@@ -45,27 +45,39 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
     const { data: models, isLoading: modelsLoading } = useQuery({
       queryKey: ["building-models", buildingId],
       queryFn: async () => {
-        const { data, error } = await supabase
-          .from("modelos")
-          .select(`
-            id,
-            nombre,
-            descripcion,
-            edificios_modelos!inner (
-              id_edificio
-            )
-          `)
-          .eq("edificios_modelos.id_edificio", buildingId)
-          .eq("activo", true)
-          .eq("edificios_modelos.activo", true);
+        // First get the edificios_modelos relationships
+        const { data: edificiosModelos, error: emError } = await supabase
+          .from("edificios_modelos")
+          .select("id_modelo")
+          .eq("id_edificio", buildingId)
+          .eq("activo", true);
         
-        if (error) {
-          console.error("Error fetching building models:", error);
-          throw error;
+        if (emError) {
+          console.error("Error fetching edificios_modelos:", emError);
+          throw emError;
+        }
+
+        if (!edificiosModelos || edificiosModelos.length === 0) {
+          return [];
+        }
+
+        // Get the modelo IDs
+        const modeloIds = edificiosModelos.map(em => em.id_modelo);
+
+        // Then get the modelos details
+        const { data: models, error: modelsError } = await supabase
+          .from("modelos")
+          .select("id, nombre, descripcion")
+          .in("id", modeloIds)
+          .eq("activo", true);
+        
+        if (modelsError) {
+          console.error("Error fetching models:", modelsError);
+          throw modelsError;
         }
         
-        console.log("Models for building", buildingId, ":", data);
-        return data;
+        console.log("Models for building", buildingId, ":", models);
+        return models || [];
       },
       enabled: !!buildingId,
     });
@@ -96,6 +108,18 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
                           {model.descripcion}
                         </p>
                       )}
+                      <div className="grid grid-cols-2 gap-2 text-sm mt-2">
+                        {model.numero_recamaras && (
+                          <div>
+                            <span className="font-medium">Recámaras:</span> {model.numero_recamaras}
+                          </div>
+                        )}
+                        {model.numero_completo_banos && (
+                          <div>
+                            <span className="font-medium">Baños:</span> {model.numero_completo_banos}
+                          </div>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 ))}

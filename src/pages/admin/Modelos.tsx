@@ -8,71 +8,116 @@ import { Input } from "@/components/ui/input";
 import { Search, Edit, Home, Building2 } from "lucide-react";
 import { NewModeloDialog } from "@/components/admin/NewModeloDialog";
 
-interface ModeloWithProject {
+interface EdificioModeloWithDetails {
   id: number;
-  nombre: string;
-  descripcion?: string;
-  numero_recamaras?: number;
-  numero_completo_banos?: number;
-  numero_medio_bano?: number;
-  modelos_caracteristicas: {
-    caracteristicas: {
+  id_edificio: number;
+  id_modelo: number;
+  edificios: {
+    id: number;
+    nombre: string;
+    id_proyecto: number;
+    proyectos: {
       id: number;
       nombre: string;
     };
-  }[];
-  edificios_modelos: {
-    edificios: {
-      id: number;
-      nombre: string;
-      proyectos: {
-        id: number;
-        nombre: string;
-      };
-    };
-  }[];
+  };
+  modelos: {
+    id: number;
+    nombre: string;
+    descripcion?: string;
+    numero_recamaras?: number;
+    numero_completo_banos?: number;
+    numero_medio_bano?: number;
+  };
 }
 
-interface ProjectGroup {
+interface ProjectGroupNew {
   proyecto: {
     id: number;
     nombre: string;
   };
-  modelos: ModeloWithProject[];
+  modelosWithBuildings: {
+    modelo: EdificioModeloWithDetails['modelos'];
+    edificios: EdificioModeloWithDetails['edificios'][];
+  }[];
 }
 
 export default function Modelos() {
   const [searchTerm, setSearchTerm] = useState("");
 
-  const { data: modelos, isLoading, refetch } = useQuery({
-    queryKey: ["modelos-with-projects"],
+  const { data: edificiosModelos, isLoading, refetch } = useQuery({
+    queryKey: ["edificios-modelos-detailed"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("modelos")
+      // Step 1: Get all edificios_modelos relationships
+      const { data: relationships, error: relError } = await supabase
+        .from("edificios_modelos")
+        .select("id, id_edificio, id_modelo")
+        .eq("activo", true);
+      
+      if (relError) {
+        console.error("Error fetching relationships:", relError);
+        throw relError;
+      }
+
+      if (!relationships || relationships.length === 0) {
+        return [];
+      }
+
+      // Step 2: Get all unique edificio IDs
+      const edificioIds = [...new Set(relationships.map(r => r.id_edificio))];
+      
+      // Step 3: Get edificios with proyectos
+      const { data: edificios, error: edificiosError } = await supabase
+        .from("edificios")
         .select(`
-          *,
-          modelos_caracteristicas (
-            caracteristicas (
-              id,
-              nombre
-            )
-          ),
-          edificios_modelos!id_modelo (
-            edificios!id_edificio (
-              id,
-              nombre,
-              proyectos!id_proyecto (
-                id,
-                nombre
-              )
-            )
+          id,
+          nombre,
+          id_proyecto,
+          proyectos!inner (
+            id,
+            nombre
           )
         `)
+        .in("id", edificioIds)
         .eq("activo", true)
-        .order("nombre");
+        .eq("proyectos.activo", true);
       
-      if (error) throw error;
-      return data as ModeloWithProject[];
+      if (edificiosError) {
+        console.error("Error fetching edificios:", edificiosError);
+        throw edificiosError;
+      }
+
+      // Step 4: Get all unique modelo IDs
+      const modeloIds = [...new Set(relationships.map(r => r.id_modelo))];
+      
+      // Step 5: Get modelos
+      const { data: modelos, error: modelosError } = await supabase
+        .from("modelos")
+        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano")
+        .in("id", modeloIds)
+        .eq("activo", true);
+      
+      if (modelosError) {
+        console.error("Error fetching modelos:", modelosError);
+        throw modelosError;
+      }
+
+      // Step 6: Combine the data
+      const result = relationships.map(rel => {
+        const edificio = edificios?.find(e => e.id === rel.id_edificio);
+        const modelo = modelos?.find(m => m.id === rel.id_modelo);
+        
+        return {
+          id: rel.id,
+          id_edificio: rel.id_edificio,
+          id_modelo: rel.id_modelo,
+          edificio,
+          modelo
+        };
+      }).filter(item => item.edificio && item.modelo);
+
+      console.log("Combined edificios_modelos data:", result);
+      return result;
     },
   });
 
@@ -82,57 +127,53 @@ export default function Modelos() {
 
   // Group models by project
   const groupedByProject = () => {
-    if (!modelos) return [];
+    if (!edificiosModelos) return [];
 
-    const projectMap = new Map<number, ProjectGroup>();
-    const unassignedModelos: ModeloWithProject[] = [];
+    const projectMap = new Map<number, ProjectGroupNew>();
 
-    modelos.forEach((modelo) => {
-      if (modelo.edificios_modelos && modelo.edificios_modelos.length > 0) {
-        // Get all unique projects for this model
-        const projectsForModel = new Set<number>();
+    edificiosModelos.forEach((item: any) => {
+      if (item.edificio && item.modelo) {
+        const proyecto = item.edificio.proyectos;
         
-        modelo.edificios_modelos.forEach((em) => {
-          const proyecto = em.edificios.proyectos;
-          if (proyecto && !projectsForModel.has(proyecto.id)) {
-            projectsForModel.add(proyecto.id);
-            
-            if (!projectMap.has(proyecto.id)) {
-              projectMap.set(proyecto.id, {
-                proyecto: proyecto,
-                modelos: []
-              });
-            }
-            
-            projectMap.get(proyecto.id)!.modelos.push(modelo);
-          }
-        });
-      } else {
-        // Model not assigned to any building/project
-        unassignedModelos.push(modelo);
+        if (!projectMap.has(proyecto.id)) {
+          projectMap.set(proyecto.id, {
+            proyecto: proyecto,
+            modelosWithBuildings: []
+          });
+        }
+
+        const projectGroup = projectMap.get(proyecto.id)!;
+        
+        // Find or create modelo entry
+        let modeloEntry = projectGroup.modelosWithBuildings.find(
+          m => m.modelo.id === item.modelo.id
+        );
+        
+        if (!modeloEntry) {
+          modeloEntry = {
+            modelo: item.modelo,
+            edificios: []
+          };
+          projectGroup.modelosWithBuildings.push(modeloEntry);
+        }
+        
+        // Add edificio if not already present
+        if (!modeloEntry.edificios.find(e => e.id === item.edificio.id)) {
+          modeloEntry.edificios.push(item.edificio);
+        }
       }
     });
 
-    const result = Array.from(projectMap.values());
-    
-    // Add unassigned models as a separate group if any exist
-    if (unassignedModelos.length > 0) {
-      result.push({
-        proyecto: { id: 0, nombre: "Modelos sin asignar" },
-        modelos: unassignedModelos
-      });
-    }
-
-    return result;
+    return Array.from(projectMap.values());
   };
 
   const filteredGroups = groupedByProject().map(group => ({
     ...group,
-    modelos: group.modelos.filter((modelo) =>
-      modelo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (modelo.descripcion && modelo.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
+    modelosWithBuildings: group.modelosWithBuildings.filter((item) =>
+      item.modelo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.modelo.descripcion && item.modelo.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
     )
-  })).filter(group => group.modelos.length > 0);
+  })).filter(group => group.modelosWithBuildings.length > 0);
 
   if (isLoading) {
     return <div>Cargando modelos...</div>;
