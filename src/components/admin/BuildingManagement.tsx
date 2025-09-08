@@ -46,23 +46,25 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
       queryKey: ["building-models", buildingId],
       queryFn: async () => {
         const { data, error } = await supabase
-          .from("edificios_modelos")
+          .from("modelos")
           .select(`
             id,
-            modelos (
-              id,
-              nombre,
-              descripcion
+            nombre,
+            descripcion,
+            edificios_modelos!inner (
+              id_edificio
             )
           `)
-          .eq("id_edificio", buildingId)
-          .eq("activo", true);
+          .eq("edificios_modelos.id_edificio", buildingId)
+          .eq("activo", true)
+          .eq("edificios_modelos.activo", true);
         
         if (error) {
           console.error("Error fetching building models:", error);
           throw error;
         }
         
+        console.log("Models for building", buildingId, ":", data);
         return data;
       },
       enabled: !!buildingId,
@@ -85,13 +87,13 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
               <p>Cargando modelos...</p>
             ) : models && models.length > 0 ? (
               <div className="space-y-2">
-                {models.map((em: any) => (
-                  <Card key={em.id}>
+                {models.map((model: any) => (
+                  <Card key={model.id}>
                     <CardContent className="p-3">
-                      <h4 className="font-medium">{em.modelos.nombre}</h4>
-                      {em.modelos.descripcion && (
+                      <h4 className="font-medium">{model.nombre}</h4>
+                      {model.descripcion && (
                         <p className="text-sm text-muted-foreground mt-1">
-                          {em.modelos.descripcion}
+                          {model.descripcion}
                         </p>
                       )}
                     </CardContent>
