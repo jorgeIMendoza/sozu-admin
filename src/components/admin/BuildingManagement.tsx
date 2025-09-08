@@ -21,7 +21,7 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
         .from("edificios")
         .select(`
           *,
-          edificios_modelos!inner (
+          edificios_modelos (
             id,
             modelos (
               id,

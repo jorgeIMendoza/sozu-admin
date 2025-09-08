@@ -57,11 +57,11 @@ export default function Modelos() {
               nombre
             )
           ),
-          edificios_modelos!fk_edificios_modelos_modelo (
-            edificios!fk_edificios_modelos_edificio (
+          edificios_modelos!id_modelo (
+            edificios!id_edificio (
               id,
               nombre,
-              proyectos!fk_edificios_proyecto (
+              proyectos!id_proyecto (
                 id,
                 nombre
               )

@@ -197,7 +197,6 @@ export const NewModeloDialog = ({ onModeloAdded }: NewModeloDialogProps) => {
               name="caracteristicas"
               render={() => (
                 <FormItem>
-                  <FormLabel>Características</FormLabel>
                   <div className="grid grid-cols-2 gap-2">
                     {caracteristicas?.map((caracteristica) => (
                       <FormField
