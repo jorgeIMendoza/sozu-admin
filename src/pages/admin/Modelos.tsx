@@ -28,21 +28,16 @@ export default function Modelos() {
   const { data: modelos, isLoading, refetch } = useQuery({
     queryKey: ["modelos-with-relations"],
     queryFn: async () => {
-      // Based on the SQL query: select p.nombre as proyecto, e.nombre as edificio, m.nombre as modelo
+      // Using the SQL structure: proyectos -> edificios -> edificios_modelos -> modelos
       const { data, error } = await supabase
         .from("edificios_modelos")
         .select(`
-          id_edificio,
-          id_modelo,
           edificios!inner (
             id,
             nombre,
-            id_proyecto,
-            activo,
             proyectos!inner (
               id,
-              nombre,
-              activo
+              nombre
             )
           ),
           modelos!inner (
@@ -51,13 +46,12 @@ export default function Modelos() {
             descripcion,
             numero_recamaras,
             numero_completo_banos,
-            numero_medio_bano,
-            activo
+            numero_medio_bano
           )
         `)
         .eq("activo", true)
         .eq("edificios.activo", true)
-        .eq("proyectos.activo", true)
+        .eq("edificios.proyectos.activo", true)
         .eq("modelos.activo", true);
 
       if (error) {
