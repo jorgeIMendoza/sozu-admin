@@ -5,14 +5,47 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Edit, Home } from "lucide-react";
+import { Search, Edit, Home, Building2 } from "lucide-react";
 import { NewModeloDialog } from "@/components/admin/NewModeloDialog";
+
+interface ModeloWithProject {
+  id: number;
+  nombre: string;
+  descripcion?: string;
+  numero_recamaras?: number;
+  numero_completo_banos?: number;
+  numero_medio_bano?: number;
+  modelos_caracteristicas: {
+    caracteristicas: {
+      id: number;
+      nombre: string;
+    };
+  }[];
+  edificios_modelos: {
+    edificios: {
+      id: number;
+      nombre: string;
+      proyectos: {
+        id: number;
+        nombre: string;
+      };
+    };
+  }[];
+}
+
+interface ProjectGroup {
+  proyecto: {
+    id: number;
+    nombre: string;
+  };
+  modelos: ModeloWithProject[];
+}
 
 export default function Modelos() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const { data: modelos, isLoading, refetch } = useQuery({
-    queryKey: ["modelos"],
+    queryKey: ["modelos-with-projects"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("modelos")
@@ -23,13 +56,23 @@ export default function Modelos() {
               id,
               nombre
             )
+          ),
+          edificios_modelos!fk_edificios_modelos_modelo (
+            edificios!fk_edificios_modelos_edificio (
+              id,
+              nombre,
+              proyectos!fk_edificios_proyecto (
+                id,
+                nombre
+              )
+            )
           )
         `)
         .eq("activo", true)
         .order("nombre");
       
       if (error) throw error;
-      return data;
+      return data as ModeloWithProject[];
     },
   });
 
@@ -37,10 +80,59 @@ export default function Modelos() {
     refetch();
   };
 
-  const filteredModelos = modelos?.filter((modelo) =>
-    modelo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (modelo.descripcion && modelo.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Group models by project
+  const groupedByProject = () => {
+    if (!modelos) return [];
+
+    const projectMap = new Map<number, ProjectGroup>();
+    const unassignedModelos: ModeloWithProject[] = [];
+
+    modelos.forEach((modelo) => {
+      if (modelo.edificios_modelos && modelo.edificios_modelos.length > 0) {
+        // Get all unique projects for this model
+        const projectsForModel = new Set<number>();
+        
+        modelo.edificios_modelos.forEach((em) => {
+          const proyecto = em.edificios.proyectos;
+          if (proyecto && !projectsForModel.has(proyecto.id)) {
+            projectsForModel.add(proyecto.id);
+            
+            if (!projectMap.has(proyecto.id)) {
+              projectMap.set(proyecto.id, {
+                proyecto: proyecto,
+                modelos: []
+              });
+            }
+            
+            projectMap.get(proyecto.id)!.modelos.push(modelo);
+          }
+        });
+      } else {
+        // Model not assigned to any building/project
+        unassignedModelos.push(modelo);
+      }
+    });
+
+    const result = Array.from(projectMap.values());
+    
+    // Add unassigned models as a separate group if any exist
+    if (unassignedModelos.length > 0) {
+      result.push({
+        proyecto: { id: 0, nombre: "Modelos sin asignar" },
+        modelos: unassignedModelos
+      });
+    }
+
+    return result;
+  };
+
+  const filteredGroups = groupedByProject().map(group => ({
+    ...group,
+    modelos: group.modelos.filter((modelo) =>
+      modelo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (modelo.descripcion && modelo.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
+  })).filter(group => group.modelos.length > 0);
 
   if (isLoading) {
     return <div>Cargando modelos...</div>;
@@ -52,7 +144,7 @@ export default function Modelos() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Gestión de Modelos</h1>
           <p className="text-muted-foreground">
-            Administra los modelos de propiedades
+            Administra los modelos de propiedades agrupados por proyecto
           </p>
         </div>
 
@@ -70,60 +162,90 @@ export default function Modelos() {
         </div>
       </div>
 
-      {filteredModelos && filteredModelos.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredModelos.map((modelo) => (
-            <Card key={modelo.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Home className="h-5 w-5 text-primary" />
-                    <span className="text-lg">{modelo.nombre}</span>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {modelo.descripcion && (
-                  <p className="text-sm text-muted-foreground">
-                    {modelo.descripcion}
-                  </p>
-                )}
-                
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {modelo.numero_recamaras && (
-                    <div>
-                      <span className="font-medium">Recámaras:</span> {modelo.numero_recamaras}
-                    </div>
-                  )}
-                  {modelo.numero_completo_banos && (
-                    <div>
-                      <span className="font-medium">Baños:</span> {modelo.numero_completo_banos}
-                    </div>
-                  )}
-                  {modelo.numero_medio_bano && (
-                    <div>
-                      <span className="font-medium">Medios baños:</span> {modelo.numero_medio_bano}
-                    </div>
-                  )}
-                </div>
+      {filteredGroups && filteredGroups.length > 0 ? (
+        <div className="space-y-8">
+          {filteredGroups.map((group) => (
+            <div key={group.proyecto.id} className="space-y-4">
+              <div className="flex items-center space-x-3 border-b pb-2">
+                <Building2 className="h-5 w-5 text-primary" />
+                <h2 className="text-xl font-semibold">{group.proyecto.nombre}</h2>
+                <Badge variant="secondary" className="text-xs">
+                  {group.modelos.length} modelo{group.modelos.length !== 1 ? 's' : ''}
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {group.modelos.map((modelo) => (
+                  <Card key={modelo.id} className="hover:shadow-lg transition-shadow">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Home className="h-5 w-5 text-primary" />
+                          <span className="text-lg">{modelo.nombre}</span>
+                        </div>
+                        <Button variant="outline" size="sm">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {modelo.descripcion && (
+                        <p className="text-sm text-muted-foreground">
+                          {modelo.descripcion}
+                        </p>
+                      )}
+                      
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {modelo.numero_recamaras && (
+                          <div>
+                            <span className="font-medium">Recámaras:</span> {modelo.numero_recamaras}
+                          </div>
+                        )}
+                        {modelo.numero_completo_banos && (
+                          <div>
+                            <span className="font-medium">Baños:</span> {modelo.numero_completo_banos}
+                          </div>
+                        )}
+                        {modelo.numero_medio_bano && (
+                          <div>
+                            <span className="font-medium">Medios baños:</span> {modelo.numero_medio_bano}
+                          </div>
+                        )}
+                      </div>
 
-                {modelo.modelos_caracteristicas && modelo.modelos_caracteristicas.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium mb-2">Características:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {modelo.modelos_caracteristicas.map((mc: any) => (
-                        <Badge key={mc.caracteristicas.id} variant="secondary" className="text-xs">
-                          {mc.caracteristicas.nombre}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      {/* Show buildings where this model is used */}
+                      {modelo.edificios_modelos && modelo.edificios_modelos.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium mb-2">Edificios:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {modelo.edificios_modelos
+                              .filter(em => em.edificios.proyectos.id === group.proyecto.id)
+                              .map((em) => (
+                              <Badge key={em.edificios.id} variant="outline" className="text-xs">
+                                {em.edificios.nombre}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {modelo.modelos_caracteristicas && modelo.modelos_caracteristicas.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium mb-2">Características:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {modelo.modelos_caracteristicas.map((mc: any) => (
+                              <Badge key={mc.caracteristicas.id} variant="secondary" className="text-xs">
+                                {mc.caracteristicas.nombre}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       ) : (
