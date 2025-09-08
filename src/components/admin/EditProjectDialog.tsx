@@ -13,6 +13,7 @@ import { Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
+import { BuildingManagement } from "./BuildingManagement";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -175,7 +176,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
           Editar
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar Proyecto</DialogTitle>
         </DialogHeader>
@@ -281,6 +282,11 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
                     </FormItem>
                   )}
                 />
+              </div>
+
+              {/* Building Management Section */}
+              <div className="space-y-3">
+                <BuildingManagement projectId={projectId} />
               </div>
 
               <FormField
