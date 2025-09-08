@@ -20,7 +20,6 @@ const formSchema = z.object({
   id_tipo_uso: z.string().min(1, "El tipo de uso es requerido"),
   precio_m2: z.string().optional(),
   fecha_inicio: z.string().optional(),
-  numero_edificios: z.string().optional(),
   numero_amenidades: z.string().optional(),
 });
 
@@ -41,7 +40,6 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
       id_tipo_uso: "",
       precio_m2: "",
       fecha_inicio: "",
-      numero_edificios: "0",
       numero_amenidades: "0",
     },
   });
@@ -69,7 +67,6 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         id_tipo_uso: parseInt(values.id_tipo_uso),
         precio_m2: values.precio_m2 ? parseFloat(values.precio_m2) : null,
         fecha_inicio: values.fecha_inicio || null,
-        numero_edificios: values.numero_edificios ? parseInt(values.numero_edificios) : 0,
         numero_amenidades: values.numero_amenidades ? parseInt(values.numero_amenidades) : 0,
       };
 
@@ -208,35 +205,19 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="numero_edificios"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Número de Edificios</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="0" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="numero_amenidades"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Número de Amenidades</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="0" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="numero_amenidades"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Número de Amenidades</FormLabel>
+                  <FormControl>
+                    <Input type="number" placeholder="0" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="flex justify-end space-x-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>

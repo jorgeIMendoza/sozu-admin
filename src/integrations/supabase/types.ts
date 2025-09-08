@@ -2465,7 +2465,6 @@ export type Database = {
           id_tipo_uso: number | null
           nombre: string
           numero_amenidades: number | null
-          numero_edificios: number | null
           precio_m2: number | null
         }
         Insert: {
@@ -2479,7 +2478,6 @@ export type Database = {
           id_tipo_uso?: number | null
           nombre: string
           numero_amenidades?: number | null
-          numero_edificios?: number | null
           precio_m2?: number | null
         }
         Update: {
@@ -2493,7 +2491,6 @@ export type Database = {
           id_tipo_uso?: number | null
           nombre?: string
           numero_amenidades?: number | null
-          numero_edificios?: number | null
           precio_m2?: number | null
         }
         Relationships: [
