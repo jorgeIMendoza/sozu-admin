@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Edit } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Building2, Eye } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewBuildingDialog } from "./NewBuildingDialog";
@@ -38,6 +39,72 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
   const handleBuildingAdded = () => {
     setRefreshKey(prev => prev + 1);
     refetch();
+  };
+
+  const BuildingModelsDialog = ({ buildingId, buildingName }: { buildingId: number, buildingName: string }) => {
+    const { data: models, isLoading: modelsLoading } = useQuery({
+      queryKey: ["building-models", buildingId],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from("edificios_modelos")
+          .select(`
+            id,
+            modelos (
+              id,
+              nombre,
+              descripcion
+            )
+          `)
+          .eq("id_edificio", buildingId)
+          .eq("activo", true);
+        
+        if (error) {
+          console.error("Error fetching building models:", error);
+          throw error;
+        }
+        
+        return data;
+      },
+      enabled: !!buildingId,
+    });
+
+    return (
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Eye className="h-4 w-4 mr-1" />
+            Ver Modelos
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modelos de {buildingName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {modelsLoading ? (
+              <p>Cargando modelos...</p>
+            ) : models && models.length > 0 ? (
+              <div className="space-y-2">
+                {models.map((em: any) => (
+                  <Card key={em.id}>
+                    <CardContent className="p-3">
+                      <h4 className="font-medium">{em.modelos.nombre}</h4>
+                      {em.modelos.descripcion && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {em.modelos.descripcion}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground">No hay modelos asignados a este edificio</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
   };
 
   if (isLoading) {
@@ -79,9 +146,10 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
                     <Building2 className="h-4 w-4" />
                     <span>{building.nombre}</span>
                   </div>
-                  <Button variant="outline" size="sm">
-                    <Edit className="h-4 w-4" />
-                  </Button>
+                  <BuildingModelsDialog 
+                    buildingId={building.id} 
+                    buildingName={building.nombre} 
+                  />
                 </CardTitle>
               </CardHeader>
                <CardContent className="space-y-2">
