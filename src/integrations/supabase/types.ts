@@ -3163,6 +3163,23 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      get_properties_with_details: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          activo: boolean
+          clabe_stp: string
+          disponibilidad: string
+          dueño: string
+          id: number
+          m2_reales: number
+          numero_piso: number
+          numero_propiedad: string
+          precio_lista: number
+          tipo_propiedad: string
+          transaccion: string
+          vista: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

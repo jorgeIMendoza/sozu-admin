@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AdminLayout } from "./components/admin/AdminLayout";
 import Dashboard from "./pages/admin/Dashboard";
 import Proyectos from "./pages/admin/Proyectos";
-import Propiedades from "./pages/admin/PropiedadesMockup";
+import Propiedades from "./pages/admin/Propiedades";
 import Modelos from "./pages/admin/Modelos";
 import Pagos from "./pages/admin/Pagos";
 import Usuarios from "./pages/admin/Usuarios";

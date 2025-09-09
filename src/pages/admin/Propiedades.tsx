@@ -36,54 +36,11 @@ const Propiedades = () => {
   const { data: properties, isLoading } = useQuery({
     queryKey: ['properties'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('propiedades')
-        .select(`
-          id,
-          numero_propiedad,
-          numero_piso,
-          m2_reales,
-          precio_lista,
-          clabe_stp_tmp_apartado,
-          activo,
-          id_entidad_relacionada_dueno,
-          id_vista,
-          id_tipo_transaccion,
-          id_tipo_propiedad,
-          id_estatus_disponibilidad
-        `);
-
+      const { data, error } = await supabase.rpc('get_properties_with_details');
+      
       if (error) throw error;
-
-      // Get related data separately
-      const [entidades, vistas, tiposTransaccion, tiposPropiedad, estatus] = await Promise.all([
-        supabase.from('entidades_relacionadas').select('id, personas!id_persona(nombre_legal)').eq('activo', true),
-        supabase.from('vistas').select('id, nombre').eq('activo', true),
-        supabase.from('tipos_transaccion').select('id, nombre').eq('activo', true),  
-        supabase.from('tipos_propiedad').select('id, nombre').eq('activo', true),
-        supabase.from('estatus_disponibilidad').select('id, nombre').eq('activo', true)
-      ]);
-
-      const entidadesMap = new Map(entidades.data?.map(e => [e.id, e.personas?.nombre_legal]) || []);
-      const vistasMap = new Map(vistas.data?.map(v => [v.id, v.nombre]) || []);
-      const tiposTransaccionMap = new Map(tiposTransaccion.data?.map(t => [t.id, t.nombre]) || []);
-      const tiposPropiedadMap = new Map(tiposPropiedad.data?.map(t => [t.id, t.nombre]) || []);
-      const estatusMap = new Map(estatus.data?.map(e => [e.id, e.nombre]) || []);
-
-      return data?.map(p => ({
-        id: p.id,
-        dueño: entidadesMap.get(p.id_entidad_relacionada_dueno) || 'Sin propietario',
-        numero_propiedad: p.numero_propiedad,
-        numero_piso: p.numero_piso || 0,
-        m2_reales: p.m2_reales || 0,
-        precio_lista: p.precio_lista,
-        clabe_stp: p.clabe_stp_tmp_apartado || '',
-        vista: vistasMap.get(p.id_vista) || '',
-        transaccion: tiposTransaccionMap.get(p.id_tipo_transaccion) || '',
-        tipo_propiedad: tiposPropiedadMap.get(p.id_tipo_propiedad) || '',
-        disponibilidad: estatusMap.get(p.id_estatus_disponibilidad) || '',
-        activo: p.activo
-      })) || [];
+      
+      return data || [];
     },
   });
 
