@@ -19,6 +19,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
   const [curp, setCurp] = useState(initialData?.curp || '');
   const [documentImageUrl, setDocumentImageUrl] = useState(initialData?.url_documento_identificacion || '');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isApiProcessing, setIsApiProcessing] = useState(false);
   const { toast } = useToast();
 
   const handleCameraCapture = async () => {
@@ -112,6 +113,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         cursor: pointer;
         font-size: 16px;
         font-weight: 500;
+        transition: background-color 0.2s;
       `;
       
       const cancelBtn = document.createElement('button');
@@ -125,7 +127,23 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         cursor: pointer;
         font-size: 16px;
         font-weight: 500;
+        transition: background-color 0.2s;
       `;
+      
+      // Add hover effects
+      captureBtn.addEventListener('mouseenter', () => {
+        captureBtn.style.background = '#0056b3';
+      });
+      captureBtn.addEventListener('mouseleave', () => {
+        captureBtn.style.background = '#007bff';
+      });
+      
+      cancelBtn.addEventListener('mouseenter', () => {
+        cancelBtn.style.background = '#545b62';
+      });
+      cancelBtn.addEventListener('mouseleave', () => {
+        cancelBtn.style.background = '#6c757d';
+      });
       
       buttonContainer.appendChild(captureBtn);
       buttonContainer.appendChild(cancelBtn);
@@ -153,7 +171,10 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         setIsProcessing(false);
       };
       
-      captureBtn.onclick = () => {
+      // Use addEventListener instead of onclick for better reliability
+      captureBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         console.log('Capture button clicked');
         console.log('Video dimensions:', video.videoWidth, 'x', video.videoHeight);
         
@@ -183,9 +204,14 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
             });
           }
         }, 'image/jpeg', 0.8);
-      };
+      });
       
-      cancelBtn.onclick = cleanup;
+      cancelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Cancel button clicked');
+        cleanup();
+      });
       
       // Add escape key handler
       const handleEscape = (e: KeyboardEvent) => {
@@ -217,7 +243,12 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
 
   const processImage = async (imageFile: Blob) => {
     try {
-      setIsProcessing(true);
+      setIsApiProcessing(true);
+      
+      toast({
+        title: "Procesando documento",
+        description: "Extrayendo datos del documento...",
+      });
       
       // Process with external API
       const formData = new FormData();
@@ -265,8 +296,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
           setDocumentImageUrl(imageUrl);
           
           toast({
-            title: "Documento procesado",
-            description: "Los datos se han extraído exitosamente del documento.",
+            title: "Documento procesado exitosamente",
+            description: "Los datos se han extraído del documento.",
           });
         } else {
           toast({
@@ -292,7 +323,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         variant: "destructive",
       });
     } finally {
-      setIsProcessing(false);
+      setIsApiProcessing(false);
     }
   };
 
@@ -352,7 +383,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
                 type="button"
                 variant="outline"
                 onClick={handleCameraCapture}
-                disabled={isProcessing}
+                disabled={isProcessing || isApiProcessing}
                 className="flex-1"
               >
                 <Camera className="w-4 h-4 mr-2" />
@@ -363,7 +394,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isApiProcessing}
                   className="w-full"
                   asChild
                 >
@@ -378,14 +409,20 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
                   accept="image/*"
                   onChange={handleFileUpload}
                   className="hidden"
-                  disabled={isProcessing}
+                  disabled={isProcessing || isApiProcessing}
                 />
               </Label>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               Toma una foto o sube una imagen del documento de identificación para extraer automáticamente los datos.
             </p>
-            {documentImageUrl && (
+            {isApiProcessing && (
+              <div className="mt-3 flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                <span className="text-sm text-primary">Procesando documento...</span>
+              </div>
+            )}
+            {documentImageUrl && !isApiProcessing && (
               <div className="mt-3">
                 <img 
                   src={documentImageUrl} 
@@ -398,7 +435,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         </div>
         
         <div className="flex gap-2 pt-4">
-          <Button type="submit" disabled={isLoading || isProcessing}>
+          <Button type="submit" disabled={isLoading || isProcessing || isApiProcessing}>
             {isLoading ? 'Guardando...' : initialData ? 'Actualizar' : 'Confirmar'}
           </Button>
           <Button type="button" variant="outline" onClick={onCancel}>
