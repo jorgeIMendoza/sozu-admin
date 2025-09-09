@@ -29,8 +29,40 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         description: "Preparando la cámara para tomar la foto...",
       });
 
-      // Create a simple camera interface
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('getUserMedia no está soportado en este navegador');
+      }
+
+      // Request camera access with fallback options
+      let stream;
+      try {
+        // Try with back camera first
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        });
+      } catch (err) {
+        console.log('Back camera not available, trying front camera:', err);
+        // Fallback to front camera or any available camera
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        });
+      }
+
+      // Create video element
       const video = document.createElement('video');
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.playsInline = true;
+      
+      // Create canvas for capture
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
       
@@ -38,19 +70,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         throw new Error('No se pudo crear el contexto del canvas');
       }
 
-      // Request camera access
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } 
-      });
-      
-      video.srcObject = stream;
-      video.play();
-      
-      // Create a modal-like overlay for camera
+      // Create modal overlay
       const overlay = document.createElement('div');
       overlay.style.cssText = `
         position: fixed;
@@ -64,41 +84,47 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        padding: 20px;
       `;
       
       video.style.cssText = `
         max-width: 90%;
         max-height: 70%;
         border: 2px solid white;
+        border-radius: 8px;
       `;
       
       const buttonContainer = document.createElement('div');
       buttonContainer.style.cssText = `
         margin-top: 20px;
         display: flex;
-        gap: 10px;
+        gap: 15px;
       `;
       
       const captureBtn = document.createElement('button');
       captureBtn.textContent = 'Tomar Foto';
       captureBtn.style.cssText = `
-        padding: 10px 20px;
+        padding: 12px 24px;
         background: #007bff;
         color: white;
         border: none;
-        border-radius: 5px;
+        border-radius: 6px;
         cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
       `;
       
       const cancelBtn = document.createElement('button');
       cancelBtn.textContent = 'Cancelar';
       cancelBtn.style.cssText = `
-        padding: 10px 20px;
+        padding: 12px 24px;
         background: #6c757d;
         color: white;
         border: none;
-        border-radius: 5px;
+        border-radius: 6px;
         cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
       `;
       
       buttonContainer.appendChild(captureBtn);
@@ -107,32 +133,75 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
       overlay.appendChild(buttonContainer);
       document.body.appendChild(overlay);
       
+      // Wait for video to be ready
+      await new Promise((resolve) => {
+        video.onloadedmetadata = () => {
+          console.log('Video metadata loaded');
+          resolve(true);
+        };
+      });
+
       const cleanup = () => {
-        stream.getTracks().forEach(track => track.stop());
-        document.body.removeChild(overlay);
+        console.log('Cleaning up camera resources');
+        stream.getTracks().forEach(track => {
+          track.stop();
+          console.log('Stopped track:', track.kind);
+        });
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
         setIsProcessing(false);
       };
       
       captureBtn.onclick = () => {
+        console.log('Capture button clicked');
+        console.log('Video dimensions:', video.videoWidth, 'x', video.videoHeight);
+        
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+          toast({
+            title: "Error",
+            description: "El video no está listo. Intenta de nuevo.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0);
         
         canvas.toBlob(async (blob) => {
+          console.log('Image blob created:', blob?.size, 'bytes');
           cleanup();
           if (blob) {
             await processImage(blob);
+          } else {
+            toast({
+              title: "Error",
+              description: "No se pudo capturar la imagen.",
+              variant: "destructive",
+            });
           }
         }, 'image/jpeg', 0.8);
       };
       
       cancelBtn.onclick = cleanup;
       
+      // Add escape key handler
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          cleanup();
+          document.removeEventListener('keydown', handleEscape);
+        }
+      };
+      document.addEventListener('keydown', handleEscape);
+      
     } catch (error) {
       console.error('Error accessing camera:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       toast({
-        title: "Error",
-        description: "No se pudo acceder a la cámara. Intenta subir una imagen desde tus archivos.",
+        title: "Error de cámara",
+        description: `${errorMessage}. Intenta subir una imagen desde tus archivos.`,
         variant: "destructive",
       });
       setIsProcessing(false);
