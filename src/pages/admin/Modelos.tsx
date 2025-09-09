@@ -7,6 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Search, Edit, Home, Trash2 } from "lucide-react";
 import { NewModeloDialog } from "@/components/admin/NewModeloDialog";
 import { EditModeloDialog } from "@/components/admin/EditModeloDialog";
@@ -24,6 +34,7 @@ interface Modelo {
 export default function Modelos() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"active" | "deleted">("active");
+  const [modeloToDelete, setModeloToDelete] = useState<Modelo | null>(null);
   const { toast } = useToast();
 
   const { data: modelosActivos, isLoading: loadingActivos, refetch: refetchActivos } = useQuery({
@@ -87,6 +98,7 @@ export default function Modelos() {
       });
 
       refetchActivos();
+      setModeloToDelete(null);
     } catch (error) {
       console.error("Error deleting modelo:", error);
       toast({
@@ -214,7 +226,7 @@ export default function Modelos() {
                             <Button 
                               variant="outline" 
                               size="sm"
-                              onClick={() => handleDeleteModelo(modelo)}
+                              onClick={() => setModeloToDelete(modelo)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -314,6 +326,27 @@ export default function Modelos() {
           )}
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={!!modeloToDelete} onOpenChange={() => setModeloToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará el modelo "{modeloToDelete?.nombre}". 
+              El modelo se marcará como inactivo y se podrá restaurar desde la pestaña de eliminados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => modeloToDelete && handleDeleteModelo(modeloToDelete)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
