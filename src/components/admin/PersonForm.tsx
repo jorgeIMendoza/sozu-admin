@@ -59,8 +59,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;">
           <video id="camera-video" autoplay playsinline muted style="max-width: 90%; max-height: 60%; border: 3px solid white; border-radius: 12px;"></video>
           <div style="margin-top: 30px; display: flex; gap: 20px;">
-            <button id="capture-btn" style="padding: 15px 30px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600;">📷 Tomar Foto</button>
-            <button id="cancel-btn" style="padding: 15px 30px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600;">❌ Cancelar</button>
+            <button type="button" id="capture-btn" style="padding: 15px 30px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600; user-select: none;">📷 Tomar Foto</button>
+            <button type="button" id="cancel-btn" style="padding: 15px 30px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600; user-select: none;">❌ Cancelar</button>
           </div>
         </div>
       `;
@@ -84,8 +84,22 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
       });
 
       // Capture button handler
-      document.getElementById('capture-btn')!.onclick = async () => {
+      const captureBtn = document.getElementById('capture-btn')! as HTMLButtonElement;
+      const cancelBtn = document.getElementById('cancel-btn')! as HTMLButtonElement;
+      
+      captureBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        // Disable button to prevent double clicks
+        captureBtn.disabled = true;
+        captureBtn.style.opacity = '0.6';
+        captureBtn.innerText = '📷 Capturando...';
+        
         try {
+          console.log('Capturing image...');
+          
           // Set canvas size to match video
           canvas.width = modalVideo.videoWidth;
           canvas.height = modalVideo.videoHeight;
@@ -93,10 +107,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
           // Draw video frame to canvas
           context.drawImage(modalVideo, 0, 0);
           
-          // Convert to blob
+          // Convert to blob and process immediately
           canvas.toBlob(async (blob) => {
             if (blob) {
+              console.log('Image captured, closing camera and processing...');
+              // Close camera modal first
               cleanup();
+              // Process image after camera is closed
               await processImage(blob);
             }
           }, 'image/jpeg', 0.9);
@@ -108,11 +125,16 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
             description: "Error al capturar la imagen.",
             variant: "destructive",
           });
+          cleanup();
         }
-      };
+      });
 
       // Cancel button handler
-      document.getElementById('cancel-btn')!.onclick = cleanup;
+      cancelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        cleanup();
+      });
 
       // ESC key handler
       const handleEsc = (e: KeyboardEvent) => {
