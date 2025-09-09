@@ -25,6 +25,11 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
   const handleCameraCapture = async () => {
     try {
       setIsProcessing(true);
+      
+      // Prevent the parent dialog from closing by stopping any propagation
+      const originalOnOpenChange = (window as any).__dialogOnOpenChange;
+      (window as any).__dialogOnOpenChange = null;
+      
       toast({
         title: "Activando cámara",
         description: "Preparando la cámara para tomar la foto...",
@@ -53,25 +58,62 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
       video.playsInline = true;
       video.muted = true;
 
-      // Create modal
-      const modal = document.createElement('div');
-      modal.innerHTML = `
-        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;">
-          <video id="camera-video" autoplay playsinline muted style="max-width: 90%; max-height: 60%; border: 3px solid white; border-radius: 12px;"></video>
-          <div style="margin-top: 30px; display: flex; gap: 20px;">
-            <button type="button" id="capture-btn" style="padding: 15px 30px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600; user-select: none;">📷 Tomar Foto</button>
-            <button type="button" id="cancel-btn" style="padding: 15px 30px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600; user-select: none;">❌ Cancelar</button>
-          </div>
+      // Create modal overlay that won't interfere with parent dialog
+      const modalOverlay = document.createElement('div');
+      modalOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.95);
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      `;
+      
+      const modalContent = document.createElement('div');
+      modalContent.innerHTML = `
+        <video id="camera-video" autoplay playsinline muted style="max-width: 90%; max-height: 60%; border: 3px solid white; border-radius: 12px;"></video>
+        <div style="margin-top: 30px; display: flex; gap: 20px;">
+          <button type="button" id="capture-btn" style="padding: 15px 30px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600; user-select: none;">📷 Tomar Foto</button>
+          <button type="button" id="cancel-btn" style="padding: 15px 30px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600; user-select: none;">❌ Cancelar</button>
         </div>
       `;
       
-      document.body.appendChild(modal);
+      modalOverlay.appendChild(modalContent);
+      
+      // Prevent all events from bubbling to avoid closing parent dialog
+      modalOverlay.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+      });
+      
+      modalOverlay.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          cleanup();
+        }
+      });
+      
+      document.body.appendChild(modalOverlay);
       const modalVideo = document.getElementById('camera-video') as HTMLVideoElement;
       modalVideo.srcObject = stream;
 
       const cleanup = () => {
-        stream.getTracks().forEach(track => track.stop());
-        document.body.removeChild(modal);
+        try {
+          stream.getTracks().forEach(track => track.stop());
+          if (document.body.contains(modalOverlay)) {
+            document.body.removeChild(modalOverlay);
+          }
+          // Restore the original dialog handler
+          (window as any).__dialogOnOpenChange = originalOnOpenChange;
+        } catch (error) {
+          console.error('Error during cleanup:', error);
+        }
         setIsProcessing(false);
       };
 
@@ -113,7 +155,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
               console.log('Image captured, closing camera and processing...');
               // Close camera modal first
               cleanup();
-              // Process image after camera is closed
+              // Process image after camera is closed - this will update the main form
               await processImage(blob);
             }
           }, 'image/jpeg', 0.9);
