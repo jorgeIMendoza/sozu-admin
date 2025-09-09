@@ -106,25 +106,18 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
     queryFn: async () => {
       const { data, error } = await supabase
         .from('entidades_relacionadas')
-        .select('id')
+        .select(`
+          id,
+          id_persona,
+          personas!id_persona (
+            id,
+            nombre_legal
+          )
+        `)
         .eq('activo', true);
       if (error) throw error;
 
-      // Get personas separately
-      const personasIds = data?.map(e => e.id) || [];
-      if (personasIds.length === 0) return [];
-
-      const { data: personas, error: personasError } = await supabase
-        .from('personas')
-        .select('id, nombre_legal')
-        .in('id', personasIds);
-
-      if (personasError) throw personasError;
-
-      return data?.map(entidad => ({
-        id: entidad.id,
-        personas: personas?.find(p => p.id === entidad.id) || { nombre_legal: 'Sin nombre' }
-      })) || [];
+      return data || [];
     }
   });
 
@@ -133,24 +126,23 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
     queryFn: async () => {
       const { data, error } = await supabase
         .from('edificios_modelos')
-        .select('id, id_edificio, id_modelo')
+        .select(`
+          id,
+          id_edificio,
+          id_modelo,
+          edificios!id_edificio (
+            id,
+            nombre
+          ),
+          modelos!id_modelo (
+            id,
+            nombre
+          )
+        `)
         .eq('activo', true);
       if (error) throw error;
 
-      // Get edificios and modelos separately
-      const edificioIds = [...new Set(data?.map(em => em.id_edificio) || [])];
-      const modeloIds = [...new Set(data?.map(em => em.id_modelo) || [])];
-
-      const [edificios, modelos] = await Promise.all([
-        supabase.from('edificios').select('id, nombre').in('id', edificioIds),
-        supabase.from('modelos').select('id, nombre').in('id', modeloIds)
-      ]);
-
-      return data?.map(em => ({
-        id: em.id,
-        edificios: edificios.data?.find(e => e.id === em.id_edificio) || { nombre: 'Sin nombre' },
-        modelos: modelos.data?.find(m => m.id === em.id_modelo) || { nombre: 'Sin nombre' }
-      })) || [];
+      return data || [];
     }
   });
 
@@ -388,7 +380,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                 <SelectContent>
                   {entidadesRelacionadas?.map((entidad) => (
                     <SelectItem key={entidad.id} value={entidad.id.toString()}>
-                      {entidad.personas?.nombre_legal}
+                      {entidad.personas?.nombre_legal || 'Sin nombre'}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -404,7 +396,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                 <SelectContent>
                   {edificiosModelos?.map((em) => (
                     <SelectItem key={em.id} value={em.id.toString()}>
-                      {em.edificios?.nombre} - {em.modelos?.nombre}
+                      {em.edificios?.nombre || 'Sin edificio'} - {em.modelos?.nombre || 'Sin modelo'}
                     </SelectItem>
                   ))}
                 </SelectContent>
