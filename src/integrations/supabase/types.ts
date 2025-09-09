@@ -976,6 +976,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "entidades_relacionadas_id_tipo_entidad_fkey"
+            columns: ["id_tipo_entidad"]
+            isOneToOne: false
+            referencedRelation: "tipos_entidad"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "fk_entrel_persona"
             columns: ["id_persona"]
             isOneToOne: false
@@ -1810,6 +1817,50 @@ export type Database = {
           },
         ]
       }
+      pagos_fake: {
+        Row: {
+          clave_rastreo: string | null
+          concepto_pago: string | null
+          fecha_pago: string
+          id: number
+          metodo_pago: string | null
+          monto: number
+          nombre_beneficiario: string | null
+          url_cep: string | null
+          url_recibo: string | null
+        }
+        Insert: {
+          clave_rastreo?: string | null
+          concepto_pago?: string | null
+          fecha_pago: string
+          id?: number
+          metodo_pago?: string | null
+          monto: number
+          nombre_beneficiario?: string | null
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Update: {
+          clave_rastreo?: string | null
+          concepto_pago?: string | null
+          fecha_pago?: string
+          id?: number
+          metodo_pago?: string | null
+          monto?: number
+          nombre_beneficiario?: string | null
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pagos_fake_clave_rastreo_fkey"
+            columns: ["clave_rastreo"]
+            isOneToOne: true
+            referencedRelation: "pagos_stp_raw"
+            referencedColumns: ["claverastreo"]
+          },
+        ]
+      }
       pagos_stp_raw: {
         Row: {
           activo: boolean
@@ -1822,7 +1873,7 @@ export type Database = {
           es_pago_aplicado: boolean
           fecha_actualizacion: string
           fecha_creacion: string
-          fecha_operacion: string
+          fecha_operacion: string | null
           folio_codi: string | null
           id: number
           institucion_beneficiaria: string | null
@@ -1853,9 +1904,9 @@ export type Database = {
           es_pago_aplicado?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          fecha_operacion: string
+          fecha_operacion?: string | null
           folio_codi?: string | null
-          id?: never
+          id?: number
           institucion_beneficiaria?: string | null
           institucion_ordenante?: string | null
           monto: number
@@ -1884,9 +1935,9 @@ export type Database = {
           es_pago_aplicado?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          fecha_operacion?: string
+          fecha_operacion?: string | null
           folio_codi?: string | null
-          id?: never
+          id?: number
           institucion_beneficiaria?: string | null
           institucion_ordenante?: string | null
           monto?: number
@@ -2055,7 +2106,7 @@ export type Database = {
           fecha_nacimiento?: string | null
           fecha_registro?: string | null
           folio_mercantil?: string | null
-          id?: never
+          id?: number
           id_estado_civil?: number | null
           id_estado_nacimiento?: number | null
           id_municipio_nacimiento?: number | null
@@ -2099,7 +2150,7 @@ export type Database = {
           fecha_nacimiento?: string | null
           fecha_registro?: string | null
           folio_mercantil?: string | null
-          id?: never
+          id?: number
           id_estado_civil?: number | null
           id_estado_nacimiento?: number | null
           id_municipio_nacimiento?: number | null
@@ -2797,14 +2848,14 @@ export type Database = {
           activo?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          id?: number
           nombre: string
         }
         Update: {
           activo?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          id?: number
           nombre?: string
         }
         Relationships: []

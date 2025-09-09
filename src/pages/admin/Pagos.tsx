@@ -16,6 +16,8 @@ interface Pago {
   url_cep: string | null;
   fecha_pago: string;
   url_recibo: string | null;
+  concepto_pago: string | null;
+  nombre_beneficiario: string | null;
 }
 
 export default function Pagos() {
@@ -38,6 +40,8 @@ export default function Pagos() {
   const filteredPagos = pagos?.filter(pago =>
     pago.clave_rastreo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     pago.metodo_pago?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    pago.concepto_pago?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    pago.nombre_beneficiario?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     pago.monto.toString().includes(searchTerm)
   ) || [];
 
@@ -109,7 +113,7 @@ export default function Pagos() {
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por clave de rastreo, método de pago o monto..."
+              placeholder="Buscar por clave, método de pago, concepto, beneficiario o monto..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-8"
@@ -132,7 +136,8 @@ export default function Pagos() {
                   <TableHead>Monto</TableHead>
                   <TableHead>Método de Pago</TableHead>
                   <TableHead>Clave de Rastreo</TableHead>
-                  <TableHead>Acciones</TableHead>
+                  <TableHead>Concepto de Pago</TableHead>
+                  <TableHead>Beneficiario</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -156,28 +161,14 @@ export default function Pagos() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
-                        {pago.url_cep && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(pago.url_cep!, '_blank')}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                            CEP
-                          </Button>
-                        )}
-                        {pago.url_recibo && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(pago.url_recibo!, '_blank')}
-                          >
-                            <Receipt className="h-4 w-4" />
-                            Recibo
-                          </Button>
-                        )}
-                      </div>
+                      {pago.concepto_pago || (
+                        <span className="text-muted-foreground">Sin concepto</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {pago.nombre_beneficiario || (
+                        <span className="text-muted-foreground">Sin beneficiario</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
