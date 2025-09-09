@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   LayoutDashboard,
   Building2,
@@ -14,7 +16,9 @@ import {
   MapPin,
   User,
   Calendar,
-  Briefcase
+  Briefcase,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -75,6 +79,19 @@ const navigationItems = [
 ];
 
 export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps) => {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    new Set(["Entidades"]) // Start with Entidades expanded by default
+  );
+
+  const toggleGroup = (groupTitle: string) => {
+    const newExpanded = new Set(expandedGroups);
+    if (newExpanded.has(groupTitle)) {
+      newExpanded.delete(groupTitle);
+    } else {
+      newExpanded.add(groupTitle);
+    }
+    setExpandedGroups(newExpanded);
+  };
   return (
     <>
       {/* Overlay for mobile */}
@@ -111,50 +128,66 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
-          {navigationItems.map((item, index) => (
-            <div key={index}>
-              {item.href ? (
-                <Link
-                  to={item.href}
-                  className={cn(
-                    "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
-                    currentPath === item.href
-                      ? "bg-admin-sidebar-accent text-white"
-                      : "hover:bg-white/10"
-                  )}
-                  onClick={onClose}
-                >
-                  <item.icon className="h-5 w-5" />
-                  <span>{item.title}</span>
-                </Link>
-              ) : (
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-3 px-3 py-2 text-sm font-medium opacity-70">
+        <ScrollArea className="flex-1 px-4">
+          <nav className="py-4 space-y-2">
+            {navigationItems.map((item, index) => (
+              <div key={index}>
+                {item.href ? (
+                  <Link
+                    to={item.href}
+                    className={cn(
+                      "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                      currentPath === item.href
+                        ? "bg-admin-sidebar-accent text-white"
+                        : "hover:bg-white/10"
+                    )}
+                    onClick={onClose}
+                  >
                     <item.icon className="h-5 w-5" />
                     <span>{item.title}</span>
-                  </div>
-                  {item.children?.map((child, childIndex) => (
-                    <Link
-                      key={childIndex}
-                      to={child.href}
-                      className={cn(
-                        "flex items-center space-x-3 pl-8 pr-3 py-2 rounded-lg transition-colors text-sm",
-                        currentPath === child.href
-                          ? "bg-admin-sidebar-accent text-white"
-                          : "hover:bg-white/10"
-                      )}
-                      onClick={onClose}
+                  </Link>
+                ) : (
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => toggleGroup(item.title)}
+                      className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium opacity-70 hover:opacity-100 hover:bg-white/5 rounded-lg transition-all"
                     >
-                      <child.icon className="h-4 w-4" />
-                      <span>{child.title}</span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </nav>
+                      <div className="flex items-center space-x-3">
+                        <item.icon className="h-5 w-5" />
+                        <span>{item.title}</span>
+                      </div>
+                      {expandedGroups.has(item.title) ? (
+                        <ChevronDown className="h-4 w-4 transition-transform" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 transition-transform" />
+                      )}
+                    </button>
+                    {expandedGroups.has(item.title) && (
+                      <div className="space-y-1 animate-in slide-in-from-top-2 duration-200">
+                        {item.children?.map((child, childIndex) => (
+                          <Link
+                            key={childIndex}
+                            to={child.href}
+                            className={cn(
+                              "flex items-center space-x-3 pl-8 pr-3 py-2 rounded-lg transition-colors text-sm",
+                              currentPath === child.href
+                                ? "bg-admin-sidebar-accent text-white"
+                                : "hover:bg-white/10"
+                            )}
+                            onClick={onClose}
+                          >
+                            <child.icon className="h-4 w-4" />
+                            <span>{child.title}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </nav>
+        </ScrollArea>
 
         {/* User Profile */}
         <div className="p-4 border-t border-white/10">
