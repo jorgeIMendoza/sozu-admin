@@ -340,41 +340,41 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
           
           <div>
             <Label>Documento de Identificación</Label>
-            <div className="flex gap-2 mt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCameraCapture}
-                disabled={isProcessing || isApiProcessing}
-                className="flex-1"
-              >
-                <Camera className="w-4 h-4 mr-2" />
-                {isProcessing ? 'Procesando...' : 'Tomar Foto'}
-              </Button>
-              
-              <Label htmlFor="file-upload" className="flex-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isProcessing || isApiProcessing}
-                  className="w-full"
-                  asChild
-                >
-                  <span>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Subir Archivo
-                  </span>
-                </Button>
-                <input
-                  id="file-upload"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  disabled={isProcessing || isApiProcessing}
-                />
-              </Label>
-            </div>
+        <div className="flex gap-2 mt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleCameraCapture}
+            disabled={isProcessing || isApiProcessing}
+            className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-blue-500 hover:border-blue-600 shadow-lg transition-all duration-300 hover:scale-105 font-semibold"
+          >
+            <Camera className="w-4 h-4 mr-2" />
+            {isProcessing ? 'Procesando...' : 'Tomar Foto'}
+          </Button>
+          
+          <Label htmlFor="file-upload" className="flex-1">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isProcessing || isApiProcessing}
+              className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-green-500 hover:border-green-600 shadow-lg transition-all duration-300 hover:scale-105 font-semibold"
+              asChild
+            >
+              <span>
+                <Upload className="w-4 h-4 mr-2" />
+                Subir Archivo
+              </span>
+            </Button>
+            <input
+              id="file-upload"
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+              disabled={isProcessing || isApiProcessing}
+            />
+          </Label>
+        </div>
             <p className="text-sm text-muted-foreground mt-1">
               Toma una foto o sube una imagen del documento de identificación para extraer automáticamente los datos.
             </p>
@@ -397,10 +397,19 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel }: Perso
         </div>
         
         <div className="flex gap-2 pt-4">
-          <Button type="submit" disabled={isLoading || isProcessing || isApiProcessing}>
-            {isLoading ? 'Guardando...' : initialData ? 'Actualizar' : 'Confirmar'}
+          <Button 
+            type="submit" 
+            disabled={isLoading || isProcessing || isApiProcessing}
+            className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-8"
+          >
+            {isLoading ? 'Guardando...' : initialData ? 'Actualizar' : 'Crear'}
           </Button>
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={onCancel}
+            className="hover:bg-muted/50 transition-colors font-semibold px-8"
+          >
             Cancelar
           </Button>
         </div>
