@@ -3172,6 +3172,7 @@ export type Database = {
           dueño: string
           id: number
           m2_reales: number
+          modelo: string
           numero_piso: number
           numero_propiedad: string
           precio_lista: number

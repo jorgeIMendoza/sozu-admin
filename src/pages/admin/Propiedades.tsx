@@ -24,6 +24,7 @@ interface Property {
   transaccion: string;
   tipo_propiedad: string;
   disponibilidad: string;
+  modelo: string;
   activo: boolean;
 }
 
@@ -165,66 +166,70 @@ const Propiedades = () => {
             
             <TabsContent value="activas" className="mt-4">
               <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Propietario</TableHead>
-                      <TableHead>No. Propiedad</TableHead>
-                      <TableHead>Piso</TableHead>
-                      <TableHead>M² Reales</TableHead>
-                      <TableHead>Precio Lista</TableHead>
-                      <TableHead>Vista</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Disponibilidad</TableHead>
-                      <TableHead>Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProperties.length === 0 ? (
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-6">
-                          {searchTerm ? "No se encontraron resultados." : "No hay propiedades activas."}
-                        </TableCell>
+                        <TableHead>Propietario</TableHead>
+                        <TableHead>No. Propiedad</TableHead>
+                        <TableHead>Piso</TableHead>
+                        <TableHead>M² Reales</TableHead>
+                        <TableHead>Precio Lista</TableHead>
+                        <TableHead>Vista</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Modelo</TableHead>
+                        <TableHead>Disponibilidad</TableHead>
+                        <TableHead>Acciones</TableHead>
                       </TableRow>
-                    ) : (
-                      filteredProperties.map((property) => (
-                        <TableRow key={property.id}>
-                          <TableCell className="font-medium">{property.dueño}</TableCell>
-                          <TableCell>{property.numero_propiedad}</TableCell>
-                          <TableCell>{property.numero_piso}</TableCell>
-                          <TableCell>{property.m2_reales} m²</TableCell>
-                          <TableCell>{formatCurrency(property.precio_lista)}</TableCell>
-                          <TableCell>{property.vista}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{property.tipo_propiedad}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">{property.disponibilidad}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setEditingProperty(property)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDelete(property.id)}
-                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredProperties.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={10} className="text-center py-6">
+                            {searchTerm ? "No se encontraron resultados." : "No hay propiedades activas."}
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
+                      ) : (
+                        filteredProperties.map((property) => (
+                          <TableRow key={property.id}>
+                            <TableCell className="font-medium">{property.dueño}</TableCell>
+                            <TableCell>{property.numero_propiedad}</TableCell>
+                            <TableCell>{property.numero_piso}</TableCell>
+                            <TableCell>{property.m2_reales} m²</TableCell>
+                            <TableCell>{formatCurrency(property.precio_lista)}</TableCell>
+                            <TableCell>{property.vista}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{property.tipo_propiedad}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{property.modelo}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">{property.disponibilidad}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingProperty(property)}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDelete(property.id)}
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
                 </Table>
               </div>
             </TabsContent>
@@ -241,6 +246,7 @@ const Propiedades = () => {
                       <TableHead>Precio Lista</TableHead>
                       <TableHead>Vista</TableHead>
                       <TableHead>Tipo</TableHead>
+                      <TableHead>Modelo</TableHead>
                       <TableHead>Disponibilidad</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -248,7 +254,7 @@ const Propiedades = () => {
                   <TableBody>
                     {filteredProperties.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-6">
+                        <TableCell colSpan={10} className="text-center py-6">
                           {searchTerm ? "No se encontraron resultados." : "No hay propiedades eliminadas."}
                         </TableCell>
                       </TableRow>
@@ -263,6 +269,9 @@ const Propiedades = () => {
                           <TableCell>{property.vista}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{property.tipo_propiedad}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{property.modelo}</Badge>
                           </TableCell>
                           <TableCell>
                             <Badge variant="secondary">{property.disponibilidad}</Badge>
