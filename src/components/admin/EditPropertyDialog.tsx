@@ -456,7 +456,58 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
               <Label htmlFor="propietario">Propietario</Label>
               <Select 
                 value={formData.id_entidad_relacionada_dueno} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, id_entidad_relacionada_dueno: value }))}
+                onValueChange={async (value) => {
+                  setFormData(prev => ({ ...prev, id_entidad_relacionada_dueno: value }));
+                  
+                  // Recalculate CLABE STP when owner changes
+                  if (value) {
+                    try {
+                      const { data: nuevaClabe, error } = await supabase
+                        .rpc('crear_referencia_bancaria', { id_er_dueno: parseInt(value) });
+                      
+                      if (error) {
+                        console.error('Error generating new CLABE STP:', error);
+                        toast({
+                          title: "Error",
+                          description: "No se pudo generar la nueva CLABE STP.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      // Update CLABE STP in database
+                      const { error: updateError } = await supabase
+                        .from('propiedades')
+                        .update({ clabe_stp_tmp_apartado: nuevaClabe })
+                        .eq('id', property.id);
+
+                      if (updateError) {
+                        console.error('Error updating CLABE STP:', updateError);
+                        toast({
+                          title: "Error",
+                          description: "No se pudo actualizar la CLABE STP.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      // Update form state
+                      setFormData(prev => ({ ...prev, clabe_stp_tmp_apartado: nuevaClabe }));
+                      
+                      toast({
+                        title: "CLABE STP actualizada",
+                        description: "Se ha generado una nueva CLABE STP para el propietario seleccionado.",
+                      });
+                    } catch (error) {
+                      console.error('Error in CLABE STP generation:', error);
+                      toast({
+                        title: "Error",
+                        description: "Error inesperado al generar la CLABE STP.",
+                        variant: "destructive",
+                      });
+                    }
+                  }
+                }}
                 disabled={parseInt(formData.id_estatus_disponibilidad) > 2}
               >
                 <SelectTrigger>
