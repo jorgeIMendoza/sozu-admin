@@ -2076,7 +2076,7 @@ export type Database = {
           numero_escritura: string | null
           numero_libro: string | null
           ocupacion: string | null
-          regimen: number | null
+          regimen: string | null
           rfc: string | null
           sexo: string | null
           telefono: string | null
@@ -2120,7 +2120,7 @@ export type Database = {
           numero_escritura?: string | null
           numero_libro?: string | null
           ocupacion?: string | null
-          regimen?: number | null
+          regimen?: string | null
           rfc?: string | null
           sexo?: string | null
           telefono?: string | null
@@ -2164,7 +2164,7 @@ export type Database = {
           numero_escritura?: string | null
           numero_libro?: string | null
           ocupacion?: string | null
-          regimen?: number | null
+          regimen?: string | null
           rfc?: string | null
           sexo?: string | null
           telefono?: string | null
@@ -2276,6 +2276,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "uso_cfdi"
             referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "personas_regimen_fkey"
+            columns: ["regimen"]
+            isOneToOne: false
+            referencedRelation: "regimen"
+            referencedColumns: ["id"]
           },
         ]
       }
