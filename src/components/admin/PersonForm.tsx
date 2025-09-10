@@ -176,6 +176,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         .from('regimen')
         .select('id, nombre')
         .eq('activo', true)
+        .eq('tipo', 'pm')
         .order('nombre');
       
       if (error) throw error;
@@ -190,6 +191,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         .from('uso_cfdi')
         .select('codigo, nombre')
         .eq('activo', true)
+        .in('tipo', ['pm', 'a'])
         .order('codigo');
       
       if (error) throw error;
