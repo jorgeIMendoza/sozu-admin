@@ -268,9 +268,6 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogPr
               name="caracteristicas"
               render={() => (
                 <FormItem>
-                  <div className="mb-4">
-                    <FormLabel className="text-base">Características</FormLabel>
-                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     {caracteristicas?.map((caracteristica) => (
                       <FormField
