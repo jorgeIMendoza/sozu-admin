@@ -173,6 +173,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     queryKey: ['regimen', tipoPersona, entityType],
     queryFn: async () => {
       console.log('Fetching regimenes for tipoPersona:', tipoPersona, 'entityType:', entityType);
+      
+      // Fix: Ensure we have a valid tipoPersona value
+      if (!tipoPersona || (tipoPersona !== 'pm' && tipoPersona !== 'pf')) {
+        console.log('Invalid tipoPersona:', tipoPersona);
+        return [];
+      }
+      
       const { data, error } = await supabase
         .from('regimen')
         .select('id, nombre')
@@ -184,17 +191,24 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         console.error('Error fetching regimenes:', error);
         throw error;
       }
-      console.log('Regimenes fetched:', data);
+      console.log('Regimenes fetched for tipo:', tipoPersona, 'data:', data);
       return data || [];
     },
-    enabled: !!tipoPersona && shouldShowTaxFields(),
+    enabled: !!tipoPersona && shouldShowTaxFields() && (tipoPersona === 'pm' || tipoPersona === 'pf'),
   });
 
   const { data: usosCfdi = [] } = useQuery({
     queryKey: ['uso_cfdi', tipoPersona, entityType],
     queryFn: async () => {
+      // Fix: Ensure we have a valid tipoPersona value
+      if (!tipoPersona || (tipoPersona !== 'pm' && tipoPersona !== 'pf')) {
+        console.log('Invalid tipoPersona for uso_cfdi:', tipoPersona);
+        return [];
+      }
+      
       const filterTypes = tipoPersona === 'pm' ? ['pm', 'a'] : ['pf', 'a'];
       console.log('Fetching uso_cfdi for tipoPersona:', tipoPersona, 'filterTypes:', filterTypes, 'entityType:', entityType);
+      
       const { data, error } = await supabase
         .from('uso_cfdi')
         .select('codigo, nombre')
@@ -206,10 +220,10 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         console.error('Error fetching uso_cfdi:', error);
         throw error;
       }
-      console.log('Uso CFDI fetched:', data);
+      console.log('Uso CFDI fetched for tipos:', filterTypes, 'data:', data);
       return data || [];
     },
-    enabled: !!tipoPersona && shouldShowTaxFields(),
+    enabled: !!tipoPersona && shouldShowTaxFields() && (tipoPersona === 'pm' || tipoPersona === 'pf'),
   });
 
   const { data: representantesLegales = [] } = useQuery({
