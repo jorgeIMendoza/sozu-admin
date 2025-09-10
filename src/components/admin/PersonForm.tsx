@@ -177,7 +177,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         .from('regimen')
         .select('id, nombre')
         .eq('activo', true)
-        .in('tipo', [tipoPersona])
+        .eq('tipo', tipoPersona)
         .order('nombre');
       
       if (error) {
