@@ -101,29 +101,68 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
     }
   });
 
+  // Fetch property project info first
+  const { data: propertyProject } = useQuery({
+    queryKey: ['property_project', property.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('propiedades')
+        .select(`
+          id,
+          edificios_modelos!id_edificio_modelo (
+            edificios!id_edificio (
+              proyectos!id_proyecto (
+                id,
+                nombre
+              )
+            )
+          )
+        `)
+        .eq('id', property.id)
+        .single();
+      if (error) throw error;
+      return data?.edificios_modelos?.edificios?.proyectos;
+    }
+  });
+
+  // Fetch owners based on the custom query logic
   const { data: entidadesRelacionadas } = useQuery({
-    queryKey: ['entidades_relacionadas'],
+    queryKey: ['propietarios_filtered'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('entidades_relacionadas')
         .select(`
           id,
+          id_proyecto,
           id_persona,
+          proyectos!id_proyecto (
+            id,
+            nombre
+          ),
           personas!id_persona (
             id,
             nombre_legal
+          ),
+          tipos_entidad!id_tipo_entidad (
+            id,
+            nombre
           )
         `)
-        .eq('activo', true);
+        .lte('id_tipo_entidad', 2)
+        .eq('activo', true)
+        .order('personas(nombre_legal)');
+      
       if (error) throw error;
-
       return data || [];
     }
   });
 
+  // Fetch models based on project
   const { data: edificiosModelos } = useQuery({
-    queryKey: ['edificios_modelos'],
+    queryKey: ['modelos_filtered', propertyProject?.nombre],
     queryFn: async () => {
+      if (!propertyProject?.nombre) return [];
+      
       const { data, error } = await supabase
         .from('edificios_modelos')
         .select(`
@@ -132,7 +171,11 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
           id_modelo,
           edificios!id_edificio (
             id,
-            nombre
+            nombre,
+            proyectos!id_proyecto (
+              id,
+              nombre
+            )
           ),
           modelos!id_modelo (
             id,
@@ -140,10 +183,17 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
           )
         `)
         .eq('activo', true);
+      
       if (error) throw error;
-
-      return data || [];
-    }
+      
+      // Filter by project name
+      const filtered = data?.filter(em => 
+        em.edificios?.proyectos?.nombre === propertyProject.nombre
+      ) || [];
+      
+      return filtered;
+    },
+    enabled: !!propertyProject?.nombre
   });
 
   // Fetch current property details to populate form
@@ -380,7 +430,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                 <SelectContent>
                   {entidadesRelacionadas?.map((entidad) => (
                     <SelectItem key={entidad.id} value={entidad.id.toString()}>
-                      {entidad.personas?.nombre_legal || 'Sin nombre'}
+                      {entidad.personas?.nombre_legal} - {entidad.proyectos?.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -396,7 +446,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                 <SelectContent>
                   {edificiosModelos?.map((em) => (
                     <SelectItem key={em.id} value={em.id.toString()}>
-                      {em.edificios?.nombre || 'Sin edificio'} - {em.modelos?.nombre || 'Sin modelo'}
+                      {em.edificios?.nombre} - {em.modelos?.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
