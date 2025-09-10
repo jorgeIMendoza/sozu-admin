@@ -110,8 +110,8 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
         .select(`
           id,
           edificios_modelos!id_edificio_modelo (
-            edificios!id_edificio (
-              proyectos!id_proyecto (
+            edificios!edificios_modelos_id_edificio_fkey (
+              proyectos!fk_edificios_proyecto (
                 id,
                 nombre
               )
@@ -135,7 +135,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
           id,
           id_proyecto,
           id_persona,
-          proyectos!id_proyecto (
+          proyectos!entidades_relacionadas_id_proyecto_fkey (
             id,
             nombre
           ),
@@ -169,10 +169,10 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
           id,
           id_edificio,
           id_modelo,
-          edificios!id_edificio (
+          edificios!edificios_modelos_id_edificio_fkey (
             id,
             nombre,
-            proyectos!id_proyecto (
+            proyectos!fk_edificios_proyecto (
               id,
               nombre
             )
