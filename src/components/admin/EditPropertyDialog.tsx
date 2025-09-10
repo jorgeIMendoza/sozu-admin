@@ -346,17 +346,12 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
               <Label htmlFor="precio_lista">Precio Lista</Label>
               <Input
                 id="precio_lista"
-                type="text"
-                value={new Intl.NumberFormat('es-MX', { 
-                  style: 'currency', 
-                  currency: 'MXN',
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2 
-                }).format(formData.precio_lista)}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[^0-9.]/g, '');
-                  setFormData(prev => ({ ...prev, precio_lista: parseFloat(value) || 0 }));
-                }}
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.precio_lista}
+                onChange={(e) => setFormData(prev => ({ ...prev, precio_lista: parseFloat(e.target.value) || 0 }))}
+                placeholder="0.00"
                 required
               />
             </div>
@@ -365,17 +360,12 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
               <Label htmlFor="monto_apartado">Monto Apartado</Label>
               <Input
                 id="monto_apartado"
-                type="text"
-                value={new Intl.NumberFormat('es-MX', { 
-                  style: 'currency', 
-                  currency: 'MXN',
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2 
-                }).format(formData.monto_apartado)}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[^0-9.]/g, '');
-                  setFormData(prev => ({ ...prev, monto_apartado: parseFloat(value) || 0 }));
-                }}
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.monto_apartado}
+                onChange={(e) => setFormData(prev => ({ ...prev, monto_apartado: parseFloat(e.target.value) || 0 }))}
+                placeholder="0.00"
               />
             </div>
 
