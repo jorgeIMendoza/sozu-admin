@@ -170,8 +170,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   });
 
   const { data: regimenes = [] } = useQuery({
-    queryKey: ['regimen', tipoPersona],
+    queryKey: ['regimen', tipoPersona, entityType],
     queryFn: async () => {
+      console.log('Fetching regimenes for tipoPersona:', tipoPersona, 'entityType:', entityType);
       const { data, error } = await supabase
         .from('regimen')
         .select('id, nombre')
@@ -179,23 +180,33 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         .eq('tipo', tipoPersona)
         .order('nombre');
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching regimenes:', error);
+        throw error;
+      }
+      console.log('Regimenes fetched:', data);
       return data || [];
     },
     enabled: !!tipoPersona && shouldShowTaxFields(),
   });
 
   const { data: usosCfdi = [] } = useQuery({
-    queryKey: ['uso_cfdi', tipoPersona],
+    queryKey: ['uso_cfdi', tipoPersona, entityType],
     queryFn: async () => {
+      const filterTypes = tipoPersona === 'pm' ? ['pm', 'a'] : ['pf', 'a'];
+      console.log('Fetching uso_cfdi for tipoPersona:', tipoPersona, 'filterTypes:', filterTypes, 'entityType:', entityType);
       const { data, error } = await supabase
         .from('uso_cfdi')
         .select('codigo, nombre')
         .eq('activo', true)
-        .in('tipo', tipoPersona === 'pm' ? ['pm', 'a'] : ['pf', 'a'])
+        .in('tipo', filterTypes)
         .order('codigo');
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching uso_cfdi:', error);
+        throw error;
+      }
+      console.log('Uso CFDI fetched:', data);
       return data || [];
     },
     enabled: !!tipoPersona && shouldShowTaxFields(),
@@ -228,7 +239,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
   function shouldShowTaxFields() {
     // Show tax fields for all entities except users
-    return entityType !== 'user';
+    const shouldShow = entityType !== 'user';
+    console.log('shouldShowTaxFields for entityType:', entityType, 'tipoPersona:', tipoPersona, 'result:', shouldShow);
+    return shouldShow;
   }
 
   // Camera capture and document processing functions
