@@ -34,12 +34,10 @@ export default function RepresentantesLegales() {
   const { data: representantes = [], isLoading } = useQuery({
     queryKey: ['representantes_legales'],
     queryFn: async () => {
-      // Por ahora mostramos personas físicas que podrían ser representantes legales
-      // En el futuro se podría crear una relación específica
       const { data, error } = await supabase
         .from('personas')
         .select('*')
-        .eq('tipo_persona', 'pf')
+        .eq('id_tipo_relacion', 1)
         .eq('activo', true)
         .order('nombre_legal', { ascending: true });
       

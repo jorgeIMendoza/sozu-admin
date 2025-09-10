@@ -35,6 +35,7 @@ export default function Clientes() {
       const { data, error } = await supabase
         .from('personas')
         .select('*')
+        .in('id_tipo_relacion', [2, 7])
         .eq('activo', true)
         .order('nombre_legal', { ascending: true });
       

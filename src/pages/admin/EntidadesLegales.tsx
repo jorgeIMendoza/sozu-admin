@@ -34,7 +34,7 @@ export default function EntidadesLegales() {
       const { data, error } = await supabase
         .from('personas')
         .select('*')
-        .eq('tipo_persona', 'pm')
+        .in('id_tipo_relacion', [3, 5, 6, 8, 9, 13])
         .eq('activo', true)
         .order('nombre_legal', { ascending: true });
       
