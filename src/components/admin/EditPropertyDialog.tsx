@@ -422,7 +422,11 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
 
             <div className="space-y-2">
               <Label htmlFor="propietario">Propietario</Label>
-              <Select value={formData.id_entidad_relacionada_dueno} onValueChange={(value) => setFormData(prev => ({ ...prev, id_entidad_relacionada_dueno: value }))}>
+              <Select 
+                value={formData.id_entidad_relacionada_dueno} 
+                onValueChange={(value) => setFormData(prev => ({ ...prev, id_entidad_relacionada_dueno: value }))}
+                disabled={parseInt(formData.id_estatus_disponibilidad) > 2}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona propietario" />
                 </SelectTrigger>
