@@ -170,33 +170,35 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   });
 
   const { data: regimenes = [] } = useQuery({
-    queryKey: ['regimen'],
+    queryKey: ['regimen', tipoPersona],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('regimen')
         .select('id, nombre')
         .eq('activo', true)
-        .eq('tipo', 'pm')
+        .eq('tipo', tipoPersona)
         .order('nombre');
       
       if (error) throw error;
       return data || [];
     },
+    enabled: !!tipoPersona && shouldShowTaxFields(),
   });
 
   const { data: usosCfdi = [] } = useQuery({
-    queryKey: ['uso_cfdi'],
+    queryKey: ['uso_cfdi', tipoPersona],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('uso_cfdi')
         .select('codigo, nombre')
         .eq('activo', true)
-        .in('tipo', ['pm', 'a'])
+        .in('tipo', tipoPersona === 'pm' ? ['pm', 'a'] : ['pf', 'a'])
         .order('codigo');
       
       if (error) throw error;
       return data || [];
     },
+    enabled: !!tipoPersona && shouldShowTaxFields(),
   });
 
   const { data: representantesLegales = [] } = useQuery({
@@ -222,6 +224,11 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       case 'representative': return 1;
       default: return undefined;
     }
+  }
+
+  function shouldShowTaxFields() {
+    // Show tax fields for all entities except users
+    return entityType !== 'user';
   }
 
   // Camera capture and document processing functions
@@ -437,37 +444,41 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                   />
                 </div>
 
-                <div>
-                  <Label htmlFor="usoCfdi">Uso CFDI</Label>
-                  <Select value={usoCfdi} onValueChange={setUsoCfdi}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona el uso CFDI" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {usosCfdi.map((uso) => (
-                        <SelectItem key={uso.codigo} value={uso.codigo}>
-                          {uso.codigo} - {uso.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {shouldShowTaxFields() && (
+                  <div>
+                    <Label htmlFor="usoCfdi">Uso CFDI</Label>
+                    <Select value={usoCfdi} onValueChange={setUsoCfdi}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona el uso CFDI" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {usosCfdi.map((uso) => (
+                          <SelectItem key={uso.codigo} value={uso.codigo}>
+                            {uso.codigo} - {uso.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
-                <div>
-                  <Label htmlFor="regimen">Régimen</Label>
-                  <Select value={regimen} onValueChange={setRegimen}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un régimen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {regimenes.map((reg) => (
-                        <SelectItem key={reg.id} value={reg.id.toString()}>
-                          {reg.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {shouldShowTaxFields() && (
+                  <div>
+                    <Label htmlFor="regimen">Régimen</Label>
+                    <Select value={regimen} onValueChange={setRegimen}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona un régimen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {regimenes.map((reg) => (
+                          <SelectItem key={reg.id} value={reg.id.toString()}>
+                            {reg.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </TabsContent>
 
