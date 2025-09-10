@@ -459,7 +459,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                 onValueChange={async (value) => {
                   setFormData(prev => ({ ...prev, id_entidad_relacionada_dueno: value }));
                   
-                  // Recalculate CLABE STP when owner changes
+                  // Generate new CLABE STP when owner changes (but don't save to DB yet)
                   if (value) {
                     try {
                       const { data: nuevaClabe, error } = await supabase
@@ -475,28 +475,12 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                         return;
                       }
 
-                      // Update CLABE STP in database
-                      const { error: updateError } = await supabase
-                        .from('propiedades')
-                        .update({ clabe_stp_tmp_apartado: nuevaClabe })
-                        .eq('id', property.id);
-
-                      if (updateError) {
-                        console.error('Error updating CLABE STP:', updateError);
-                        toast({
-                          title: "Error",
-                          description: "No se pudo actualizar la CLABE STP.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-
-                      // Update form state
+                      // Update only form state (don't save to database until submit)
                       setFormData(prev => ({ ...prev, clabe_stp_tmp_apartado: nuevaClabe }));
                       
                       toast({
-                        title: "CLABE STP actualizada",
-                        description: "Se ha generado una nueva CLABE STP para el propietario seleccionado.",
+                        title: "CLABE STP generada",
+                        description: "Se ha generado una nueva CLABE STP. Guarda los cambios para aplicarla.",
                       });
                     } catch (error) {
                       console.error('Error in CLABE STP generation:', error);
