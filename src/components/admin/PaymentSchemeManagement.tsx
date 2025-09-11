@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { CreditCard, Eye, Edit, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,11 +44,7 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
     refetch();
   };
 
-  const handleDeleteScheme = async (schemeId: number, schemeName: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar el esquema de pago "${schemeName}"?`)) {
-      return;
-    }
-
+  const handleDeleteScheme = async (schemeId: number) => {
     try {
       const { error } = await supabase
         .from("esquemas_pago")
@@ -70,6 +67,41 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
         variant: "destructive",
       });
     }
+  };
+
+  const DeletePaymentSchemeDialog = ({ scheme }: { scheme: any }) => {
+    return (
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Eliminar
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar esquema de pago?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar el esquema de pago "<strong>{scheme.nombre}</strong>"? 
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleDeleteScheme(scheme.id)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
   };
 
   const PaymentSchemeDetailsDialog = ({ scheme }: { scheme: any }) => {
@@ -126,15 +158,7 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
                 scheme={scheme} 
                 onSchemeUpdated={handleSchemeAdded} 
               />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDeleteScheme(scheme.id, scheme.nombre)}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                Eliminar
-              </Button>
+              <DeletePaymentSchemeDialog scheme={scheme} />
             </div>
           </div>
         </DialogContent>

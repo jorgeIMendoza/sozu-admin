@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Building2, Eye, Edit, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,11 +45,7 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
     refetch();
   };
 
-  const handleDeleteBuilding = async (buildingId: number, buildingName: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar el edificio "${buildingName}"?`)) {
-      return;
-    }
-
+  const handleDeleteBuilding = async (buildingId: number) => {
     try {
       const { error } = await supabase
         .from("edificios")
@@ -71,6 +68,41 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
         variant: "destructive",
       });
     }
+  };
+
+  const DeleteBuildingDialog = ({ building }: { building: any }) => {
+    return (
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Eliminar
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar edificio?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar el edificio "<strong>{building.nombre}</strong>"? 
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleDeleteBuilding(building.id)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
   };
 
   const BuildingModelsDialog = ({ buildingId, buildingName }: { buildingId: number, buildingName: string }) => {
@@ -214,15 +246,7 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
                       building={building} 
                       onBuildingUpdated={handleBuildingAdded} 
                     />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeleteBuilding(building.id, building.nombre)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Eliminar
-                    </Button>
+                    <DeleteBuildingDialog building={building} />
                   </div>
 
                   {(building.numero_pisos || building.fecha_lanzamiento) && (
