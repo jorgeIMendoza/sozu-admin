@@ -70,10 +70,13 @@ export default function RepresentantesLegales() {
 
   const createMutation = useMutation({
     mutationFn: async (personData: any) => {
+      // Filter out fields that don't belong to personas table
+      const { entityType, representativeId, ...cleanPersonData } = personData;
+      
       // First, create the person record
       const { data: personResult, error: personError } = await supabase
         .from('personas')
-        .insert([{ ...personData, tipo_persona: 'pf' }])
+        .insert([{ ...cleanPersonData, tipo_persona: 'pf' }])
         .select()
         .single();
       
@@ -110,9 +113,12 @@ export default function RepresentantesLegales() {
 
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
+      // Filter out fields that don't belong to personas table
+      const { entityType, representativeId, ...cleanPersonData } = personData;
+      
       const { error } = await supabase
         .from('personas')
-        .update(personData)
+        .update(cleanPersonData)
         .eq('id', editingRepresentant?.id);
       
       if (error) throw error;
