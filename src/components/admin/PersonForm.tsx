@@ -278,8 +278,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   }
 
   function shouldShowBeneficiariosTab() {
-    // Show beneficiarios tab only for clients when editing (has ID)
-    return entityType === 'client' && initialData && initialData.id;
+    // Show beneficiarios tab for all clients
+    return entityType === 'client';
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -861,10 +861,19 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
             {shouldShowBeneficiariosTab() && (
               <TabsContent value="beneficiarios" className="space-y-4 mt-6">
-                <BeneficiariosForm 
-                  personaId={initialData.id} 
-                  personaNombre={initialData.nombre_legal || initialData.nombre} 
-                />
+                {initialData && initialData.id ? (
+                  <BeneficiariosForm 
+                    personaId={initialData.id} 
+                    personaNombre={initialData.nombre_legal || initialData.nombre} 
+                  />
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="text-lg mb-2">Beneficiarios</p>
+                    <p className="text-sm">
+                      Guarda primero la información del cliente para poder agregar beneficiarios
+                    </p>
+                  </div>
+                )}
               </TabsContent>
             )}
           </Tabs>
