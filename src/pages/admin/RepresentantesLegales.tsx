@@ -38,7 +38,7 @@ export default function RepresentantesLegales() {
         .from('entidades_relacionadas')
         .select(`
           id,
-          personas!inner (
+          personas!entidades_relacionadas_id_persona_fkey!inner (
             id,
             nombre_legal,
             email,
