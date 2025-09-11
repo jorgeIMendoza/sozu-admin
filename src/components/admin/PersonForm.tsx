@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { BeneficiariosForm } from "./BeneficiariosForm";
 
 interface PersonFormProps {
   onSubmit: (data: any) => void;
@@ -276,6 +277,11 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     return entityType === 'legal';
   }
 
+  function shouldShowBeneficiariosTab() {
+    // Show beneficiarios tab only for clients when editing (has ID)
+    return entityType === 'client' && initialData && initialData.id;
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -368,10 +374,11 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       <form onSubmit={handleSubmit} className="space-y-6">
         {!isUser ? (
           <Tabs defaultValue="basic" className="w-full">
-            <TabsList className={`grid w-full ${shouldShowLegalTab() ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            <TabsList className={`grid w-full ${shouldShowBeneficiariosTab() ? 'grid-cols-3' : shouldShowLegalTab() ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <TabsTrigger value="basic">Información Básica</TabsTrigger>
               <TabsTrigger value="address">Dirección</TabsTrigger>
               {shouldShowLegalTab() && <TabsTrigger value="legal">Información Legal</TabsTrigger>}
+              {shouldShowBeneficiariosTab() && <TabsTrigger value="beneficiarios">Beneficiarios</TabsTrigger>}
             </TabsList>
 
             <TabsContent value="basic" className="space-y-4 mt-6">
@@ -849,6 +856,15 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     </div>
                   )}
                 </div>
+              </TabsContent>
+            )}
+
+            {shouldShowBeneficiariosTab() && (
+              <TabsContent value="beneficiarios" className="space-y-4 mt-6">
+                <BeneficiariosForm 
+                  personaId={initialData.id} 
+                  personaNombre={initialData.nombre_legal || initialData.nombre} 
+                />
               </TabsContent>
             )}
           </Tabs>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, Users } from "lucide-react";
+import { Plus, Search, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,6 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PersonForm } from "@/components/admin/PersonForm";
-import { BeneficiariosForm } from "@/components/admin/BeneficiariosForm";
 
 type Cliente = {
   id: number;
@@ -145,9 +144,8 @@ export default function Clientes() {
     <div className="container mx-auto py-6 px-4">
       <Card className="border-border shadow-lg">
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-1">
             <TabsTrigger value="general">Información General</TabsTrigger>
-            <TabsTrigger value="beneficiarios">Beneficiarios</TabsTrigger>
           </TabsList>
           
           <TabsContent value="general" className="mt-6">
@@ -256,33 +254,6 @@ export default function Clientes() {
                       ))}
                     </TableBody>
                   </Table>
-                </div>
-              )}
-            </CardContent>
-          </TabsContent>
-          
-          <TabsContent value="beneficiarios" className="mt-6">
-            <CardContent className="p-6">
-              {filteredClientes.length === 0 ? (
-                <div className="text-center py-12">
-                  <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                  <div className="text-muted-foreground text-lg mb-2">
-                    No hay clientes para mostrar beneficiarios
-                  </div>
-                  <p className="text-muted-foreground/80">
-                    Primero agrega clientes para gestionar sus beneficiarios
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {filteredClientes.map((cliente) => (
-                    <div key={cliente.id} className="border border-border rounded-lg p-4">
-                      <BeneficiariosForm 
-                        personaId={cliente.id} 
-                        personaNombre={cliente.nombre_legal} 
-                      />
-                    </div>
-                  ))}
                 </div>
               )}
             </CardContent>
