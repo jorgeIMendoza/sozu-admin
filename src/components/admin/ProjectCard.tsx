@@ -1,7 +1,11 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, DollarSign, Building, Home, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MapPin, DollarSign, Building, Home, Calendar, Trash2 } from "lucide-react";
 import { EditProjectDialog } from "./EditProjectDialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface ProjectCardProps {
   id: number;
@@ -32,6 +36,8 @@ export const ProjectCard = ({
   onProjectUpdated,
   onProjectDeleted
 }: ProjectCardProps) => {
+  const { toast } = useToast();
+
   const formatPrice = (price?: number) => {
     if (!price) return "N/A";
     return `$${price.toLocaleString('es-MX')} MXN/m²`;
@@ -41,6 +47,33 @@ export const ProjectCard = ({
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString('es-MX');
   };
+
+  const handleDeleteProject = async () => {
+    try {
+      const { error } = await supabase
+        .from("proyectos")
+        .update({ activo: false })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Proyecto eliminado",
+        description: "El proyecto se ha eliminado exitosamente.",
+      });
+
+      onProjectDeleted?.();
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      toast({
+        title: "Error",
+        description: "Hubo un error al eliminar el proyecto.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const hasBuildings = numero_edificios > 0;
 
   return (
     <Card className="transition-all duration-200 hover:shadow-lg border border-border">
@@ -103,9 +136,43 @@ export const ProjectCard = ({
               <EditProjectDialog 
                 projectId={id} 
                 onProjectUpdated={onProjectUpdated || (() => {})}
-                onProjectDeleted={onProjectDeleted || (() => {})}
               />
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    disabled={hasBuildings}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Eliminar
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>¿Eliminar proyecto?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      ¿Estás seguro de que deseas eliminar este proyecto? Esta acción no se puede deshacer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteProject}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Eliminar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
+            {hasBuildings && (
+              <p className="text-xs text-muted-foreground">
+                No se puede eliminar: contiene {numero_edificios} edificio{numero_edificios !== 1 ? 's' : ''}
+              </p>
+            )}
           </div>
         </div>
       </CardContent>
