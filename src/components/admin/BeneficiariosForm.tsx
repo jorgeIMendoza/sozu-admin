@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -51,6 +52,7 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
   const [porcentajeParticipacion, setPorcentajeParticipacion] = useState("");
   const [tempBeneficiarios, setTempBeneficiarios] = useState<TempBeneficiario[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [deletingBeneficiario, setDeletingBeneficiario] = useState<TempBeneficiario | null>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -143,7 +145,7 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
       if (toDelete.length > 0) {
         const { error: deleteError } = await supabase
           .from('beneficiarios')
-          .update({ activo: false })
+          .delete()
           .in('id', toDelete.map(b => b.id));
         if (deleteError) throw deleteError;
       }
@@ -238,13 +240,18 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: number | string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este beneficiario?')) {
-      const filtered = tempBeneficiarios.filter(b => b.id !== id);
-      const recalculated = recalculatePercentages(filtered);
-      setTempBeneficiarios(recalculated);
-      setHasChanges(true);
-    }
+  const handleDelete = (beneficiario: TempBeneficiario) => {
+    setDeletingBeneficiario(beneficiario);
+  };
+
+  const confirmDelete = () => {
+    if (!deletingBeneficiario) return;
+    
+    const filtered = tempBeneficiarios.filter(b => b.id !== deletingBeneficiario.id);
+    const recalculated = recalculatePercentages(filtered);
+    setTempBeneficiarios(recalculated);
+    setHasChanges(true);
+    setDeletingBeneficiario(null);
   };
 
   const handlePercentageChange = (id: number | string, newPercentage: number) => {
@@ -362,7 +369,7 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => handleDelete(beneficiario.id)}
+                        onClick={() => handleDelete(beneficiario)}
                         className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -457,6 +464,28 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog para confirmar eliminación */}
+      <AlertDialog open={!!deletingBeneficiario} onOpenChange={() => setDeletingBeneficiario(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar beneficiario?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar a <strong>{deletingBeneficiario?.nombre_beneficiario}</strong> como beneficiario? 
+              Esta acción no se puede deshacer y los porcentajes se redistribuirán automáticamente entre los beneficiarios restantes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
