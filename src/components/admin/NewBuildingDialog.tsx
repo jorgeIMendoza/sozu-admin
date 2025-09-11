@@ -52,7 +52,12 @@ export const NewBuildingDialog = ({ projectId, onBuildingAdded }: NewBuildingDia
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>, event?: any) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
     try {
       const buildingData = {
         nombre: values.nombre,
@@ -114,7 +119,14 @@ export const NewBuildingDialog = ({ projectId, onBuildingAdded }: NewBuildingDia
           <DialogTitle>Agregar Nuevo Edificio</DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit(onSubmit)(e);
+            }} 
+            className="space-y-4"
+          >
             <FormField
               control={form.control}
               name="nombre"

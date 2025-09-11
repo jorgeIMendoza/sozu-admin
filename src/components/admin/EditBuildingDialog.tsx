@@ -44,7 +44,12 @@ export const EditBuildingDialog = ({ building, onBuildingUpdated }: EditBuilding
     }
   }, [building, open, form]);
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>, event?: any) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
     try {
       const updateData: any = {
         nombre: values.nombre,
@@ -94,7 +99,14 @@ export const EditBuildingDialog = ({ building, onBuildingUpdated }: EditBuilding
           <DialogTitle>Editar Edificio</DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit(onSubmit)(e);
+            }} 
+            className="space-y-4"
+          >
             <FormField
               control={form.control}
               name="nombre"

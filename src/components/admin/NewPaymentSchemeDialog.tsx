@@ -49,7 +49,12 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded }: NewPaymentS
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>, event?: any) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
     try {
       // Validate percentages sum to 100 before attempting to save
       const enganche = parseFloat(values.porcentaje_enganche);
@@ -118,7 +123,14 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded }: NewPaymentS
           <DialogTitle>Nuevo Esquema de Pago</DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit(onSubmit)(e);
+            }} 
+            className="space-y-4"
+          >
             <FormField
               control={form.control}
               name="nombre"

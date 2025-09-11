@@ -101,7 +101,12 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogPr
     enabled: open,
   });
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>, event?: any) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
     try {
       // Update modelo
       const modeloData = {
@@ -172,7 +177,14 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogPr
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit(onSubmit)(e);
+            }} 
+            className="space-y-4"
+          >
             <FormField
               control={form.control}
               name="nombre"
