@@ -244,23 +244,17 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const { data: tiposEntidad = [] } = useQuery({
     queryKey: ['tipos_entidad', entityType],
     queryFn: async () => {
-      let tipoFilter = '';
-      if (entityType === 'legal') {
-        tipoFilter = 'el'; // entidades legales
-      } else if (entityType === 'client') {
-        tipoFilter = 'c'; // clientes  
-      } else {
-        tipoFilter = 'p'; // proyectos
-      }
-
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('tipos_relacion')
         .select('id, nombre')
-        .eq('tipo', tipoFilter)
+        .eq('padre', 'p')
         .eq('activo', true)
         .order('nombre');
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching tipos_entidad:', error);
+        throw error;
+      }
       return data || [];
     },
     enabled: entityType !== 'user' && entityType !== 'representative'
