@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { BuildingFormSection, Building } from "./BuildingFormSection";
 import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
+import { NewPaymentSchemeDialog } from "./NewPaymentSchemeDialog";
 
 const BuildingSchema = z.object({
   id: z.string(),
@@ -41,6 +42,7 @@ interface NewProjectDialogProps {
 
 export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   const [open, setOpen] = useState(false);
+  const [createdProjectId, setCreatedProjectId] = useState<number | null>(null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -159,6 +161,14 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         description: "El proyecto se ha creado exitosamente.",
       });
 
+      // Store the created project ID for payment scheme management
+      setCreatedProjectId(newProject.id);
+      
+      toast({
+        title: "Proyecto creado",
+        description: "Proyecto creado exitosamente. Ahora puedes agregar esquemas de pago.",
+      });
+
       form.reset();
       setOpen(false);
       onProjectAdded();
@@ -175,6 +185,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   const handleDialogClose = (isOpen: boolean) => {
     if (!isOpen) {
       form.reset();
+      setCreatedProjectId(null);
       onProjectAdded();
     }
     setOpen(isOpen);
@@ -306,8 +317,23 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
               )}
             />
 
-            {/* Payment Scheme Management Section - Only show after project is created */}
-            {/* This section will be available in Edit Project mode */}
+            {/* Payment Scheme Management Section */}
+            {createdProjectId && (
+              <div className="space-y-4">
+                <div className="border-t pt-4">
+                  <h4 className="text-md font-medium mb-3">Gestión de Esquemas de Pago</h4>
+                  <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-lg">
+                    <p className="text-muted-foreground mb-4 text-center">
+                      El proyecto se ha creado. Ahora puedes agregar esquemas de pago.
+                    </p>
+                    <NewPaymentSchemeDialog 
+                      projectId={createdProjectId} 
+                      onSchemeAdded={() => {}} 
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <FormField
               control={form.control}
@@ -359,9 +385,11 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
 
             <div className="flex justify-end space-x-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancelar
+                {createdProjectId ? 'Cerrar' : 'Cancelar'}
               </Button>
-              <Button type="submit">Crear Proyecto</Button>
+              {!createdProjectId && (
+                <Button type="submit">Crear Proyecto</Button>
+              )}
             </div>
             </form>
           </Form>
