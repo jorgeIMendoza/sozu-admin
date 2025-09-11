@@ -318,19 +318,17 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
             />
 
             {/* Payment Scheme Management Section */}
-            {createdProjectId && (
-              <div className="space-y-4">
-                <div className="border-t pt-4">
-                  <h4 className="text-md font-medium mb-3">Gestión de Esquemas de Pago</h4>
-                  <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-lg">
-                    <p className="text-muted-foreground mb-4 text-center">
-                      El proyecto se ha creado. Ahora puedes agregar esquemas de pago.
-                    </p>
-                    <NewPaymentSchemeDialog 
-                      projectId={createdProjectId} 
-                      onSchemeAdded={() => {}} 
-                    />
-                  </div>
+            {createdProjectId ? (
+              <div className="space-y-3">
+                <PaymentSchemeManagement projectId={createdProjectId} />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="border rounded-lg p-4 bg-muted/50">
+                  <h4 className="text-sm font-medium mb-2">Esquemas de Pago</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Los esquemas de pago se podrán configurar después de crear el proyecto.
+                  </p>
                 </div>
               </div>
             )}
