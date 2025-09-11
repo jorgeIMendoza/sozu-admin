@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PersonForm } from "@/components/admin/PersonForm";
+import { BeneficiariosForm } from "@/components/admin/BeneficiariosForm";
 
 type Cliente = {
   id: number;
@@ -26,7 +27,9 @@ export default function Clientes() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isBeneficiariosDialogOpen, setIsBeneficiariosDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Cliente | null>(null);
+  const [selectedClientForBeneficiarios, setSelectedClientForBeneficiarios] = useState<Cliente | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -140,6 +143,11 @@ export default function Clientes() {
     }
   };
 
+  const handleBeneficiarios = (cliente: Cliente) => {
+    setSelectedClientForBeneficiarios(cliente);
+    setIsBeneficiariosDialogOpen(true);
+  };
+
   return (
     <div className="container mx-auto py-6 px-4">
       <Card className="border-border shadow-lg">
@@ -230,26 +238,35 @@ export default function Clientes() {
                           <TableCell className="text-muted-foreground">
                             {cliente.tipo_persona === 'pf' ? (cliente.curp || '-') : (cliente.rfc || '-')}
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex gap-2 justify-end">
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => handleEdit(cliente)}
-                                className="hover:bg-primary/10 hover:border-primary transition-colors"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => handleDelete(cliente.id)}
-                                className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
+                           <TableCell className="text-right">
+                             <div className="flex gap-2 justify-end">
+                               <Button 
+                                 variant="outline" 
+                                 size="sm"
+                                 onClick={() => handleBeneficiarios(cliente)}
+                                 className="hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors"
+                                 title="Gestionar Beneficiarios"
+                               >
+                                 <Users className="w-4 h-4" />
+                               </Button>
+                               <Button 
+                                 variant="outline" 
+                                 size="sm"
+                                 onClick={() => handleEdit(cliente)}
+                                 className="hover:bg-primary/10 hover:border-primary transition-colors"
+                               >
+                                 <Edit className="w-4 h-4" />
+                               </Button>
+                               <Button 
+                                 variant="outline" 
+                                 size="sm"
+                                 onClick={() => handleDelete(cliente.id)}
+                                 className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                               >
+                                 <Trash2 className="w-4 h-4" />
+                               </Button>
+                             </div>
+                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -292,6 +309,21 @@ export default function Clientes() {
             }}
             entityType="client"
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para gestionar beneficiarios */}
+      <Dialog open={isBeneficiariosDialogOpen} onOpenChange={setIsBeneficiariosDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Gestionar Beneficiarios - {selectedClientForBeneficiarios?.nombre_legal}</DialogTitle>
+          </DialogHeader>
+          {selectedClientForBeneficiarios && (
+            <BeneficiariosForm
+              personaId={selectedClientForBeneficiarios.id}
+              personaNombre={selectedClientForBeneficiarios.nombre_legal}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

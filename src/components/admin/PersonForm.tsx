@@ -278,8 +278,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   }
 
   function shouldShowBeneficiariosTab() {
-    // Show beneficiarios tab for all clients
-    return entityType === 'client';
+    // Show beneficiarios tab only for existing clients (not new clients)
+    return entityType === 'client' && initialData?.id;
   }
 
   const handleSubmit = (e: React.FormEvent) => {
