@@ -466,7 +466,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                       }
 
                       // Update only form state (don't save to database until submit)
-                      setFormData(prev => ({ ...prev, clabe_stp_tmp_apartado: nuevaClabe }));
+                      setFormData(prev => ({ ...prev, clabe_stp_tmp_apartado: nuevaClabe || '' }));
                       
                       toast({
                         title: "CLABE STP generada",
