@@ -424,12 +424,13 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
                 step="0.01"
                 value={porcentajeParticipacion}
                 onChange={(e) => setPorcentajeParticipacion(e.target.value)}
-                placeholder="Ej: 25.50"
+                placeholder="Se calculará automáticamente"
+                disabled={!editingBeneficiario}
                 required={editingBeneficiario !== null}
               />
               {!editingBeneficiario && (
                 <p className="text-sm text-muted-foreground mt-1">
-                  El porcentaje se calculará automáticamente al agregar
+                  El porcentaje se calculará automáticamente al agregar (100/{tempBeneficiarios.length + 1} = {(100 / (tempBeneficiarios.length + 1)).toFixed(2)}% para cada uno)
                 </p>
               )}
             </div>
