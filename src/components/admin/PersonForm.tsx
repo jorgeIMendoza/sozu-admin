@@ -393,7 +393,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       const extendedFormData = {
         ...formData,
         entityType: idTipoEntidad,
-        representativeId: idRepresentanteLegal ? parseInt(idRepresentanteLegal) : null,
+        representativeId: idRepresentanteLegal === 'none' || !idRepresentanteLegal ? null : parseInt(idRepresentanteLegal),
       };
       onSubmit(extendedFormData);
     }
@@ -570,7 +570,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         <SelectValue placeholder="Selecciona un representante legal" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Sin representante legal</SelectItem>
+                        <SelectItem value="none">Sin representante legal</SelectItem>
                         {representantesLegales.map((rep) => (
                           <SelectItem key={rep.id} value={rep.id.toString()}>
                             {rep.nombre_legal}
@@ -926,6 +926,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           <SelectValue placeholder="Selecciona un representante legal" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="none">Sin representante legal</SelectItem>
                           {representantesLegales.map((rep) => (
                             <SelectItem key={rep.id} value={rep.id.toString()}>
                               {rep.nombre_legal}
