@@ -51,15 +51,30 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded }: NewPaymentS
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      // Validate percentages sum to 100 before attempting to save
+      const enganche = parseFloat(values.porcentaje_enganche);
+      const mensualidades = parseFloat(values.porcentaje_mensualidades);
+      const entrega = parseFloat(values.porcentaje_entrega);
+      const total = enganche + mensualidades + entrega;
+      
+      if (Math.abs(total - 100) >= 0.01) {
+        toast({
+          title: "Error de validación",
+          description: "Los porcentajes de enganche, mensualidades y entrega deben sumar exactamente 100%",
+          variant: "destructive",
+        });
+        return; // Don't close modal, keep form open
+      }
+
       const { error } = await supabase
         .from("esquemas_pago")
         .insert([{
           id_proyecto: projectId,
           id_producto: null,
           nombre: values.nombre,
-          porcentaje_enganche: parseFloat(values.porcentaje_enganche),
-          porcentaje_mensualidades: parseFloat(values.porcentaje_mensualidades),
-          porcentaje_entrega: parseFloat(values.porcentaje_entrega),
+          porcentaje_enganche: enganche,
+          porcentaje_mensualidades: mensualidades,
+          porcentaje_entrega: entrega,
           numero_mensualidades: parseInt(values.numero_mensualidades),
           porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento),
         }]);
@@ -81,6 +96,7 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded }: NewPaymentS
         description: "Hubo un error al crear el esquema de pago.",
         variant: "destructive",
       });
+      // Don't close modal on error
     }
   };
 

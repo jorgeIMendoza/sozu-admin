@@ -198,13 +198,14 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {buildings.map((building) => (
             <Card key={building.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center justify-between">
+              <CardContent className="p-4">
+                <div className="space-y-3">
                   <div className="flex items-center space-x-2">
                     <Building2 className="h-4 w-4" />
-                    <span>{building.nombre}</span>
+                    <h4 className="font-medium text-base">{building.nombre}</h4>
                   </div>
-                  <div className="flex space-x-1">
+                  
+                  <div className="flex space-x-2">
                     <BuildingModelsDialog 
                       buildingId={building.id} 
                       buildingName={building.nombre} 
@@ -214,28 +215,28 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
                       onBuildingUpdated={handleBuildingAdded} 
                     />
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
                       onClick={() => handleDeleteBuilding(building.id, building.nombre)}
                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Eliminar
                     </Button>
                   </div>
-                </CardTitle>
-              </CardHeader>
-               <CardContent className="space-y-2">
-                 {building.numero_pisos && (
-                   <p className="text-sm text-muted-foreground">
-                     Pisos: {building.numero_pisos}
-                   </p>
-                 )}
-                 {building.fecha_lanzamiento && (
-                   <p className="text-sm text-muted-foreground">
-                     Lanzamiento: {new Date(building.fecha_lanzamiento).toLocaleDateString()}
-                   </p>
-                 )}
-               </CardContent>
+
+                  {(building.numero_pisos || building.fecha_lanzamiento) && (
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      {building.numero_pisos && (
+                        <p>Pisos: {building.numero_pisos}</p>
+                      )}
+                      {building.fecha_lanzamiento && (
+                        <p>Lanzamiento: {new Date(building.fecha_lanzamiento).toLocaleDateString()}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
             </Card>
           ))}
           </div>

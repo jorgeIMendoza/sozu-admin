@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { BuildingFormSection, Building } from "./BuildingFormSection";
+import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
 
 const BuildingSchema = z.object({
   id: z.string(),
@@ -187,7 +188,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
           Nuevo Proyecto
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Crear Nuevo Proyecto</DialogTitle>
         </DialogHeader>
@@ -304,6 +305,9 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                 </FormItem>
               )}
             />
+
+            {/* Payment Scheme Management Section - Only show after project is created */}
+            {/* This section will be available in Edit Project mode */}
 
             <FormField
               control={form.control}

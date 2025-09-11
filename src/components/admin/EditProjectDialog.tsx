@@ -177,7 +177,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
           Editar
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar Proyecto</DialogTitle>
         </DialogHeader>

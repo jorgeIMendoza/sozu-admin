@@ -121,6 +121,21 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
                 </p>
               )}
             </div>
+            <div className="flex justify-end space-x-2 pt-4 border-t">
+              <EditPaymentSchemeDialog 
+                scheme={scheme} 
+                onSchemeUpdated={handleSchemeAdded} 
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDeleteScheme(scheme.id, scheme.nombre)}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Eliminar
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -169,43 +184,10 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
                       <div className="flex items-center space-x-2">
                         <CreditCard className="h-4 w-4" />
                         <span>{scheme.nombre}</span>
-                        <Badge variant={isValidScheme ? "default" : "destructive"} className="text-xs">
-                          {totalPercentage}%
-                        </Badge>
                       </div>
-                      <div className="flex space-x-1">
-                        <PaymentSchemeDetailsDialog scheme={scheme} />
-                        <EditPaymentSchemeDialog 
-                          scheme={scheme} 
-                          onSchemeUpdated={handleSchemeAdded} 
-                        />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteScheme(scheme.id, scheme.nombre)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <PaymentSchemeDetailsDialog scheme={scheme} />
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="font-medium">Enganche:</span> {scheme.porcentaje_enganche}%
-                      </div>
-                      <div>
-                        <span className="font-medium">Mensualidades:</span> {scheme.porcentaje_mensualidades}%
-                      </div>
-                      <div>
-                        <span className="font-medium">Entrega:</span> {scheme.porcentaje_entrega}%
-                      </div>
-                      <div>
-                        <span className="font-medium">No. Mensualidades:</span> {scheme.numero_mensualidades}
-                      </div>
-                    </div>
-                  </CardContent>
                 </Card>
               );
             })}
