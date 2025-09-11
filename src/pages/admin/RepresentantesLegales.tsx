@@ -45,14 +45,11 @@ export default function RepresentantesLegales() {
             telefono,
             curp,
             activo
-          ),
-          tipos_entidad!inner (
-            padre
           )
         `)
         .eq('personas.activo', true)
         .eq('activo', true)
-        .eq('tipos_entidad.padre', 'el')
+        .eq('id_tipo_entidad', 1)
         .is('id_proyecto', null)
         .order('personas(nombre_legal)', { ascending: true });
       
