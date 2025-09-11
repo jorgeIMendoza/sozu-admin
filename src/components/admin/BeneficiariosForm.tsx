@@ -414,22 +414,25 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
               </Select>
             </div>
 
-            {editingBeneficiario && (
-              <div>
-                <Label htmlFor="porcentajeParticipacion">Porcentaje de Participación * (%)</Label>
-                <Input
-                  id="porcentajeParticipacion"
-                  type="number"
-                  min="0.01"
-                  max="100"
-                  step="0.01"
-                  value={porcentajeParticipacion}
-                  onChange={(e) => setPorcentajeParticipacion(e.target.value)}
-                  placeholder="Ej: 25.50"
-                  required
-                />
-              </div>
-            )}
+            <div>
+              <Label htmlFor="porcentajeParticipacion">Porcentaje de Participación * (%)</Label>
+              <Input
+                id="porcentajeParticipacion"
+                type="number"
+                min="0.01"
+                max="100"
+                step="0.01"
+                value={porcentajeParticipacion}
+                onChange={(e) => setPorcentajeParticipacion(e.target.value)}
+                placeholder="Ej: 25.50"
+                required={editingBeneficiario !== null}
+              />
+              {!editingBeneficiario && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  El porcentaje se calculará automáticamente al agregar
+                </p>
+              )}
+            </div>
 
             <div className="flex justify-end gap-2 pt-4">
               <Button 
