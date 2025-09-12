@@ -21,10 +21,11 @@ interface PersonFormProps {
   initialData?: any;
   isLoading?: boolean;
   onCancel: () => void;
-  entityType?: 'legal' | 'client' | 'representative' | 'user';
+  entityType?: 'legal' | 'client' | 'representative' | 'user' | 'desarrollador' | 'inmobiliaria';
+  fixedEntityType?: boolean;
 }
 
-export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityType = 'user' }: PersonFormProps) {
+export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityType = 'user', fixedEntityType = false }: PersonFormProps) {
   // Basic info
   const [nombre, setNombre] = useState(initialData?.nombre || initialData?.nombre_legal || '');
   const [nombreComercial, setNombreComercial] = useState(initialData?.nombre_comercial || '');
@@ -33,7 +34,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [clavePaisTelefono, setClavePaisTelefono] = useState(initialData?.clave_pais_telefono || 'MX');
   const [tipoPersona, setTipoPersona] = useState(
     initialData?.tipo_persona || 
-    (entityType === 'legal' ? 'pm' : 
+    (entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' ? 'pm' : 
      entityType === 'representative' ? 'pf' : 
      'pf')
   );
@@ -244,12 +245,23 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const { data: tiposEntidad = [] } = useQuery({
     queryKey: ['tipos_entidad', entityType],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('tipos_entidad')
         .select('id, nombre')
         .eq('padre', 'p')
-        .eq('activo', true)
-        .order('nombre');
+        .eq('activo', true);
+      
+      // Filter based on entity type
+      if (entityType === 'legal') {
+        // Exclude Desarrollador and Inmobiliaria from legal entities form
+        query = query.not('nombre', 'in', '(Desarrollador,Inmobiliaria)');
+      } else if (entityType === 'desarrollador') {
+        query = query.eq('nombre', 'Desarrollador');
+      } else if (entityType === 'inmobiliaria') {
+        query = query.eq('nombre', 'Inmobiliaria');
+      }
+      
+      const { data, error } = await query.order('nombre');
       
       if (error) {
         console.error('Error fetching tipos_entidad:', error);
@@ -257,8 +269,20 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       }
       return data || [];
     },
-    enabled: entityType === 'legal' || (entityType === 'client' && tipoPersona === 'pm') // Show for legal entities and PM clients
+    enabled: entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || (entityType === 'client' && tipoPersona === 'pm')
   });
+
+  // Set default entity type for desarrollador/inmobiliaria
+  useEffect(() => {
+    if ((entityType === 'desarrollador' || entityType === 'inmobiliaria') && tiposEntidad.length > 0 && !idTipoEntidad) {
+      const defaultTipo = tiposEntidad.find(tipo => 
+        tipo.nombre === (entityType === 'desarrollador' ? 'Desarrollador' : 'Inmobiliaria')
+      );
+      if (defaultTipo) {
+        setIdTipoEntidad(defaultTipo.id);
+      }
+    }
+  }, [entityType, tiposEntidad, idTipoEntidad]);
 
   const { data: representantesLegales = [] } = useQuery({
     queryKey: ['representantes_legales_select'],
@@ -285,7 +309,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         nombre_legal: item.personas.nombre_legal
       }));
     },
-    enabled: entityType === 'legal' || (entityType === 'client' && tipoPersona === 'pm')
+    enabled: entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || (entityType === 'client' && tipoPersona === 'pm')
   });
 
   function getDefaultTipoEntidad(type: string) {
@@ -293,6 +317,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       case 'legal': return undefined; // Will be selected by user
       case 'client': return 7; // Prospecto by default
       case 'representative': return 1; // Representante Legal
+      case 'desarrollador': return undefined; // Will be set by the parent component
+      case 'inmobiliaria': return undefined; // Will be set by the parent component
       default: return undefined;
     }
   }
@@ -535,12 +561,16 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                   />
                 </div>
 
-                {entityType === 'legal' && (
+                {(entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria') && (
                   <div>
                     <Label htmlFor="idTipoEntidad">
                       Tipo de Entidad Legal *
                     </Label>
-                    <Select value={idTipoEntidad?.toString() || ''} onValueChange={(value) => setIdTipoEntidad(parseInt(value))}>
+                    <Select 
+                      value={idTipoEntidad?.toString() || ''} 
+                      onValueChange={(value) => setIdTipoEntidad(parseInt(value))}
+                      disabled={fixedEntityType}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecciona el tipo de entidad legal" />
                       </SelectTrigger>
@@ -555,7 +585,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                   </div>
                 )}
 
-                {(entityType === 'legal' || (entityType === 'client' && tipoPersona === 'pm')) && (
+                {(entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || (entityType === 'client' && tipoPersona === 'pm')) && (
                   <div>
                     <Label htmlFor="idRepresentanteLegal">Representante Legal</Label>
                     <Select value={idRepresentanteLegal?.toString() || ''} onValueChange={setIdRepresentanteLegal}>

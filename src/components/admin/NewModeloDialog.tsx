@@ -20,6 +20,7 @@ const formSchema = z.object({
   numero_completo_banos: z.string().optional(),
   numero_medio_bano: z.string().optional(),
   caracteristicas: z.array(z.string()).default([]),
+  habilitar_asignar: z.boolean().default(false),
 });
 
 interface NewModeloDialogProps {
@@ -39,6 +40,7 @@ export const NewModeloDialog = ({ onModeloAdded }: NewModeloDialogProps) => {
       numero_completo_banos: "",
       numero_medio_bano: "",
       caracteristicas: [],
+      habilitar_asignar: false,
     },
   });
 
@@ -251,6 +253,29 @@ export const NewModeloDialog = ({ onModeloAdded }: NewModeloDialogProps) => {
                     ))}
                   </div>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="habilitar_asignar"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>
+                      Habilitar para asignar
+                    </FormLabel>
+                    <p className="text-[0.8rem] text-muted-foreground">
+                      Permitir que este modelo se pueda asignar a edificios
+                    </p>
+                  </div>
                 </FormItem>
               )}
             />

@@ -31,6 +31,7 @@ interface Modelo {
   numero_recamaras?: number;
   numero_completo_banos?: number;
   numero_medio_bano?: number;
+  habilitar_asignar?: boolean;
 }
 
 export default function Modelos() {

@@ -35,6 +35,7 @@ const formSchema = z.object({
   numero_completo_banos: z.number().optional(),
   numero_medio_bano: z.number().optional(),
   caracteristicas: z.array(z.string()).default([]),
+  habilitar_asignar: z.boolean().default(false),
 });
 
 interface Modelo {
@@ -44,6 +45,7 @@ interface Modelo {
   numero_recamaras?: number;
   numero_completo_banos?: number;
   numero_medio_bano?: number;
+  habilitar_asignar?: boolean;
 }
 
 interface EditModeloDialogProps {
@@ -64,6 +66,7 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogPr
       numero_completo_banos: modelo.numero_completo_banos || undefined,
       numero_medio_bano: modelo.numero_medio_bano || undefined,
       caracteristicas: [],
+      habilitar_asignar: modelo.habilitar_asignar || false,
     },
   });
 
@@ -115,6 +118,7 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogPr
         numero_recamaras: values.numero_recamaras || null,
         numero_completo_banos: values.numero_completo_banos || null,
         numero_medio_bano: values.numero_medio_bano || null,
+        habilitar_asignar: values.habilitar_asignar,
       };
 
       const { error: modeloError } = await supabase
@@ -316,6 +320,29 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogPr
                     ))}
                   </div>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="habilitar_asignar"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>
+                      Habilitar para asignar
+                    </FormLabel>
+                    <p className="text-[0.8rem] text-muted-foreground">
+                      Permitir que este modelo se pueda asignar a edificios
+                    </p>
+                  </div>
                 </FormItem>
               )}
             />

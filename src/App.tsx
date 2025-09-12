@@ -12,6 +12,8 @@ import Pagos from "./pages/admin/Pagos";
 import Usuarios from "./pages/admin/Usuarios";
 import NuevoUsuario from "./pages/admin/NuevoUsuario";
 import EntidadesLegales from "./pages/admin/EntidadesLegales";
+import Desarrolladores from "./pages/admin/Desarrolladores";
+import Inmobiliarias from "./pages/admin/Inmobiliarias";
 import Clientes from "./pages/admin/Clientes";
 import RepresentantesLegales from "./pages/admin/RepresentantesLegales";
 import ComingSoon from "./pages/admin/ComingSoon";
@@ -38,6 +40,8 @@ const App = () => (
             <Route path="usuarios" element={<Usuarios />} />
             <Route path="usuarios/nuevo" element={<NuevoUsuario />} />
             <Route path="entidades-legales" element={<EntidadesLegales />} />
+            <Route path="desarrolladores" element={<Desarrolladores />} />
+            <Route path="inmobiliarias" element={<Inmobiliarias />} />
             <Route path="clientes" element={<Clientes />} />
             <Route path="representantes-legales" element={<RepresentantesLegales />} />
             <Route path="productos" element={<ComingSoon title="Productos" />} />

@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   LayoutDashboard,
   Building2,
+  Building,
   Users,
   Home,
   Package,
@@ -47,6 +48,8 @@ const navigationItems = [
     icon: Users,
     children: [
       { title: "Entidades Legales", href: "/admin/entidades-legales", icon: Building2 },
+      { title: "Desarrolladores", href: "/admin/desarrolladores", icon: Building2 },
+      { title: "Inmobiliarias", href: "/admin/inmobiliarias", icon: Building },
       { title: "Clientes", href: "/admin/clientes", icon: Users },
       { title: "Representantes Legales", href: "/admin/representantes-legales", icon: User },
     ]
