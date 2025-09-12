@@ -47,7 +47,7 @@ export default function Clientes() {
           rfc,
           tipo_persona,
           activo,
-          entidades_relacionadas!inner (
+          entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
             id,
             id_tipo_entidad,
             tipos_entidad!inner (
