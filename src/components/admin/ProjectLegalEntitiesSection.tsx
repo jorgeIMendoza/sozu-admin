@@ -54,33 +54,13 @@ export const ProjectLegalEntitiesSection = ({
           id,
           nombre_legal,
           email,
-          telefono,
-          entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
-            id,
-            id_tipo_entidad,
-            tipos_entidad!inner (
-              id,
-              nombre
-            )
-          )
+          telefono
         `)
         .eq("activo", true)
-        .eq("tipo_persona", "pm")
-        .eq("entidades_relacionadas.activo", true)
-        .eq("entidades_relacionadas.tipos_entidad.padre", "el")
-        .is("entidades_relacionadas.id_proyecto", null);
+        .eq("tipo_persona", "pm");
       
       if (error) throw error;
-      
-      return (data || []).map((item: any) => ({
-        id: item.id,
-        nombre_legal: item.nombre_legal,
-        email: item.email,
-        telefono: item.telefono,
-        tipo_entidad_id: item.entidades_relacionadas[0]?.id_tipo_entidad,
-        tipo_entidad_nombre: item.entidades_relacionadas[0]?.tipos_entidad?.nombre,
-        entidad_relacionada_id: item.entidades_relacionadas[0]?.id
-      }));
+      return data || [];
     },
   });
 
@@ -132,19 +112,14 @@ export const ProjectLegalEntitiesSection = ({
         throw new Error("El proyecto ya tiene una entidad legal de este tipo");
       }
 
-      // Update the existing entidad_relacionada to link it to this project
-      const selectedEntity = availableLegalEntities.find(
-        entity => entity.id === parseInt(selectedEntityId)
-      );
-
-      if (!selectedEntity?.entidad_relacionada_id) {
-        throw new Error("No se encontró la relación de entidad");
-      }
-
+      // Insert new entidad_relacionada record
       const { error } = await supabase
         .from("entidades_relacionadas")
-        .update({ id_proyecto: projectId })
-        .eq("id", selectedEntity.entidad_relacionada_id);
+        .insert({
+          id_proyecto: projectId,
+          id_persona: parseInt(selectedEntityId),
+          id_tipo_entidad: parseInt(selectedEntityTypeId)
+        });
 
       if (error) throw error;
     },
@@ -194,12 +169,8 @@ export const ProjectLegalEntitiesSection = ({
     },
   });
 
-  // Filter available entities by selected type
-  const filteredEntities = selectedEntityTypeId
-    ? availableLegalEntities.filter(
-        entity => entity.tipo_entidad_id === parseInt(selectedEntityTypeId)
-      )
-    : [];
+  // Filter available entities by selected type - all entities are available since we'll assign the type when adding
+  const filteredEntities = availableLegalEntities;
 
   // Get used entity types
   const usedEntityTypes = new Set(
@@ -273,18 +244,18 @@ export const ProjectLegalEntitiesSection = ({
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona una entidad" />
                 </SelectTrigger>
-                <SelectContent>
-                  {filteredEntities.map((entity) => (
-                    <SelectItem key={entity.id} value={entity.id.toString()}>
-                      <div>
-                        <div className="font-medium">{entity.nombre_legal}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {entity.email}
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+                 <SelectContent>
+                   {filteredEntities.map((entity) => (
+                     <SelectItem key={entity.id} value={entity.id.toString()}>
+                       <div>
+                         <div className="font-medium">{entity.nombre_legal}</div>
+                         <div className="text-xs text-muted-foreground">
+                           {entity.email}
+                         </div>
+                       </div>
+                     </SelectItem>
+                   ))}
+                 </SelectContent>
               </Select>
             </div>
           </div>

@@ -16,8 +16,6 @@ import { useQuery } from "@tanstack/react-query";
 import { BuildingFormSection, Building } from "./BuildingFormSection";
 import { PaymentSchemeFormSection, PaymentScheme } from "./PaymentSchemeFormSection";
 import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
-import { ProjectLegalEntitiesSection } from "./ProjectLegalEntitiesSection";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const BuildingSchema = z.object({
   id: z.string(),
@@ -257,15 +255,8 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         <DialogHeader>
           <DialogTitle>Crear Nuevo Proyecto</DialogTitle>
         </DialogHeader>
-        <Tabs defaultValue="information" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="information">Información</TabsTrigger>
-            <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="information" className="mt-6">
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
                   control={form.control}
                   name="nombre"
@@ -437,15 +428,6 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                 </div>
               </form>
             </Form>
-          </TabsContent>
-          
-          <TabsContent value="legal-entities" className="mt-6">
-            <ProjectLegalEntitiesSection 
-              projectId={createdProjectId || undefined}
-              isCreating={!createdProjectId}
-            />
-          </TabsContent>
-        </Tabs>
       </DialogContent>
     </Dialog>
   );
