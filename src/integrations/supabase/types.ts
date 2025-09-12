@@ -2713,6 +2713,27 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_proyectos_direccion_id_estado"
+            columns: ["direccion_id_estado"]
+            isOneToOne: false
+            referencedRelation: "estados_mx"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_proyectos_direccion_id_municipio"
+            columns: ["direccion_id_municipio"]
+            isOneToOne: false
+            referencedRelation: "municipios_mx"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_proyectos_direccion_id_pais"
+            columns: ["direccion_id_pais"]
+            isOneToOne: false
+            referencedRelation: "paises"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "proyectos_direccion_id_estado_fkey"
             columns: ["direccion_id_estado"]
             isOneToOne: false
