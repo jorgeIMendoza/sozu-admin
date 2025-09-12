@@ -37,37 +37,44 @@ export default function Clientes() {
     queryKey: ['clientes'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('entidades_relacionadas')
+        .from('personas')
         .select(`
           id,
-          id_tipo_entidad,
-          personas!inner (
+          nombre_legal,
+          email,
+          telefono,
+          curp,
+          rfc,
+          tipo_persona,
+          activo,
+          entidades_relacionadas!inner (
             id,
-            nombre_legal,
-            email,
-            telefono,
-            curp,
-            activo
+            id_tipo_entidad,
+            tipos_entidad!inner (
+              padre
+            )
           )
         `)
-        .eq('personas.activo', true)
         .eq('activo', true)
-        .in('id_tipo_entidad', [2, 7, 11, 14]) // Cliente, Prospecto, Referido, Propietario (tipo "c")
-        .is('id_proyecto', null)
-        .order('personas(nombre_legal)', { ascending: true });
+        .eq('entidades_relacionadas.activo', true)
+        .eq('entidades_relacionadas.tipos_entidad.padre', 'c')
+        .is('entidades_relacionadas.id_proyecto', null)
+        .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
       
       // Flatten the structure to match the expected format
       return (data || []).map((item: any) => ({
-        id: item.personas.id,
-        entidad_relacionada_id: item.id,
-        id_tipo_entidad: item.id_tipo_entidad,
-        nombre_legal: item.personas.nombre_legal,
-        email: item.personas.email,
-        telefono: item.personas.telefono,
-        curp: item.personas.curp,
-        activo: item.personas.activo,
+        id: item.id,
+        entidad_relacionada_id: item.entidades_relacionadas[0].id,
+        id_tipo_entidad: item.entidades_relacionadas[0].id_tipo_entidad,
+        nombre_legal: item.nombre_legal,
+        email: item.email,
+        telefono: item.telefono,
+        curp: item.curp,
+        rfc: item.rfc,
+        tipo_persona: item.tipo_persona,
+        activo: item.activo,
       })) as (Cliente & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
