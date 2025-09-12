@@ -274,22 +274,16 @@ export const ProjectLegalEntitiesSection = ({
                   <SelectValue placeholder="Selecciona una entidad" />
                 </SelectTrigger>
                  <SelectContent>
-                   {selectedEntityTypeId && filteredEntities.length === 0 ? (
-                     <SelectItem value="" disabled>
-                       No hay entidades disponibles para este tipo
-                     </SelectItem>
-                   ) : (
-                     filteredEntities.map((entity) => (
-                       <SelectItem key={entity.id} value={entity.id.toString()}>
-                         <div>
-                           <div className="font-medium">{entity.nombre_legal}</div>
-                           <div className="text-xs text-muted-foreground">
-                             {entity.email}
-                           </div>
+                   {filteredEntities.map((entity) => (
+                     <SelectItem key={entity.id} value={entity.id.toString()}>
+                       <div>
+                         <div className="font-medium">{entity.nombre_legal}</div>
+                         <div className="text-xs text-muted-foreground">
+                           {entity.email}
                          </div>
-                       </SelectItem>
-                     ))
-                   )}
+                       </div>
+                     </SelectItem>
+                   ))}
                  </SelectContent>
               </Select>
             </div>
