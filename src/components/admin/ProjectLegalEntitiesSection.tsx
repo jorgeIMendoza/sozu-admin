@@ -67,20 +67,29 @@ export const ProjectLegalEntitiesSection = ({
         .eq("activo", true)
         .eq("tipo_persona", "pm")
         .eq("entidades_relacionadas.activo", true)
-        .eq("entidades_relacionadas.tipos_entidad.padre", "p")
-        .is("entidades_relacionadas.id_proyecto", null);
+        .eq("entidades_relacionadas.tipos_entidad.padre", "p");
       
       if (error) throw error;
       
-      return (data || []).map((item: any) => ({
-        id: item.id,
-        nombre_legal: item.nombre_legal,
-        email: item.email,
-        telefono: item.telefono,
-        tipo_entidad_id: item.entidades_relacionadas[0]?.id_tipo_entidad,
-        tipo_entidad_nombre: item.entidades_relacionadas[0]?.tipos_entidad?.nombre,
-        entidad_relacionada_id: item.entidades_relacionadas[0]?.id
-      }));
+      // Group entities by tipo_entidad_id to get unique combinations
+      const entityMap = new Map();
+      (data || []).forEach((item: any) => {
+        item.entidades_relacionadas.forEach((rel: any) => {
+          const key = `${item.id}-${rel.id_tipo_entidad}`;
+          if (!entityMap.has(key)) {
+            entityMap.set(key, {
+              id: item.id,
+              nombre_legal: item.nombre_legal,
+              email: item.email,
+              telefono: item.telefono,
+              tipo_entidad_id: rel.id_tipo_entidad,
+              tipo_entidad_nombre: rel.tipos_entidad?.nombre,
+            });
+          }
+        });
+      });
+      
+      return Array.from(entityMap.values());
     },
   });
 
@@ -123,28 +132,15 @@ export const ProjectLegalEntitiesSection = ({
         throw new Error("Faltan datos requeridos");
       }
 
-      // Check if project already has an entity of this type
-      const existingEntity = projectLegalEntities.find(
-        (entity) => entity.id_tipo_entidad === parseInt(selectedEntityTypeId)
-      );
-
-      if (existingEntity) {
-        throw new Error("El proyecto ya tiene una entidad legal de este tipo");
-      }
-
-      // Update the existing entidad_relacionada to link it to this project
-      const selectedEntity = availableLegalEntities.find(
-        entity => entity.id === parseInt(selectedEntityId) && entity.tipo_entidad_id === parseInt(selectedEntityTypeId)
-      );
-
-      if (!selectedEntity?.entidad_relacionada_id) {
-        throw new Error("No se encontró la relación de entidad del tipo seleccionado");
-      }
-
+      // Create a new entidades_relacionadas record for this project
       const { error } = await supabase
         .from("entidades_relacionadas")
-        .update({ id_proyecto: projectId })
-        .eq("id", selectedEntity.entidad_relacionada_id);
+        .insert({
+          id_persona: parseInt(selectedEntityId),
+          id_tipo_entidad: parseInt(selectedEntityTypeId),
+          id_proyecto: projectId,
+          activo: true
+        });
 
       if (error) throw error;
     },
@@ -156,7 +152,6 @@ export const ProjectLegalEntitiesSection = ({
       setSelectedEntityId("");
       setSelectedEntityTypeId("");
       queryClient.invalidateQueries({ queryKey: ["project-legal-entities", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["available-legal-entities"] });
     },
     onError: (error: any) => {
       toast({
@@ -172,7 +167,7 @@ export const ProjectLegalEntitiesSection = ({
     mutationFn: async (entityRelationId: number) => {
       const { error } = await supabase
         .from("entidades_relacionadas")
-        .update({ id_proyecto: null })
+        .update({ activo: false })
         .eq("id", entityRelationId);
 
       if (error) throw error;
@@ -183,7 +178,6 @@ export const ProjectLegalEntitiesSection = ({
         description: "La entidad legal se removió del proyecto exitosamente.",
       });
       queryClient.invalidateQueries({ queryKey: ["project-legal-entities", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["available-legal-entities"] });
     },
     onError: () => {
       toast({
@@ -201,10 +195,6 @@ export const ProjectLegalEntitiesSection = ({
       )
     : [];
 
-  // Get used entity types
-  const usedEntityTypes = new Set(
-    projectLegalEntities.map(entity => entity.id_tipo_entidad)
-  );
 
   if (isCreating) {
     return (
@@ -227,7 +217,7 @@ export const ProjectLegalEntitiesSection = ({
             Agregar Entidad Legal
           </CardTitle>
           <CardDescription>
-            Selecciona una entidad legal para agregar al proyecto. Solo puede haber una entidad por tipo.
+            Selecciona una entidad legal para agregar al proyecto. Una misma entidad puede participar en múltiples proyectos.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -249,14 +239,8 @@ export const ProjectLegalEntitiesSection = ({
                     <SelectItem 
                       key={type.id} 
                       value={type.id.toString()}
-                      disabled={usedEntityTypes.has(type.id)}
                     >
-                      <div className="flex items-center justify-between">
-                        <span>{type.nombre}</span>
-                        {usedEntityTypes.has(type.id) && (
-                          <Badge variant="secondary" className="ml-2">Ya asignado</Badge>
-                        )}
-                      </div>
+                      <span>{type.nombre}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
