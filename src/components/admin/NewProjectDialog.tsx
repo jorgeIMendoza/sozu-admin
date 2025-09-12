@@ -320,70 +320,80 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="direccion"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Dirección</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Dirección del proyecto" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="precio_m2"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Precio por m²</FormLabel>
-                        <FormControl>
-                          <Input type="number" placeholder="0.00" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="fecha_inicio"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Fecha de Inicio</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                 </div>
-
-                {/* Location Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <MapPin className="w-4 h-4" />
-                    <label className="text-sm font-medium">Ubicación en Google Maps</label>
-                    {selectedLocation && (
-                      <span className="text-xs text-muted-foreground">
-                        ({selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)})
-                      </span>
-                    )}
-                  </div>
-                    <GoogleMapComponent
-                      onLocationSelect={setSelectedLocation}
-                      onAddressSelect={(address) => form.setValue('direccion', address)}
-                      initialLocation={selectedLocation}
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="precio_m2"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Precio por m²</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                  <p className="text-xs text-muted-foreground">
-                    Haz clic en el mapa para seleccionar la ubicación del proyecto
-                  </p>
-                </div>
+
+                    <FormField
+                      control={form.control}
+                      name="fecha_inicio"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Fecha de Inicio</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Location and Address Section */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="direccion"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Dirección</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Dirección del proyecto" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      {selectedLocation && (
+                        <div className="flex items-center space-x-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                          <MapPin className="w-4 h-4" />
+                          <div>
+                            <p className="font-medium">Coordenadas seleccionadas:</p>
+                            <p>Lat: {selectedLocation.lat.toFixed(6)}</p>
+                            <p>Lng: {selectedLocation.lng.toFixed(6)}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="w-4 h-4" />
+                        <label className="text-sm font-medium">Ubicación en Google Maps</label>
+                      </div>
+                      <GoogleMapComponent
+                        onLocationSelect={setSelectedLocation}
+                        onAddressSelect={(address) => form.setValue('direccion', address)}
+                        initialLocation={selectedLocation}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Haz clic en el mapa para seleccionar la ubicación del proyecto
+                      </p>
+                    </div>
+                  </div>
 
                 {/* Buildings Section */}
                 <BuildingFormSection 
