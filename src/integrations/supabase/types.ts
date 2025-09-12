@@ -2600,6 +2600,8 @@ export type Database = {
           fecha_inicio: string | null
           id: number
           id_tipo_uso: number | null
+          latitud: number | null
+          longitud: number | null
           nombre: string
           precio_m2: number | null
         }
@@ -2612,6 +2614,8 @@ export type Database = {
           fecha_inicio?: string | null
           id?: never
           id_tipo_uso?: number | null
+          latitud?: number | null
+          longitud?: number | null
           nombre: string
           precio_m2?: number | null
         }
@@ -2624,6 +2628,8 @@ export type Database = {
           fecha_inicio?: string | null
           id?: never
           id_tipo_uso?: number | null
+          latitud?: number | null
+          longitud?: number | null
           nombre?: string
           precio_m2?: number | null
         }

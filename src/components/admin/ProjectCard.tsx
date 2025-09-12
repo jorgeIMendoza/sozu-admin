@@ -1,9 +1,13 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, DollarSign, Building, Home, Calendar, Trash2, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { MapPin, DollarSign, Building, Home, Calendar, Trash2, RotateCcw, Video, FileImage } from "lucide-react";
 import { EditProjectDialog } from "./EditProjectDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { YouTubeVideosSection } from "./YouTubeVideosSection";
+import { ProjectMultimediaSection } from "./ProjectMultimediaSection";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -37,6 +41,8 @@ export const ProjectCard = ({
   onProjectDeleted
 }: ProjectCardProps) => {
   const { toast } = useToast();
+  const [youTubeDialogOpen, setYouTubeDialogOpen] = useState(false);
+  const [multimediaDialogOpen, setMultimediaDialogOpen] = useState(false);
 
   const formatPrice = (price?: number) => {
     if (!price) return "N/A";
@@ -164,6 +170,49 @@ export const ProjectCard = ({
                     projectId={id} 
                     onProjectUpdated={onProjectUpdated || (() => {})}
                   />
+                  
+                  {/* YouTube Videos Button */}
+                  <Dialog open={youTubeDialogOpen} onOpenChange={setYouTubeDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="hover:bg-red-50 hover:border-red-400 hover:text-red-700 transition-colors"
+                        title="Gestionar videos de YouTube"
+                      >
+                        <Video className="h-4 w-4 mr-1" />
+                        YouTube
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Videos de YouTube - {nombre}</DialogTitle>
+                      </DialogHeader>
+                      <YouTubeVideosSection projectId={id} />
+                    </DialogContent>
+                  </Dialog>
+                  
+                  {/* Multimedia Button */}
+                  <Dialog open={multimediaDialogOpen} onOpenChange={setMultimediaDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="hover:bg-purple-50 hover:border-purple-400 hover:text-purple-700 transition-colors"
+                        title="Gestionar multimedia"
+                      >
+                        <FileImage className="h-4 w-4 mr-1" />
+                        Media
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Multimedia - {nombre}</DialogTitle>
+                      </DialogHeader>
+                      <ProjectMultimediaSection projectId={id} />
+                    </DialogContent>
+                  </Dialog>
+                  
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button 

@@ -10,12 +10,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { BuildingFormSection, Building } from "./BuildingFormSection";
 import { PaymentSchemeFormSection, PaymentScheme } from "./PaymentSchemeFormSection";
 import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
+import { GoogleMapComponent } from "./GoogleMapComponent";
 
 const BuildingSchema = z.object({
   id: z.string(),
@@ -42,6 +44,8 @@ const formSchema = z.object({
   id_tipo_uso: z.string().min(1, "El tipo de uso es requerido"),
   precio_m2: z.string().optional(),
   fecha_inicio: z.string().optional(),
+  latitud: z.number().optional(),
+  longitud: z.number().optional(),
   amenidades: z.array(z.string()).default([]),
   edificios: z.array(BuildingSchema).default([]),
   esquemas_pago: z.array(PaymentSchemeSchema).default([])
@@ -56,6 +60,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   const [createdProjectId, setCreatedProjectId] = useState<number | null>(null);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [paymentSchemes, setPaymentSchemes] = useState<PaymentScheme[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -67,6 +72,8 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
       id_tipo_uso: "",
       precio_m2: "",
       fecha_inicio: "",
+      latitud: undefined,
+      longitud: undefined,
       amenidades: [],
       edificios: [],
       esquemas_pago: []
@@ -114,6 +121,8 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         id_tipo_uso: parseInt(values.id_tipo_uso),
         precio_m2: values.precio_m2 ? parseFloat(values.precio_m2) : null,
         fecha_inicio: values.fecha_inicio || null,
+        latitud: selectedLocation?.lat || null,
+        longitud: selectedLocation?.lng || null,
       };
 
       const { data: newProject, error } = await supabase
@@ -237,6 +246,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
       form.reset();
       setBuildings([]);
       setPaymentSchemes([]);
+      setSelectedLocation(null);
       setCreatedProjectId(null);
       onProjectAdded();
     }
@@ -352,6 +362,26 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                       </FormItem>
                     )}
                   />
+                 </div>
+
+                {/* Location Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <MapPin className="w-4 h-4" />
+                    <label className="text-sm font-medium">Ubicación en Google Maps</label>
+                    {selectedLocation && (
+                      <span className="text-xs text-muted-foreground">
+                        ({selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)})
+                      </span>
+                    )}
+                  </div>
+                  <GoogleMapComponent
+                    onLocationSelect={setSelectedLocation}
+                    initialLocation={selectedLocation}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Haz clic en el mapa para seleccionar la ubicación del proyecto
+                  </p>
                 </div>
 
                 {/* Buildings Section */}

@@ -18,6 +18,8 @@ import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
 import { ProjectLegalEntitiesSection } from "./ProjectLegalEntitiesSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { GoogleMapComponent } from "./GoogleMapComponent";
+import { MapPin } from "lucide-react";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -26,6 +28,8 @@ const formSchema = z.object({
   id_tipo_uso: z.string().min(1, "El tipo de uso es requerido"),
   precio_m2: z.string().optional(),
   fecha_inicio: z.string().optional(),
+  latitud: z.number().optional(),
+  longitud: z.number().optional(),
   amenidades: z.array(z.string()).default([]),
 });
 
@@ -36,6 +40,7 @@ interface EditProjectDialogProps {
 
 export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDialogProps) => {
   const [open, setOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -47,6 +52,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
       id_tipo_uso: "",
       precio_m2: "",
       fecha_inicio: "",
+      latitud: undefined,
+      longitud: undefined,
       amenidades: [],
     },
   });
@@ -102,6 +109,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
   // Populate form when project data is loaded
   useEffect(() => {
     if (project) {
+      const initialLocation = project.latitud && project.longitud 
+        ? { lat: project.latitud, lng: project.longitud }
+        : null;
+      
+      setSelectedLocation(initialLocation);
+      
       form.reset({
         nombre: project.nombre || "",
         descripcion: project.descripcion || "",
@@ -109,6 +122,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
         id_tipo_uso: project.id_tipo_uso?.toString() || "",
         precio_m2: project.precio_m2?.toString() || "",
         fecha_inicio: project.fecha_inicio || "",
+        latitud: project.latitud || undefined,
+        longitud: project.longitud || undefined,
         amenidades: project.amenidades_proyectos?.map((ap: any) => ap.id_amenidad.toString()) || [],
       });
     }
@@ -123,6 +138,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
         id_tipo_uso: parseInt(values.id_tipo_uso),
         precio_m2: values.precio_m2 ? parseFloat(values.precio_m2) : null,
         fecha_inicio: values.fecha_inicio || null,
+        latitud: selectedLocation?.lat || null,
+        longitud: selectedLocation?.lng || null,
       };
 
       const { error: updateError } = await supabase
@@ -294,6 +311,26 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
                         </FormItem>
                       )}
                     />
+                   </div>
+
+                  {/* Location Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <MapPin className="w-4 h-4" />
+                      <label className="text-sm font-medium">Ubicación en Google Maps</label>
+                      {selectedLocation && (
+                        <span className="text-xs text-muted-foreground">
+                          ({selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)})
+                        </span>
+                      )}
+                    </div>
+                    <GoogleMapComponent
+                      onLocationSelect={setSelectedLocation}
+                      initialLocation={selectedLocation}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Haz clic en el mapa para seleccionar la ubicación del proyecto
+                    </p>
                   </div>
 
                   {/* Building Management Section */}
