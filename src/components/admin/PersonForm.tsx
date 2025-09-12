@@ -285,7 +285,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         nombre_legal: item.personas.nombre_legal
       }));
     },
-    enabled: entityType === 'legal'
+    enabled: entityType === 'legal' || (entityType === 'client' && tipoPersona === 'pm')
   });
 
   function getDefaultTipoEntidad(type: string) {
