@@ -160,9 +160,23 @@ const Proyectos = () => {
     refetchDeleted();
   };
 
-  const handleProjectDeleted = () => {
-    refetchActive();
-    refetchDeleted();
+  const handleProjectDeleted = async (projectId: number) => {
+    try {
+      const { error } = await supabase
+        .from("proyectos")
+        .update({ activo: false })
+        .eq("id", projectId);
+
+      if (error) {
+        console.error("Error deleting project:", error);
+        return;
+      }
+
+      refetchActive();
+      refetchDeleted();
+    } catch (error) {
+      console.error("Error deleting project:", error);
+    }
   };
 
   // Filter active projects based on search term
@@ -279,9 +293,15 @@ const Proyectos = () => {
                           projectId={project.id}
                           onProjectUpdated={handleProjectUpdated}
                         />
-                        <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">
-                          <Eye className="h-4 w-4 mr-1" />
-                          Ver
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          disabled={project.edificios && project.edificios.length > 0}
+                          onClick={() => handleProjectDeleted(project.id)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Eliminar
                         </Button>
                       </div>
                     </TableCell>
