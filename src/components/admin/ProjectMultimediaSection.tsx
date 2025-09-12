@@ -146,7 +146,7 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
       {isAdding && (
         <Card>
           <CardHeader>
-            <CardTitle>Nuevo Multimedia</CardTitle>
+            <CardTitle>Multimedia del Proyecto</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -278,37 +278,27 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                  </Button>
                </div>
               
-               <div className="aspect-video bg-muted rounded-md overflow-hidden">
-                 {item.activo ? (
-                   <>
-                     {item.es_imagen && isImageUrl(item.url) ? (
-                       <img 
-                         src={item.url} 
-                         alt="Multimedia" 
-                         className="w-full h-full object-cover"
-                       />
-                     ) : !item.es_imagen && isVideoUrl(item.url) ? (
-                       <video 
-                         src={item.url} 
-                         controls 
-                         className="w-full h-full object-cover"
-                       />
-                     ) : (
-                       <div className="w-full h-full flex items-center justify-center">
-                         <p className="text-xs text-muted-foreground text-center p-2">
-                           Vista previa no disponible
-                         </p>
-                       </div>
-                     )}
-                   </>
-                 ) : (
-                   <div className="w-full h-full flex items-center justify-center">
-                     <p className="text-xs text-muted-foreground text-center p-2">
-                       Multimedia inactivo
-                     </p>
-                   </div>
-                 )}
-               </div>
+                <div className="aspect-video bg-muted rounded-md overflow-hidden">
+                  {item.es_imagen && isImageUrl(item.url) ? (
+                    <img 
+                      src={item.url} 
+                      alt="Multimedia" 
+                      className={`w-full h-full object-cover ${!item.activo ? 'grayscale opacity-50' : ''}`}
+                    />
+                  ) : !item.es_imagen && isVideoUrl(item.url) ? (
+                    <video 
+                      src={item.url} 
+                      controls={item.activo}
+                      className={`w-full h-full object-cover ${!item.activo ? 'grayscale opacity-50' : ''}`}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <p className="text-xs text-muted-foreground text-center p-2">
+                        Vista previa no disponible
+                      </p>
+                    </div>
+                  )}
+                </div>
               
               <a 
                 href={item.url} 

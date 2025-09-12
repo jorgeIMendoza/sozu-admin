@@ -211,24 +211,18 @@ export function YouTubeVideosSection({ projectId }: YouTubeVideosSectionProps) {
                    </Button>
                  </div>
                  
-                 {embedUrl && video.activo && (
-                   <div className="aspect-video">
-                     <iframe
-                       src={embedUrl}
-                       title={video.nombre}
-                       frameBorder="0"
-                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                       allowFullScreen
-                       className="w-full h-full rounded-md"
-                     ></iframe>
-                   </div>
-                 )}
-                 
-                 {!video.activo && (
-                   <div className="aspect-video bg-muted rounded-md flex items-center justify-center">
-                     <p className="text-muted-foreground">Video inactivo</p>
-                   </div>
-                 )}
+                  {embedUrl && video.activo && (
+                    <div className="aspect-video max-w-sm">
+                      <iframe
+                        src={embedUrl}
+                        title={video.nombre}
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full rounded-md"
+                      ></iframe>
+                    </div>
+                  )}
               </CardContent>
             </Card>
           );
