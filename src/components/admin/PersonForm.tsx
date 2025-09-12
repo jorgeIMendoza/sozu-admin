@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BeneficiariosForm } from "./BeneficiariosForm";
+import { ImageUploadField } from "./ImageUploadField";
 
 interface PersonFormProps {
   onSubmit: (data: any) => void;
@@ -91,6 +92,10 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [documentImageUrl, setDocumentImageUrl] = useState(initialData?.url_documento_identificacion || '');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isApiProcessing, setIsApiProcessing] = useState(false);
+  
+  // Logo
+  const [urlLogo, setUrlLogo] = useState(initialData?.url_logo || '');
+  
   const { toast } = useToast();
 
   // Copy address functionality
@@ -399,6 +404,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       fecha_escritura: fechaEscritura?.toISOString() || null,
       fecha_registro: fechaRegistro?.toISOString() || null,
       id_notario: idNotario ? parseInt(idNotario) : null,
+      url_logo: urlLogo.trim() || null,
       activo: true,
     };
 
@@ -509,6 +515,17 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     placeholder="Ingresa el email"
                   />
                 </div>
+
+                {(entityType === 'desarrollador' || entityType === 'inmobiliaria') && (
+                  <div className="col-span-1 md:col-span-2">
+                    <ImageUploadField
+                      label="Logo de la empresa"
+                      value={urlLogo}
+                      onChange={setUrlLogo}
+                      accept="image/*"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="telefono">Teléfono</Label>

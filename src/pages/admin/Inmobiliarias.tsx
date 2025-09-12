@@ -27,6 +27,7 @@ type Inmobiliaria = {
   numero_proyectos: number;
   entidad_relacionada_id: number;
   id_tipo_entidad: number;
+  url_logo?: string;
 };
 
 export default function Inmobiliarias() {
@@ -58,6 +59,7 @@ export default function Inmobiliarias() {
         telefono,
         rfc,
         activo,
+        url_logo,
         id_entidad_relacionada_rep_leg,
         entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
           id,
@@ -118,6 +120,7 @@ export default function Inmobiliarias() {
       id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
       representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
       numero_proyectos: projectCounts[item.entidades_relacionadas[0]?.id] || 0,
+      url_logo: item.url_logo,
     })) as Inmobiliaria[];
   };
 
@@ -548,8 +551,16 @@ export default function Inmobiliarias() {
             {paginatedInmobiliarias.map((inmobiliaria) => (
               <TableRow key={inmobiliaria.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell>
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Building className="w-5 h-5 text-primary" />
+                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center overflow-hidden">
+                    {inmobiliaria.url_logo ? (
+                      <img 
+                        src={inmobiliaria.url_logo} 
+                        alt={`Logo de ${inmobiliaria.nombre_comercial || inmobiliaria.nombre_legal}`}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <Building className="w-5 h-5 text-primary" />
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="font-medium text-foreground">

@@ -2151,6 +2151,7 @@ export type Database = {
           sexo: string | null
           telefono: string | null
           tipo_persona: string
+          url_logo: string | null
           uso_cfdi: string | null
         }
         Insert: {
@@ -2194,6 +2195,7 @@ export type Database = {
           sexo?: string | null
           telefono?: string | null
           tipo_persona: string
+          url_logo?: string | null
           uso_cfdi?: string | null
         }
         Update: {
@@ -2237,6 +2239,7 @@ export type Database = {
           sexo?: string | null
           telefono?: string | null
           tipo_persona?: string
+          url_logo?: string | null
           uso_cfdi?: string | null
         }
         Relationships: [
