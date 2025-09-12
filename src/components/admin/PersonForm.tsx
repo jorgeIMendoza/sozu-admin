@@ -244,8 +244,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const { data: tiposEntidad = [] } = useQuery({
     queryKey: ['tipos_entidad', entityType],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from('tipos_relacion')
+      const { data, error } = await supabase
+        .from('tipos_entidad')
         .select('id, nombre')
         .eq('padre', 'p')
         .eq('activo', true)
