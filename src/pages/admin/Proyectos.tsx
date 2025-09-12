@@ -205,6 +205,26 @@ const Proyectos = () => {
     }
   };
 
+  // Helper functions
+  const getMultimediaCount = (project: any) => {
+    const images = project.multimedias_proyecto?.filter((m: any) => m.es_imagen) || [];
+    const videos = project.multimedias_proyecto?.filter((m: any) => !m.es_imagen) || [];
+    return { images: images.length, videos: videos.length };
+  };
+
+  const getCityName = (project: any) => {
+    if (project.municipios_mx?.nombre && project.estados_mx?.nombre) {
+      return `${project.municipios_mx.nombre}, ${project.estados_mx.nombre}`;
+    }
+    if (project.estados_mx?.nombre) {
+      return project.estados_mx.nombre;
+    }
+    if (project.paises?.nombre) {
+      return project.paises.nombre;
+    }
+    return "No especificada";
+  };
+
   // Filter active projects based on search term and specific filters
   const filteredActiveProjects = activeProjects.filter(project => {
     const matchesSearch = project.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -238,25 +258,6 @@ const Proyectos = () => {
     
     return matchesSearch && matchesNombre && matchesDesarrollador && matchesCiudad && matchesEstatus;
   });
-
-  const getMultimediaCount = (project: any) => {
-    const images = project.multimedias_proyecto?.filter((m: any) => m.es_imagen) || [];
-    const videos = project.multimedias_proyecto?.filter((m: any) => !m.es_imagen) || [];
-    return { images: images.length, videos: videos.length };
-  };
-
-  const getCityName = (project: any) => {
-    if (project.municipios_mx?.nombre && project.estados_mx?.nombre) {
-      return `${project.municipios_mx.nombre}, ${project.estados_mx.nombre}`;
-    }
-    if (project.estados_mx?.nombre) {
-      return project.estados_mx.nombre;
-    }
-    if (project.paises?.nombre) {
-      return project.paises.nombre;
-    }
-    return "No especificada";
-  };
 
   const handleProjectRestored = async (projectId: number) => {
     try {
