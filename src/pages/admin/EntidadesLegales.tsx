@@ -52,9 +52,9 @@ export default function EntidadesLegales() {
               nombre
             )
           ),
-          representante_legal:entidades_relacionadas (
+          representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
             id,
-            personas (
+            personas!entidades_relacionadas_id_persona_fkey (
               id,
               nombre_legal
             )
