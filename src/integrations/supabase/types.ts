@@ -1235,6 +1235,30 @@ export type Database = {
         }
         Relationships: []
       }
+      estatus_proyecto: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre?: string
+        }
+        Relationships: []
+      }
       logs_actividad: {
         Row: {
           actividad_id: number
@@ -1405,6 +1429,7 @@ export type Database = {
           descripcion: string | null
           fecha_actualizacion: string | null
           fecha_creacion: string | null
+          habilitar_asignar: boolean | null
           id: number
           nombre: string
           numero_completo_banos: number | null
@@ -1416,7 +1441,8 @@ export type Database = {
           descripcion?: string | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
-          id?: never
+          habilitar_asignar?: boolean | null
+          id?: number
           nombre: string
           numero_completo_banos?: number | null
           numero_medio_bano?: number | null
@@ -1427,7 +1453,8 @@ export type Database = {
           descripcion?: string | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
-          id?: never
+          habilitar_asignar?: boolean | null
+          id?: number
           nombre?: string
           numero_completo_banos?: number | null
           numero_medio_bano?: number | null
@@ -2596,10 +2623,16 @@ export type Database = {
           costo_mantenimiento_m2: number | null
           descripcion: string | null
           direccion: string | null
+          direccion_id_estado: number | null
+          direccion_id_municipio: number | null
+          direccion_id_pais: string | null
           fecha_actualizacion: string
           fecha_creacion: string
+          fecha_entrega: string | null
           fecha_inicio: string | null
+          fecha_lanzamiento: string | null
           id: number
+          id_estatus_proyecto: number | null
           id_tipo_uso: number | null
           latitud: number | null
           longitud: number | null
@@ -2618,10 +2651,16 @@ export type Database = {
           costo_mantenimiento_m2?: number | null
           descripcion?: string | null
           direccion?: string | null
+          direccion_id_estado?: number | null
+          direccion_id_municipio?: number | null
+          direccion_id_pais?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
+          fecha_entrega?: string | null
           fecha_inicio?: string | null
+          fecha_lanzamiento?: string | null
           id?: never
+          id_estatus_proyecto?: number | null
           id_tipo_uso?: number | null
           latitud?: number | null
           longitud?: number | null
@@ -2640,10 +2679,16 @@ export type Database = {
           costo_mantenimiento_m2?: number | null
           descripcion?: string | null
           direccion?: string | null
+          direccion_id_estado?: number | null
+          direccion_id_municipio?: number | null
+          direccion_id_pais?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
+          fecha_entrega?: string | null
           fecha_inicio?: string | null
+          fecha_lanzamiento?: string | null
           id?: never
+          id_estatus_proyecto?: number | null
           id_tipo_uso?: number | null
           latitud?: number | null
           longitud?: number | null
@@ -2658,6 +2703,34 @@ export type Database = {
           url_logo?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "proyectos_direccion_id_estado_fkey"
+            columns: ["direccion_id_estado"]
+            isOneToOne: false
+            referencedRelation: "estados_mx"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proyectos_direccion_id_municipio_fkey"
+            columns: ["direccion_id_municipio"]
+            isOneToOne: false
+            referencedRelation: "municipios_mx"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proyectos_direccion_id_pais_fkey"
+            columns: ["direccion_id_pais"]
+            isOneToOne: false
+            referencedRelation: "paises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proyectos_id_estatus_proyecto_fkey"
+            columns: ["id_estatus_proyecto"]
+            isOneToOne: false
+            referencedRelation: "estatus_proyecto"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "proyectos_id_tipo_uso_fkey"
             columns: ["id_tipo_uso"]
