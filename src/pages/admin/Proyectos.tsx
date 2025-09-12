@@ -46,7 +46,7 @@ const Proyectos = () => {
           municipios_mx!fk_proyectos_direccion_id_municipio (
             nombre
           ),
-          edificios (
+          edificios!fk_edificios_proyecto (
             id,
             nombre
           ),
@@ -106,7 +106,7 @@ const Proyectos = () => {
           municipios_mx!fk_proyectos_direccion_id_municipio (
             nombre
           ),
-          edificios (
+          edificios!fk_edificios_proyecto (
             id,
             nombre
           ),
