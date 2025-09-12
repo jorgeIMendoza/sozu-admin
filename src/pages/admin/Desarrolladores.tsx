@@ -471,7 +471,9 @@ export default function Desarrolladores() {
                           variant="outline" 
                           size="sm"
                           onClick={() => handleDelete(desarrollador)}
-                          className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                          disabled={desarrollador.numero_proyectos > 0}
+                          className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={desarrollador.numero_proyectos > 0 ? "No se puede eliminar: tiene proyectos relacionados" : "Eliminar desarrollador"}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>

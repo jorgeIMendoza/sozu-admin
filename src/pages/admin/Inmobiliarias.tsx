@@ -588,7 +588,9 @@ export default function Inmobiliarias() {
                           variant="outline" 
                           size="sm"
                           onClick={() => handleDelete(inmobiliaria)}
-                          className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                          disabled={inmobiliaria.numero_proyectos > 0}
+                          className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={inmobiliaria.numero_proyectos > 0 ? "No se puede eliminar: tiene proyectos relacionados" : "Eliminar inmobiliaria"}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>

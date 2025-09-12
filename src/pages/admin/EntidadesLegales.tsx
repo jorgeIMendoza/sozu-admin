@@ -550,16 +550,16 @@ export default function EntidadesLegales() {
                         >
                           💳
                         </Button>
-                        {canDeleteEntity(entidad.entidad_relacionada_id) && (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleDelete(entidad)}
-                            className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleDelete(entidad)}
+                          disabled={!canDeleteEntity(entidad.entidad_relacionada_id)}
+                          className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={!canDeleteEntity(entidad.entidad_relacionada_id) ? "No se puede eliminar: tiene proyectos relacionados" : "Eliminar entidad legal"}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </>
                     ) : (
                       <Button 
