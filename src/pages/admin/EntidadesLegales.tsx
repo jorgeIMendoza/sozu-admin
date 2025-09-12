@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, RotateCcw } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RotateCcw, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,21 +88,21 @@ export default function EntidadesLegales() {
       
       if (error) throw error;
       
-        return (data || []).map((item: any) => ({
-          id: item.id,
-          entidad_relacionada_id: item.entidades_relacionadas[0]?.id,
-          id_tipo_entidad: item.entidades_relacionadas[0]?.id_tipo_entidad,
-          nombre_legal: item.nombre_legal,
-          nombre_comercial: item.nombre_comercial,
-          email: item.email,
-          telefono: item.telefono,
-          rfc: item.rfc,
-          activo: item.activo,
-          id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
-          representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
-          numero_proyectos: 0,
-          tipo_entidad_nombre: item.entidades_relacionadas[0]?.tipos_entidad?.nombre || '',
-        })) as EntidadLegal[];
+      return (data || []).map((item: any) => ({
+        id: item.id,
+        entidad_relacionada_id: item.entidades_relacionadas[0]?.id,
+        id_tipo_entidad: item.entidades_relacionadas[0]?.id_tipo_entidad,
+        nombre_legal: item.nombre_legal,
+        nombre_comercial: item.nombre_comercial,
+        email: item.email,
+        telefono: item.telefono,
+        rfc: item.rfc,
+        activo: item.activo,
+        id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
+        representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
+        numero_proyectos: 0,
+        tipo_entidad_nombre: item.entidades_relacionadas[0]?.tipos_entidad?.nombre || '',
+      })) as EntidadLegal[];
     },
   });
 
@@ -158,12 +158,9 @@ export default function EntidadesLegales() {
         activo: item.activo,
         id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
         representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
-      })) as (EntidadLegal & { 
-        entidad_relacionada_id: number; 
-        id_tipo_entidad: number;
-        id_entidad_relacionada_rep_leg: number;
-        representante_legal_nombre: string;
-      })[];
+        numero_proyectos: 0,
+        tipo_entidad_nombre: item.entidades_relacionadas[0]?.tipos_entidad?.nombre || '',
+      })) as EntidadLegal[];
     },
   });
 
@@ -405,6 +402,184 @@ export default function EntidadesLegales() {
     setIsBankAccountsDialogOpen(true);
   };
 
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="mt-6 flex justify-center">
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious 
+                href="#" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (currentPage > 1) setCurrentPage(currentPage - 1);
+                }}
+                className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+            
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              
+              return (
+                <PaginationItem key={pageNum}>
+                  <PaginationLink
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCurrentPage(pageNum);
+                    }}
+                    isActive={currentPage === pageNum}
+                  >
+                    {pageNum}
+                  </PaginationLink>
+                </PaginationItem>
+              );
+            })}
+            
+            <PaginationItem>
+              <PaginationNext 
+                href="#" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                }}
+                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
+    );
+  };
+
+  const renderTable = () => {
+    if (paginatedEntidades.length === 0 && filteredEntidades.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-muted-foreground text-lg mb-2">
+            {activeTab === 'active' ? 'No hay entidades legales activas' : 'No hay entidades legales eliminadas'}
+          </div>
+          <p className="text-muted-foreground/80 mb-4">
+            {activeTab === 'active' ? 'Agrega tu primera entidad legal para comenzar' : 'Las entidades eliminadas aparecerán aquí'}
+          </p>
+          {activeTab === 'active' && (
+            <Button 
+              onClick={() => setIsNewDialogOpen(true)}
+              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Primera Entidad Legal
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="border border-border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="font-semibold text-foreground w-16">Logo</TableHead>
+              <TableHead className="font-semibold text-foreground">Nombre Comercial</TableHead>
+              <TableHead className="font-semibold text-foreground">Tipo Entidad</TableHead>
+              <TableHead className="font-semibold text-foreground">Email</TableHead>
+              <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
+              <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
+              <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedEntidades.map((entidad) => (
+              <TableRow key={entidad.id} className="hover:bg-muted/30 transition-colors">
+                <TableCell>
+                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <Building2 className="w-5 h-5 text-primary" />
+                  </div>
+                </TableCell>
+                <TableCell className="font-medium text-foreground">
+                  <div>
+                    <div className="font-semibold">{entidad.nombre_comercial || entidad.nombre_legal}</div>
+                    {entidad.nombre_comercial && (
+                      <div className="text-sm text-muted-foreground">{entidad.nombre_legal}</div>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entidad.tipo_entidad_nombre}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entidad.email}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entidad.telefono || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entidad.representante_legal_nombre || '-'}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex gap-2 justify-end">
+                    {activeTab === 'active' ? (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleEdit(entidad)}
+                          className="hover:bg-primary/10 hover:border-primary transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleBankAccounts(entidad)}
+                          className="hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors"
+                          title="Gestionar cuentas bancarias"
+                        >
+                          💳
+                        </Button>
+                        {canDeleteEntity(entidad.entidad_relacionada_id) && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDelete(entidad)}
+                            className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleRestore(entidad)}
+                        className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
 
   return (
     <div className="container mx-auto py-6 px-4">
@@ -499,213 +674,40 @@ export default function EntidadesLegales() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Dialog para confirmar eliminación */}
       <DeleteConfirmationDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
         title="Eliminar Entidad Legal"
-        description={`¿Estás seguro de que quieres eliminar la entidad legal "${entityToDelete?.nombre_legal}"? Esta acción no se puede deshacer.`}
+        description={`¿Estás seguro de que deseas eliminar la entidad legal "${entityToDelete?.nombre_comercial || entityToDelete?.nombre_legal}"? Esta acción se puede revertir.`}
         isLoading={deleteMutation.isPending}
       />
 
-      {/* Restore Confirmation Dialog */}
+      {/* Dialog para confirmar restauración */}
       <DeleteConfirmationDialog
         open={restoreDialogOpen}
         onOpenChange={setRestoreDialogOpen}
         onConfirm={handleConfirmRestore}
         title="Restaurar Entidad Legal"
-        description={`¿Estás seguro de que quieres restaurar la entidad legal "${entityToRestore?.nombre_legal}"?`}
+        description={`¿Estás seguro de que deseas restaurar la entidad legal "${entityToRestore?.nombre_comercial || entityToRestore?.nombre_legal}"?`}
         isLoading={restoreMutation.isPending}
         actionType="restore"
       />
 
-      {/* Dialog para cuentas bancarias */}
+      {/* Dialog para gestionar cuentas bancarias */}
       <Dialog open={isBankAccountsDialogOpen} onOpenChange={setIsBankAccountsDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Cuentas Bancarias - {selectedEntityForBankAccounts?.nombre_legal}</DialogTitle>
+            <DialogTitle>
+              Cuentas Bancarias - {selectedEntityForBankAccounts?.nombre_comercial || selectedEntityForBankAccounts?.nombre_legal}
+            </DialogTitle>
           </DialogHeader>
           {selectedEntityForBankAccounts && (
-            <BankAccountsSection
-              personId={selectedEntityForBankAccounts.id}
-              showStpCheckbox={true}
-            />
+            <BankAccountsSection personId={selectedEntityForBankAccounts.id} />
           )}
         </DialogContent>
       </Dialog>
     </div>
   );
-
-  function renderPagination() {
-    if (totalPages <= 1) return null;
-
-    return (
-      <div className="mt-6 flex justify-center">
-        <Pagination>
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious 
-                href="#" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (currentPage > 1) setCurrentPage(currentPage - 1);
-                }}
-                className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
-              />
-            </PaginationItem>
-            
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let pageNum;
-              if (totalPages <= 5) {
-                pageNum = i + 1;
-              } else if (currentPage <= 3) {
-                pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                pageNum = totalPages - 4 + i;
-              } else {
-                pageNum = currentPage - 2 + i;
-              }
-              
-              return (
-                <PaginationItem key={pageNum}>
-                  <PaginationLink
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setCurrentPage(pageNum);
-                    }}
-                    isActive={currentPage === pageNum}
-                  >
-                    {pageNum}
-                  </PaginationLink>
-                </PaginationItem>
-              );
-            })}
-            
-            <PaginationItem>
-              <PaginationNext 
-                href="#" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                }}
-                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      </div>
-    );
-  }
-
-  function renderTable() {
-    if (paginatedEntidades.length === 0 && filteredEntidades.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <div className="text-muted-foreground text-lg mb-2">
-            {activeTab === 'active' ? 'No hay entidades legales activas' : 'No hay entidades legales eliminadas'}
-          </div>
-          <p className="text-muted-foreground/80 mb-4">
-            {activeTab === 'active' ? 'Agrega tu primera entidad legal para comenzar' : 'Las entidades eliminadas aparecerán aquí'}
-          </p>
-          {activeTab === 'active' && (
-            <Button 
-              onClick={() => setIsNewDialogOpen(true)}
-              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Agregar Primera Entidad Legal
-            </Button>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div className="border border-border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold text-foreground w-16">Logo</TableHead>
-              <TableHead className="font-semibold text-foreground">Nombre Comercial</TableHead>
-              <TableHead className="font-semibold text-foreground">Tipo Entidad</TableHead>
-              <TableHead className="font-semibold text-foreground">Email</TableHead>
-              <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-              <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
-              <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginatedEntidades.map((entidad) => (
-              <TableRow key={entidad.id} className="hover:bg-muted/30 transition-colors">
-                <TableCell className="font-medium text-foreground">
-                  {entidad.nombre_legal}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {entidad.nombre_comercial || '-'}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {entidad.rfc || '-'}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {entidad.email}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {entidad.telefono || '-'}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {entidad.representante_legal_nombre || '-'}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex gap-2 justify-end">
-                    {activeTab === 'active' ? (
-                      <>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleEdit(entidad)}
-                          className="hover:bg-primary/10 hover:border-primary transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleBankAccounts(entidad)}
-                          className="hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors"
-                          title="Gestionar cuentas bancarias"
-                        >
-                          💳
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleDelete(entidad)}
-                          disabled={!canDeleteEntity(entidad.entidad_relacionada_id)}
-                          className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={!canDeleteEntity(entidad.entidad_relacionada_id) ? "No se puede eliminar: está seleccionada en un proyecto" : "Eliminar entidad legal"}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </>
-                    ) : (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleRestore(entidad)}
-                        className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    );
-  }
 }
