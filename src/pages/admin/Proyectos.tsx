@@ -24,7 +24,7 @@ const Proyectos = () => {
   const [nombreFilter, setNombreFilter] = useState("");
   const [desarrolladorFilter, setDesarrolladorFilter] = useState("");
   const [ciudadFilter, setCiudadFilter] = useState("");
-  const [estatusFilter, setEstatusFilter] = useState("");
+  const [estatusFilter, setEstatusFilter] = useState("all");
 
   const { data: activeProjects = [], refetch: refetchActive } = useQuery({
     queryKey: ["projects", "active"],
@@ -237,7 +237,7 @@ const Proyectos = () => {
     const city = getCityName(project);
     const matchesCiudad = city.toLowerCase().includes(ciudadFilter.toLowerCase());
     
-    const matchesEstatus = estatusFilter === "all" || !estatusFilter || (project.estatus_proyecto && 'id' in project.estatus_proyecto && project.estatus_proyecto.id?.toString() === estatusFilter);
+    const matchesEstatus = estatusFilter === "all" || (project.estatus_proyecto && 'id' in project.estatus_proyecto && project.estatus_proyecto.id?.toString() === estatusFilter);
     
     return matchesSearch && matchesNombre && matchesDesarrollador && matchesCiudad && matchesEstatus;
   });
@@ -254,7 +254,7 @@ const Proyectos = () => {
     const city = getCityName(project);
     const matchesCiudad = city.toLowerCase().includes(ciudadFilter.toLowerCase());
     
-    const matchesEstatus = estatusFilter === "all" || !estatusFilter || (project.estatus_proyecto && 'id' in project.estatus_proyecto && project.estatus_proyecto.id?.toString() === estatusFilter);
+    const matchesEstatus = estatusFilter === "all" || (project.estatus_proyecto && 'id' in project.estatus_proyecto && project.estatus_proyecto.id?.toString() === estatusFilter);
     
     return matchesSearch && matchesNombre && matchesDesarrollador && matchesCiudad && matchesEstatus;
   });
