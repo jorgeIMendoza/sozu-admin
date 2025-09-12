@@ -215,6 +215,8 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
       return;
     }
 
+    const wasEditing = editingBeneficiario !== null;
+
     if (editingBeneficiario) {
       // Update existing beneficiario
       const updated = tempBeneficiarios.map(b =>
@@ -253,8 +255,9 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
     setHasChanges(true);
     resetForm();
     setEditingBeneficiario(null);
-    if (editingBeneficiario) {
-      // Only close dialog when editing, not when adding new
+    
+    // Only close dialog when editing, not when adding new
+    if (wasEditing) {
       setIsDialogOpen(false);
     }
   };
