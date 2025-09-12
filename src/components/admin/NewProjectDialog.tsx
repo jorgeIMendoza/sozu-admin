@@ -55,6 +55,10 @@ const formSchema = z.object({
   url_firma_recibos: z.string().optional(),
   nombre_firmante_recibos: z.string().optional(),
   url_imagen_portada: z.string().optional(),
+  costo_mantenimiento_m2: z.string().optional(),
+  porcentaje_anual_cuota_extraordinaria: z.string().optional(),
+  porcentaje_anual_cuota_estancia_corta: z.string().optional(),
+  porcentaje_anual_cuota_garantia_renta: z.string().optional(),
 });
 
 interface NewProjectDialogProps {
@@ -87,6 +91,10 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
       url_firma_recibos: "",
       nombre_firmante_recibos: "",
       url_imagen_portada: "",
+      costo_mantenimiento_m2: "",
+      porcentaje_anual_cuota_extraordinaria: "",
+      porcentaje_anual_cuota_estancia_corta: "",
+      porcentaje_anual_cuota_garantia_renta: "",
     },
   });
 
@@ -137,6 +145,10 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         url_firma_recibos: values.url_firma_recibos || null,
         nombre_firmante_recibos: values.nombre_firmante_recibos || null,
         url_imagen_portada: values.url_imagen_portada || null,
+        costo_mantenimiento_m2: values.costo_mantenimiento_m2 ? parseFloat(values.costo_mantenimiento_m2) : null,
+        porcentaje_anual_cuota_extraordinaria: values.porcentaje_anual_cuota_extraordinaria ? parseFloat(values.porcentaje_anual_cuota_extraordinaria) : null,
+        porcentaje_anual_cuota_estancia_corta: values.porcentaje_anual_cuota_estancia_corta ? parseFloat(values.porcentaje_anual_cuota_estancia_corta) : null,
+        porcentaje_anual_cuota_garantia_renta: values.porcentaje_anual_cuota_garantia_renta ? parseFloat(values.porcentaje_anual_cuota_garantia_renta) : null,
       };
 
       const { data: newProject, error } = await supabase
@@ -577,6 +589,86 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                         </FormItem>
                       )}
                     />
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="costo_mantenimiento_m2"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Costo Mantenimiento M²</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="porcentaje_anual_cuota_extraordinaria"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>% Anual Cuota Extraordinaria</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="porcentaje_anual_cuota_estancia_corta"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>% Anual Cuota Estancia Corta</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="porcentaje_anual_cuota_garantia_renta"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>% Anual Cuota Garantía Renta</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   </div>
 
                   <div className="flex justify-end space-x-2">

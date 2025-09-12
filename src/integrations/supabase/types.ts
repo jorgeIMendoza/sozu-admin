@@ -2593,6 +2593,7 @@ export type Database = {
       proyectos: {
         Row: {
           activo: boolean
+          costo_mantenimiento_m2: number | null
           descripcion: string | null
           direccion: string | null
           fecha_actualizacion: string
@@ -2604,6 +2605,9 @@ export type Database = {
           longitud: number | null
           nombre: string
           nombre_firmante_recibos: string | null
+          porcentaje_anual_cuota_estancia_corta: number | null
+          porcentaje_anual_cuota_extraordinaria: number | null
+          porcentaje_anual_cuota_garantia_renta: number | null
           precio_m2: number | null
           url_firma_recibos: string | null
           url_imagen_portada: string | null
@@ -2611,6 +2615,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          costo_mantenimiento_m2?: number | null
           descripcion?: string | null
           direccion?: string | null
           fecha_actualizacion?: string
@@ -2622,6 +2627,9 @@ export type Database = {
           longitud?: number | null
           nombre: string
           nombre_firmante_recibos?: string | null
+          porcentaje_anual_cuota_estancia_corta?: number | null
+          porcentaje_anual_cuota_extraordinaria?: number | null
+          porcentaje_anual_cuota_garantia_renta?: number | null
           precio_m2?: number | null
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null
@@ -2629,6 +2637,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          costo_mantenimiento_m2?: number | null
           descripcion?: string | null
           direccion?: string | null
           fecha_actualizacion?: string
@@ -2640,6 +2649,9 @@ export type Database = {
           longitud?: number | null
           nombre?: string
           nombre_firmante_recibos?: string | null
+          porcentaje_anual_cuota_estancia_corta?: number | null
+          porcentaje_anual_cuota_extraordinaria?: number | null
+          porcentaje_anual_cuota_garantia_renta?: number | null
           precio_m2?: number | null
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null

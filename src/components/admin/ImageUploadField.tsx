@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ interface ImageUploadFieldProps {
 export function ImageUploadField({ label, value, onChange, accept = "image/*" }: ImageUploadFieldProps) {
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -51,6 +52,10 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*" }:
     onChange("");
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
@@ -76,7 +81,10 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*" }:
           <p className="text-xs text-muted-foreground">Imagen actual cargada</p>
         </div>
       ) : (
-        <div className="border-2 border-dashed border-muted-foreground/25 rounded-md p-6 text-center">
+        <div 
+          className="border-2 border-dashed border-muted-foreground/25 rounded-md p-6 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors"
+          onClick={handleUploadClick}
+        >
           <Upload className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
           <p className="text-sm text-muted-foreground mb-2">
             Haz clic para subir {label.toLowerCase()}
@@ -86,6 +94,7 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*" }:
       
       <div className="flex gap-2">
         <Input
+          ref={fileInputRef}
           type="file"
           accept={accept}
           onChange={handleFileUpload}
@@ -96,7 +105,7 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*" }:
           type="button"
           variant="outline"
           disabled={uploading}
-          onClick={() => (document.querySelector('input[type="file"]') as HTMLInputElement)?.click()}
+          onClick={handleUploadClick}
         >
           <Upload className="w-4 h-4 mr-2" />
           {uploading ? "Subiendo..." : "Subir"}
