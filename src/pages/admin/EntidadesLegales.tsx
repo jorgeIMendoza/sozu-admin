@@ -49,7 +49,8 @@ export default function EntidadesLegales() {
             id_tipo_entidad,
             tipos_entidad!inner (
               id,
-              nombre
+              nombre,
+              padre
             )
           ),
           representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
@@ -63,6 +64,7 @@ export default function EntidadesLegales() {
         .eq('activo', true)
         .eq('tipo_persona', 'pm')
         .eq('entidades_relacionadas.activo', true)
+        .neq('entidades_relacionadas.tipos_entidad.padre', 'c') // Exclude clients
         .is('entidades_relacionadas.id_proyecto', null)
         .order('nombre_legal', { ascending: true });
       

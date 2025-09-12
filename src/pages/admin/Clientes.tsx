@@ -21,6 +21,8 @@ type Cliente = {
   rfc?: string;
   tipo_persona: string;
   activo: boolean;
+  id_entidad_relacionada_rep_leg?: number;
+  representante_legal_nombre?: string;
 };
 
 export default function Clientes() {
@@ -47,11 +49,19 @@ export default function Clientes() {
           rfc,
           tipo_persona,
           activo,
+          id_entidad_relacionada_rep_leg,
           entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
             id,
             id_tipo_entidad,
             tipos_entidad!inner (
               padre
+            )
+          ),
+          representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
+            id,
+            personas!entidades_relacionadas_id_persona_fkey (
+              id,
+              nombre_legal
             )
           )
         `)
@@ -75,6 +85,8 @@ export default function Clientes() {
         rfc: item.rfc,
         tipo_persona: item.tipo_persona,
         activo: item.activo,
+        id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
+        representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
       })) as (Cliente & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
@@ -104,6 +116,16 @@ export default function Clientes() {
         }]);
       
       if (entidadError) throw entidadError;
+
+      // If a representative was selected and it's a PM, update the person record
+      if (representativeId && cleanPersonData.tipo_persona === 'pm') {
+        const { error: updateError } = await supabase
+          .from('personas')
+          .update({ id_entidad_relacionada_rep_leg: representativeId })
+          .eq('id', personResult.id);
+          
+        if (updateError) throw updateError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
@@ -124,12 +146,26 @@ export default function Clientes() {
 
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { error } = await supabase
+      // Extract entity type and representative from personData
+      const { entityType, representativeId, ...cleanPersonData } = personData;
+      
+      // First, update the basic person data
+      const { error: updateError } = await supabase
         .from('personas')
-        .update(personData)
+        .update(cleanPersonData)
         .eq('id', editingClient?.id);
       
-      if (error) throw error;
+      if (updateError) throw updateError;
+      
+      // Then, update the legal representative if provided for PM clients
+      if (representativeId !== undefined && cleanPersonData.tipo_persona === 'pm') {
+        const { error: repError } = await supabase
+          .from('personas')
+          .update({ id_entidad_relacionada_rep_leg: representativeId || null })
+          .eq('id', editingClient?.id);
+          
+        if (repError) throw repError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
@@ -261,12 +297,13 @@ export default function Clientes() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
-                        <TableHead className="font-semibold text-foreground">Nombre</TableHead>
-                        <TableHead className="font-semibold text-foreground">Tipo</TableHead>
-                        <TableHead className="font-semibold text-foreground">Email</TableHead>
-                        <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-                        <TableHead className="font-semibold text-foreground">CURP/RFC</TableHead>
-                        <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
+                         <TableHead className="font-semibold text-foreground">Nombre</TableHead>
+                         <TableHead className="font-semibold text-foreground">Tipo</TableHead>
+                         <TableHead className="font-semibold text-foreground">Email</TableHead>
+                         <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
+                         <TableHead className="font-semibold text-foreground">CURP/RFC</TableHead>
+                         <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
+                         <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -284,9 +321,12 @@ export default function Clientes() {
                           <TableCell className="text-muted-foreground">
                             {cliente.telefono || '-'}
                           </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {cliente.tipo_persona === 'pf' ? (cliente.curp || '-') : (cliente.rfc || '-')}
-                          </TableCell>
+                           <TableCell className="text-muted-foreground">
+                             {cliente.tipo_persona === 'pf' ? (cliente.curp || '-') : (cliente.rfc || '-')}
+                           </TableCell>
+                           <TableCell className="text-muted-foreground">
+                             {cliente.tipo_persona === 'pm' ? (cliente.representante_legal_nombre || '-') : '-'}
+                           </TableCell>
                            <TableCell className="text-right">
                              <div className="flex gap-2 justify-end">
                                <Button 
@@ -333,12 +373,12 @@ export default function Clientes() {
           <DialogHeader>
             <DialogTitle>Nuevo Cliente</DialogTitle>
           </DialogHeader>
-          <PersonForm
-            onSubmit={(data) => createMutation.mutate(data)}
-            isLoading={createMutation.isPending}
-            onCancel={() => setIsNewDialogOpen(false)}
-            entityType="client"
-          />
+           <PersonForm
+             onSubmit={(data) => createMutation.mutate(data)}
+             isLoading={createMutation.isPending}
+             onCancel={() => setIsNewDialogOpen(false)}
+             entityType="client"
+           />
         </DialogContent>
       </Dialog>
 
@@ -348,16 +388,19 @@ export default function Clientes() {
           <DialogHeader>
             <DialogTitle>Editar Cliente</DialogTitle>
           </DialogHeader>
-          <PersonForm
-            initialData={editingClient}
-            onSubmit={(data) => updateMutation.mutate(data)}
-            isLoading={updateMutation.isPending}
-            onCancel={() => {
-              setIsEditDialogOpen(false);
-              setEditingClient(null);
-            }}
-            entityType="client"
-          />
+           <PersonForm
+             initialData={{
+               ...editingClient,
+               representativeId: editingClient?.id_entidad_relacionada_rep_leg
+             }}
+             onSubmit={(data) => updateMutation.mutate(data)}
+             isLoading={updateMutation.isPending}
+             onCancel={() => {
+               setIsEditDialogOpen(false);
+               setEditingClient(null);
+             }}
+             entityType="client"
+           />
         </DialogContent>
       </Dialog>
 
