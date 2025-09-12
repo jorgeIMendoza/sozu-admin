@@ -671,12 +671,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
                     )}
                   />
 
-                  <div className="flex justify-end space-x-2">
-                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button type="submit">Actualizar Proyecto</Button>
-                  </div>
+                   <div className="flex justify-end space-x-2">
+                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                       Cancelar
+                     </Button>
+                     <Button type="submit" form="edit-project-form">Actualizar Proyecto</Button>
+                   </div>
                 </TabsContent>
 
                 <TabsContent value="images" className="mt-6">
@@ -855,12 +855,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
                       </div>
                     </div>
 
-                    <div className="flex justify-end space-x-2">
-                      <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                        Cancelar
-                      </Button>
-                      <Button type="submit">Actualizar Proyecto</Button>
-                    </div>
+                     <div className="flex justify-end space-x-2">
+                       <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                         Cancelar
+                       </Button>
+                       <Button type="submit" form="edit-project-form">Actualizar Proyecto</Button>
+                     </div>
                   </div>
                 </TabsContent>
                 
