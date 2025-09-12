@@ -492,7 +492,6 @@ export default function EntidadesLegales() {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold text-foreground w-16">Logo</TableHead>
               <TableHead className="font-semibold text-foreground">Nombre Comercial</TableHead>
               <TableHead className="font-semibold text-foreground">Tipo Entidad</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
@@ -504,11 +503,6 @@ export default function EntidadesLegales() {
           <TableBody>
             {paginatedEntidades.map((entidad) => (
               <TableRow key={entidad.id} className="hover:bg-muted/30 transition-colors">
-                <TableCell>
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Building2 className="w-5 h-5 text-primary" />
-                  </div>
-                </TableCell>
                 <TableCell className="font-medium text-foreground">
                   <div>
                     <div className="font-semibold">{entidad.nombre_comercial || entidad.nombre_legal}</div>
