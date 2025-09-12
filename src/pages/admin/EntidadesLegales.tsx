@@ -131,12 +131,23 @@ export default function EntidadesLegales() {
       // Extract entity type and representative from personData
       const { entityType, representativeId, ...cleanPersonData } = personData;
       
-      const { error } = await supabase
+      // First, update the basic person data
+      const { error: updateError } = await supabase
         .from('personas')
         .update(cleanPersonData)
         .eq('id', editingEntity?.id);
       
-      if (error) throw error;
+      if (updateError) throw updateError;
+      
+      // Then, update the legal representative if provided
+      if (representativeId !== undefined) {
+        const { error: repError } = await supabase
+          .from('personas')
+          .update({ id_entidad_relacionada_rep_leg: representativeId || null })
+          .eq('id', editingEntity?.id);
+          
+        if (repError) throw repError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['entidades_legales'] });
