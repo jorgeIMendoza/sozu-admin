@@ -675,7 +675,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
                      <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                        Cancelar
                      </Button>
-                     <Button type="submit" form="edit-project-form">Actualizar Proyecto</Button>
+                     <Button type="button" onClick={() => form.handleSubmit(onSubmit)()}>Actualizar Proyecto</Button>
                    </div>
                 </TabsContent>
 
@@ -859,7 +859,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
                        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                          Cancelar
                        </Button>
-                       <Button type="submit" form="edit-project-form">Actualizar Proyecto</Button>
+                       <Button type="button" onClick={() => form.handleSubmit(onSubmit)()}>Actualizar Proyecto</Button>
                      </div>
                   </div>
                 </TabsContent>
