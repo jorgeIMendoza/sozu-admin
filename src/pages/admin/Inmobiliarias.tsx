@@ -72,7 +72,7 @@ export default function Inmobiliarias() {
       .eq('activo', activo)
       .eq('tipo_persona', 'pm')
       .eq('entidades_relacionadas.activo', true)
-      .eq('entidades_relacionadas.tipos_entidad.padre', 'neq.c')
+      .neq('entidades_relacionadas.tipos_entidad.padre', 'c')
       .eq('entidades_relacionadas.tipos_entidad.nombre', 'Inmobiliaria')
       .order('nombre_legal', { ascending: true });
     
