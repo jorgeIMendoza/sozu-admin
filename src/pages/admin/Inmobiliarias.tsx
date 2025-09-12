@@ -59,8 +59,7 @@ export default function Inmobiliarias() {
             id,
             nombre,
             padre
-          ),
-          proyectos_count:proyectos!fk_proyectos_inmobiliaria(count)
+          )
         ),
         representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
           id,
@@ -73,6 +72,7 @@ export default function Inmobiliarias() {
       .eq('activo', activo)
       .eq('tipo_persona', 'pm')
       .eq('entidades_relacionadas.activo', true)
+      .eq('entidades_relacionadas.tipos_entidad.padre', 'neq.c')
       .eq('entidades_relacionadas.tipos_entidad.nombre', 'Inmobiliaria')
       .order('nombre_legal', { ascending: true });
     
@@ -90,7 +90,7 @@ export default function Inmobiliarias() {
       activo: item.activo,
       id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
       representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
-      numero_proyectos: item.entidades_relacionadas[0]?.proyectos_count?.[0]?.count || 0,
+      numero_proyectos: 0, // We'll fetch this separately if needed
     })) as (Inmobiliaria & { 
       entidad_relacionada_id: number; 
       id_tipo_entidad: number;
