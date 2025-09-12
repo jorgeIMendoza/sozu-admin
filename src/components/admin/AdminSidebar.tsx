@@ -50,6 +50,9 @@ const navigationItems = [
       { title: "Entidades Legales", href: "/admin/entidades-legales", icon: Building2 },
       { title: "Desarrolladores", href: "/admin/desarrolladores", icon: Building2 },
       { title: "Inmobiliarias", href: "/admin/inmobiliarias", icon: Building },
+      { title: "Administradoras", href: "/admin/administradoras", icon: Building },
+      { title: "Notarías", href: "/admin/notarias", icon: FileText },
+      { title: "Bancos", href: "/admin/bancos", icon: CreditCard },
       { title: "Clientes", href: "/admin/clientes", icon: Users },
       { title: "Representantes Legales", href: "/admin/representantes-legales", icon: User },
     ]

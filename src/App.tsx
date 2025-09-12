@@ -14,6 +14,9 @@ import NuevoUsuario from "./pages/admin/NuevoUsuario";
 import EntidadesLegales from "./pages/admin/EntidadesLegales";
 import Desarrolladores from "./pages/admin/Desarrolladores";
 import Inmobiliarias from "./pages/admin/Inmobiliarias";
+import Administradoras from "./pages/admin/Administradoras";
+import Notarias from "./pages/admin/Notarias";
+import Bancos from "./pages/admin/Bancos";
 import Clientes from "./pages/admin/Clientes";
 import RepresentantesLegales from "./pages/admin/RepresentantesLegales";
 import ComingSoon from "./pages/admin/ComingSoon";
@@ -42,6 +45,9 @@ const App = () => (
             <Route path="entidades-legales" element={<EntidadesLegales />} />
             <Route path="desarrolladores" element={<Desarrolladores />} />
             <Route path="inmobiliarias" element={<Inmobiliarias />} />
+            <Route path="administradoras" element={<Administradoras />} />
+            <Route path="notarias" element={<Notarias />} />
+            <Route path="bancos" element={<Bancos />} />
             <Route path="clientes" element={<Clientes />} />
             <Route path="representantes-legales" element={<RepresentantesLegales />} />
             <Route path="productos" element={<ComingSoon title="Productos" />} />

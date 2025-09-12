@@ -22,7 +22,7 @@ interface PersonFormProps {
   initialData?: any;
   isLoading?: boolean;
   onCancel: () => void;
-  entityType?: 'legal' | 'client' | 'representative' | 'user' | 'desarrollador' | 'inmobiliaria';
+  entityType?: 'legal' | 'client' | 'representative' | 'user' | 'desarrollador' | 'inmobiliaria' | 'administradora' | 'banco';
   fixedEntityType?: boolean;
 }
 
@@ -35,7 +35,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [clavePaisTelefono, setClavePaisTelefono] = useState(initialData?.clave_pais_telefono || 'MX');
   const [tipoPersona, setTipoPersona] = useState(
     initialData?.tipo_persona || 
-    (entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' ? 'pm' : 
+    (entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || entityType === 'administradora' || entityType === 'banco' ? 'pm' : 
      entityType === 'representative' ? 'pf' : 
      'pf')
   );
@@ -314,7 +314,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         nombre_legal: item.personas.nombre_legal
       }));
     },
-    enabled: entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || (entityType === 'client' && tipoPersona === 'pm')
+    enabled: entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || entityType === 'administradora' || entityType === 'banco' || (entityType === 'client' && tipoPersona === 'pm')
   });
 
   function getDefaultTipoEntidad(type: string) {
@@ -324,6 +324,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       case 'representative': return 1; // Representante Legal
       case 'desarrollador': return undefined; // Will be set by the parent component
       case 'inmobiliaria': return undefined; // Will be set by the parent component
+      case 'administradora': return undefined; // Will be set by the parent component
+      case 'banco': return undefined; // Will be set by the parent component
       default: return undefined;
     }
   }
