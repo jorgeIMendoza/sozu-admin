@@ -9,9 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Search, Edit, Trash2, Eye, Image, Video } from "lucide-react";
 import { useState } from "react";
 import { EditProjectDialog } from "@/components/admin/EditProjectDialog";
+import { ProjectMultimediaModal } from "@/components/admin/ProjectMultimediaModal";
 
 const Proyectos = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProjectMultimedia, setSelectedProjectMultimedia] = useState<{
+    multimedia: any[];
+    projectName: string;
+  } | null>(null);
 
   const { data: activeProjects = [], refetch: refetchActive } = useQuery({
     queryKey: ["projects", "active"],
@@ -48,7 +53,10 @@ const Proyectos = () => {
           ),
           edificios!fk_edificios_proyecto (
             id,
-            nombre
+            nombre,
+            propiedades!fk_propiedades_edificio_modelo (
+              id
+            )
           ),
           multimedias_proyecto (
             id,
@@ -108,7 +116,10 @@ const Proyectos = () => {
           ),
           edificios!fk_edificios_proyecto (
             id,
-            nombre
+            nombre,
+            propiedades!fk_propiedades_edificio_modelo (
+              id
+            )
           ),
           multimedias_proyecto (
             id,
@@ -203,7 +214,9 @@ const Proyectos = () => {
                 const multimedia = getMultimediaCount(project);
                 const city = getCityName(project);
                 const developer = "Por definir"; // Simplificamos por ahora
-                const departmentCount = project.edificios?.length || 0;
+                const departmentCount = project.edificios?.reduce((total: number, edificio: any) => {
+                  return total + (edificio.propiedades?.length || 0);
+                }, 0) || 0;
                 
                 return (
                   <TableRow key={project.id}>
@@ -215,16 +228,32 @@ const Proyectos = () => {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {multimedia.images > 0 && (
-                          <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex items-center gap-1 p-1 h-auto"
+                            onClick={() => setSelectedProjectMultimedia({
+                              multimedia: project.multimedias_proyecto || [],
+                              projectName: project.nombre
+                            })}
+                          >
                             <Image className="h-4 w-4" />
                             <span className="text-sm">{multimedia.images}</span>
-                          </div>
+                          </Button>
                         )}
                         {multimedia.videos > 0 && (
-                          <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex items-center gap-1 p-1 h-auto"
+                            onClick={() => setSelectedProjectMultimedia({
+                              multimedia: project.multimedias_proyecto || [],
+                              projectName: project.nombre
+                            })}
+                          >
                             <Video className="h-4 w-4" />
                             <span className="text-sm">{multimedia.videos}</span>
-                          </div>
+                          </Button>
                         )}
                         {multimedia.images === 0 && multimedia.videos === 0 && (
                           <span className="text-muted-foreground text-sm">Sin multimedia</span>
@@ -324,6 +353,15 @@ const Proyectos = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {selectedProjectMultimedia && (
+        <ProjectMultimediaModal
+          isOpen={true}
+          onClose={() => setSelectedProjectMultimedia(null)}
+          multimedia={selectedProjectMultimedia.multimedia}
+          projectName={selectedProjectMultimedia.projectName}
+        />
+      )}
     </div>
   );
 };
