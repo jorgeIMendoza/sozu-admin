@@ -4,7 +4,9 @@ import { Plus, Search, Edit, Trash2, RotateCcw, Building } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,6 +30,7 @@ type Inmobiliaria = {
 export default function Inmobiliarias() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
+  const [currentPage, setCurrentPage] = useState(1);
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEntity, setEditingEntity] = useState<Inmobiliaria | null>(null);
@@ -39,6 +42,8 @@ export default function Inmobiliarias() {
   const [isBankAccountsDialogOpen, setIsBankAccountsDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  const itemsPerPage = 25;
 
   const fetchInmobiliarias = async (activo: boolean) => {
     const { data, error } = await supabase
@@ -113,6 +118,23 @@ export default function Inmobiliarias() {
     inmob.nombre_comercial?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     inmob.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredInmobiliarias.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedInmobiliarias = filteredInmobiliarias.slice(startIndex, endIndex);
+
+  // Reset to first page when changing tabs or search
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
+  };
 
   const createMutation = useMutation({
     mutationFn: async (personData: any) => {
@@ -195,7 +217,7 @@ export default function Inmobiliarias() {
         </CardHeader>
         
         <CardContent className="p-6">
-          <Tabs defaultValue="active" value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs defaultValue="active" value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="active">Activos ({activeInmobiliarias.length})</TabsTrigger>
               <TabsTrigger value="deleted">Eliminados ({deletedInmobiliarias.length})</TabsTrigger>
@@ -208,68 +230,20 @@ export default function Inmobiliarias() {
                   type="text"
                   placeholder="Buscar por nombre, RFC..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={handleSearchChange}
                   className="pl-10 border-border focus:ring-primary/20"
                 />
               </div>
             </div>
 
             <TabsContent value="active" className="mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredInmobiliarias.map((inmobiliaria) => (
-                  <Card key={inmobiliaria.id} className="border-border hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                          <Building className="w-6 h-6 text-primary" />
-                        </div>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => setEditingEntity(inmobiliaria)}>
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <h3 className="font-semibold text-foreground mb-1">
-                        {inmobiliaria.nombre_comercial || inmobiliaria.nombre_legal}
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        {inmobiliaria.numero_proyectos} proyecto{inmobiliaria.numero_proyectos !== 1 ? 's' : ''}
-                      </p>
-                      <div className="space-y-1 text-sm">
-                        <p className="text-muted-foreground">{inmobiliaria.email}</p>
-                        {inmobiliaria.telefono && (
-                          <p className="text-muted-foreground">{inmobiliaria.telefono}</p>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              {renderTable()}
+              {renderPagination()}
             </TabsContent>
 
             <TabsContent value="deleted" className="mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredInmobiliarias.map((inmobiliaria) => (
-                  <Card key={inmobiliaria.id} className="border-border opacity-60">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
-                          <Building className="w-6 h-6 text-muted-foreground" />
-                        </div>
-                        <Button variant="outline" size="sm">
-                          <RotateCcw className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <h3 className="font-semibold text-foreground mb-1">
-                        {inmobiliaria.nombre_comercial || inmobiliaria.nombre_legal}
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        {inmobiliaria.numero_proyectos} proyecto{inmobiliaria.numero_proyectos !== 1 ? 's' : ''}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              {renderTable()}
+              {renderPagination()}
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -291,4 +265,156 @@ export default function Inmobiliarias() {
       </Dialog>
     </div>
   );
+
+  function renderPagination() {
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="mt-6 flex justify-center">
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious 
+                href="#" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (currentPage > 1) setCurrentPage(currentPage - 1);
+                }}
+                className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+            
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              
+              return (
+                <PaginationItem key={pageNum}>
+                  <PaginationLink
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCurrentPage(pageNum);
+                    }}
+                    isActive={currentPage === pageNum}
+                  >
+                    {pageNum}
+                  </PaginationLink>
+                </PaginationItem>
+              );
+            })}
+            
+            <PaginationItem>
+              <PaginationNext 
+                href="#" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                }}
+                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
+    );
+  }
+
+  function renderTable() {
+    if (paginatedInmobiliarias.length === 0 && filteredInmobiliarias.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-muted-foreground text-lg mb-2">
+            {activeTab === 'active' ? 'No hay inmobiliarias activas' : 'No hay inmobiliarias eliminadas'}
+          </div>
+          <p className="text-muted-foreground/80 mb-4">
+            {activeTab === 'active' ? 'Agrega tu primera inmobiliaria para comenzar' : 'Las inmobiliarias eliminadas aparecerán aquí'}
+          </p>
+          {activeTab === 'active' && (
+            <Button 
+              onClick={() => setIsNewDialogOpen(true)}
+              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Primera Inmobiliaria
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="border border-border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="font-semibold text-foreground">Razón Social</TableHead>
+              <TableHead className="font-semibold text-foreground">Nombre Comercial</TableHead>
+              <TableHead className="font-semibold text-foreground">RFC</TableHead>
+              <TableHead className="font-semibold text-foreground">Email</TableHead>
+              <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
+              <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
+              <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedInmobiliarias.map((inmobiliaria) => (
+              <TableRow key={inmobiliaria.id} className="hover:bg-muted/30 transition-colors">
+                <TableCell className="font-medium text-foreground">
+                  {inmobiliaria.nombre_legal}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {inmobiliaria.nombre_comercial || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {inmobiliaria.rfc || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {inmobiliaria.email}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {inmobiliaria.telefono || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {inmobiliaria.representante_legal_nombre || '-'}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex gap-2 justify-end">
+                    {activeTab === 'active' ? (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setEditingEntity(inmobiliaria)}
+                          className="hover:bg-primary/10 hover:border-primary transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
 }

@@ -4,7 +4,9 @@ import { Plus, Search, Edit, Trash2, RotateCcw, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,6 +30,7 @@ type Desarrollador = {
 export default function Desarrolladores() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
+  const [currentPage, setCurrentPage] = useState(1);
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEntity, setEditingEntity] = useState<Desarrollador | null>(null);
@@ -39,6 +42,8 @@ export default function Desarrolladores() {
   const [isBankAccountsDialogOpen, setIsBankAccountsDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  const itemsPerPage = 25;
 
   const fetchDesarrolladores = async (activo: boolean) => {
     const { data, error } = await supabase
@@ -113,6 +118,23 @@ export default function Desarrolladores() {
     dev.nombre_comercial?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     dev.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredDesarrolladores.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedDesarrolladores = filteredDesarrolladores.slice(startIndex, endIndex);
+
+  // Reset to first page when changing tabs or search
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
+  };
 
   const createMutation = useMutation({
     mutationFn: async (personData: any) => {
@@ -291,4 +313,156 @@ export default function Desarrolladores() {
       </Dialog>
     </div>
   );
+
+  function renderPagination() {
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="mt-6 flex justify-center">
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious 
+                href="#" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (currentPage > 1) setCurrentPage(currentPage - 1);
+                }}
+                className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+            
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              
+              return (
+                <PaginationItem key={pageNum}>
+                  <PaginationLink
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCurrentPage(pageNum);
+                    }}
+                    isActive={currentPage === pageNum}
+                  >
+                    {pageNum}
+                  </PaginationLink>
+                </PaginationItem>
+              );
+            })}
+            
+            <PaginationItem>
+              <PaginationNext 
+                href="#" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                }}
+                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
+    );
+  }
+
+  function renderTable() {
+    if (paginatedDesarrolladores.length === 0 && filteredDesarrolladores.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-muted-foreground text-lg mb-2">
+            {activeTab === 'active' ? 'No hay desarrolladores activos' : 'No hay desarrolladores eliminados'}
+          </div>
+          <p className="text-muted-foreground/80 mb-4">
+            {activeTab === 'active' ? 'Agrega tu primer desarrollador para comenzar' : 'Los desarrolladores eliminados aparecerán aquí'}
+          </p>
+          {activeTab === 'active' && (
+            <Button 
+              onClick={() => setIsNewDialogOpen(true)}
+              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Primer Desarrollador
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="border border-border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="font-semibold text-foreground">Razón Social</TableHead>
+              <TableHead className="font-semibold text-foreground">Nombre Comercial</TableHead>
+              <TableHead className="font-semibold text-foreground">RFC</TableHead>
+              <TableHead className="font-semibold text-foreground">Email</TableHead>
+              <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
+              <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
+              <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedDesarrolladores.map((desarrollador) => (
+              <TableRow key={desarrollador.id} className="hover:bg-muted/30 transition-colors">
+                <TableCell className="font-medium text-foreground">
+                  {desarrollador.nombre_legal}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {desarrollador.nombre_comercial || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {desarrollador.rfc || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {desarrollador.email}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {desarrollador.telefono || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {desarrollador.representante_legal_nombre || '-'}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex gap-2 justify-end">
+                    {activeTab === 'active' ? (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setEditingEntity(desarrollador)}
+                          className="hover:bg-primary/10 hover:border-primary transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
 }
