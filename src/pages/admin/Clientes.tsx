@@ -36,6 +36,8 @@ export default function Clientes() {
   const [selectedClientForBeneficiarios, setSelectedClientForBeneficiarios] = useState<Cliente | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<Cliente | null>(null);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [clientToRestore, setClientToRestore] = useState<Cliente | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -285,9 +287,16 @@ export default function Clientes() {
     }
   };
 
-  const handleRestore = (id: number) => {
-    if (confirm('¿Estás seguro de que quieres restaurar este cliente?')) {
-      restoreMutation.mutate(id);
+  const handleRestore = (cliente: Cliente) => {
+    setClientToRestore(cliente);
+    setRestoreDialogOpen(true);
+  };
+
+  const handleConfirmRestore = () => {
+    if (clientToRestore) {
+      restoreMutation.mutate(clientToRestore.id);
+      setRestoreDialogOpen(false);
+      setClientToRestore(null);
     }
   };
 
@@ -411,6 +420,16 @@ export default function Clientes() {
         description={`¿Estás seguro de que quieres eliminar al cliente "${clientToDelete?.nombre_legal}"? Esta acción no se puede deshacer.`}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* Restore Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={restoreDialogOpen}
+        onOpenChange={setRestoreDialogOpen}
+        onConfirm={handleConfirmRestore}
+        title="Restaurar Cliente"
+        description={`¿Estás seguro de que quieres restaurar al cliente "${clientToRestore?.nombre_legal}"?`}
+        isLoading={restoreMutation.isPending}
+      />
     </div>
   );
 
@@ -508,7 +527,7 @@ export default function Clientes() {
                        <Button 
                          variant="outline" 
                          size="sm"
-                         onClick={() => handleRestore(cliente.id)}
+                         onClick={() => handleRestore(cliente)}
                          className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
                        >
                          <RotateCcw className="w-4 h-4" />

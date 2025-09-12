@@ -31,6 +31,8 @@ export default function Notarios() {
   const [editingNotario, setEditingNotario] = useState<Notario | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [notarioToDelete, setNotarioToDelete] = useState<Notario | null>(null);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [notarioToRestore, setNotarioToRestore] = useState<Notario | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -201,9 +203,16 @@ export default function Notarios() {
     }
   };
 
-  const handleRestore = (id: number) => {
-    if (confirm('¿Estás seguro de que quieres restaurar este notario?')) {
-      restoreMutation.mutate(id);
+  const handleRestore = (notario: any) => {
+    setNotarioToRestore(notario);
+    setRestoreDialogOpen(true);
+  };
+
+  const handleConfirmRestore = () => {
+    if (notarioToRestore) {
+      restoreMutation.mutate(notarioToRestore.id);
+      setRestoreDialogOpen(false);
+      setNotarioToRestore(null);
     }
   };
 
@@ -317,6 +326,16 @@ export default function Notarios() {
         description={`¿Estás seguro de que quieres eliminar al notario "${notarioToDelete?.nombre}"? Esta acción no se puede deshacer.`}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* Restore Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={restoreDialogOpen}
+        onOpenChange={setRestoreDialogOpen}
+        onConfirm={handleConfirmRestore}
+        title="Restaurar Notario"
+        description={`¿Estás seguro de que quieres restaurar al notario "${notarioToRestore?.nombre}"?`}
+        isLoading={restoreMutation.isPending}
+      />
     </div>
   );
 
@@ -395,7 +414,7 @@ export default function Notarios() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => handleRestore(notario.id)}
+                        onClick={() => handleRestore(notario)}
                         className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
                       >
                         <RotateCcw className="w-4 h-4" />

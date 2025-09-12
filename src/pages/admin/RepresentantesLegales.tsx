@@ -33,6 +33,8 @@ export default function RepresentantesLegales() {
   const [editingRepresentant, setEditingRepresentant] = useState<RepresentanteLegal | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [representantToDelete, setRepresentantToDelete] = useState<RepresentanteLegal | null>(null);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [representantToRestore, setRepresentantToRestore] = useState<RepresentanteLegal | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -253,9 +255,16 @@ export default function RepresentantesLegales() {
     }
   };
 
-  const handleRestore = (id: number) => {
-    if (confirm('¿Estás seguro de que quieres restaurar este representante legal?')) {
-      restoreMutation.mutate(id);
+  const handleRestore = (representante: RepresentanteLegal) => {
+    setRepresentantToRestore(representante);
+    setRestoreDialogOpen(true);
+  };
+
+  const handleConfirmRestore = () => {
+    if (representantToRestore) {
+      restoreMutation.mutate(representantToRestore.id);
+      setRestoreDialogOpen(false);
+      setRepresentantToRestore(null);
     }
   };
 
@@ -356,6 +365,16 @@ export default function RepresentantesLegales() {
         description={`¿Estás seguro de que quieres eliminar a "${representantToDelete?.nombre_legal}"? Esta acción no se puede deshacer.`}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* Restore Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={restoreDialogOpen}
+        onOpenChange={setRestoreDialogOpen}
+        onConfirm={handleConfirmRestore}
+        title="Restaurar Representante Legal"
+        description={`¿Estás seguro de que quieres restaurar a "${representantToRestore?.nombre_legal}"?`}
+        isLoading={restoreMutation.isPending}
+      />
     </div>
   );
 
@@ -436,7 +455,7 @@ export default function RepresentantesLegales() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => handleRestore(representante.id)}
+                        onClick={() => handleRestore(representante)}
                         className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
                       >
                         <RotateCcw className="w-4 h-4" />

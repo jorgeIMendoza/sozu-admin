@@ -32,6 +32,8 @@ export default function EntidadesLegales() {
   const [editingEntity, setEditingEntity] = useState<EntidadLegal | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [entityToDelete, setEntityToDelete] = useState<EntidadLegal | null>(null);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [entityToRestore, setEntityToRestore] = useState<EntidadLegal | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -298,9 +300,16 @@ export default function EntidadesLegales() {
     }
   };
 
-  const handleRestore = (id: number) => {
-    if (confirm('¿Estás seguro de que quieres restaurar esta entidad legal?')) {
-      restoreMutation.mutate(id);
+  const handleRestore = (entidad: EntidadLegal) => {
+    setEntityToRestore(entidad);
+    setRestoreDialogOpen(true);
+  };
+
+  const handleConfirmRestore = () => {
+    if (entityToRestore) {
+      restoreMutation.mutate(entityToRestore.id);
+      setRestoreDialogOpen(false);
+      setEntityToRestore(null);
     }
   };
 
@@ -405,6 +414,16 @@ export default function EntidadesLegales() {
         description={`¿Estás seguro de que quieres eliminar la entidad legal "${entityToDelete?.nombre_legal}"? Esta acción no se puede deshacer.`}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* Restore Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={restoreDialogOpen}
+        onOpenChange={setRestoreDialogOpen}
+        onConfirm={handleConfirmRestore}
+        title="Restaurar Entidad Legal"
+        description={`¿Estás seguro de que quieres restaurar la entidad legal "${entityToRestore?.nombre_legal}"?`}
+        isLoading={restoreMutation.isPending}
+      />
     </div>
   );
 
@@ -493,7 +512,7 @@ export default function EntidadesLegales() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => handleRestore(entidad.id)}
+                        onClick={() => handleRestore(entidad)}
                         className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
                       >
                         <RotateCcw className="w-4 h-4" />
