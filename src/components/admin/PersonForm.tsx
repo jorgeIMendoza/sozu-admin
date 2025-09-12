@@ -305,8 +305,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   }
 
   function shouldShowLegalTab() {
-    // Show legal tab only for legal entities, not for clients or representatives
-    return entityType === 'legal';
+    // Show legal tab for legal entities AND for PM clients
+    return entityType === 'legal' || (entityType === 'client' && tipoPersona === 'pm');
   }
 
   function shouldShowBeneficiariosTab() {
@@ -410,7 +410,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       <form onSubmit={handleSubmit} className="space-y-6">
         {!isUser ? (
           <Tabs defaultValue="basic" className="w-full">
-            <TabsList className={`grid w-full ${shouldShowBeneficiariosTab() ? 'grid-cols-3' : shouldShowLegalTab() ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            <TabsList className={`grid w-full ${shouldShowBeneficiariosTab() ? 'grid-cols-4' : shouldShowLegalTab() ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <TabsTrigger value="basic">Información Básica</TabsTrigger>
               <TabsTrigger value="address">Dirección</TabsTrigger>
               {shouldShowLegalTab() && <TabsTrigger value="legal">Información Legal</TabsTrigger>}

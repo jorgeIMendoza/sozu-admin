@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,6 +25,7 @@ type EntidadLegal = {
 
 export default function EntidadesLegales() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("active");
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEntity, setEditingEntity] = useState<EntidadLegal | null>(null);
@@ -31,7 +33,7 @@ export default function EntidadesLegales() {
   const queryClient = useQueryClient();
 
   const { data: entidades = [], isLoading } = useQuery({
-    queryKey: ['entidades_legales'],
+    queryKey: ['entidades_legales', activeTab],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('personas')
@@ -61,7 +63,7 @@ export default function EntidadesLegales() {
             )
           )
         `)
-        .eq('activo', true)
+        .eq('activo', activeTab === 'active')
         .eq('tipo_persona', 'pm')
         .eq('entidades_relacionadas.activo', true)
         .neq('entidades_relacionadas.tipos_entidad.padre', 'c') // Exclude clients
@@ -222,9 +224,40 @@ export default function EntidadesLegales() {
     setIsEditDialogOpen(true);
   };
 
+  const restoreMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase
+        .from('personas')
+        .update({ activo: true })
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entidades_legales'] });
+      toast({
+        title: "Éxito",
+        description: "Entidad legal restaurada correctamente.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: `Error al restaurar la entidad legal: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDelete = (id: number) => {
     if (confirm('¿Estás seguro de que quieres eliminar esta entidad legal?')) {
       deleteMutation.mutate(id);
+    }
+  };
+
+  const handleRestore = (id: number) => {
+    if (confirm('¿Estás seguro de que quieres restaurar esta entidad legal?')) {
+      restoreMutation.mutate(id);
     }
   };
 
@@ -252,96 +285,33 @@ export default function EntidadesLegales() {
         </CardHeader>
         
         <CardContent className="p-6">
-          <div className="mb-6">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                type="text"
-                placeholder="Buscar por nombre, RFC..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 border-border focus:ring-primary/20"
-              />
-            </div>
-          </div>
-
-          {filteredEntidades.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-muted-foreground text-lg mb-2">
-                No hay entidades legales registradas
+          <Tabs defaultValue="active" value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="active">Activos</TabsTrigger>
+              <TabsTrigger value="deleted">Eliminados</TabsTrigger>
+            </TabsList>
+            
+            <div className="mb-6">
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  type="text"
+                  placeholder="Buscar por nombre, RFC..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 border-border focus:ring-primary/20"
+                />
               </div>
-              <p className="text-muted-foreground/80 mb-4">
-                Agrega tu primera entidad legal para comenzar
-              </p>
-              <Button 
-                onClick={() => setIsNewDialogOpen(true)}
-                className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Agregar Primera Entidad Legal
-              </Button>
             </div>
-          ) : (
-            <div className="border border-border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="font-semibold text-foreground">Razón Social</TableHead>
-                    <TableHead className="font-semibold text-foreground">Nombre Comercial</TableHead>
-                    <TableHead className="font-semibold text-foreground">RFC</TableHead>
-                    <TableHead className="font-semibold text-foreground">Email</TableHead>
-                    <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-                    <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
-                    <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEntidades.map((entidad) => (
-                    <TableRow key={entidad.id} className="hover:bg-muted/30 transition-colors">
-                      <TableCell className="font-medium text-foreground">
-                        {entidad.nombre_legal}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {entidad.nombre_comercial || '-'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {entidad.rfc || '-'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {entidad.email}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {entidad.telefono || '-'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {entidad.representante_legal_nombre || '-'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleEdit(entidad)}
-                            className="hover:bg-primary/10 hover:border-primary transition-colors"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleDelete(entidad.id)}
-                            className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+
+            <TabsContent value="active" className="mt-6">
+              {renderTable()}
+            </TabsContent>
+
+            <TabsContent value="deleted" className="mt-6">
+              {renderTable()}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
@@ -383,4 +353,104 @@ export default function EntidadesLegales() {
       </Dialog>
     </div>
   );
+
+  function renderTable() {
+
+    if (filteredEntidades.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-muted-foreground text-lg mb-2">
+            {activeTab === 'active' ? 'No hay entidades legales activas' : 'No hay entidades legales eliminadas'}
+          </div>
+          <p className="text-muted-foreground/80 mb-4">
+            {activeTab === 'active' ? 'Agrega tu primera entidad legal para comenzar' : 'Las entidades eliminadas aparecerán aquí'}
+          </p>
+          {activeTab === 'active' && (
+            <Button 
+              onClick={() => setIsNewDialogOpen(true)}
+              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Primera Entidad Legal
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="border border-border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="font-semibold text-foreground">Razón Social</TableHead>
+              <TableHead className="font-semibold text-foreground">Nombre Comercial</TableHead>
+              <TableHead className="font-semibold text-foreground">RFC</TableHead>
+              <TableHead className="font-semibold text-foreground">Email</TableHead>
+              <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
+              <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
+              <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredEntidades.map((entidad) => (
+              <TableRow key={entidad.id} className="hover:bg-muted/30 transition-colors">
+                <TableCell className="font-medium text-foreground">
+                  {entidad.nombre_legal}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entidad.nombre_comercial || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entidad.rfc || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entidad.email}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entidad.telefono || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entidad.representante_legal_nombre || '-'}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex gap-2 justify-end">
+                    {activeTab === 'active' ? (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleEdit(entidad)}
+                          className="hover:bg-primary/10 hover:border-primary transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleDelete(entidad.id)}
+                          className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleRestore(entidad.id)}
+                        className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
 }

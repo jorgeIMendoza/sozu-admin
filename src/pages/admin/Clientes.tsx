@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, Users } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Users, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,7 @@ type Cliente = {
 
 export default function Clientes() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("active");
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isBeneficiariosDialogOpen, setIsBeneficiariosDialogOpen] = useState(false);
@@ -36,7 +37,7 @@ export default function Clientes() {
   const queryClient = useQueryClient();
 
   const { data: clientes = [], isLoading } = useQuery({
-    queryKey: ['clientes'],
+    queryKey: ['clientes', activeTab],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('personas')
@@ -65,7 +66,7 @@ export default function Clientes() {
             )
           )
         `)
-        .eq('activo', true)
+        .eq('activo', activeTab === 'active')
         .eq('entidades_relacionadas.activo', true)
         .eq('entidades_relacionadas.tipos_entidad.padre', 'c')
         .is('entidades_relacionadas.id_proyecto', null)
@@ -222,9 +223,40 @@ export default function Clientes() {
     setIsEditDialogOpen(true);
   };
 
+  const restoreMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase
+        .from('personas')
+        .update({ activo: true })
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
+      toast({
+        title: "Éxito",
+        description: "Cliente restaurado correctamente.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: `Error al restaurar el cliente: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDelete = (id: number) => {
     if (confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
       deleteMutation.mutate(id);
+    }
+  };
+
+  const handleRestore = (id: number) => {
+    if (confirm('¿Estás seguro de que quieres restaurar este cliente?')) {
+      restoreMutation.mutate(id);
     }
   };
 
@@ -236,135 +268,55 @@ export default function Clientes() {
   return (
     <div className="container mx-auto py-6 px-4">
       <Card className="border-border shadow-lg">
-        <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-1">
-            <TabsTrigger value="general">Información General</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="general" className="mt-6">
-            <CardHeader className="border-b border-border bg-muted/30">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                  <CardTitle className="text-2xl font-bold text-foreground">
-                    Clientes
-                  </CardTitle>
-                  <p className="text-muted-foreground mt-1">
-                    Gestiona la información de los clientes
-                  </p>
-                </div>
-                <Button 
-                  onClick={() => setIsNewDialogOpen(true)}
-                  className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nuevo Cliente
-                </Button>
-              </div>
-            </CardHeader>
+        <CardHeader className="border-b border-border bg-muted/30">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle className="text-2xl font-bold text-foreground">
+                Clientes
+              </CardTitle>
+              <p className="text-muted-foreground mt-1">
+                Gestiona la información de los clientes
+              </p>
+            </div>
+            <Button 
+              onClick={() => setIsNewDialogOpen(true)}
+              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Nuevo Cliente
+            </Button>
+          </div>
+        </CardHeader>
+        
+        <CardContent className="p-6">
+          <Tabs defaultValue="active" value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="active">Activos</TabsTrigger>
+              <TabsTrigger value="deleted">Eliminados</TabsTrigger>
+            </TabsList>
             
-            <CardContent className="p-6">
-              <div className="mb-6">
-                <div className="relative max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                  <Input
-                    type="text"
-                    placeholder="Buscar por nombre, email, CURP, RFC..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 border-border focus:ring-primary/20"
-                  />
-                </div>
+            <div className="mb-6">
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  type="text"
+                  placeholder="Buscar por nombre, email, CURP, RFC..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 border-border focus:ring-primary/20"
+                />
               </div>
+            </div>
 
-              {filteredClientes.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-muted-foreground text-lg mb-2">
-                    No hay clientes registrados
-                  </div>
-                  <p className="text-muted-foreground/80 mb-4">
-                    Agrega tu primer cliente para comenzar
-                  </p>
-                  <Button 
-                    onClick={() => setIsNewDialogOpen(true)}
-                    className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Agregar Primer Cliente
-                  </Button>
-                </div>
-              ) : (
-                <div className="border border-border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                         <TableHead className="font-semibold text-foreground">Nombre</TableHead>
-                         <TableHead className="font-semibold text-foreground">Tipo</TableHead>
-                         <TableHead className="font-semibold text-foreground">Email</TableHead>
-                         <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-                         <TableHead className="font-semibold text-foreground">CURP/RFC</TableHead>
-                         <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
-                         <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredClientes.map((cliente) => (
-                        <TableRow key={cliente.id} className="hover:bg-muted/30 transition-colors">
-                          <TableCell className="font-medium text-foreground">
-                            {cliente.nombre_legal}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {cliente.tipo_persona === 'pf' ? 'Persona Física' : 'Persona Moral'}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {cliente.email}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {cliente.telefono || '-'}
-                          </TableCell>
-                           <TableCell className="text-muted-foreground">
-                             {cliente.tipo_persona === 'pf' ? (cliente.curp || '-') : (cliente.rfc || '-')}
-                           </TableCell>
-                           <TableCell className="text-muted-foreground">
-                             {cliente.tipo_persona === 'pm' ? (cliente.representante_legal_nombre || '-') : '-'}
-                           </TableCell>
-                           <TableCell className="text-right">
-                             <div className="flex gap-2 justify-end">
-                               <Button 
-                                 variant="outline" 
-                                 size="sm"
-                                 onClick={() => handleBeneficiarios(cliente)}
-                                 className="hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors"
-                                 title="Gestionar Beneficiarios"
-                               >
-                                 <Users className="w-4 h-4" />
-                               </Button>
-                               <Button 
-                                 variant="outline" 
-                                 size="sm"
-                                 onClick={() => handleEdit(cliente)}
-                                 className="hover:bg-primary/10 hover:border-primary transition-colors"
-                               >
-                                 <Edit className="w-4 h-4" />
-                               </Button>
-                               <Button 
-                                 variant="outline" 
-                                 size="sm"
-                                 onClick={() => handleDelete(cliente.id)}
-                                 className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
-                               >
-                                 <Trash2 className="w-4 h-4" />
-                               </Button>
-                             </div>
-                           </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="active" className="mt-6">
+              {renderTable()}
+            </TabsContent>
+
+            <TabsContent value="deleted" className="mt-6">
+              {renderTable()}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
       </Card>
 
       {/* Dialog para nuevo cliente */}
@@ -420,4 +372,113 @@ export default function Clientes() {
       </Dialog>
     </div>
   );
+
+  function renderTable() {
+
+    if (filteredClientes.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-muted-foreground text-lg mb-2">
+            {activeTab === 'active' ? 'No hay clientes activos' : 'No hay clientes eliminados'}
+          </div>
+          <p className="text-muted-foreground/80 mb-4">
+            {activeTab === 'active' ? 'Agrega tu primer cliente para comenzar' : 'Los clientes eliminados aparecerán aquí'}
+          </p>
+          {activeTab === 'active' && (
+            <Button 
+              onClick={() => setIsNewDialogOpen(true)}
+              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Primer Cliente
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="border border-border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+               <TableHead className="font-semibold text-foreground">Nombre</TableHead>
+               <TableHead className="font-semibold text-foreground">Tipo</TableHead>
+               <TableHead className="font-semibold text-foreground">Email</TableHead>
+               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
+               <TableHead className="font-semibold text-foreground">CURP/RFC</TableHead>
+               <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
+               <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredClientes.map((cliente) => (
+              <TableRow key={cliente.id} className="hover:bg-muted/30 transition-colors">
+                <TableCell className="font-medium text-foreground">
+                  {cliente.nombre_legal}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {cliente.tipo_persona === 'pf' ? 'Persona Física' : 'Persona Moral'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {cliente.email}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {cliente.telefono || '-'}
+                </TableCell>
+                 <TableCell className="text-muted-foreground">
+                   {cliente.tipo_persona === 'pf' ? (cliente.curp || '-') : (cliente.rfc || '-')}
+                 </TableCell>
+                 <TableCell className="text-muted-foreground">
+                   {cliente.tipo_persona === 'pm' ? (cliente.representante_legal_nombre || '-') : '-'}
+                 </TableCell>
+                 <TableCell className="text-right">
+                   <div className="flex gap-2 justify-end">
+                     {activeTab === 'active' ? (
+                       <>
+                         <Button 
+                           variant="outline" 
+                           size="sm"
+                           onClick={() => handleBeneficiarios(cliente)}
+                           className="hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors"
+                           title="Gestionar Beneficiarios"
+                         >
+                           <Users className="w-4 h-4" />
+                         </Button>
+                         <Button 
+                           variant="outline" 
+                           size="sm"
+                           onClick={() => handleEdit(cliente)}
+                           className="hover:bg-primary/10 hover:border-primary transition-colors"
+                         >
+                           <Edit className="w-4 h-4" />
+                         </Button>
+                         <Button 
+                           variant="outline" 
+                           size="sm"
+                           onClick={() => handleDelete(cliente.id)}
+                           className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                         >
+                           <Trash2 className="w-4 h-4" />
+                         </Button>
+                       </>
+                     ) : (
+                       <Button 
+                         variant="outline" 
+                         size="sm"
+                         onClick={() => handleRestore(cliente.id)}
+                         className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
+                       >
+                         <RotateCcw className="w-4 h-4" />
+                       </Button>
+                     )}
+                   </div>
+                 </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
 }

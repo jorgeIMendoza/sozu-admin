@@ -9,135 +9,98 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PersonForm } from "@/components/admin/PersonForm";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
-type RepresentanteLegal = {
+type Notario = {
   id: number;
-  nombre_legal: string;
+  nombre: string;
+  notaria: string;
   email: string;
   telefono?: string;
-  curp?: string;
+  direccion?: string;
   activo: boolean;
-  representado?: {
-    id: number;
-    nombre_legal: string;
-  };
 };
 
-export default function RepresentantesLegales() {
+export default function Notarios() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingRepresentant, setEditingRepresentant] = useState<RepresentanteLegal | null>(null);
+  const [editingNotario, setEditingNotario] = useState<Notario | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: representantes = [], isLoading } = useQuery({
-    queryKey: ['representantes_legales', activeTab],
+  // Form state
+  const [nombre, setNombre] = useState("");
+  const [notaria, setNotaria] = useState("");
+  const [email, setEmail] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [direccion, setDireccion] = useState("");
+
+  const { data: notarios = [], isLoading } = useQuery({
+    queryKey: ['notarios', activeTab],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('entidades_relacionadas')
-        .select(`
-          id,
-          personas!entidades_relacionadas_id_persona_fkey!inner (
-            id,
-            nombre_legal,
-            email,
-            telefono,
-            curp,
-            activo
-          )
-        `)
-        .eq('personas.activo', activeTab === 'active')
-        .eq('activo', true)
-        .eq('id_tipo_entidad', 1)
-        .is('id_proyecto', null)
-        .order('personas(nombre_legal)', { ascending: true });
+        .from('notarios')
+        .select('*')
+        .eq('activo', activeTab === 'active')
+        .order('nombre', { ascending: true });
       
       if (error) throw error;
-      
-      // Flatten the structure to match the expected format
-      return (data || []).map((item: any) => ({
-        id: item.personas.id,
-        entidad_relacionada_id: item.id,
-        nombre_legal: item.personas.nombre_legal,
-        email: item.personas.email,
-        telefono: item.personas.telefono,
-        curp: item.personas.curp,
-        activo: item.personas.activo,
-      })) as (RepresentanteLegal & { entidad_relacionada_id: number })[];
+      return data || [];
     },
   });
 
   const createMutation = useMutation({
-    mutationFn: async (personData: any) => {
-      // Filter out fields that don't belong to personas table
-      const { entityType, representativeId, ...cleanPersonData } = personData;
+    mutationFn: async (notarioData: Omit<Notario, 'id' | 'activo'>) => {
+      const { error } = await supabase
+        .from('notarios')
+        .insert([{ ...notarioData, activo: true }]);
       
-      // First, create the person record
-      const { data: personResult, error: personError } = await supabase
-        .from('personas')
-        .insert([{ ...cleanPersonData, tipo_persona: 'pf' }])
-        .select()
-        .single();
-      
-      if (personError) throw personError;
-      
-      // Then, create the entidades_relacionadas record with id_tipo_entidad = 1 (Representante Legal)
-      const { error: entidadError } = await supabase
-        .from('entidades_relacionadas')
-        .insert([{
-          id_persona: personResult.id,
-          id_tipo_entidad: 1, // Representante Legal
-          id_proyecto: null,
-          activo: true
-        }]);
-      
-      if (entidadError) throw entidadError;
+      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['representantes_legales'] });
+      queryClient.invalidateQueries({ queryKey: ['notarios'] });
       setIsNewDialogOpen(false);
+      resetForm();
       toast({
         title: "Éxito",
-        description: "Representante legal creado correctamente.",
+        description: "Notario creado correctamente.",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: `Error al crear el representante legal: ${error.message}`,
+        description: `Error al crear el notario: ${error.message}`,
         variant: "destructive",
       });
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (personData: any) => {
-      // Filter out fields that don't belong to personas table
-      const { entityType, representativeId, ...cleanPersonData } = personData;
-      
+    mutationFn: async (notarioData: Omit<Notario, 'id' | 'activo'>) => {
       const { error } = await supabase
-        .from('personas')
-        .update(cleanPersonData)
-        .eq('id', editingRepresentant?.id);
+        .from('notarios')
+        .update(notarioData)
+        .eq('id', editingNotario?.id);
       
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['representantes_legales'] });
+      queryClient.invalidateQueries({ queryKey: ['notarios'] });
       setIsEditDialogOpen(false);
-      setEditingRepresentant(null);
+      setEditingNotario(null);
+      resetForm();
       toast({
         title: "Éxito",
-        description: "Representante legal actualizado correctamente.",
+        description: "Notario actualizado correctamente.",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: `Error al actualizar el representante legal: ${error.message}`,
+        description: `Error al actualizar el notario: ${error.message}`,
         variant: "destructive",
       });
     },
@@ -146,73 +109,118 @@ export default function RepresentantesLegales() {
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       const { error } = await supabase
-        .from('personas')
+        .from('notarios')
         .update({ activo: false })
         .eq('id', id);
       
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['representantes_legales'] });
+      queryClient.invalidateQueries({ queryKey: ['notarios'] });
       toast({
         title: "Éxito",
-        description: "Representante legal eliminado correctamente.",
+        description: "Notario eliminado correctamente.",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: `Error al eliminar el representante legal: ${error.message}`,
+        description: `Error al eliminar el notario: ${error.message}`,
         variant: "destructive",
       });
     },
   });
 
-  const filteredRepresentantes = representantes.filter(representante => 
-    representante.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    representante.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    representante.curp?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleEdit = (representante: RepresentanteLegal) => {
-    setEditingRepresentant(representante);
-    setIsEditDialogOpen(true);
-  };
-
   const restoreMutation = useMutation({
     mutationFn: async (id: number) => {
       const { error } = await supabase
-        .from('personas')
+        .from('notarios')
         .update({ activo: true })
         .eq('id', id);
       
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['representantes_legales'] });
+      queryClient.invalidateQueries({ queryKey: ['notarios'] });
       toast({
         title: "Éxito",
-        description: "Representante legal restaurado correctamente.",
+        description: "Notario restaurado correctamente.",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: `Error al restaurar el representante legal: ${error.message}`,
+        description: `Error al restaurar el notario: ${error.message}`,
         variant: "destructive",
       });
     },
   });
 
+  const filteredNotarios = notarios.filter(notario => 
+    notario.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    notario.notaria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    notario.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const resetForm = () => {
+    setNombre("");
+    setNotaria("");
+    setEmail("");
+    setTelefono("");
+    setDireccion("");
+  };
+
+  const handleNew = () => {
+    resetForm();
+    setIsNewDialogOpen(true);
+  };
+
+  const handleEdit = (notario: Notario) => {
+    setEditingNotario(notario);
+    setNombre(notario.nombre);
+    setNotaria(notario.notaria);
+    setEmail(notario.email);
+    setTelefono(notario.telefono || "");
+    setDireccion(notario.direccion || "");
+    setIsEditDialogOpen(true);
+  };
+
   const handleDelete = (id: number) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este representante legal?')) {
+    if (confirm('¿Estás seguro de que quieres eliminar este notario?')) {
       deleteMutation.mutate(id);
     }
   };
 
   const handleRestore = (id: number) => {
-    if (confirm('¿Estás seguro de que quieres restaurar este representante legal?')) {
+    if (confirm('¿Estás seguro de que quieres restaurar este notario?')) {
       restoreMutation.mutate(id);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!nombre.trim() || !notaria.trim() || !email.trim()) {
+      toast({
+        title: "Error",
+        description: "Por favor completa todos los campos requeridos (nombre, notaría y email).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const notarioData = {
+      nombre: nombre.trim(),
+      notaria: notaria.trim(),
+      email: email.trim(),
+      telefono: telefono.trim() || null,
+      direccion: direccion.trim() || null,
+    };
+
+    if (editingNotario) {
+      updateMutation.mutate(notarioData);
+    } else {
+      createMutation.mutate(notarioData);
     }
   };
 
@@ -223,18 +231,18 @@ export default function RepresentantesLegales() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle className="text-2xl font-bold text-foreground">
-                Representantes Legales
+                Notarios
               </CardTitle>
               <p className="text-muted-foreground mt-1">
-                Gestiona la información de los representantes legales
+                Gestiona la información de los notarios
               </p>
             </div>
             <Button 
-              onClick={() => setIsNewDialogOpen(true)}
+              onClick={handleNew}
               className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
             >
               <Plus className="w-4 h-4 mr-2" />
-              Nuevo Representante Legal
+              Nuevo Notario
             </Button>
           </div>
         </CardHeader>
@@ -251,7 +259,7 @@ export default function RepresentantesLegales() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   type="text"
-                  placeholder="Buscar por nombre, email, CURP..."
+                  placeholder="Buscar por nombre, notaría, email..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 border-border focus:ring-primary/20"
@@ -270,60 +278,45 @@ export default function RepresentantesLegales() {
         </CardContent>
       </Card>
 
-      {/* Dialog para nuevo representante legal */}
+      {/* Dialog para nuevo notario */}
       <Dialog open={isNewDialogOpen} onOpenChange={setIsNewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Nuevo Representante Legal</DialogTitle>
+            <DialogTitle>Nuevo Notario</DialogTitle>
           </DialogHeader>
-          <PersonForm
-            onSubmit={(data) => createMutation.mutate(data)}
-            isLoading={createMutation.isPending}
-            onCancel={() => setIsNewDialogOpen(false)}
-            entityType="representative"
-          />
+          {renderForm()}
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para editar representante legal */}
+      {/* Dialog para editar notario */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Editar Representante Legal</DialogTitle>
+            <DialogTitle>Editar Notario</DialogTitle>
           </DialogHeader>
-          <PersonForm
-            initialData={editingRepresentant}
-            onSubmit={(data) => updateMutation.mutate(data)}
-            isLoading={updateMutation.isPending}
-            onCancel={() => {
-              setIsEditDialogOpen(false);
-              setEditingRepresentant(null);
-            }}
-            entityType="representative"
-          />
+          {renderForm()}
         </DialogContent>
       </Dialog>
     </div>
   );
 
   function renderTable() {
-
-    if (filteredRepresentantes.length === 0) {
+    if (filteredNotarios.length === 0) {
       return (
         <div className="text-center py-12">
           <div className="text-muted-foreground text-lg mb-2">
-            {activeTab === 'active' ? 'No hay representantes legales activos' : 'No hay representantes legales eliminados'}
+            {activeTab === 'active' ? 'No hay notarios activos' : 'No hay notarios eliminados'}
           </div>
           <p className="text-muted-foreground/80 mb-4">
-            {activeTab === 'active' ? 'Agrega tu primer representante legal para comenzar' : 'Los representantes eliminados aparecerán aquí'}
+            {activeTab === 'active' ? 'Agrega tu primer notario para comenzar' : 'Los notarios eliminados aparecerán aquí'}
           </p>
           {activeTab === 'active' && (
             <Button 
-              onClick={() => setIsNewDialogOpen(true)}
+              onClick={handleNew}
               className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105"
             >
               <Plus className="w-4 h-4 mr-2" />
-              Agregar Primer Representante Legal
+              Agregar Primer Notario
             </Button>
           )}
         </div>
@@ -335,27 +328,27 @@ export default function RepresentantesLegales() {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold text-foreground">Nombre Completo</TableHead>
+              <TableHead className="font-semibold text-foreground">Nombre</TableHead>
+              <TableHead className="font-semibold text-foreground">Notaría</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-              <TableHead className="font-semibold text-foreground">CURP</TableHead>
               <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredRepresentantes.map((representante) => (
-              <TableRow key={representante.id} className="hover:bg-muted/30 transition-colors">
+            {filteredNotarios.map((notario) => (
+              <TableRow key={notario.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium text-foreground">
-                  {representante.nombre_legal}
+                  {notario.nombre}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {representante.email}
+                  {notario.notaria}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {representante.telefono || '-'}
+                  {notario.email}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {representante.curp || '-'}
+                  {notario.telefono || '-'}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-2 justify-end">
@@ -364,7 +357,7 @@ export default function RepresentantesLegales() {
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => handleEdit(representante)}
+                          onClick={() => handleEdit(notario)}
                           className="hover:bg-primary/10 hover:border-primary transition-colors"
                         >
                           <Edit className="w-4 h-4" />
@@ -372,7 +365,7 @@ export default function RepresentantesLegales() {
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => handleDelete(representante.id)}
+                          onClick={() => handleDelete(notario.id)}
                           className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -382,7 +375,7 @@ export default function RepresentantesLegales() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => handleRestore(representante.id)}
+                        onClick={() => handleRestore(notario.id)}
                         className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
                       >
                         <RotateCcw className="w-4 h-4" />
@@ -395,6 +388,97 @@ export default function RepresentantesLegales() {
           </TableBody>
         </Table>
       </div>
+    );
+  }
+
+  function renderForm() {
+    return (
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="nombre">Nombre *</Label>
+            <Input
+              id="nombre"
+              type="text"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder="Nombre completo del notario"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="email">Email *</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="correo@ejemplo.com"
+              required
+            />
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor="notaria">Notaría *</Label>
+          <Input
+            id="notaria"
+            type="text"
+            value={notaria}
+            onChange={(e) => setNotaria(e.target.value)}
+            placeholder="NOTARIA 35, ZAPOPAN"
+            required
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="telefono">Teléfono</Label>
+          <Input
+            id="telefono"
+            type="tel"
+            value={telefono}
+            onChange={(e) => setTelefono(e.target.value)}
+            placeholder="Número de teléfono"
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="direccion">Dirección</Label>
+          <Textarea
+            id="direccion"
+            value={direccion}
+            onChange={(e) => setDireccion(e.target.value)}
+            placeholder="Dirección completa"
+            rows={3}
+          />
+        </div>
+
+        <div className="flex gap-4 pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              if (editingNotario) {
+                setIsEditDialogOpen(false);
+                setEditingNotario(null);
+              } else {
+                setIsNewDialogOpen(false);
+              }
+              resetForm();
+            }}
+            className="flex-1"
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            disabled={createMutation.isPending || updateMutation.isPending}
+            className="flex-1"
+          >
+            {createMutation.isPending || updateMutation.isPending ? 'Guardando...' : 'Guardar'}
+          </Button>
+        </div>
+      </form>
     );
   }
 }
