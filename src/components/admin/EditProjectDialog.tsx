@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, Trash2, MapPin, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -19,7 +19,6 @@ import { ProjectLegalEntitiesSection } from "./ProjectLegalEntitiesSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { GoogleMapComponent } from "./GoogleMapComponent";
-import { MapPin } from "lucide-react";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -317,13 +316,31 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
                       />
                       
                       {selectedLocation && (
-                        <div className="flex items-center space-x-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                          <MapPin className="w-4 h-4" />
-                          <div>
-                            <p className="font-medium">Coordenadas seleccionadas:</p>
-                            <p>Lat: {selectedLocation.lat.toFixed(6)}</p>
-                            <p>Lng: {selectedLocation.lng.toFixed(6)}</p>
+                        <div className="flex items-center justify-between text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                          <div className="flex items-center space-x-2">
+                            <MapPin className="w-4 h-4" />
+                            <div>
+                              <p className="font-medium">Coordenadas seleccionadas:</p>
+                              <p>Lat: {selectedLocation.lat.toFixed(6)}</p>
+                              <p>Lng: {selectedLocation.lng.toFixed(6)}</p>
+                            </div>
                           </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const coordinates = `${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}`;
+                              navigator.clipboard.writeText(coordinates);
+                              toast({
+                                title: "Coordenadas copiadas",
+                                description: coordinates,
+                              });
+                            }}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
                         </div>
                       )}
                     </div>
