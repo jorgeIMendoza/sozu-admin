@@ -255,11 +255,7 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
     setHasChanges(true);
     resetForm();
     setEditingBeneficiario(null);
-    
-    // Only close dialog when editing, not when adding new
-    if (wasEditing) {
-      setIsDialogOpen(false);
-    }
+    setIsDialogOpen(false);
   };
 
   const handleEdit = (beneficiario: TempBeneficiario) => {
