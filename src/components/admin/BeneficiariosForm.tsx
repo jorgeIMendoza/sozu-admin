@@ -195,9 +195,7 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSubmit = () => {
     if (!nombreBeneficiario.trim() || !idParentesco) {
       toast({
         title: "Error",
@@ -431,7 +429,7 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
             </DialogTitle>
           </DialogHeader>
           
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-4">
             <div>
               <Label htmlFor="nombreBeneficiario">Nombre del Beneficiario *</Label>
               <Input
@@ -516,13 +514,14 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
                 Cancelar
               </Button>
               <Button 
-                type="submit"
+                type="button"
+                onClick={handleSubmit}
                 className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary"
               >
                 {editingBeneficiario ? 'Actualizar' : 'Agregar'}
               </Button>
             </div>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
 
