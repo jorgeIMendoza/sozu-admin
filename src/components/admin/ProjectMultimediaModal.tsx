@@ -48,9 +48,14 @@ export const ProjectMultimediaModal = ({
 
   const renderVideo = (item: MultimediaItem) => (
     <div key={item.id} className="group relative overflow-hidden rounded-lg border bg-card">
-      <div className="w-full h-48 bg-muted flex items-center justify-center">
-        <Video className="h-12 w-12 text-muted-foreground" />
-      </div>
+      <video
+        src={item.url}
+        controls
+        className="w-full h-48 object-cover"
+        preload="metadata"
+      >
+        Tu navegador no soporta el elemento de video.
+      </video>
       <div className="p-4">
         <p className="text-sm text-muted-foreground mb-2">Video del proyecto</p>
         <Button
@@ -60,7 +65,7 @@ export const ProjectMultimediaModal = ({
           onClick={() => window.open(item.url, '_blank')}
         >
           <Video className="h-4 w-4 mr-2" />
-          Ver video
+          Abrir en nueva pestaña
         </Button>
       </div>
     </div>
