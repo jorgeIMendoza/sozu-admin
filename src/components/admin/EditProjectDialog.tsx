@@ -380,6 +380,31 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
 
                   <FormField
                     control={form.control}
+                    name="id_estatus_proyecto"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Estatus del Proyecto</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un estatus" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {estatusProyecto?.map((estatus) => (
+                              <SelectItem key={estatus.id} value={estatus.id.toString()}>
+                                {estatus.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
                     name="descripcion"
                     render={({ field }) => (
                       <FormItem>
@@ -681,30 +706,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
 
                 <TabsContent value="images" className="mt-6">
                   <div className="space-y-6">
-                    <FormField
-                      control={form.control}
-                      name="id_estatus_proyecto"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Estatus del Proyecto</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecciona un estatus" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {estatusProyecto?.map((estatus) => (
-                                <SelectItem key={estatus.id} value={estatus.id.toString()}>
-                                  {estatus.nombre}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
                     <FormField
                       control={form.control}
                       name="url_logo"
