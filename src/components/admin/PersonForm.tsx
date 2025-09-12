@@ -438,15 +438,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       className="bg-muted"
                     />
                   ) : (
-                    <Select value={tipoPersona} onValueChange={setTipoPersona}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pf">Persona Física</SelectItem>
-                        <SelectItem value="pm">Persona Moral</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      id="tipoPersona"
+                      type="text"
+                      value={tipoPersona === 'pf' ? 'Persona Física' : 'Persona Moral'}
+                      disabled
+                      className="bg-muted"
+                    />
                   )}
                 </div>
 
