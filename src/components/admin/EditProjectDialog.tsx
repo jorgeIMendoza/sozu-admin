@@ -15,6 +15,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { BuildingManagement } from "./BuildingManagement";
 import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
+import { ProjectLegalEntitiesSection } from "./ProjectLegalEntitiesSection";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 const formSchema = z.object({
@@ -188,169 +190,182 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
             <p>Cargando...</p>
           </div>
         ) : (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="nombre"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre del Proyecto</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ingrese el nombre del proyecto" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          <Tabs defaultValue="information" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="information">Información</TabsTrigger>
+              <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="information" className="mt-6">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="nombre"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nombre del Proyecto</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ingrese el nombre del proyecto" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <FormField
-                control={form.control}
-                name="id_tipo_uso"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de Uso</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona un tipo de uso" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {tiposUso?.map((tipo) => (
-                          <SelectItem key={tipo.id} value={tipo.id.toString()}>
-                            {tipo.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  <FormField
+                    control={form.control}
+                    name="id_tipo_uso"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de Uso</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un tipo de uso" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {tiposUso?.map((tipo) => (
+                              <SelectItem key={tipo.id} value={tipo.id.toString()}>
+                                {tipo.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <FormField
-                control={form.control}
-                name="descripcion"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descripción</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Descripción del proyecto" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  <FormField
+                    control={form.control}
+                    name="descripcion"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descripción</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="Descripción del proyecto" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <FormField
-                control={form.control}
-                name="direccion"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Dirección</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Dirección del proyecto" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  <FormField
+                    control={form.control}
+                    name="direccion"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Dirección</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Dirección del proyecto" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="precio_m2"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Precio por m²</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="0.00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="precio_m2"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Precio por m²</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="fecha_inicio"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha de Inicio</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                    <FormField
+                      control={form.control}
+                      name="fecha_inicio"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Fecha de Inicio</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-              {/* Building Management Section */}
-              <div className="space-y-3">
-                <BuildingManagement projectId={projectId} />
-              </div>
+                  {/* Building Management Section */}
+                  <div className="space-y-3">
+                    <BuildingManagement projectId={projectId} />
+                  </div>
 
-              {/* Payment Scheme Management Section */}
-              <div className="space-y-3">
-                <PaymentSchemeManagement projectId={projectId} />
-              </div>
+                  {/* Payment Scheme Management Section */}
+                  <div className="space-y-3">
+                    <PaymentSchemeManagement projectId={projectId} />
+                  </div>
 
-              <FormField
-                control={form.control}
-                name="amenidades"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Amenidades</FormLabel>
-                    <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                      {amenidades?.map((amenidad) => (
-                        <FormField
-                          key={amenidad.id}
-                          control={form.control}
-                          name="amenidades"
-                          render={({ field }) => {
-                            return (
-                              <FormItem
-                                key={amenidad.id}
-                                className="flex flex-row items-start space-x-3 space-y-0"
-                              >
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value?.includes(amenidad.id.toString())}
-                                    onCheckedChange={(checked) => {
-                                      return checked
-                                        ? field.onChange([...field.value, amenidad.id.toString()])
-                                        : field.onChange(
-                                            field.value?.filter(
-                                              (value) => value !== amenidad.id.toString()
-                                            )
-                                          )
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormLabel className="text-sm font-normal">
-                                  {amenidad.nombre}
-                                </FormLabel>
-                              </FormItem>
-                            )
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  <FormField
+                    control={form.control}
+                    name="amenidades"
+                    render={() => (
+                      <FormItem>
+                        <FormLabel>Amenidades</FormLabel>
+                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                          {amenidades?.map((amenidad) => (
+                            <FormField
+                              key={amenidad.id}
+                              control={form.control}
+                              name="amenidades"
+                              render={({ field }) => {
+                                return (
+                                  <FormItem
+                                    key={amenidad.id}
+                                    className="flex flex-row items-start space-x-3 space-y-0"
+                                  >
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value?.includes(amenidad.id.toString())}
+                                        onCheckedChange={(checked) => {
+                                          return checked
+                                            ? field.onChange([...field.value, amenidad.id.toString()])
+                                            : field.onChange(
+                                                field.value?.filter(
+                                                  (value) => value !== amenidad.id.toString()
+                                                )
+                                              )
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="text-sm font-normal">
+                                      {amenidad.nombre}
+                                    </FormLabel>
+                                  </FormItem>
+                                )
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit">Actualizar Proyecto</Button>
-              </div>
-            </form>
-          </Form>
+                  <div className="flex justify-end space-x-2">
+                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit">Actualizar Proyecto</Button>
+                  </div>
+                </form>
+              </Form>
+            </TabsContent>
+            
+            <TabsContent value="legal-entities" className="mt-6">
+              <ProjectLegalEntitiesSection projectId={projectId} />
+            </TabsContent>
+          </Tabs>
         )}
       </DialogContent>
     </Dialog>
