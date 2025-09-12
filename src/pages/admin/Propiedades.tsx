@@ -445,10 +445,9 @@ const Propiedades = () => {
                 <label className="text-sm font-medium mb-2 block">Disponibilidad</label>
                 <Select value={disponibilidadFilter} onValueChange={setDisponibilidadFilter}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Todos" />
+                    <SelectValue placeholder="Filtrar por disponibilidad..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos</SelectItem>
                     {availabilityOptions?.map((option) => (
                       <SelectItem key={option.id} value={option.nombre}>
                         {option.nombre}
