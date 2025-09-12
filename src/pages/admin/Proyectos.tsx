@@ -22,7 +22,7 @@ const Proyectos = () => {
           direccion,
           activo,
           precio_m2,
-          fecha_inicio,
+          fecha_inicio_construccion,
           id_tipo_uso,
           tipos_uso:id_tipo_uso (
             nombre
@@ -60,7 +60,7 @@ const Proyectos = () => {
           direccion,
           activo,
           precio_m2,
-          fecha_inicio,
+          fecha_inicio_construccion,
           id_tipo_uso,
           tipos_uso:id_tipo_uso (
             nombre
@@ -129,7 +129,7 @@ const Proyectos = () => {
             tipo_uso={project.tipos_uso?.nombre}
             numero_edificios={project.edificios?.length || 0}
             numero_amenidades={project.amenidades_proyectos?.length || 0}
-            fecha_inicio={project.fecha_inicio}
+            fecha_inicio={project.fecha_inicio_construccion}
             descripcion={project.descripcion}
             onProjectUpdated={handleProjectUpdated}
             onProjectDeleted={handleProjectDeleted}

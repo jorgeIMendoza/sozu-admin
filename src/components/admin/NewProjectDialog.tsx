@@ -577,9 +577,6 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
 
                 {/* Location and Address Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                {/* Location and Address Section */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <FormField
                       control={form.control}
@@ -651,19 +648,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                 {createdProjectId ? (
                   <div className="space-y-3">
                     <PaymentSchemeManagement projectId={createdProjectId} />
-                <FormField
-                  control={form.control}
-                  name="precio_m2"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Precio por m²</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="0.00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  </div>
                 ) : (
                   <PaymentSchemeFormSection
                     paymentSchemes={paymentSchemes}

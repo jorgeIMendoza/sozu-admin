@@ -28,7 +28,7 @@ const formSchema = z.object({
   id_tipo_uso: z.string().min(1, "El tipo de uso es requerido"),
   id_estatus_proyecto: z.string().min(1, "El estatus del proyecto es requerido"),
   precio_m2: z.string().optional(),
-  fecha_inicio: z.string().optional(),
+  fecha_inicio_construccion: z.string().optional(),
   latitud: z.number().optional(),
   longitud: z.number().optional(),
   amenidades: z.array(z.string()).default([]),
@@ -61,7 +61,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
       id_tipo_uso: "",
       id_estatus_proyecto: "",
       precio_m2: "",
-      fecha_inicio: "",
+      fecha_inicio_construccion: "",
       latitud: undefined,
       longitud: undefined,
       amenidades: [],
@@ -154,7 +154,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
         id_tipo_uso: project.id_tipo_uso?.toString() || "",
         id_estatus_proyecto: project.id_estatus_proyecto?.toString() || "",
         precio_m2: project.precio_m2?.toString() || "",
-        fecha_inicio: project.fecha_inicio || "",
+        fecha_inicio_construccion: project.fecha_inicio_construccion || "",
         latitud: project.latitud || undefined,
         longitud: project.longitud || undefined,
         amenidades: project.amenidades_proyectos?.map((ap: any) => ap.id_amenidad.toString()) || [],
@@ -179,7 +179,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
         id_tipo_uso: parseInt(values.id_tipo_uso),
         id_estatus_proyecto: parseInt(values.id_estatus_proyecto),
         precio_m2: values.precio_m2 ? parseFloat(values.precio_m2) : null,
-        fecha_inicio: values.fecha_inicio || null,
+        fecha_inicio_construccion: values.fecha_inicio_construccion || null,
         latitud: selectedLocation?.lat || null,
         longitud: selectedLocation?.lng || null,
         url_logo: values.url_logo || null,
@@ -337,7 +337,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated }: EditProjectDi
 
                     <FormField
                       control={form.control}
-                      name="fecha_inicio"
+                      name="fecha_inicio_construccion"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Fecha de Inicio</FormLabel>
