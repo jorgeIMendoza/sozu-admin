@@ -494,7 +494,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                 <SelectContent>
                   {entidadesRelacionadas?.map((entidad) => (
                     <SelectItem key={entidad.id} value={entidad.id.toString()}>
-                      {entidad.personas?.nombre_legal} - {entidad.proyectos?.nombre}
+                      {entidad.personas?.nombre_legal}
                     </SelectItem>
                   ))}
                 </SelectContent>
