@@ -41,7 +41,7 @@ export default function EntidadesLegales() {
           telefono,
           rfc,
           activo,
-          entidades_relacionadas!inner (
+          entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
             id,
             id_tipo_entidad,
             tipos_entidad!inner (
