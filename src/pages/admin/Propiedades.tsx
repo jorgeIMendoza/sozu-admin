@@ -1,100 +1,131 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Edit, Trash2, Upload } from "lucide-react";
+import { Search, Edit, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { EditPropertyDialog } from "@/components/admin/EditPropertyDialog";
-import { BulkUploadPropertiesDialog } from "@/components/admin/BulkUploadPropertiesDialog";
+import { NewPropertyDialog } from "@/components/admin/NewPropertyDialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface Property {
   id: number;
-  dueño: string;
   numero_propiedad: string;
   numero_piso: number;
   m2_reales: number;
   precio_lista: number;
-  clabe_stp: string | null;
-  vista: string;
-  transaccion: string;
-  tipo_propiedad: string;
-  disponibilidad: string;
-  modelo: string;
+  clabe_stp_tmp_apartado: string | null;
   activo: boolean;
+  // Relaciones
+  propietario: string;
+  proyecto: string;
+  edificio: string;
+  modelo: string;
+  vista: string;
+  disponibilidad: string;
+  configuracion_modelo: {
+    numero_recamaras: number;
+    numero_completo_banos: number;
+    numero_medio_bano: number;
+  };
 }
 
 const Propiedades = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("activas");
-  const [modeloFilter, setModeloFilter] = useState("todos");
-  const [disponibilidadFilter, setDisponibilidadFilter] = useState("todos");
-  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
-  const [showBulkUpload, setShowBulkUpload] = useState(false);
+  
+  // Filtros de texto
+  const [proyectoFilter, setProyectoFilter] = useState("");
+  const [modeloFilter, setModeloFilter] = useState("");
+  const [configuracionFilter, setConfiguracionFilter] = useState("");
+  const [disponibilidadFilter, setDisponibilidadFilter] = useState("");
+  
+  // Paginación
+  const [currentPageActive, setCurrentPageActive] = useState(1);
+  const [currentPageInactive, setCurrentPageInactive] = useState(1);
+  const itemsPerPage = 25;
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: properties, isLoading } = useQuery({
-    queryKey: ['properties'],
+    queryKey: ['properties-detailed'],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_properties_with_details');
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching properties:', error);
+        throw error;
+      }
       
-      return data || [];
+      // Transformar los datos para facilitar su uso
+      const transformedData = data?.map((property: any) => ({
+        id: property.id,
+        numero_propiedad: property.numero_propiedad,
+        numero_piso: property.numero_piso,
+        m2_reales: property.m2_reales,
+        precio_lista: property.precio_lista,
+        clabe_stp_tmp_apartado: property.clabe_stp,
+        activo: property.activo,
+        propietario: property.dueño || 'Sin propietario',
+        proyecto: 'Por definir', // Necesitamos agregar esto a la función
+        edificio: 'Por definir', // Necesitamos agregar esto a la función
+        modelo: property.modelo || 'Sin modelo',
+        vista: property.vista || 'Sin vista',
+        disponibilidad: property.disponibilidad || 'Sin estatus',
+        configuracion_modelo: {
+          numero_recamaras: 0, // Necesitamos agregar esto a la función
+          numero_completo_banos: 0, // Necesitamos agregar esto a la función
+          numero_medio_bano: 0, // Necesitamos agregar esto a la función
+        }
+      })) || [];
+      
+      return transformedData;
     },
   });
 
-  // Fetch modelos for filter
-  const { data: modelos } = useQuery({
-    queryKey: ['modelos'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('modelos')
-        .select('id, nombre')
-        .eq('activo', true)
-        .order('nombre');
-      
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Fetch estatus disponibilidad for filter
-  const { data: estatusDisponibilidad } = useQuery({
-    queryKey: ['estatus_disponibilidad'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('estatus_disponibilidad')
-        .select('id, nombre')
-        .eq('activo', true)
-        .order('nombre');
-      
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
+  // Filtrar propiedades
   const filteredProperties = properties?.filter(property => {
     const matchesSearch = 
       property.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.dueño.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.vista.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.tipo_propiedad.toLowerCase().includes(searchTerm.toLowerCase());
+      property.propietario.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.proyecto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.edificio.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.modelo.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesTab = activeTab === "activas" ? property.activo : !property.activo;
     
-    const matchesModelo = modeloFilter === "todos" || property.modelo === modeloFilter;
+    const matchesProyecto = property.proyecto.toLowerCase().includes(proyectoFilter.toLowerCase());
+    const matchesModelo = property.modelo.toLowerCase().includes(modeloFilter.toLowerCase());
     
-    const matchesDisponibilidad = disponibilidadFilter === "todos" || property.disponibilidad === disponibilidadFilter;
+    const configuracionText = `${property.configuracion_modelo.numero_recamaras} rec, ${property.configuracion_modelo.numero_completo_banos} baños, ${property.configuracion_modelo.numero_medio_bano} medios baños`;
+    const matchesConfiguracion = configuracionText.toLowerCase().includes(configuracionFilter.toLowerCase());
     
-    return matchesSearch && matchesTab && matchesModelo && matchesDisponibilidad;
+    const matchesDisponibilidad = property.disponibilidad.toLowerCase().includes(disponibilidadFilter.toLowerCase());
+    
+    return matchesSearch && matchesTab && matchesProyecto && matchesModelo && matchesConfiguracion && matchesDisponibilidad;
   }) || [];
+
+  // Separar propiedades activas e inactivas
+  const activeProperties = filteredProperties.filter(p => p.activo);
+  const inactiveProperties = filteredProperties.filter(p => !p.activo);
+
+  // Paginación para propiedades activas
+  const totalActivePage = Math.ceil(activeProperties.length / itemsPerPage);
+  const startIndexActive = (currentPageActive - 1) * itemsPerPage;
+  const endIndexActive = startIndexActive + itemsPerPage;
+  const paginatedActiveProperties = activeProperties.slice(startIndexActive, endIndexActive);
+
+  // Paginación para propiedades inactivas
+  const totalInactivePage = Math.ceil(inactiveProperties.length / itemsPerPage);
+  const startIndexInactive = (currentPageInactive - 1) * itemsPerPage;
+  const endIndexInactive = startIndexInactive + itemsPerPage;
+  const paginatedInactiveProperties = inactiveProperties.slice(startIndexInactive, endIndexInactive);
 
   const handleDelete = async (propertyId: number) => {
     try {
@@ -110,7 +141,7 @@ const Propiedades = () => {
         description: "La propiedad se ha marcado como inactiva correctamente.",
       });
 
-      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['properties-detailed'] });
     } catch (error) {
       toast({
         title: "Error",
@@ -134,7 +165,7 @@ const Propiedades = () => {
         description: "La propiedad se ha reactivado correctamente.",
       });
 
-      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['properties-detailed'] });
     } catch (error) {
       toast({
         title: "Error",
@@ -150,6 +181,161 @@ const Propiedades = () => {
       currency: 'MXN',
     }).format(amount);
   };
+
+  const formatConfiguracion = (config: Property['configuracion_modelo']) => {
+    return `${config.numero_recamaras} rec, ${config.numero_completo_banos} baños, ${config.numero_medio_bano} 1/2 baños`;
+  };
+
+  const handlePropertyAdded = () => {
+    queryClient.invalidateQueries({ queryKey: ['properties-detailed'] });
+  };
+
+  const renderPagination = (currentPage: number, totalPages: number, onPageChange: (page: number) => void) => {
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="mt-4">
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious 
+                onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <PaginationItem key={page}>
+                <PaginationLink
+                  onClick={() => onPageChange(page)}
+                  isActive={currentPage === page}
+                  className="cursor-pointer"
+                >
+                  {page}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationNext 
+                onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
+    );
+  };
+
+  const renderPropertiesTable = (propertiesToRender: Property[], isDeleted = false) => (
+    <>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Proyecto</TableHead>
+              <TableHead>Propietario</TableHead>
+              <TableHead>Edificio</TableHead>
+              <TableHead>Modelo</TableHead>
+              <TableHead>No. Departamento</TableHead>
+              <TableHead>No. Piso</TableHead>
+              <TableHead>Cuenta CLABE</TableHead>
+              <TableHead>Vista</TableHead>
+              <TableHead>M² Reales</TableHead>
+              <TableHead>Configuración</TableHead>
+              <TableHead>Precio Lista</TableHead>
+              <TableHead>Disponibilidad</TableHead>
+              <TableHead>Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {propertiesToRender.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={13} className="text-center py-6">
+                  {searchTerm || proyectoFilter || modeloFilter || configuracionFilter || disponibilidadFilter 
+                    ? "No se encontraron resultados." 
+                    : isDeleted 
+                      ? "No hay propiedades eliminadas." 
+                      : "No hay propiedades activas."
+                  }
+                </TableCell>
+              </TableRow>
+            ) : (
+              propertiesToRender.map((property) => (
+                <TableRow key={property.id} className={isDeleted ? "opacity-60" : ""}>
+                  <TableCell className="font-medium">{property.proyecto}</TableCell>
+                  <TableCell>{property.propietario}</TableCell>
+                  <TableCell>{property.edificio}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{property.modelo}</Badge>
+                  </TableCell>
+                  <TableCell>{property.numero_propiedad}</TableCell>
+                  <TableCell>{property.numero_piso}</TableCell>
+                  <TableCell className="font-mono text-sm">{property.clabe_stp_tmp_apartado || 'Sin CLABE'}</TableCell>
+                  <TableCell>{property.vista}</TableCell>
+                  <TableCell>{property.m2_reales} m²</TableCell>
+                  <TableCell className="text-sm">{formatConfiguracion(property.configuracion_modelo)}</TableCell>
+                  <TableCell>{formatCurrency(property.precio_lista)}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{property.disponibilidad}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {isDeleted ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRestore(property.id)}
+                        className="h-8 px-2 text-xs text-green-600 hover:text-green-700"
+                      >
+                        Restaurar
+                      </Button>
+                    ) : (
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar propiedad?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                ¿Estás seguro de que deseas eliminar la propiedad {property.numero_propiedad}? Esta acción se puede revertir posteriormente.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDelete(property.id)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Eliminar
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
 
   if (isLoading) {
     return (
@@ -168,58 +354,57 @@ const Propiedades = () => {
             Gestiona el inventario de propiedades del sistema
           </p>
         </div>
-        <Button 
-          onClick={() => setShowBulkUpload(true)}
-          className="gap-2"
-        >
-          <Upload className="h-4 w-4" />
-          Carga Masiva
-        </Button>
+        <NewPropertyDialog onPropertyAdded={handlePropertyAdded} />
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Lista de Propiedades</CardTitle>
           <div className="space-y-4">
+            {/* Búsqueda general */}
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por número de propiedad, propietario, vista o tipo..."
+                placeholder="Buscar por número de propiedad, propietario, proyecto, edificio o modelo..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8"
               />
             </div>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Select value={modeloFilter} onValueChange={setModeloFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filtrar por modelo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos los modelos</SelectItem>
-                    {modelos?.map((modelo) => (
-                      <SelectItem key={modelo.id} value={modelo.nombre}>
-                        {modelo.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            
+            {/* Filtros específicos */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Proyecto</label>
+                <Input
+                  placeholder="Filtrar por proyecto..."
+                  value={proyectoFilter}
+                  onChange={(e) => setProyectoFilter(e.target.value)}
+                />
               </div>
-              <div className="flex-1">
-                <Select value={disponibilidadFilter} onValueChange={setDisponibilidadFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filtrar por disponibilidad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todas las disponibilidades</SelectItem>
-                    {estatusDisponibilidad?.map((estatus) => (
-                      <SelectItem key={estatus.id} value={estatus.nombre}>
-                        {estatus.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Modelo</label>
+                <Input
+                  placeholder="Filtrar por modelo..."
+                  value={modeloFilter}
+                  onChange={(e) => setModeloFilter(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Configuración</label>
+                <Input
+                  placeholder="Ej: 2 rec, 1 baño..."
+                  value={configuracionFilter}
+                  onChange={(e) => setConfiguracionFilter(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Disponibilidad</label>
+                <Input
+                  placeholder="Filtrar por disponibilidad..."
+                  value={disponibilidadFilter}
+                  onChange={(e) => setDisponibilidadFilter(e.target.value)}
+                />
               </div>
             </div>
           </div>
@@ -228,168 +413,25 @@ const Propiedades = () => {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="activas">
-                Propiedades Activas ({properties?.filter(p => p.activo).length || 0})
+                Propiedades Activas ({activeProperties.length})
               </TabsTrigger>
               <TabsTrigger value="eliminadas">
-                Propiedades Eliminadas ({properties?.filter(p => !p.activo).length || 0})
+                Propiedades Eliminadas ({inactiveProperties.length})
               </TabsTrigger>
             </TabsList>
             
             <TabsContent value="activas" className="mt-4">
-              <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Propietario</TableHead>
-                        <TableHead>No. Propiedad</TableHead>
-                        <TableHead>Piso</TableHead>
-                        <TableHead>M² Reales</TableHead>
-                        <TableHead>Precio Lista</TableHead>
-                        <TableHead>Cuenta Clabe</TableHead>
-                        <TableHead>Vista</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Modelo</TableHead>
-                        <TableHead>Disponibilidad</TableHead>
-                        <TableHead>Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredProperties.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={11} className="text-center py-6">
-                            {searchTerm ? "No se encontraron resultados." : "No hay propiedades activas."}
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredProperties.map((property) => (
-                          <TableRow key={property.id}>
-                            <TableCell className="font-medium">{property.dueño}</TableCell>
-                            <TableCell>{property.numero_propiedad}</TableCell>
-                            <TableCell>{property.numero_piso}</TableCell>
-                            <TableCell>{property.m2_reales} m²</TableCell>
-                            <TableCell>{formatCurrency(property.precio_lista)}</TableCell>
-                            <TableCell>{property.clabe_stp || ''}</TableCell>
-                            <TableCell>{property.vista}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{property.tipo_propiedad}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{property.modelo}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">{property.disponibilidad}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex space-x-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setEditingProperty(property)}
-                                  className="h-8 w-8 p-0"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDelete(property.id)}
-                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                </Table>
-              </div>
+              {renderPropertiesTable(paginatedActiveProperties, false)}
+              {renderPagination(currentPageActive, totalActivePage, setCurrentPageActive)}
             </TabsContent>
 
             <TabsContent value="eliminadas" className="mt-4">
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Propietario</TableHead>
-                      <TableHead>No. Propiedad</TableHead>
-                      <TableHead>Piso</TableHead>
-                      <TableHead>M² Reales</TableHead>
-                      <TableHead>Precio Lista</TableHead>
-                      <TableHead>Cuenta Clabe</TableHead>
-                      <TableHead>Vista</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Modelo</TableHead>
-                      <TableHead>Disponibilidad</TableHead>
-                      <TableHead>Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProperties.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={11} className="text-center py-6">
-                          {searchTerm ? "No se encontraron resultados." : "No hay propiedades eliminadas."}
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredProperties.map((property) => (
-                        <TableRow key={property.id} className="opacity-60">
-                          <TableCell className="font-medium">{property.dueño}</TableCell>
-                          <TableCell>{property.numero_propiedad}</TableCell>
-                          <TableCell>{property.numero_piso}</TableCell>
-                          <TableCell>{property.m2_reales} m²</TableCell>
-                          <TableCell>{formatCurrency(property.precio_lista)}</TableCell>
-                          <TableCell>{property.clabe_stp || 'N/A'}</TableCell>
-                          <TableCell>{property.vista}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{property.tipo_propiedad}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{property.modelo}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">{property.disponibilidad}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRestore(property.id)}
-                              className="h-8 px-2 text-xs"
-                            >
-                              Restaurar
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+              {renderPropertiesTable(paginatedInactiveProperties, true)}
+              {renderPagination(currentPageInactive, totalInactivePage, setCurrentPageInactive)}
             </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
-
-      {editingProperty && (
-        <EditPropertyDialog
-          property={editingProperty}
-          onClose={() => setEditingProperty(null)}
-          onSuccess={() => {
-            setEditingProperty(null);
-            queryClient.invalidateQueries({ queryKey: ['properties'] });
-          }}
-        />
-      )}
-
-      <BulkUploadPropertiesDialog
-        open={showBulkUpload}
-        onClose={() => setShowBulkUpload(false)}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['properties'] });
-        }}
-      />
     </div>
   );
 };

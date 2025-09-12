@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,11 @@ const Proyectos = () => {
   const [desarrolladorFilter, setDesarrolladorFilter] = useState("");
   const [ciudadFilter, setCiudadFilter] = useState("");
   const [estatusFilter, setEstatusFilter] = useState("all");
+  
+  // Pagination states
+  const [currentPageActive, setCurrentPageActive] = useState(1);
+  const [currentPageDeleted, setCurrentPageDeleted] = useState(1);
+  const itemsPerPage = 25;
 
   const { data: activeProjects = [], refetch: refetchActive } = useQuery({
     queryKey: ["projects", "active"],
@@ -261,6 +267,18 @@ const Proyectos = () => {
     
     return matchesSearch && matchesNombre && matchesDesarrollador && matchesCiudad && matchesEstatus;
   });
+
+  // Pagination logic for active projects
+  const totalActivePages = Math.ceil(filteredActiveProjects.length / itemsPerPage);
+  const startIndexActive = (currentPageActive - 1) * itemsPerPage;
+  const endIndexActive = startIndexActive + itemsPerPage;
+  const paginatedActiveProjects = filteredActiveProjects.slice(startIndexActive, endIndexActive);
+
+  // Pagination logic for deleted projects  
+  const totalDeletedPages = Math.ceil(filteredDeletedProjects.length / itemsPerPage);
+  const startIndexDeleted = (currentPageDeleted - 1) * itemsPerPage;
+  const endIndexDeleted = startIndexDeleted + itemsPerPage;
+  const paginatedDeletedProjects = filteredDeletedProjects.slice(startIndexDeleted, endIndexDeleted);
 
   const handleProjectRestored = async (projectId: number) => {
     try {
@@ -505,11 +523,44 @@ const Proyectos = () => {
               </p>
             </div>
           ) : (
-            renderProjectsTable(
-              filteredActiveProjects, 
-              "No hay proyectos activos disponibles.",
-              false
-            )
+            <>
+              {renderProjectsTable(
+                paginatedActiveProjects, 
+                "No hay proyectos activos disponibles.",
+                false
+              )}
+              {totalActivePages > 1 && (
+                <div className="mt-4">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          onClick={() => setCurrentPageActive(Math.max(1, currentPageActive - 1))}
+                          className={currentPageActive === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: totalActivePages }, (_, i) => i + 1).map((page) => (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            onClick={() => setCurrentPageActive(page)}
+                            isActive={currentPageActive === page}
+                            className="cursor-pointer"
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext 
+                          onClick={() => setCurrentPageActive(Math.min(totalActivePages, currentPageActive + 1))}
+                          className={currentPageActive === totalActivePages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
         
@@ -521,11 +572,44 @@ const Proyectos = () => {
               </p>
             </div>
           ) : (
-            renderProjectsTable(
-              filteredDeletedProjects, 
-              "No hay proyectos eliminados.",
-              true
-            )
+            <>
+              {renderProjectsTable(
+                paginatedDeletedProjects, 
+                "No hay proyectos eliminados.",
+                true
+              )}
+              {totalDeletedPages > 1 && (
+                <div className="mt-4">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          onClick={() => setCurrentPageDeleted(Math.max(1, currentPageDeleted - 1))}
+                          className={currentPageDeleted === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: totalDeletedPages }, (_, i) => i + 1).map((page) => (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            onClick={() => setCurrentPageDeleted(page)}
+                            isActive={currentPageDeleted === page}
+                            className="cursor-pointer"
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext 
+                          onClick={() => setCurrentPageDeleted(Math.min(totalDeletedPages, currentPageDeleted + 1))}
+                          className={currentPageDeleted === totalDeletedPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
       </Tabs>
