@@ -308,16 +308,18 @@ const Proyectos = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <EditProjectDialog
-                          projectId={project.id}
-                          onProjectUpdated={handleProjectUpdated}
-                          trigger={
-                            <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 hover:bg-green-50">
-                              <Edit className="h-4 w-4 mr-1" />
-                              Editar
-                            </Button>
-                          }
-                        />
+                        {!isDeletedTab && (
+                          <EditProjectDialog
+                            projectId={project.id}
+                            onProjectUpdated={handleProjectUpdated}
+                            trigger={
+                              <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 hover:bg-green-50">
+                                <Edit className="h-4 w-4 mr-1" />
+                                Editar
+                              </Button>
+                            }
+                          />
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm" 
