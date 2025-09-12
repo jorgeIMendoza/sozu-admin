@@ -2,6 +2,7 @@ import { NewProjectDialog } from "@/components/admin/NewProjectDialog";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -18,6 +19,12 @@ const Proyectos = () => {
     multimedia: any[];
     projectName: string;
   } | null>(null);
+  
+  // Filtros específicos
+  const [nombreFilter, setNombreFilter] = useState("");
+  const [desarrolladorFilter, setDesarrolladorFilter] = useState("");
+  const [ciudadFilter, setCiudadFilter] = useState("");
+  const [estatusFilter, setEstatusFilter] = useState("");
 
   const { data: activeProjects = [], refetch: refetchActive } = useQuery({
     queryKey: ["projects", "active"],
@@ -151,6 +158,24 @@ const Proyectos = () => {
     },
   });
 
+  // Query para obtener estatus de proyecto para el filtro
+  const { data: estatusProyecto = [] } = useQuery({
+    queryKey: ["estatus-proyecto"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("estatus_proyecto")
+        .select("*")
+        .eq("activo", true)
+        .order("nombre");
+      
+      if (error) {
+        console.error("Error fetching project status:", error);
+        return [];
+      }
+      return data || [];
+    },
+  });
+
 
   const handleProjectAdded = () => {
     refetchActive();
@@ -180,19 +205,39 @@ const Proyectos = () => {
     }
   };
 
-  // Filter active projects based on search term
-  const filteredActiveProjects = activeProjects.filter(project =>
-    project.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.direccion?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter active projects based on search term and specific filters
+  const filteredActiveProjects = activeProjects.filter(project => {
+    const matchesSearch = project.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.direccion?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesNombre = project.nombre.toLowerCase().includes(nombreFilter.toLowerCase());
+    const matchesDesarrollador = "Por definir".toLowerCase().includes(desarrolladorFilter.toLowerCase()); // Simplificado por ahora
+    
+    const city = getCityName(project);
+    const matchesCiudad = city.toLowerCase().includes(ciudadFilter.toLowerCase());
+    
+    const matchesEstatus = !estatusFilter || (project.estatus_proyecto && 'id' in project.estatus_proyecto && project.estatus_proyecto.id?.toString() === estatusFilter);
+    
+    return matchesSearch && matchesNombre && matchesDesarrollador && matchesCiudad && matchesEstatus;
+  });
 
-  // Filter deleted projects based on search term
-  const filteredDeletedProjects = deletedProjects.filter(project =>
-    project.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.direccion?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter deleted projects based on search term and specific filters
+  const filteredDeletedProjects = deletedProjects.filter(project => {
+    const matchesSearch = project.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.direccion?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesNombre = project.nombre.toLowerCase().includes(nombreFilter.toLowerCase());
+    const matchesDesarrollador = "Por definir".toLowerCase().includes(desarrolladorFilter.toLowerCase()); // Simplificado por ahora
+    
+    const city = getCityName(project);
+    const matchesCiudad = city.toLowerCase().includes(ciudadFilter.toLowerCase());
+    
+    const matchesEstatus = !estatusFilter || (project.estatus_proyecto && 'id' in project.estatus_proyecto && project.estatus_proyecto.id?.toString() === estatusFilter);
+    
+    return matchesSearch && matchesNombre && matchesDesarrollador && matchesCiudad && matchesEstatus;
+  });
 
   const getMultimediaCount = (project: any) => {
     const images = project.multimedias_proyecto?.filter((m: any) => m.es_imagen) || [];
@@ -392,6 +437,50 @@ const Proyectos = () => {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-10"
         />
+      </div>
+
+      {/* Filtros específicos */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+        <div>
+          <label className="text-sm font-medium mb-2 block">Nombre del Proyecto</label>
+          <Input
+            placeholder="Filtrar por nombre..."
+            value={nombreFilter}
+            onChange={(e) => setNombreFilter(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium mb-2 block">Desarrollador</label>
+          <Input
+            placeholder="Filtrar por desarrollador..."
+            value={desarrolladorFilter}
+            onChange={(e) => setDesarrolladorFilter(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium mb-2 block">Ciudad</label>
+          <Input
+            placeholder="Filtrar por ciudad..."
+            value={ciudadFilter}
+            onChange={(e) => setCiudadFilter(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium mb-2 block">Estatus</label>
+          <Select value={estatusFilter} onValueChange={setEstatusFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Todos los estatus" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos los estatus</SelectItem>
+              {estatusProyecto.map((estatus) => (
+                <SelectItem key={estatus.id} value={estatus.id.toString()}>
+                  {estatus.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Tabs defaultValue="active" className="w-full">
