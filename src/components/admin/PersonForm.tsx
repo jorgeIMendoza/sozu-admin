@@ -257,7 +257,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       }
       return data || [];
     },
-    enabled: entityType === 'legal' // Only show for legal entities
+    enabled: entityType === 'legal' || (entityType === 'client' && tipoPersona === 'pm') // Show for legal entities and PM clients
   });
 
   const { data: representantesLegales = [] } = useQuery({
@@ -557,7 +557,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                   </div>
                 )}
 
-                {entityType === 'legal' && (
+                {(entityType === 'legal' || (entityType === 'client' && tipoPersona === 'pm')) && (
                   <div>
                     <Label htmlFor="idRepresentanteLegal">Representante Legal</Label>
                     <Select value={idRepresentanteLegal?.toString() || ''} onValueChange={setIdRepresentanteLegal}>
@@ -913,7 +913,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     </Select>
                   </div>
 
-                  {entityType === 'legal' && (
+                  {(entityType === 'legal' || (entityType === 'client' && tipoPersona === 'pm')) && (
                     <div>
                       <Label htmlFor="idRepresentanteLegal">Representante Legal</Label>
                       <Select value={idRepresentanteLegal} onValueChange={setIdRepresentanteLegal}>
