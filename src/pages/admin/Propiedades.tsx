@@ -70,7 +70,7 @@ const Propiedades = () => {
           edificios_modelos!inner(
             edificios!edificios_modelos_id_edificio_fkey!inner(
               nombre,
-              proyectos!inner(nombre)
+              proyectos!edificios_id_proyecto_fkey!inner(nombre)
             ),
             modelos!inner(
               nombre,
