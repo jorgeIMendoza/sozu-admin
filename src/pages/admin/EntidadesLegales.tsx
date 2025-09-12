@@ -32,39 +32,43 @@ export default function EntidadesLegales() {
     queryKey: ['entidades_legales'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('entidades_relacionadas')
+        .from('personas')
         .select(`
           id,
-          id_tipo_entidad,
-          personas!inner (
+          nombre_legal,
+          nombre_comercial,
+          email,
+          telefono,
+          rfc,
+          activo,
+          entidades_relacionadas!inner (
             id,
-            nombre_legal,
-            nombre_comercial,
-            email,
-            telefono,
-            rfc,
-            activo
+            id_tipo_entidad,
+            tipos_entidad!inner (
+              id,
+              nombre
+            )
           )
         `)
-        .eq('personas.activo', true)
         .eq('activo', true)
-        .in('id_tipo_entidad', [1, 12]) // Representante Legal, Empleado (tipo "el")
-        .is('id_proyecto', null)
-        .order('personas(nombre_legal)', { ascending: true });
+        .eq('tipo_persona', 'pm')
+        .eq('entidades_relacionadas.activo', true)
+        .is('entidades_relacionadas.id_proyecto', null)
+        .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
       
       // Flatten the structure to match the expected format
       return (data || []).map((item: any) => ({
-        id: item.personas.id,
-        entidad_relacionada_id: item.id,
-        id_tipo_entidad: item.id_tipo_entidad,
-        nombre_legal: item.personas.nombre_legal,
-        nombre_comercial: item.personas.nombre_comercial,
-        email: item.personas.email,
-        telefono: item.personas.telefono,
-        rfc: item.personas.rfc,
-        activo: item.personas.activo,
+        id: item.id,
+        entidad_relacionada_id: item.entidades_relacionadas[0]?.id,
+        id_tipo_entidad: item.entidades_relacionadas[0]?.id_tipo_entidad,
+        nombre_legal: item.nombre_legal,
+        nombre_comercial: item.nombre_comercial,
+        email: item.email,
+        telefono: item.telefono,
+        rfc: item.rfc,
+        activo: item.activo,
       })) as (EntidadLegal & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
