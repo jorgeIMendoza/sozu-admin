@@ -318,7 +318,10 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
         </div>
         <div className="flex gap-2">
           <Button 
-            onClick={() => {
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               resetForm();
               setEditingBeneficiario(null);
               setIsDialogOpen(true);
@@ -330,7 +333,12 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
           </Button>
           {hasChanges && (
             <Button
-              onClick={() => saveAllMutation.mutate()}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                saveAllMutation.mutate();
+              }}
               disabled={saveAllMutation.isPending}
               className="bg-gradient-to-r from-accent to-accent-glow hover:from-accent-glow hover:to-accent"
             >
@@ -398,22 +406,32 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-2 justify-end">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleEdit(beneficiario)}
-                        className="hover:bg-primary/10 hover:border-primary transition-colors"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleDelete(beneficiario)}
-                        className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                       <Button 
+                         type="button"
+                         variant="outline" 
+                         size="sm"
+                         onClick={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           handleEdit(beneficiario);
+                         }}
+                         className="hover:bg-primary/10 hover:border-primary transition-colors"
+                       >
+                         <Edit className="w-4 h-4" />
+                       </Button>
+                       <Button 
+                         type="button"
+                         variant="outline" 
+                         size="sm"
+                         onClick={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           handleDelete(beneficiario);
+                         }}
+                         className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                       >
+                         <Trash2 className="w-4 h-4" />
+                       </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -508,7 +526,9 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
               <Button 
                 type="button" 
                 variant="outline" 
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   setIsDialogOpen(false);
                   resetForm();
                   setEditingBeneficiario(null);
@@ -518,7 +538,11 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
               </Button>
               <Button 
                 type="button"
-                onClick={handleSubmit}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSubmit();
+                }}
                 className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary"
               >
                 {editingBeneficiario ? 'Actualizar' : 'Agregar'}
