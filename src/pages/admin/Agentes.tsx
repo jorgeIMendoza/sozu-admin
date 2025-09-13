@@ -579,8 +579,8 @@ export default function Agentes() {
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmationDialog
-        isOpen={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
         title="Eliminar Agente"
         description={`¿Estás seguro de que deseas eliminar al agente "${agenteToDelete?.nombre_legal}"? Esta acción se puede deshacer.`}
@@ -589,14 +589,13 @@ export default function Agentes() {
 
       {/* Restore Confirmation Dialog */}
       <DeleteConfirmationDialog
-        isOpen={restoreDialogOpen}
-        onClose={() => setRestoreDialogOpen(false)}
+        open={restoreDialogOpen}
+        onOpenChange={setRestoreDialogOpen}
         onConfirm={handleConfirmRestore}
         title="Restaurar Agente"
         description={`¿Estás seguro de que deseas restaurar al agente "${agenteToRestore?.nombre_legal}"?`}
-        confirmText="Restaurar"
         isLoading={restoreMutation.isPending}
-        variant="default"
+        actionType="restore"
       />
     </div>
   );

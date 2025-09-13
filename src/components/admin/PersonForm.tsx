@@ -22,7 +22,7 @@ interface PersonFormProps {
   initialData?: any;
   isLoading?: boolean;
   onCancel: () => void;
-  entityType?: 'legal' | 'client' | 'representative' | 'user' | 'desarrollador' | 'inmobiliaria' | 'administradora' | 'banco';
+  entityType?: 'legal' | 'client' | 'representative' | 'user' | 'desarrollador' | 'inmobiliaria' | 'administradora' | 'banco' | 'buyer' | 'seller' | 'owner' | 'resident' | 'agent' | 'administrator';
   fixedEntityType?: boolean;
 }
 

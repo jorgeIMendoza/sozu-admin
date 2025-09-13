@@ -579,8 +579,8 @@ export default function Vendedores() {
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmationDialog
-        isOpen={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
         title="Eliminar Vendedor"
         description={`¿Estás seguro de que deseas eliminar al vendedor "${vendedorToDelete?.nombre_legal}"? Esta acción se puede deshacer.`}
@@ -589,14 +589,13 @@ export default function Vendedores() {
 
       {/* Restore Confirmation Dialog */}
       <DeleteConfirmationDialog
-        isOpen={restoreDialogOpen}
-        onClose={() => setRestoreDialogOpen(false)}
+        open={restoreDialogOpen}
+        onOpenChange={setRestoreDialogOpen}
         onConfirm={handleConfirmRestore}
         title="Restaurar Vendedor"
         description={`¿Estás seguro de que deseas restaurar al vendedor "${vendedorToRestore?.nombre_legal}"?`}
-        confirmText="Restaurar"
         isLoading={restoreMutation.isPending}
-        variant="default"
+        actionType="restore"
       />
     </div>
   );

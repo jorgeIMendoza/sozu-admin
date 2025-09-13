@@ -616,8 +616,8 @@ export default function Prospectos() {
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmationDialog
-        isOpen={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
         title="Eliminar Prospecto"
         description={`¿Estás seguro de que deseas eliminar al prospecto "${prospectoToDelete?.nombre_legal}"? Esta acción se puede deshacer.`}
@@ -626,14 +626,13 @@ export default function Prospectos() {
 
       {/* Restore Confirmation Dialog */}
       <DeleteConfirmationDialog
-        isOpen={restoreDialogOpen}
-        onClose={() => setRestoreDialogOpen(false)}
+        open={restoreDialogOpen}
+        onOpenChange={setRestoreDialogOpen}
         onConfirm={handleConfirmRestore}
         title="Restaurar Prospecto"
         description={`¿Estás seguro de que deseas restaurar al prospecto "${prospectoToRestore?.nombre_legal}"?`}
-        confirmText="Restaurar"
         isLoading={restoreMutation.isPending}
-        variant="default"
+        actionType="restore"
       />
     </div>
   );
