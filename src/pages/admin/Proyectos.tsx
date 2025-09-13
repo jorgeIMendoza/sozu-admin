@@ -233,6 +233,28 @@ const Proyectos = () => {
     return "No especificada";
   };
 
+  const getBadgeVariant = (status: string | undefined) => {
+    switch (status?.toLowerCase()) {
+      case 'activo':
+      case 'en desarrollo':
+        return 'default';
+      case 'finalizado':
+      case 'completado':
+        return 'secondary';
+      case 'en construcción':
+      case 'construcción':
+        return 'outline';
+      case 'pausado':
+      case 'suspendido':
+        return 'destructive';
+      case 'planeado':
+      case 'planificado':
+        return 'default';
+      default:
+        return 'secondary';
+    }
+  };
+
   // Filter active projects based on search term and specific filters
   const filteredActiveProjects = activeProjects.filter(project => {
     const matchesSearch = project.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -370,7 +392,7 @@ const Proyectos = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={project.activo ? "default" : "secondary"}>
+                      <Badge variant={getBadgeVariant(project.estatus_proyecto?.nombre)}>
                         {project.estatus_proyecto?.nombre || "Sin estatus"}
                       </Badge>
                     </TableCell>
