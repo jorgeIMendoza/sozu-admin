@@ -53,7 +53,19 @@ const navigationItems = [
       { title: "Administradoras", href: "/admin/administradoras", icon: Building },
       { title: "Notarías", href: "/admin/notarias", icon: FileText },
       { title: "Bancos", href: "/admin/bancos", icon: CreditCard },
-      { title: "Clientes", href: "/admin/clientes", icon: Users },
+    ]
+  },
+  {
+    title: "Personas",
+    icon: User,
+    children: [
+      { title: "Prospectos", href: "/admin/prospectos", icon: Users },
+      { title: "Compradores", href: "/admin/compradores", icon: Users },
+      { title: "Vendedores", href: "/admin/vendedores", icon: Users },
+      { title: "Dueños", href: "/admin/duenos", icon: Users },
+      { title: "Residentes", href: "/admin/residentes", icon: Users },
+      { title: "Agentes", href: "/admin/agentes", icon: Users },
+      { title: "Administradores", href: "/admin/administradores-personas", icon: Users },
       { title: "Representantes Legales", href: "/admin/representantes-legales", icon: User },
     ]
   },

@@ -17,7 +17,13 @@ import Inmobiliarias from "./pages/admin/Inmobiliarias";
 import Administradoras from "./pages/admin/Administradoras";
 import Notarias from "./pages/admin/Notarias";
 import Bancos from "./pages/admin/Bancos";
-import Clientes from "./pages/admin/Clientes";
+import Prospectos from "./pages/admin/Prospectos";
+import Compradores from "./pages/admin/Compradores";
+import Vendedores from "./pages/admin/Vendedores";
+import Duenos from "./pages/admin/Duenos";
+import Residentes from "./pages/admin/Residentes";
+import Agentes from "./pages/admin/Agentes";
+import AdministradoresPersonas from "./pages/admin/AdministradoresPersonas";
 import RepresentantesLegales from "./pages/admin/RepresentantesLegales";
 import ComingSoon from "./pages/admin/ComingSoon";
 import Index from "./pages/Index";
@@ -48,7 +54,13 @@ const App = () => (
             <Route path="administradoras" element={<Administradoras />} />
             <Route path="notarias" element={<Notarias />} />
             <Route path="bancos" element={<Bancos />} />
-            <Route path="clientes" element={<Clientes />} />
+            <Route path="prospectos" element={<Prospectos />} />
+            <Route path="compradores" element={<Compradores />} />
+            <Route path="vendedores" element={<Vendedores />} />
+            <Route path="duenos" element={<Duenos />} />
+            <Route path="residentes" element={<Residentes />} />
+            <Route path="agentes" element={<Agentes />} />
+            <Route path="administradores-personas" element={<AdministradoresPersonas />} />
             <Route path="representantes-legales" element={<RepresentantesLegales />} />
             <Route path="productos" element={<ComingSoon title="Productos" />} />
             <Route path="categorias" element={<ComingSoon title="Categorías de Producto" />} />
