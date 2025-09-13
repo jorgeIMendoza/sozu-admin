@@ -12,6 +12,7 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { NewPropertyDialog } from "@/components/admin/NewPropertyDialog";
+import { EditPropertyDialog } from "@/components/admin/EditPropertyDialog";
 import { BulkUploadPropertiesDialog } from "@/components/admin/BulkUploadPropertiesDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
@@ -35,12 +36,15 @@ interface Property {
     numero_completo_banos: number;
     numero_medio_bano: number;
   };
+  // Nueva propiedad para verificar si tiene ofertas
+  tieneOfertas: boolean;
 }
 
 const Propiedades = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("activas");
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   
   // Filtros de texto
   const [proyectoFilter, setProyectoFilter] = useState("");
@@ -85,7 +89,8 @@ const Propiedades = () => {
             personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
           ),
           vistas(nombre),
-          estatus_disponibilidad!inner(nombre)
+          estatus_disponibilidad!inner(nombre),
+          ofertas(id)
         `)
         .order('id', { ascending: false });
       
@@ -109,6 +114,7 @@ const Propiedades = () => {
         modelo: property.edificios_modelos?.modelos?.nombre || 'Sin modelo',
         vista: property.vistas?.nombre || 'Sin vista',
         disponibilidad: property.estatus_disponibilidad?.nombre || 'Sin estatus',
+        tieneOfertas: property.ofertas && property.ofertas.length > 0,
         configuracion_modelo: {
           numero_recamaras: property.edificios_modelos?.modelos?.numero_recamaras || 0,
           numero_completo_banos: property.edificios_modelos?.modelos?.numero_completo_banos || 0,
@@ -136,22 +142,24 @@ const Propiedades = () => {
 
   // Filtrar propiedades
   const filteredProperties = properties?.filter(property => {
-    const matchesSearch = 
-      property.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.propietario.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.proyecto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.edificio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.modelo.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = searchTerm === "" || 
+      property.numero_propiedad.toString().includes(searchTerm) ||
+      property.numero_propiedad.toLowerCase().includes(searchLower) ||
+      property.propietario.toLowerCase().includes(searchLower) ||
+      property.proyecto.toLowerCase().includes(searchLower) ||
+      property.edificio.toLowerCase().includes(searchLower) ||
+      property.modelo.toLowerCase().includes(searchLower);
     
     const matchesTab = activeTab === "activas" ? property.activo : !property.activo;
     
-    const matchesProyecto = property.proyecto.toLowerCase().includes(proyectoFilter.toLowerCase());
-    const matchesModelo = property.modelo.toLowerCase().includes(modeloFilter.toLowerCase());
+    const matchesProyecto = proyectoFilter === "" || property.proyecto.toLowerCase().includes(proyectoFilter.toLowerCase());
+    const matchesModelo = modeloFilter === "" || property.modelo.toLowerCase().includes(modeloFilter.toLowerCase());
     
     const configuracionText = `${property.configuracion_modelo.numero_recamaras} rec, ${property.configuracion_modelo.numero_completo_banos} baños, ${property.configuracion_modelo.numero_medio_bano} medios baños`;
-    const matchesConfiguracion = configuracionText.toLowerCase().includes(configuracionFilter.toLowerCase());
+    const matchesConfiguracion = configuracionFilter === "" || configuracionText.toLowerCase().includes(configuracionFilter.toLowerCase());
     
-    const matchesDisponibilidad = property.disponibilidad.toLowerCase().includes(disponibilidadFilter.toLowerCase());
+    const matchesDisponibilidad = disponibilidadFilter === "" || property.disponibilidad.toLowerCase().includes(disponibilidadFilter.toLowerCase());
     
     return matchesSearch && matchesTab && matchesProyecto && matchesModelo && matchesConfiguracion && matchesDisponibilidad;
   }) || [];
@@ -339,6 +347,7 @@ const Propiedades = () => {
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 p-0"
+                          onClick={() => setEditingProperty(property)}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -348,6 +357,8 @@ const Propiedades = () => {
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              disabled={property.tieneOfertas}
+                              title={property.tieneOfertas ? "No se puede eliminar una propiedad con ofertas asociadas" : "Eliminar propiedad"}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -506,6 +517,30 @@ const Propiedades = () => {
           });
         }}
       />
+
+      {editingProperty && (
+        <EditPropertyDialog
+          property={{
+            id: editingProperty.id,
+            dueño: editingProperty.propietario,
+            numero_propiedad: editingProperty.numero_propiedad,
+            numero_piso: editingProperty.numero_piso,
+            m2_reales: editingProperty.m2_reales,
+            precio_lista: editingProperty.precio_lista,
+            clabe_stp: editingProperty.clabe_stp_tmp_apartado || '',
+            vista: editingProperty.vista,
+            transaccion: '', // Se obtendrá del componente
+            tipo_propiedad: '', // Se obtendrá del componente
+            disponibilidad: editingProperty.disponibilidad,
+            activo: editingProperty.activo
+          }}
+          onClose={() => setEditingProperty(null)}
+          onSuccess={() => {
+            setEditingProperty(null);
+            queryClient.invalidateQueries({ queryKey: ['properties-detailed'] });
+          }}
+        />
+      )}
     </div>
   );
 };
