@@ -41,6 +41,7 @@ const navigationItems = [
       { title: "Proyectos", href: "/admin/proyectos", icon: Building2 },
       { title: "Propiedades", href: "/admin/propiedades", icon: MapPin },
       { title: "Modelos", href: "/admin/modelos", icon: Home },
+      { title: "Vistas", href: "/admin/vistas", icon: MapPin },
     ]
   },
   {

@@ -8,6 +8,7 @@ import Dashboard from "./pages/admin/Dashboard";
 import Proyectos from "./pages/admin/Proyectos";
 import Propiedades from "./pages/admin/Propiedades";
 import Modelos from "./pages/admin/Modelos";
+import Vistas from "./pages/admin/Vistas";
 import Pagos from "./pages/admin/Pagos";
 import Usuarios from "./pages/admin/Usuarios";
 import NuevoUsuario from "./pages/admin/NuevoUsuario";
@@ -67,6 +68,7 @@ const App = () => (
             <Route path="amenidades" element={<ComingSoon title="Amenidades" />} />
             <Route path="caracteristicas" element={<ComingSoon title="Características" />} />
             <Route path="modelos" element={<Modelos />} />
+            <Route path="vistas" element={<Vistas />} />
             <Route path="cuentas-cobranza" element={<Pagos />} />
             <Route path="pagos" element={<ComingSoon title="Pagos" />} />
             <Route path="cuentas-bancarias" element={<ComingSoon title="Cuentas Bancarias" />} />
