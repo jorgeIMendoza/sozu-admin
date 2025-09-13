@@ -90,7 +90,7 @@ const Propiedades = () => {
           ),
           vistas(nombre),
           estatus_disponibilidad!inner(nombre),
-          ofertas(id)
+          ofertas!ofertas_id_propiedad_fkey(id)
         `)
         .order('id', { ascending: false });
       
