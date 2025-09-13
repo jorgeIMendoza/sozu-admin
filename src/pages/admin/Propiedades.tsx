@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Edit, Trash2 } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +12,7 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { NewPropertyDialog } from "@/components/admin/NewPropertyDialog";
+import { BulkUploadPropertiesDialog } from "@/components/admin/BulkUploadPropertiesDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface Property {
@@ -39,6 +40,7 @@ interface Property {
 const Propiedades = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("activas");
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   
   // Filtros de texto
   const [proyectoFilter, setProyectoFilter] = useState("");
@@ -397,7 +399,17 @@ const Propiedades = () => {
             Gestiona el inventario de propiedades del sistema
           </p>
         </div>
-        <NewPropertyDialog onPropertyAdded={handlePropertyAdded} />
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setBulkUploadOpen(true)}
+            variant="outline"
+            className="gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            Carga Masiva
+          </Button>
+          <NewPropertyDialog onPropertyAdded={handlePropertyAdded} />
+        </div>
       </div>
 
       <Card>
@@ -482,6 +494,18 @@ const Propiedades = () => {
           </Tabs>
         </CardContent>
       </Card>
+
+      <BulkUploadPropertiesDialog 
+        open={bulkUploadOpen}
+        onClose={() => setBulkUploadOpen(false)}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['properties-detailed'] });
+          toast({
+            title: "Éxito", 
+            description: "Las propiedades se han cargado correctamente.",
+          });
+        }}
+      />
     </div>
   );
 };
