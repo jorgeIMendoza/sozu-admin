@@ -260,37 +260,73 @@ const Proyectos = () => {
   };
 
   const getAveragePropertyPrice = (project: any) => {
-    const properties = project.edificios?.flatMap((edificio: any) => 
-      edificio.edificios_modelos?.flatMap((modelo: any) => 
-        modelo.propiedades || []
-      ) || []
-    ) || [];
+    console.log('Calculating average price for project:', project.nombre);
+    console.log('Project edificios:', project.edificios);
+    
+    const properties = project.edificios?.flatMap((edificio: any) => {
+      console.log('Processing edificio:', edificio);
+      return edificio.edificios_modelos?.flatMap((modelo: any) => {
+        console.log('Processing modelo:', modelo);
+        console.log('Modelo propiedades:', modelo.propiedades);
+        return modelo.propiedades || [];
+      }) || [];
+    }) || [];
+    
+    console.log('Total properties found:', properties.length);
+    console.log('Properties sample:', properties.slice(0, 2));
     
     if (properties.length === 0) return 0;
     
-    const totalPrice = properties.reduce((sum: number, property: any) => 
+    const validProperties = properties.filter((property: any) => 
+      property.precio_lista && property.precio_lista > 0
+    );
+    
+    console.log('Valid properties with precio_lista:', validProperties.length);
+    
+    if (validProperties.length === 0) return 0;
+    
+    const totalPrice = validProperties.reduce((sum: number, property: any) => 
       sum + (property.precio_lista || 0), 0);
     
-    return totalPrice / properties.length;
+    const average = totalPrice / validProperties.length;
+    console.log('Average price calculated:', average);
+    
+    return average;
   };
 
   const getAveragePricePerM2 = (project: any) => {
+    console.log('Calculating average price per M2 for project:', project.nombre);
+    
     const properties = project.edificios?.flatMap((edificio: any) => 
       edificio.edificios_modelos?.flatMap((modelo: any) => 
         modelo.propiedades || []
       ) || []
     ) || [];
     
+    console.log('Total properties for M2 calculation:', properties.length);
+    
     if (properties.length === 0) return 0;
     
-    const totalPrice = properties.reduce((sum: number, property: any) => 
+    const validProperties = properties.filter((property: any) => 
+      property.precio_lista && property.precio_lista > 0 &&
+      property.m2_escriturables && property.m2_escriturables > 0
+    );
+    
+    console.log('Valid properties with precio_lista and m2_escriturables:', validProperties.length);
+    
+    if (validProperties.length === 0) return 0;
+    
+    const totalPrice = validProperties.reduce((sum: number, property: any) => 
       sum + (property.precio_lista || 0), 0);
-    const totalM2 = properties.reduce((sum: number, property: any) => 
+    const totalM2 = validProperties.reduce((sum: number, property: any) => 
       sum + (property.m2_escriturables || 0), 0);
     
     if (totalM2 === 0) return 0;
     
-    return totalPrice / totalM2;
+    const averagePerM2 = totalPrice / totalM2;
+    console.log('Average price per M2 calculated:', averagePerM2);
+    
+    return averagePerM2;
   };
 
   // Filter active projects based on search term and specific filters
