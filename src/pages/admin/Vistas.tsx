@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Trash2, Eye } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Eye, RotateCcw } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -30,9 +31,11 @@ export default function Vistas() {
   const [vistas, setVistas] = useState<Vista[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("activos");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false);
   const [selectedVista, setSelectedVista] = useState<Vista | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -51,7 +54,6 @@ export default function Vistas() {
       const { data, error } = await supabase
         .from('vistas')
         .select('*')
-        .eq('activo', true)
         .order('nombre', { ascending: true });
 
       if (error) throw error;
@@ -167,7 +169,9 @@ export default function Vistas() {
 
       if (error) throw error;
 
-      setVistas(prev => prev.filter(vista => vista.id !== selectedVista.id));
+      setVistas(prev => prev.map(vista => 
+        vista.id === selectedVista.id ? { ...vista, activo: false } : vista
+      ));
       setIsDeleteDialogOpen(false);
       setSelectedVista(null);
       toast({
@@ -186,6 +190,39 @@ export default function Vistas() {
     }
   };
 
+  const handleRestoreVista = async () => {
+    if (!selectedVista) return;
+
+    try {
+      setIsSubmitting(true);
+      const { error } = await supabase
+        .from('vistas')
+        .update({ activo: true })
+        .eq('id', selectedVista.id);
+
+      if (error) throw error;
+
+      setVistas(prev => prev.map(vista => 
+        vista.id === selectedVista.id ? { ...vista, activo: true } : vista
+      ));
+      setIsRestoreDialogOpen(false);
+      setSelectedVista(null);
+      toast({
+        title: "Éxito",
+        description: "Vista restaurada correctamente",
+      });
+    } catch (error) {
+      console.error('Error restoring vista:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo restaurar la vista",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const openEditDialog = (vista: Vista) => {
     setSelectedVista(vista);
     setFormData({ nombre: vista.nombre });
@@ -197,9 +234,16 @@ export default function Vistas() {
     setIsDeleteDialogOpen(true);
   };
 
-  const filteredVistas = vistas.filter(vista =>
-    vista.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const openRestoreDialog = (vista: Vista) => {
+    setSelectedVista(vista);
+    setIsRestoreDialogOpen(true);
+  };
+
+  const filteredVistas = vistas.filter(vista => {
+    const matchesSearch = vista.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesTab = activeTab === "activos" ? vista.activo : !vista.activo;
+    return matchesSearch && matchesTab;
+  });
 
   if (loading) {
     return (
@@ -264,86 +308,110 @@ export default function Vistas() {
         </Dialog>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Eye className="h-5 w-5" />
-            Vistas ({filteredVistas.length})
-          </CardTitle>
-          <CardDescription>
-            Lista de todas las vistas disponibles en el sistema
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center space-x-2 mb-6">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar vistas..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-          </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="activos">Activos</TabsTrigger>
+          <TabsTrigger value="eliminados">Eliminados</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value={activeTab}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5" />
+                Vistas {activeTab === "activos" ? "Activas" : "Eliminadas"} ({filteredVistas.length})
+              </CardTitle>
+              <CardDescription>
+                {activeTab === "activos" 
+                  ? "Lista de todas las vistas activas en el sistema"
+                  : "Lista de todas las vistas eliminadas en el sistema"
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center space-x-2 mb-6">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar vistas..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
 
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Fecha Creación</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredVistas.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      No se encontraron vistas
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredVistas.map((vista) => (
-                    <TableRow key={vista.id}>
-                      <TableCell className="font-medium">{vista.id}</TableCell>
-                      <TableCell>{vista.nombre}</TableCell>
-                      <TableCell>
-                        <Badge variant={vista.activo ? "default" : "secondary"}>
-                          {vista.activo ? "Activo" : "Inactivo"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(vista.fecha_creacion).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEditDialog(vista)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openDeleteDialog(vista)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Fecha Creación</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredVistas.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground">
+                          No se encontraron vistas
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredVistas.map((vista) => (
+                        <TableRow key={vista.id}>
+                          <TableCell className="font-medium">{vista.id}</TableCell>
+                          <TableCell>{vista.nombre}</TableCell>
+                          <TableCell>
+                            <Badge variant={vista.activo ? "default" : "secondary"}>
+                              {vista.activo ? "Activo" : "Inactivo"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(vista.fecha_creacion).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end space-x-2">
+                              {activeTab === "activos" ? (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openEditDialog(vista)}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openDeleteDialog(vista)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openRestoreDialog(vista)}
+                                >
+                                  <RotateCcw className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -390,8 +458,19 @@ export default function Vistas() {
         onOpenChange={setIsDeleteDialogOpen}
         onConfirm={handleDeleteVista}
         title="Eliminar Vista"
-        description={`¿Estás seguro de que deseas eliminar la vista "${selectedVista?.nombre}"? Esta acción no se puede deshacer.`}
+        description={`¿Estás seguro de que deseas eliminar la vista "${selectedVista?.nombre}"? Esta acción se puede deshacer desde la pestaña de eliminados.`}
         isLoading={isSubmitting}
+      />
+
+      {/* Restore Dialog */}
+      <DeleteConfirmationDialog
+        open={isRestoreDialogOpen}
+        onOpenChange={setIsRestoreDialogOpen}
+        onConfirm={handleRestoreVista}
+        title="Restaurar Vista"
+        description={`¿Estás seguro de que deseas restaurar la vista "${selectedVista?.nombre}"?`}
+        isLoading={isSubmitting}
+        actionType="restore"
       />
     </div>
   );
