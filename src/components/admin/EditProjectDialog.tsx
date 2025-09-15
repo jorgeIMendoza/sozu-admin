@@ -346,7 +346,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                       <FormItem>
                         <FormLabel>Nombre del Proyecto</FormLabel>
                         <FormControl>
-                          <Input placeholder="Ingrese el nombre del proyecto" {...field} />
+                          <Input 
+                            placeholder="Ingrese el nombre del proyecto" 
+                            {...field} 
+                            readOnly 
+                            className="bg-muted cursor-not-allowed"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
