@@ -386,7 +386,16 @@ const Propiedades = () => {
   };
 
   const formatConfiguracion = (config: Property['configuracion_modelo']) => {
-    return `${config.numero_recamaras} rec, ${config.numero_completo_banos} baños, ${config.numero_medio_bano} 1/2 baños`;
+    return (
+      <span className="font-bold">
+        {config.numero_recamaras} rec, {config.numero_completo_banos} baños, {config.numero_medio_bano} 1/2 baños
+      </span>
+    );
+  };
+
+  const formatPrecioPorM2 = (precioLista: number, m2Reales: number) => {
+    if (m2Reales === 0) return 'N/A';
+    return formatCurrency(precioLista / m2Reales);
   };
 
   const handlePropertyAdded = () => {
@@ -450,20 +459,23 @@ const Propiedades = () => {
               <TableHead>Edificio</TableHead>
               <TableHead>Modelo</TableHead>
               <TableHead>No. Departamento</TableHead>
-              <TableHead>No. Piso</TableHead>
-              <TableHead>Cuenta CLABE</TableHead>
+              <TableHead>Piso</TableHead>
               <TableHead>Vista</TableHead>
-              <TableHead>M² Reales</TableHead>
+              <TableHead>M2</TableHead>
               <TableHead>Configuración</TableHead>
-              <TableHead>Precio Lista</TableHead>
+              <TableHead>Precio de Lista</TableHead>
+              <TableHead>Precio por M2</TableHead>
+              <TableHead>Ofertas Comerciales</TableHead>
               <TableHead>Disponibilidad</TableHead>
+              <TableHead>Colección Vinculada</TableHead>
+              <TableHead>Cuenta Clabe</TableHead>
               <TableHead>Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {propertiesToRender.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={tabType === "draft" ? 14 : 13} className="text-center py-6">
+                <TableCell colSpan={tabType === "draft" ? 17 : 16} className="text-center py-6">
                   {searchTerm || proyectoFilter || modeloFilter || recamarasFilter || banosFilter || disponibilidadFilter 
                     ? "No se encontraron resultados." 
                     : tabType === "eliminados"
@@ -495,14 +507,23 @@ const Propiedades = () => {
                   </TableCell>
                   <TableCell>{property.numero_propiedad}</TableCell>
                   <TableCell>{property.numero_piso}</TableCell>
-                  <TableCell className="font-mono text-sm">{property.clabe_stp_tmp_apartado || 'Sin CLABE'}</TableCell>
                   <TableCell>{property.vista}</TableCell>
                   <TableCell>{property.m2_reales} m²</TableCell>
                   <TableCell className="text-sm">{formatConfiguracion(property.configuracion_modelo)}</TableCell>
                   <TableCell>{formatCurrency(property.precio_lista)}</TableCell>
+                  <TableCell>{formatPrecioPorM2(property.precio_lista, property.m2_reales)}</TableCell>
+                  <TableCell>
+                    <Badge variant={property.tieneOfertas ? "default" : "outline"}>
+                      {property.tieneOfertas ? "Sí" : "No"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <Badge variant="secondary">{property.disponibilidad}</Badge>
                   </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">N/A</Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">{property.clabe_stp_tmp_apartado || 'Sin CLABE'}</TableCell>
                   <TableCell>
                     {tabType === "eliminados" ? (
                       <Button
