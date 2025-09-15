@@ -507,8 +507,7 @@ const Proyectos = () => {
                               className={isDeletedTab ? "text-green-600 hover:text-green-700 hover:bg-green-50" : "text-red-600 hover:text-red-700 hover:bg-red-50"}
                               disabled={!isDeletedTab && project.edificios && project.edificios.length > 0}
                             >
-                              <Trash2 className="h-4 w-4 mr-1" />
-                              {isDeletedTab ? "Restaurar" : "Eliminar"}
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
