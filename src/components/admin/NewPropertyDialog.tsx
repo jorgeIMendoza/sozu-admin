@@ -453,10 +453,81 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                         <FormMessage />
                       </FormItem>
                     )}
-                  />
-                </div>
+                   />
 
-                {/* Show remaining fields only after project, building and model are selected */}
+                   {/* Owner selector right after model selection */}
+                   <FormField
+                     control={form.control}
+                     name="id_entidad_relacionada_dueno"
+                     render={({ field }) => (
+                       <FormItem>
+                         <FormLabel>Propietario</FormLabel>
+                         <Select 
+                           onValueChange={(value) => {
+                             console.log("Owner selected:", value);
+                             field.onChange(value);
+                             setSelectedOwnerId(value);
+                           }} 
+                           value={field.value}
+                         >
+                           <FormControl>
+                             <SelectTrigger>
+                               <SelectValue placeholder="Selecciona propietario" />
+                             </SelectTrigger>
+                           </FormControl>
+                           <SelectContent>
+                             {propietarios && propietarios.length > 0 ? (
+                               propietarios?.map((entidad) => (
+                                 <SelectItem key={entidad.id} value={entidad.id.toString()}>
+                                   {entidad.personas?.nombre_legal}
+                                 </SelectItem>
+                               ))
+                             ) : (
+                               <SelectItem value="no-owners" disabled>
+                                 Se deben asignar Entidades Legales (Dueños vendedor o Aportante) al proyecto
+                               </SelectItem>
+                             )}
+                           </SelectContent>
+                         </Select>
+                         <FormMessage />
+                       </FormItem>
+                     )}
+                   />
+
+                   {/* Campo de solo lectura para mostrar la CLABE */}
+                   {selectedOwnerId && selectedOwnerId !== "no-owners" && (
+                     <div className="space-y-2">
+                       <FormLabel>CLABE (Generada Automáticamente)</FormLabel>
+                       {isLoadingClabe ? (
+                         <Input 
+                           value="Generando CLABE..." 
+                           readOnly 
+                           className="bg-muted text-muted-foreground cursor-not-allowed"
+                         />
+                       ) : clabeError ? (
+                         <Input 
+                           value="Error al generar CLABE" 
+                           readOnly 
+                           className="bg-destructive/10 text-destructive cursor-not-allowed"
+                         />
+                       ) : ownerClabe ? (
+                         <Input 
+                           value={ownerClabe} 
+                           readOnly 
+                           className="bg-muted text-muted-foreground cursor-not-allowed font-mono"
+                         />
+                       ) : (
+                         <Input 
+                           value="Sin CLABE disponible" 
+                           readOnly 
+                           className="bg-muted text-muted-foreground cursor-not-allowed"
+                         />
+                       )}
+                     </div>
+                   )}
+                 </div>
+
+                 {/* Show remaining fields only after project, building and model are selected */}
                 {form.watch("id_proyecto") && form.watch("id_edificio") && form.watch("id_modelo") && (
                   <>
                     <div className="grid grid-cols-2 gap-4">
@@ -549,76 +620,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="id_entidad_relacionada_dueno"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Propietario</FormLabel>
-                  <Select 
-                    onValueChange={(value) => {
-                      console.log("Owner selected:", value);
-                      field.onChange(value);
-                      setSelectedOwnerId(value);
-                    }} 
-                    value={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona propietario" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {propietarios && propietarios.length > 0 ? (
-                        propietarios?.map((entidad) => (
-                          <SelectItem key={entidad.id} value={entidad.id.toString()}>
-                            {entidad.personas?.nombre_legal}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="no-owners" disabled>
-                          Se deben asignar Entidades Legales (Dueños vendedor o Aportante) al proyecto
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Campo de solo lectura para mostrar la CLABE */}
-            {selectedOwnerId && selectedOwnerId !== "no-owners" && (
-              <div className="space-y-2">
-                <FormLabel>CLABE (Generada Automáticamente)</FormLabel>
-                {isLoadingClabe ? (
-                  <Input 
-                    value="Generando CLABE..." 
-                    readOnly 
-                    className="bg-muted text-muted-foreground cursor-not-allowed"
-                  />
-                ) : clabeError ? (
-                  <Input 
-                    value="Error al generar CLABE" 
-                    readOnly 
-                    className="bg-destructive/10 text-destructive cursor-not-allowed"
-                  />
-                ) : ownerClabe ? (
-                  <Input 
-                    value={ownerClabe} 
-                    readOnly 
-                    className="bg-muted text-muted-foreground cursor-not-allowed font-mono"
-                  />
-                ) : (
-                  <Input 
-                    value="Sin CLABE disponible" 
-                    readOnly 
-                    className="bg-muted text-muted-foreground cursor-not-allowed"
-                  />
-                )}
-              </div>
-            )}
-                    <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
                         name="id_tipo_transaccion"
@@ -722,6 +724,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                        />
                      </div>
 
+                     {/* Descripción al final del modal */}
                      <FormField
                        control={form.control}
                        name="descripcion"
@@ -730,7 +733,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                            <FormLabel>Descripción</FormLabel>
                            <FormControl>
                              <textarea
-                               className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                               className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visibility:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                placeholder="Descripción de la propiedad (opcional)"
                                {...field}
                              />
