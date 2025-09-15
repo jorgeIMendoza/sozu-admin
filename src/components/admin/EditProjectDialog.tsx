@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BuildingManagement } from "./BuildingManagement";
 import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
 import { ProjectLegalEntitiesSection } from "./ProjectLegalEntitiesSection";
+import { ProjectMultimediaSection } from "./ProjectMultimediaSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { GoogleMapComponent } from "./GoogleMapComponent";
@@ -346,9 +347,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" id="edit-project-form">
               <Tabs defaultValue="information" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="information">Información</TabsTrigger>
                   <TabsTrigger value="images">Configuración general</TabsTrigger>
+                  <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
                   <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
                 </TabsList>
                 
@@ -885,6 +887,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                        <Button type="button" onClick={() => form.handleSubmit(onSubmit)()}>Actualizar Proyecto</Button>
                      </div>
                   </div>
+                </TabsContent>
+                
+                <TabsContent value="multimedia" className="mt-6">
+                  <ProjectMultimediaSection projectId={projectId} />
                 </TabsContent>
                 
                 <TabsContent value="legal-entities" className="mt-6">

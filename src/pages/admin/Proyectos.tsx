@@ -83,6 +83,11 @@ const Proyectos = () => {
             url,
             es_imagen
           ),
+          videos_youtube!videos_youtube_id_proyecto_fkey (
+            id,
+            nombre,
+            activo
+          ),
           amenidades_proyectos (
             amenidades (
               id,
@@ -151,6 +156,11 @@ const Proyectos = () => {
             id,
             url,
             es_imagen
+          ),
+          videos_youtube!videos_youtube_id_proyecto_fkey (
+            id,
+            nombre,
+            activo
           ),
           amenidades_proyectos (
             amenidades (
@@ -221,7 +231,11 @@ const Proyectos = () => {
   const getMultimediaCount = (project: any) => {
     const images = project.multimedias_proyecto?.filter((m: any) => m.es_imagen) || [];
     const videos = project.multimedias_proyecto?.filter((m: any) => !m.es_imagen) || [];
-    return { images: images.length, videos: videos.length };
+    const youtubeVideos = project.videos_youtube?.filter((v: any) => v.activo) || [];
+    return { 
+      images: images.length, 
+      videos: videos.length + youtubeVideos.length 
+    };
   };
 
   const getCityName = (project: any) => {
