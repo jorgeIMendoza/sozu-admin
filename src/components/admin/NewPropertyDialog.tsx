@@ -292,7 +292,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
 
         toast({
           title: "Propiedad creada",
-          description: `La propiedad se ha creado exitosamente con CLABE: ${clabeData}`,
+          description: `La propiedad se ha creado exitosamente con CLABE: ${clabeData || 'SIN CLABE'}`,
         });
       } catch (clabeError) {
         console.error("Error generating CLABE:", clabeError);
