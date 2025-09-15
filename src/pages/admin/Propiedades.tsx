@@ -175,7 +175,7 @@ const Propiedades = () => {
     const matchesModelo = modeloFilter === "" || property.modelo.toLowerCase().includes(modeloFilter.toLowerCase());
     
     const matchesRecamaras = recamarasFilter === "" || property.configuracion_modelo.numero_recamaras.toString().includes(recamarasFilter);
-    const matchesBanos = banosFilter === "" || (property.configuracion_modelo.numero_completo_banos + property.configuracion_modelo.numero_medio_bano).toString().includes(banosFilter);
+    const matchesBanos = banosFilter === "" || property.configuracion_modelo.numero_completo_banos.toString().includes(banosFilter);
     
     const matchesDisponibilidad = disponibilidadFilter === "" || property.disponibilidad.toLowerCase().includes(disponibilidadFilter.toLowerCase());
     
