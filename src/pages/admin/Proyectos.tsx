@@ -494,8 +494,7 @@ const Proyectos = () => {
                             onProjectUpdated={handleProjectUpdated}
                             trigger={
                               <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 hover:bg-green-50">
-                                <Edit className="h-4 w-4 mr-1" />
-                                Editar
+                                <Edit className="h-4 w-4" />
                               </Button>
                             }
                           />

@@ -221,8 +221,7 @@ export const ProjectCard = ({
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         disabled={hasBuildings}
                       >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Eliminar
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>

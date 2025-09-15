@@ -315,6 +315,17 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {!trigger && (
+        <DialogTrigger asChild>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="text-green-600 hover:text-green-700 hover:bg-green-50"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        </DialogTrigger>
+      )}
       {trigger && (
         <DialogTrigger asChild>
           {trigger}

@@ -174,18 +174,26 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
     },
   });
 
-  const { data: personas } = useQuery({
-    queryKey: ["personas"],
+  const { data: propietarios } = useQuery({
+    queryKey: ["propietarios", selectedProjectId],
     queryFn: async () => {
+      if (!selectedProjectId) return [];
+      
       const { data, error } = await supabase
-        .from("personas")
-        .select("id, nombre_legal")
+        .from("entidades_relacionadas")
+        .select(`
+          id,
+          personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal)
+        `)
+        .eq("id_proyecto", parseInt(selectedProjectId))
+        .in("id_tipo_entidad", [4, 15]) // Dueño vendedor or Aportante
         .eq("activo", true)
-        .order("nombre_legal");
+        .order("personas(nombre_legal)");
       
       if (error) throw error;
       return data || [];
     },
+    enabled: !!selectedProjectId,
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
@@ -248,8 +256,19 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
     }
   };
 
+  const handleClose = (newOpen: boolean) => {
+    if (!newOpen) {
+      // Clear all data when closing
+      form.reset();
+      setPropertyId(null);
+      setSelectedProjectId("");
+      setSelectedBuildingId("");
+    }
+    setOpen(newOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogTrigger asChild>
         <Button className="gap-2">
           <Plus className="h-4 w-4" />
@@ -476,11 +495,17 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {personas?.map((persona) => (
-                        <SelectItem key={persona.id} value={persona.id.toString()}>
-                          {persona.nombre_legal}
+                      {propietarios && propietarios.length > 0 ? (
+                        propietarios?.map((entidad) => (
+                          <SelectItem key={entidad.id} value={entidad.id.toString()}>
+                            {entidad.personas?.nombre_legal}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="" disabled>
+                          Se deben asignar Entidades Legales (Dueños vendedor o Aportante) al proyecto
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -591,30 +616,6 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                       />
                     </div>
 
-                    <FormField
-                      control={form.control}
-                      name="id_entidad_relacionada_dueno"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Propietario</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecciona propietario" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {personas?.map((persona) => (
-                                <SelectItem key={persona.id} value={persona.id.toString()}>
-                                  {persona.nombre_legal}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
                   </>
                 )}
 
@@ -629,7 +630,16 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                   }}>
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={!form.watch("id_proyecto") || !form.watch("id_edificio") || !form.watch("id_modelo")}>
+                  <Button 
+                    type="submit" 
+                    disabled={
+                      !form.watch("id_proyecto") || 
+                      !form.watch("id_edificio") || 
+                      !form.watch("id_modelo") ||
+                      !propietarios ||
+                      propietarios.length === 0
+                    }
+                  >
                     {propertyId ? "Actualizar" : "Crear Propiedad"}
                   </Button>
                 </div>
