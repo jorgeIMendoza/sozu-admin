@@ -3424,7 +3424,8 @@ export type Database = {
           fecha_actualizacion: string | null
           fecha_creacion: string | null
           id: number
-          id_proyecto: number
+          id_propiedad: number | null
+          id_proyecto: number | null
           link: string
           nombre: string
         }
@@ -3432,8 +3433,9 @@ export type Database = {
           activo?: boolean | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
-          id?: never
-          id_proyecto: number
+          id?: number
+          id_propiedad?: number | null
+          id_proyecto?: number | null
           link: string
           nombre: string
         }
@@ -3441,8 +3443,9 @@ export type Database = {
           activo?: boolean | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
-          id?: never
-          id_proyecto?: number
+          id?: number
+          id_propiedad?: number | null
+          id_proyecto?: number | null
           link?: string
           nombre?: string
         }
@@ -3452,6 +3455,13 @@ export type Database = {
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_videos_youtube_propiedad"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
             referencedColumns: ["id"]
           },
         ]
