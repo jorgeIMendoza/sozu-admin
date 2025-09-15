@@ -47,15 +47,22 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
   // Load document types based on entity type
   const loadTiposDocumento = async () => {
     try {
-      const response = await supabase
+      // Filter by asignado_a based on entity type
+      const asignadoA = entityType === 'propiedad' ? 'prop' : 'per';
+      
+      // Bypass TypeScript issues for now
+      const result: any = await (supabase as any)
         .from('tipos_documento')
         .select('id, nombre')
-        .eq('activo', true);
+        .eq('activo', true)
+        .eq('asignado_a', asignadoA);
       
-      if (response.error) {
-        console.error('Error loading document types:', response.error);
+      const { data, error } = result;
+      
+      if (error) {
+        console.error('Error loading document types:', error);
       } else {
-        setTiposDocumento(response.data || []);
+        setTiposDocumento(data || []);
       }
     } catch (err) {
       console.error('Error loading document types:', err);
@@ -88,15 +95,15 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
       if (tiposError) throw tiposError;
       
       // Create types map
-      const tiposMap = new Map();
+      const tiposMap = new Map<number, string>();
       if (tiposData) {
-        tiposData.forEach((tipo: any) => {
+        tiposData.forEach((tipo) => {
           tiposMap.set(tipo.id, tipo.nombre);
         });
       }
       
       // Combine the data
-      const docs = (docsData || []).map((doc: any) => ({
+      const docs = (docsData || []).map((doc) => ({
         ...doc,
         tipo_documento_nombre: tiposMap.get(doc.id_tipo_documento) || 'Tipo desconocido'
       }));
@@ -158,19 +165,16 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
         : 1;
 
       // Save document record
-      const documentData: any = {
+      const documentData = {
         numero: nextNumero,
         url: urlData.publicUrl,
         es_verificado: false,
         activo: true,
         id_tipo_documento: parseInt(selectedTipoDocumento),
+        ...(entityType === 'persona' 
+          ? { id_persona: entityId } 
+          : { id_propiedad: entityId })
       };
-
-      if (entityType === 'persona') {
-        documentData.id_persona = entityId;
-      } else {
-        documentData.id_propiedad = entityId;
-      }
 
       const { error: dbError } = await supabase
         .from('documentos')
@@ -200,7 +204,7 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
     }
   };
 
-  const handleDelete = async (documento: any) => {
+  const handleDelete = async (documento: Documento) => {
     const column = entityType === 'persona' ? 'id_persona' : 'id_propiedad';
     
     try {
@@ -226,7 +230,7 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
     }
   };
 
-  const handleToggleVerification = async (documento: any) => {
+  const handleToggleVerification = async (documento: Documento) => {
     const column = entityType === 'persona' ? 'id_persona' : 'id_propiedad';
     
     try {
@@ -304,7 +308,7 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {documentos.map((documento: any) => (
+                  {documentos.map((documento) => (
                     <TableRow key={documento.numero}>
                       <TableCell className="font-medium">{documento.numero}</TableCell>
                       <TableCell>{documento.tipo_documento_nombre}</TableCell>
@@ -368,7 +372,7 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
                   <SelectValue placeholder="Selecciona el tipo de documento" />
                 </SelectTrigger>
                 <SelectContent>
-                  {tiposDocumento.map((tipo: any) => (
+                  {tiposDocumento.map((tipo) => (
                     <SelectItem key={tipo.id} value={tipo.id.toString()}>
                       {tipo.nombre}
                     </SelectItem>
