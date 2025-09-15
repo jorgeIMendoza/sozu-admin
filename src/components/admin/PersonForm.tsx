@@ -349,8 +349,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   }
 
   function shouldShowDocumentsTab() {
-    // Show documents tab for clients, buyers, and legal entities (always visible with messages)
-    return entityType === 'buyer' || entityType === 'client' || entityType === 'legal';
+    // Show documents tab for clients, buyers, and legal entities with an existing ID
+    return (entityType === 'buyer' || entityType === 'client' || entityType === 'legal') && initialData?.id;
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1022,25 +1022,16 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
             {shouldShowDocumentsTab() && (
               <TabsContent value="documents" className="space-y-4 mt-6">
-                {initialData && initialData.id ? (
-                  <DocumentsTab 
-                    entityId={initialData.id} 
-                    entityType="persona"
-                    onDocumentAdded={() => {
-                      toast({
-                        title: "Documento agregado",
-                        description: "El documento se ha agregado correctamente."
-                      });
-                    }}
-                  />
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-lg mb-2">Documentos de la Persona</p>
-                    <p className="text-sm">
-                      Guarda primero la información de la persona para poder agregar documentos
-                    </p>
-                  </div>
-                )}
+                <DocumentsTab 
+                  entityId={initialData?.id || undefined} 
+                  entityType="persona"
+                  onDocumentAdded={() => {
+                    toast({
+                      title: "Documento agregado",
+                      description: "El documento se ha agregado correctamente."
+                    });
+                  }}
+                />
               </TabsContent>
             )}
           </Tabs>

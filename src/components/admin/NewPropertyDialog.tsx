@@ -212,9 +212,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
         <Tabs defaultValue="basic" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="basic">Datos Básicos</TabsTrigger>
-            <TabsTrigger value="documents">
-              Documentos {!propertyId && <span className="text-xs ml-1">(Después de guardar)</span>}
-            </TabsTrigger>
+            <TabsTrigger value="documents" disabled={!propertyId}>Documentos</TabsTrigger>
           </TabsList>
           
           <TabsContent value="basic">
@@ -481,36 +479,25 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
           </TabsContent>
           
           <TabsContent value="documents">
-            {propertyId ? (
-              <>
-                <DocumentsTab 
-                  entityId={propertyId} 
-                  entityType="propiedad"
-                  onDocumentAdded={() => {
-                    toast({
-                      title: "Documento agregado",
-                      description: "El documento se ha agregado correctamente."
-                    });
-                  }}
-                />
-                <div className="flex justify-end pt-4">
-                  <Button onClick={() => {
-                    setOpen(false);
-                    setPropertyId(null);
-                    onPropertyAdded();
-                  }}>
-                    Finalizar
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <p className="text-lg mb-2">Documentos de la Propiedad</p>
-                <p className="text-sm">
-                  Guarda primero los datos básicos de la propiedad para poder agregar documentos
-                </p>
-              </div>
-            )}
+            <DocumentsTab 
+              entityId={propertyId} 
+              entityType="propiedad"
+              onDocumentAdded={() => {
+                toast({
+                  title: "Documento agregado",
+                  description: "El documento se ha agregado correctamente."
+                });
+              }}
+            />
+            <div className="flex justify-end pt-4">
+              <Button onClick={() => {
+                setOpen(false);
+                setPropertyId(null);
+                onPropertyAdded();
+              }}>
+                Finalizar
+              </Button>
+            </div>
           </TabsContent>
         </Tabs>
       </DialogContent>

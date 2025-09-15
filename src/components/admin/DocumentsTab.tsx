@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileText, Upload, Eye, Trash2, Check, X, Download } from "lucide-react";
+import { FileText, Upload, Eye, Trash2, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -42,22 +42,15 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
   const [tiposDocumento, setTiposDocumento] = useState<TipoDocumento[]>([]);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [previewDocument, setPreviewDocument] = useState<Documento | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const { toast } = useToast();
 
   // Load document types based on entity type
   const loadTiposDocumento = async () => {
     try {
-      // Filter by asignado_a based on entity type
-      const asignadoA = entityType === 'persona' ? 'per' : 'prop';
-      
-      // Use direct query with any type to avoid TypeScript issues
-      const response: any = await (supabase as any)
+      const response = await supabase
         .from('tipos_documento')
         .select('id, nombre')
-        .eq('activo', true)
-        .eq('asignado_a', asignadoA);
+        .eq('activo', true);
       
       if (response.error) {
         console.error('Error loading document types:', response.error);
@@ -248,61 +241,13 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
       await loadDocumentos();
       toast({
         title: "Éxito",
-        description: `Documento ${documento.es_verificado ? 'marcado como pendiente' : 'verificado'} correctamente`,
+        description: "Estado de verificación actualizado",
       });
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Error",
         description: `Error al actualizar la verificación: ${error.message}`,
-      });
-    }
-  };
-
-  const handleViewDocument = (documento: any) => {
-    setPreviewDocument(documento);
-    setIsPreviewOpen(true);
-  };
-
-  const getFileType = (url: string) => {
-    const extension = url.split('.').pop()?.toLowerCase();
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension || '')) return 'image';
-    if (extension === 'pdf') return 'pdf';
-    return 'other';
-  };
-
-  const handleDownloadDocument = async (documento: any) => {
-    try {
-      // Extract file path from URL for proper download
-      const urlParts = documento.url.split('/');
-      const filePath = urlParts.slice(-2).join('/'); // Gets "documentos/filename.ext"
-      
-      const { data, error } = await supabase.storage
-        .from('documentos')
-        .download(filePath);
-      
-      if (error) throw error;
-      
-      // Create blob URL and download
-      const blob = new Blob([data]);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `documento_${documento.numero}_${documento.tipo_documento_nombre}.${documento.url.split('.').pop()}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      toast({
-        title: "Descarga iniciada",
-        description: "El documento se está descargando",
-      });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: `Error al descargar: ${error.message}`,
       });
     }
   };
@@ -376,38 +321,27 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleViewDocument(documento)}
-                            title="Ver documento"
+                            onClick={() => window.open(documento.url, '_blank')}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleDownloadDocument(documento)}
-                            title="Descargar documento"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
                             onClick={() => handleToggleVerification(documento)}
-                            title={documento.es_verificado ? "Marcar como pendiente" : "Marcar como verificado"}
                           >
                             {documento.es_verificado ? (
-                              <X className="h-4 w-4 text-orange-500" />
+                              <X className="h-4 w-4" />
                             ) : (
-                              <Check className="h-4 w-4 text-green-500" />
+                              <Check className="h-4 w-4" />
                             )}
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleDelete(documento)}
-                            title="Eliminar documento"
                           >
-                            <Trash2 className="h-4 w-4 text-red-500" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -470,60 +404,6 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
               {isUploading ? "Subiendo..." : "Subir"}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Document Preview Dialog */}
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>
-                {previewDocument?.tipo_documento_nombre} - Documento #{previewDocument?.numero}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => previewDocument && handleDownloadDocument(previewDocument)}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Descargar
-              </Button>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-auto">
-            {previewDocument && (
-              <div className="w-full h-full min-h-[500px] flex items-center justify-center">
-                {getFileType(previewDocument.url) === 'image' ? (
-                  <img
-                    src={previewDocument.url}
-                    alt={`Documento ${previewDocument.numero}`}
-                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
-                  />
-                ) : getFileType(previewDocument.url) === 'pdf' ? (
-                  <iframe
-                    src={previewDocument.url}
-                    className="w-full h-[600px] rounded-lg shadow-lg"
-                    title={`Documento ${previewDocument.numero}`}
-                  />
-                ) : (
-                  <div className="text-center p-8">
-                    <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-lg font-medium mb-2">Vista previa no disponible</p>
-                    <p className="text-muted-foreground mb-4">
-                      Este tipo de archivo no se puede previsualizar en el navegador
-                    </p>
-                    <Button
-                      onClick={() => previewDocument && handleDownloadDocument(previewDocument)}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Descargar archivo
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </DialogContent>
       </Dialog>
     </div>
