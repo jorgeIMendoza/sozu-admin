@@ -305,9 +305,9 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
         </DialogHeader>
 
         <Tabs defaultValue="basic" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="basic">Datos Básicos</TabsTrigger>
-            <TabsTrigger value="documents">Documentos</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted">
+            <TabsTrigger value="basic" className="text-foreground">Datos Básicos</TabsTrigger>
+            <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>
           </TabsList>
           
           <TabsContent value="basic">

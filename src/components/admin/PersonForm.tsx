@@ -449,16 +449,16 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       <form onSubmit={handleSubmit} className="space-y-6">
         {!isUser ? (
           <Tabs defaultValue="basic" className="w-full">
-            <TabsList className={`grid w-full ${
-              shouldShowBeneficiariosTab() && shouldShowDocumentsTab() ? 'grid-cols-5' :
-              shouldShowBeneficiariosTab() || shouldShowDocumentsTab() ? 'grid-cols-4' : 
-              shouldShowLegalTab() ? 'grid-cols-3' : 'grid-cols-2'
-            }`}>
-              <TabsTrigger value="basic">Información Básica</TabsTrigger>
-              <TabsTrigger value="address">Dirección</TabsTrigger>
-              {shouldShowLegalTab() && <TabsTrigger value="legal">Información Legal</TabsTrigger>}
-              {shouldShowBeneficiariosTab() && <TabsTrigger value="beneficiarios">Beneficiarios</TabsTrigger>}
-              {shouldShowDocumentsTab() && <TabsTrigger value="documents">Documentos</TabsTrigger>}
+             <TabsList className={`grid w-full mb-4 bg-muted ${
+               shouldShowBeneficiariosTab() && shouldShowDocumentsTab() ? 'grid-cols-5' :
+               shouldShowBeneficiariosTab() || shouldShowDocumentsTab() ? 'grid-cols-4' : 
+               shouldShowLegalTab() ? 'grid-cols-3' : 'grid-cols-2'
+             }`}>
+               <TabsTrigger value="basic" className="text-foreground">Información Básica</TabsTrigger>
+               <TabsTrigger value="address" className="text-foreground">Dirección</TabsTrigger>
+               {shouldShowLegalTab() && <TabsTrigger value="legal" className="text-foreground">Información Legal</TabsTrigger>}
+               {shouldShowBeneficiariosTab() && <TabsTrigger value="beneficiarios" className="text-foreground">Beneficiarios</TabsTrigger>}
+               {shouldShowDocumentsTab() && <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>}
             </TabsList>
 
             <TabsContent value="basic" className="space-y-4 mt-6">

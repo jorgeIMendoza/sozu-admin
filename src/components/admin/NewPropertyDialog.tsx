@@ -210,9 +210,9 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
           <DialogTitle>Nueva Propiedad</DialogTitle>
         </DialogHeader>
         <Tabs defaultValue="basic" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="basic">Datos Básicos</TabsTrigger>
-            <TabsTrigger value="documents" disabled={!propertyId}>Documentos</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted">
+            <TabsTrigger value="basic" className="text-foreground">Datos Básicos</TabsTrigger>
+            <TabsTrigger value="documents" disabled={!propertyId} className="text-foreground">Documentos</TabsTrigger>
           </TabsList>
           
           <TabsContent value="basic">
