@@ -42,6 +42,8 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
   const [tiposDocumento, setTiposDocumento] = useState<TipoDocumento[]>([]);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [previewDocument, setPreviewDocument] = useState<Documento | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const { toast } = useToast();
 
   // Load document types based on entity type
@@ -258,14 +260,15 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
   };
 
   const handleViewDocument = (documento: any) => {
-    // Create a safe method to view documents that avoids CSP issues
-    const link = document.createElement('a');
-    link.href = documento.url;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    setPreviewDocument(documento);
+    setIsPreviewOpen(true);
+  };
+
+  const getFileType = (url: string) => {
+    const extension = url.split('.').pop()?.toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension || '')) return 'image';
+    if (extension === 'pdf') return 'pdf';
+    return 'other';
   };
 
   const handleDownloadDocument = async (documento: any) => {
@@ -467,6 +470,60 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
               {isUploading ? "Subiendo..." : "Subir"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Document Preview Dialog */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>
+                {previewDocument?.tipo_documento_nombre} - Documento #{previewDocument?.numero}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => previewDocument && handleDownloadDocument(previewDocument)}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Descargar
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            {previewDocument && (
+              <div className="w-full h-full min-h-[500px] flex items-center justify-center">
+                {getFileType(previewDocument.url) === 'image' ? (
+                  <img
+                    src={previewDocument.url}
+                    alt={`Documento ${previewDocument.numero}`}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                  />
+                ) : getFileType(previewDocument.url) === 'pdf' ? (
+                  <iframe
+                    src={previewDocument.url}
+                    className="w-full h-[600px] rounded-lg shadow-lg"
+                    title={`Documento ${previewDocument.numero}`}
+                  />
+                ) : (
+                  <div className="text-center p-8">
+                    <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-lg font-medium mb-2">Vista previa no disponible</p>
+                    <p className="text-muted-foreground mb-4">
+                      Este tipo de archivo no se puede previsualizar en el navegador
+                    </p>
+                    <Button
+                      onClick={() => previewDocument && handleDownloadDocument(previewDocument)}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Descargar archivo
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
