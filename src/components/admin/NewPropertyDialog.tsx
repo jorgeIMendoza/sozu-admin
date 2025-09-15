@@ -28,7 +28,9 @@ const formSchema = z.object({
   id_tipo_propiedad: z.string().min(1, "El tipo de propiedad es requerido"),
   id_estatus_disponibilidad: z.string().min(1, "El estatus de disponibilidad es requerido"),
   id_vista: z.string().min(1, "La vista es requerida"),
-  id_entidad_relacionada_dueno: z.string().min(1, "El propietario es requerido"),
+  id_entidad_relacionada_dueno: z.string().min(1, "El propietario es requerido").refine((val) => val !== "no-owners", {
+    message: "Se deben asignar Entidades Legales (Dueños vendedor o Aportante) al proyecto"
+  }),
 });
 
 interface NewPropertyDialogProps {
@@ -502,7 +504,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                           </SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="" disabled>
+                        <SelectItem value="no-owners" disabled>
                           Se deben asignar Entidades Legales (Dueños vendedor o Aportante) al proyecto
                         </SelectItem>
                       )}
