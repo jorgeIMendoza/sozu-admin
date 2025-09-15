@@ -47,10 +47,15 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
   // Load document types based on entity type
   const loadTiposDocumento = async () => {
     try {
-      const response = await supabase
+      // Filter by asignado_a based on entity type
+      const asignadoA = entityType === 'persona' ? 'per' : 'prop';
+      
+      // Use direct query with any type to avoid TypeScript issues
+      const response: any = await (supabase as any)
         .from('tipos_documento')
         .select('id, nombre')
-        .eq('activo', true);
+        .eq('activo', true)
+        .eq('asignado_a', asignadoA);
       
       if (response.error) {
         console.error('Error loading document types:', response.error);
