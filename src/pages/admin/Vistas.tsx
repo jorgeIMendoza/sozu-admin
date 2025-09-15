@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Trash2, Eye, RotateCcw } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Eye, RotateCcw, Upload, Image } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +23,7 @@ import {
 interface Vista {
   id: number;
   nombre: string;
+  url?: string | null;
   activo: boolean;
   fecha_creacion: string;
   fecha_actualizacion: string;
@@ -40,6 +42,7 @@ export default function Vistas() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     nombre: "",
+    url: ""
   });
 
   const { toast } = useToast();
@@ -82,10 +85,12 @@ export default function Vistas() {
 
     try {
       setIsSubmitting(true);
+
       const { data, error } = await supabase
         .from('vistas')
         .insert([{
           nombre: formData.nombre.trim(),
+          url: formData.url || null,
           activo: true
         }])
         .select()
@@ -95,7 +100,7 @@ export default function Vistas() {
 
       setVistas(prev => [...prev, data]);
       setIsCreateDialogOpen(false);
-      setFormData({ nombre: "" });
+      setFormData({ nombre: "", url: "" });
       toast({
         title: "Éxito",
         description: "Vista creada correctamente",
@@ -124,11 +129,19 @@ export default function Vistas() {
 
     try {
       setIsSubmitting(true);
+
+      const updateData: any = {
+        nombre: formData.nombre.trim(),
+      };
+
+      // Only update URL if there's a change
+      if (formData.url !== selectedVista.url) {
+        updateData.url = formData.url || null;
+      }
+
       const { data, error } = await supabase
         .from('vistas')
-        .update({
-          nombre: formData.nombre.trim(),
-        })
+        .update(updateData)
         .eq('id', selectedVista.id)
         .select()
         .single();
@@ -140,7 +153,7 @@ export default function Vistas() {
       ));
       setIsEditDialogOpen(false);
       setSelectedVista(null);
-      setFormData({ nombre: "" });
+      setFormData({ nombre: "", url: "" });
       toast({
         title: "Éxito",
         description: "Vista actualizada correctamente",
@@ -225,7 +238,10 @@ export default function Vistas() {
 
   const openEditDialog = (vista: Vista) => {
     setSelectedVista(vista);
-    setFormData({ nombre: vista.nombre });
+    setFormData({ 
+      nombre: vista.nombre,
+      url: vista.url || ""
+    });
     setIsEditDialogOpen(true);
   };
 
@@ -288,16 +304,25 @@ export default function Vistas() {
                   placeholder="Ej: Vista al mar, Vista a la montaña"
                 />
               </div>
+              
+              <div>
+                <ImageUploadField
+                  label="Imagen de la Vista"
+                  value={formData.url}
+                  onChange={(url) => setFormData(prev => ({ ...prev, url }))}
+                  accept="image/*"
+                />
+              </div>
             </div>
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsCreateDialogOpen(false);
-                  setFormData({ nombre: "" });
-                }}
-                disabled={isSubmitting}
-              >
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsCreateDialogOpen(false);
+                    setFormData({ nombre: "", url: "" });
+                  }}
+                  disabled={isSubmitting}
+                >
                 Cancelar
               </Button>
               <Button onClick={handleCreateVista} disabled={isSubmitting}>
@@ -347,6 +372,7 @@ export default function Vistas() {
                     <TableRow>
                       <TableHead>ID</TableHead>
                       <TableHead>Nombre</TableHead>
+                      <TableHead>Imagen</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead>Fecha Creación</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
@@ -355,7 +381,7 @@ export default function Vistas() {
                   <TableBody>
                     {filteredVistas.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        <TableCell colSpan={6} className="text-center text-muted-foreground">
                           No se encontraron vistas
                         </TableCell>
                       </TableRow>
@@ -364,6 +390,26 @@ export default function Vistas() {
                         <TableRow key={vista.id}>
                           <TableCell className="font-medium">{vista.id}</TableCell>
                           <TableCell>{vista.nombre}</TableCell>
+                          <TableCell>
+                            {vista.url ? (
+                              <div className="flex items-center gap-2">
+                                <img 
+                                  src={vista.url} 
+                                  alt={vista.nombre}
+                                  className="w-10 h-10 object-cover rounded-md"
+                                  onError={(e) => {
+                                    e.currentTarget.src = '/placeholder.svg';
+                                  }}
+                                />
+                                <Badge variant="outline">
+                                  <Image className="h-3 w-3 mr-1" />
+                                  Con imagen
+                                </Badge>
+                              </div>
+                            ) : (
+                              <Badge variant="secondary">Sin imagen</Badge>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <Badge variant={vista.activo ? "default" : "secondary"}>
                               {vista.activo ? "Activo" : "Inactivo"}
@@ -432,6 +478,15 @@ export default function Vistas() {
                 placeholder="Ej: Vista al mar, Vista a la montaña"
               />
             </div>
+
+            <div>
+              <ImageUploadField
+                label="Imagen de la Vista"
+                value={formData.url}
+                onChange={(url) => setFormData(prev => ({ ...prev, url }))}
+                accept="image/*"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -439,7 +494,7 @@ export default function Vistas() {
               onClick={() => {
                 setIsEditDialogOpen(false);
                 setSelectedVista(null);
-                setFormData({ nombre: "" });
+                setFormData({ nombre: "", url: "" });
               }}
               disabled={isSubmitting}
             >
