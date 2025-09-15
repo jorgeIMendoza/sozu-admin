@@ -10,11 +10,11 @@ import { Power, PowerOff, Plus, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
-interface ModelMultimediaSectionProps {
-  modelId: number;
+interface PropertyMultimediaSectionProps {
+  propertyId: number;
 }
 
-export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps) {
+export function PropertyMultimediaSection({ propertyId }: PropertyMultimediaSectionProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
@@ -26,12 +26,12 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
   const [uploading, setUploading] = useState(false);
 
   const { data: multimedia = [] } = useQuery({
-    queryKey: ['modelMultimedia', modelId],
+    queryKey: ['propertyMultimedia', propertyId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('multimedias_modelo')
+        .from('multimedias_propiedad')
         .select('*')
-        .eq('id_modelo', modelId)
+        .eq('id_propiedad', propertyId)
         .order('fecha_creacion', { ascending: false });
       
       if (error) throw error;
@@ -42,10 +42,10 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
   const addMutation = useMutation({
     mutationFn: async (multimediaData: typeof newMultimedia) => {
       const { data, error } = await supabase
-        .from('multimedias_modelo')
+        .from('multimedias_propiedad')
         .insert([{
           ...multimediaData,
-          id_modelo: modelId
+          id_propiedad: propertyId
         }])
         .select()
         .single();
@@ -54,7 +54,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['modelMultimedia', modelId] });
+      queryClient.invalidateQueries({ queryKey: ['propertyMultimedia', propertyId] });
       setNewMultimedia({ es_imagen: true, url: "", descripcion: "" });
       setIsAdding(false);
       toast({ title: "Multimedia agregado exitosamente" });
@@ -67,14 +67,14 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ multimediaId, newStatus }: { multimediaId: number; newStatus: boolean }) => {
       const { error } = await supabase
-        .from('multimedias_modelo')
+        .from('multimedias_propiedad')
         .update({ activo: newStatus })
         .eq('id', multimediaId);
       
       if (error) throw error;
     },
     onSuccess: (_, { newStatus }) => {
-      queryClient.invalidateQueries({ queryKey: ['modelMultimedia', modelId] });
+      queryClient.invalidateQueries({ queryKey: ['propertyMultimedia', propertyId] });
       toast({ 
         title: newStatus ? "Multimedia reactivado exitosamente" : "Multimedia inactivado exitosamente" 
       });
@@ -92,7 +92,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `models/${modelId}/${fileName}`;
+      const filePath = `properties/${propertyId}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('documentos')
@@ -134,7 +134,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Multimedia del Modelo</h3>
+        <h3 className="text-lg font-semibold">Multimedia de la Propiedad</h3>
         <Button
           onClick={() => setIsAdding(true)}
           disabled={isAdding}

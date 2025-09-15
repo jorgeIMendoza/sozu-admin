@@ -12,13 +12,14 @@ import { z } from "zod";
 import { Edit, Trash2, MapPin, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BuildingManagement } from "./BuildingManagement";
 import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
 import { ProjectLegalEntitiesSection } from "./ProjectLegalEntitiesSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { GoogleMapComponent } from "./GoogleMapComponent";
+import { NewAmenityDialog } from "./NewAmenityDialog";
 import { ImageUploadField } from "./ImageUploadField";
 
 const formSchema = z.object({
@@ -58,6 +59,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
   const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -129,6 +131,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
         .from("amenidades")
         .select("*")
         .eq("activo", true)
+        .eq("habilitar_asignar", true)
         .order("nombre");
       
       if (error) throw error;
@@ -671,7 +674,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                     name="amenidades"
                     render={() => (
                       <FormItem>
-                        <FormLabel>Amenidades</FormLabel>
+                        <div className="flex items-center justify-between">
+                          <FormLabel>Amenidades</FormLabel>
+                          <NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />
+                        </div>
                         <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
                           {amenidades?.map((amenidad) => (
                             <FormField

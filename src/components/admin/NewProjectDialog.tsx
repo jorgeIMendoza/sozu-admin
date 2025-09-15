@@ -14,11 +14,12 @@ import { Plus } from "lucide-react";
 import { MapPin, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BuildingFormSection, Building } from "./BuildingFormSection";
 import { PaymentSchemeFormSection, PaymentScheme } from "./PaymentSchemeFormSection";
 import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
 import { GoogleMapComponent } from "./GoogleMapComponent";
+import { NewAmenityDialog } from "./NewAmenityDialog";
 import { ImageUploadField } from "./ImageUploadField";
 
 const BuildingSchema = z.object({
@@ -78,6 +79,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   const [paymentSchemes, setPaymentSchemes] = useState<PaymentScheme[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -135,6 +137,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         .from("amenidades")
         .select("*")
         .eq("activo", true)
+        .eq("habilitar_asignar", true)
         .order("nombre");
       
       if (error) throw error;
@@ -686,7 +689,10 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                   name="amenidades"
                   render={() => (
                     <FormItem>
-                      <FormLabel>Amenidades</FormLabel>
+                      <div className="flex items-center justify-between">
+                        <FormLabel>Amenidades</FormLabel>
+                        <NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
                         {amenidades?.map((amenidad) => (
                           <FormField
