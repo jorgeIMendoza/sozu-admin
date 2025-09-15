@@ -14,17 +14,27 @@ import { PropertyCharacteristicsSection } from "./PropertyCharacteristicsSection
 
 interface Property {
   id: number;
-  dueño: string;
   numero_propiedad: string;
   numero_piso: number;
   m2_reales: number;
   precio_lista: number;
-  clabe_stp: string;
-  vista: string;
-  transaccion: string;
-  tipo_propiedad: string;
-  disponibilidad: string;
+  clabe_stp_tmp_apartado: string | null;
   activo: boolean;
+  es_aprobado: boolean;
+  // Relaciones
+  propietario: string;
+  proyecto: string;
+  edificio: string;
+  modelo: string;
+  vista: string;
+  disponibilidad: string;
+  configuracion_modelo: {
+    numero_recamaras: number;
+    numero_completo_banos: number;
+    numero_medio_bano: number;
+  };
+  // Nueva propiedad para verificar si tiene ofertas
+  tieneOfertas: boolean;
 }
 
 interface EditPropertyDialogProps {
@@ -43,7 +53,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
     m2_escriturables: 0,
     precio_lista: property.precio_lista,
     monto_apartado: 0,
-    clabe_stp_tmp_apartado: property.clabe_stp,
+    clabe_stp_tmp_apartado: property.clabe_stp_tmp_apartado || '',
     descripcion: '',
     url_imagen_portada: '',
     id_vista: '',
@@ -125,7 +135,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
           )
         `)
         .eq('id', property.id)
-        .single();
+        .maybeSingle();
       if (error) throw error;
       return data?.edificios_modelos?.edificios?.proyectos;
     }
@@ -230,7 +240,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
         .from('propiedades')
         .select('*')
         .eq('id', property.id)
-        .single();
+        .maybeSingle();
       
       if (fullPropertyError) {
         console.error('Error fetching full property details:', fullPropertyError);

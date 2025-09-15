@@ -799,17 +799,21 @@ const Propiedades = () => {
         <EditPropertyDialog
           property={{
             id: editingProperty.id,
-            dueño: editingProperty.propietario,
             numero_propiedad: editingProperty.numero_propiedad,
             numero_piso: editingProperty.numero_piso,
             m2_reales: editingProperty.m2_reales,
             precio_lista: editingProperty.precio_lista,
-            clabe_stp: editingProperty.clabe_stp_tmp_apartado || '',
+            clabe_stp_tmp_apartado: editingProperty.clabe_stp_tmp_apartado,
+            propietario: editingProperty.propietario,
+            proyecto: editingProperty.proyecto,
+            edificio: editingProperty.edificio,
+            modelo: editingProperty.modelo,
             vista: editingProperty.vista,
-            transaccion: '', // Se obtendrá del componente
-            tipo_propiedad: '', // Se obtendrá del componente
             disponibilidad: editingProperty.disponibilidad,
-            activo: editingProperty.activo
+            activo: editingProperty.activo,
+            es_aprobado: editingProperty.es_aprobado,
+            configuracion_modelo: editingProperty.configuracion_modelo,
+            tieneOfertas: editingProperty.tieneOfertas
           }}
           onClose={() => setEditingProperty(null)}
           onSuccess={() => {
