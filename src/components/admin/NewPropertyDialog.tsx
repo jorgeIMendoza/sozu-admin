@@ -469,10 +469,11 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                              setSelectedOwnerId(value);
                            }} 
                            value={field.value}
+                           disabled={!selectedProjectId}
                          >
                            <FormControl>
                              <SelectTrigger>
-                               <SelectValue placeholder="Selecciona propietario" />
+                               <SelectValue placeholder={!selectedProjectId ? "Selecciona un proyecto primero" : "Selecciona propietario"} />
                              </SelectTrigger>
                            </FormControl>
                            <SelectContent>
@@ -527,8 +528,8 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                    )}
                  </div>
 
-                 {/* Show remaining fields only after project, building and model are selected */}
-                {form.watch("id_proyecto") && form.watch("id_edificio") && form.watch("id_modelo") && (
+                 {/* Show remaining fields only after project, building, model AND owner are selected */}
+                 {form.watch("id_proyecto") && form.watch("id_edificio") && form.watch("id_modelo") && form.watch("id_entidad_relacionada_dueno") && form.watch("id_entidad_relacionada_dueno") !== "no-owners" && (
                   <>
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
@@ -759,13 +760,15 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                   </Button>
                   <Button 
                     type="submit" 
-                    disabled={
-                      !form.watch("id_proyecto") || 
-                      !form.watch("id_edificio") || 
-                      !form.watch("id_modelo") ||
-                      !propietarios ||
-                      propietarios.length === 0
-                    }
+                       disabled={
+                         !form.watch("id_proyecto") || 
+                         !form.watch("id_edificio") || 
+                         !form.watch("id_modelo") ||
+                         !form.watch("id_entidad_relacionada_dueno") ||
+                         form.watch("id_entidad_relacionada_dueno") === "no-owners" ||
+                         !propietarios ||
+                         propietarios.length === 0
+                       }
                   >
                     {propertyId ? "Actualizar" : "Crear Propiedad"}
                   </Button>
