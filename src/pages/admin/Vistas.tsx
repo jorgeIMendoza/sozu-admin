@@ -392,20 +392,14 @@ export default function Vistas() {
                           <TableCell>{vista.nombre}</TableCell>
                           <TableCell>
                             {vista.url ? (
-                              <div className="flex items-center gap-2">
-                                <img 
-                                  src={vista.url} 
-                                  alt={vista.nombre}
-                                  className="w-10 h-10 object-cover rounded-md"
-                                  onError={(e) => {
-                                    e.currentTarget.src = '/placeholder.svg';
-                                  }}
-                                />
-                                <Badge variant="outline">
-                                  <Image className="h-3 w-3 mr-1" />
-                                  Con imagen
-                                </Badge>
-                              </div>
+                              <img 
+                                src={vista.url} 
+                                alt={vista.nombre}
+                                className="w-10 h-10 object-cover rounded-md"
+                                onError={(e) => {
+                                  e.currentTarget.src = '/placeholder.svg';
+                                }}
+                              />
                             ) : (
                               <Badge variant="secondary">Sin imagen</Badge>
                             )}
