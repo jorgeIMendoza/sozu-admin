@@ -34,6 +34,16 @@ interface Documento {
   tipo_documento_nombre?: string;
 }
 
+interface DocumentoInsert {
+  numero: number;
+  url: string;
+  es_verificado: boolean;
+  activo: boolean;
+  id_tipo_documento: number;
+  id_persona?: number;
+  id_propiedad?: number;
+}
+
 export function DocumentsTab({ entityId, entityType, onDocumentAdded }: DocumentsTabProps) {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -88,15 +98,15 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
       if (tiposError) throw tiposError;
       
       // Create types map
-      const tiposMap = new Map();
+      const tiposMap = new Map<number, string>();
       if (tiposData) {
-        tiposData.forEach((tipo: any) => {
+        tiposData.forEach((tipo) => {
           tiposMap.set(tipo.id, tipo.nombre);
         });
       }
       
       // Combine the data
-      const docs = (docsData || []).map((doc: any) => ({
+      const docs = (docsData || []).map((doc) => ({
         ...doc,
         tipo_documento_nombre: tiposMap.get(doc.id_tipo_documento) || 'Tipo desconocido'
       }));
@@ -158,7 +168,7 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
         : 1;
 
       // Save document record
-      const documentData: any = {
+      const documentData: DocumentoInsert = {
         numero: nextNumero,
         url: urlData.publicUrl,
         es_verificado: false,
@@ -200,7 +210,7 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
     }
   };
 
-  const handleDelete = async (documento: any) => {
+  const handleDelete = async (documento: Documento) => {
     const column = entityType === 'persona' ? 'id_persona' : 'id_propiedad';
     
     try {
@@ -226,7 +236,7 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
     }
   };
 
-  const handleToggleVerification = async (documento: any) => {
+  const handleToggleVerification = async (documento: Documento) => {
     const column = entityType === 'persona' ? 'id_persona' : 'id_propiedad';
     
     try {
@@ -304,7 +314,7 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {documentos.map((documento: any) => (
+                  {documentos.map((documento) => (
                     <TableRow key={documento.numero}>
                       <TableCell className="font-medium">{documento.numero}</TableCell>
                       <TableCell>{documento.tipo_documento_nombre}</TableCell>
@@ -368,7 +378,7 @@ export function DocumentsTab({ entityId, entityType, onDocumentAdded }: Document
                   <SelectValue placeholder="Selecciona el tipo de documento" />
                 </SelectTrigger>
                 <SelectContent>
-                  {tiposDocumento.map((tipo: any) => (
+                  {tiposDocumento.map((tipo) => (
                     <SelectItem key={tipo.id} value={tipo.id.toString()}>
                       {tipo.nombre}
                     </SelectItem>
