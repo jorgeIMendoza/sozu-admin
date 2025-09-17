@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ProjectModelSelectionSection } from "./ProjectModelSelectionSection";
 import { PropertyBasicDataSection } from "./PropertyBasicDataSection";
 import { PropertyClassificationSection } from "./PropertyClassificationSection";
+import { PropertyDescriptionSection } from "./PropertyDescriptionSection";
 
 const formSchema = z.object({
   id_proyecto: z.string().min(1, "El proyecto es requerido"),
@@ -30,6 +32,7 @@ const formSchema = z.object({
   id_entidad_relacionada_dueno: z.string().min(1, "El propietario es requerido").refine((val) => val !== "no-owners", {
     message: "Se deben asignar Entidades Legales (Dueños vendedor o Aportante) al proyecto"
   }),
+  descripcion: z.string().optional(),
 });
 
 interface NewPropertyDialogProps {
@@ -61,6 +64,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
       id_estatus_disponibilidad: "",
       id_vista: "",
       id_entidad_relacionada_dueno: "",
+      descripcion: "",
     },
   });
 
@@ -102,6 +106,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
         id_estatus_disponibilidad: parseInt(values.id_estatus_disponibilidad),
         id_vista: parseInt(values.id_vista),
         id_entidad_relacionada_dueno: parseInt(values.id_entidad_relacionada_dueno),
+        descripcion: values.descripcion || null,
         es_aprobado: false,
         activo: true,
       };
@@ -177,18 +182,39 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
               clabeError={clabeError}
             />
             
-            {/* Datos Básicos y Clasificaciones - aparecen cuando se selecciona propietario */}
+            {/* Tabs aparecen cuando se selecciona propietario */}
             {selectedOwnerId && selectedOwnerId !== "no-owners" && (
-              <>
-                <PropertyBasicDataSection form={form} />
-                <PropertyClassificationSection form={form} />
+              <Tabs defaultValue="general" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="general">Características Generales</TabsTrigger>
+                  <TabsTrigger value="descripcion">Descripción</TabsTrigger>
+                  <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="general" className="space-y-6">
+                  <PropertyBasicDataSection form={form} />
+                  <PropertyClassificationSection form={form} />
+                </TabsContent>
+                
+                <TabsContent value="descripcion" className="space-y-6">
+                  <PropertyDescriptionSection 
+                    form={form} 
+                    selectedModelId={form.watch("id_modelo")}
+                  />
+                </TabsContent>
+                
+                <TabsContent value="multimedia" className="space-y-6">
+                  <div className="text-center py-8 text-muted-foreground">
+                    La multimedia se podrá gestionar una vez que la propiedad sea creada.
+                  </div>
+                </TabsContent>
                 
                 <div className="flex justify-end pt-4">
                   <Button type="submit" disabled={form.formState.isSubmitting}>
                     {form.formState.isSubmitting ? "Creando..." : "Crear Propiedad"}
                   </Button>
                 </div>
-              </>
+              </Tabs>
             )}
           </form>
         </Form>
