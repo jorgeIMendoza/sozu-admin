@@ -291,8 +291,7 @@ export default function Residentes() {
   const filteredResidentes = residentes.filter(residente => 
     residente.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     residente.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    residente.curp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    residente.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
+    residente.telefono?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleEdit = (residente: Residente) => {
@@ -365,10 +364,11 @@ export default function Residentes() {
             <TableRow className="bg-muted/30 hover:bg-muted/30">
               <TableHead className="font-semibold text-foreground">Nombre</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
-              <TableHead className="font-semibold text-foreground">Tipo</TableHead>
-              <TableHead className="font-semibold text-foreground">CURP/RFC</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-              <TableHead className="font-semibold text-foreground">Rep. Legal</TableHead>
+              <TableHead className="font-semibold text-foreground">Tipo persona</TableHead>
+              <TableHead className="font-semibold text-foreground">RFC</TableHead>
+              <TableHead className="font-semibold text-foreground">CURP</TableHead>
+              <TableHead className="font-semibold text-foreground">Representante legal</TableHead>
               <TableHead className="font-semibold text-foreground text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -381,6 +381,9 @@ export default function Residentes() {
                 <TableCell className="text-muted-foreground">
                   {residente.email}
                 </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {residente.telefono || 'N/A'}
+                </TableCell>
                 <TableCell>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     residente.tipo_persona === 'pf' 
@@ -391,10 +394,10 @@ export default function Residentes() {
                   </span>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {residente.curp || residente.rfc || 'N/A'}
+                  {residente.rfc || 'N/A'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {residente.telefono || 'N/A'}
+                  {residente.curp || 'N/A'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {residente.representante_legal_nombre || 'N/A'}

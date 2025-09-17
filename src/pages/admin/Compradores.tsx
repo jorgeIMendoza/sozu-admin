@@ -291,8 +291,7 @@ export default function Compradores() {
   const filteredCompradores = compradores.filter(comprador => 
     comprador.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     comprador.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    comprador.curp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    comprador.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
+    comprador.telefono?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleEdit = (comprador: Comprador) => {
@@ -365,10 +364,11 @@ export default function Compradores() {
             <TableRow className="bg-muted/30 hover:bg-muted/30">
               <TableHead className="font-semibold text-foreground">Nombre</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
-              <TableHead className="font-semibold text-foreground">Tipo</TableHead>
-              <TableHead className="font-semibold text-foreground">CURP/RFC</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-              <TableHead className="font-semibold text-foreground">Rep. Legal</TableHead>
+              <TableHead className="font-semibold text-foreground">Tipo persona</TableHead>
+              <TableHead className="font-semibold text-foreground">RFC</TableHead>
+              <TableHead className="font-semibold text-foreground">CURP</TableHead>
+              <TableHead className="font-semibold text-foreground">Representante legal</TableHead>
               <TableHead className="font-semibold text-foreground text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -381,6 +381,9 @@ export default function Compradores() {
                 <TableCell className="text-muted-foreground">
                   {comprador.email}
                 </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {comprador.telefono || 'N/A'}
+                </TableCell>
                 <TableCell>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     comprador.tipo_persona === 'pf' 
@@ -391,10 +394,10 @@ export default function Compradores() {
                   </span>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {comprador.curp || comprador.rfc || 'N/A'}
+                  {comprador.rfc || 'N/A'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {comprador.telefono || 'N/A'}
+                  {comprador.curp || 'N/A'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {comprador.representante_legal_nombre || 'N/A'}

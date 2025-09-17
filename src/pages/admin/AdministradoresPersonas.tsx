@@ -291,8 +291,7 @@ export default function AdministradoresPersonas() {
   const filteredAdministradores = administradores.filter(administrador => 
     administrador.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     administrador.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    administrador.curp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    administrador.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
+    administrador.telefono?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleEdit = (administrador: Administrador) => {
@@ -365,10 +364,11 @@ export default function AdministradoresPersonas() {
             <TableRow className="bg-muted/30 hover:bg-muted/30">
               <TableHead className="font-semibold text-foreground">Nombre</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
-              <TableHead className="font-semibold text-foreground">Tipo</TableHead>
-              <TableHead className="font-semibold text-foreground">CURP/RFC</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-              <TableHead className="font-semibold text-foreground">Rep. Legal</TableHead>
+              <TableHead className="font-semibold text-foreground">Tipo persona</TableHead>
+              <TableHead className="font-semibold text-foreground">RFC</TableHead>
+              <TableHead className="font-semibold text-foreground">CURP</TableHead>
+              <TableHead className="font-semibold text-foreground">Representante legal</TableHead>
               <TableHead className="font-semibold text-foreground text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -381,6 +381,9 @@ export default function AdministradoresPersonas() {
                 <TableCell className="text-muted-foreground">
                   {administrador.email}
                 </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {administrador.telefono || 'N/A'}
+                </TableCell>
                 <TableCell>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     administrador.tipo_persona === 'pf' 
@@ -391,10 +394,10 @@ export default function AdministradoresPersonas() {
                   </span>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {administrador.curp || administrador.rfc || 'N/A'}
+                  {administrador.rfc || 'N/A'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {administrador.telefono || 'N/A'}
+                  {administrador.curp || 'N/A'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {administrador.representante_legal_nombre || 'N/A'}
