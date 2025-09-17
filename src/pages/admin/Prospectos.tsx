@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, Users, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,8 +24,13 @@ type Prospecto = {
   rfc?: string;
   tipo_persona: string;
   activo: boolean;
+  fecha_creacion: string;
   id_entidad_relacionada_rep_leg?: number;
   representante_legal_nombre?: string;
+  estatus_nombre?: string;
+  id_estatus_persona?: number;
+  proyecto_nombre?: string;
+  id_proyecto?: number;
 };
 
 export default function Prospectos() {
@@ -58,12 +64,23 @@ export default function Prospectos() {
           rfc,
           tipo_persona,
           activo,
+          fecha_creacion,
           id_entidad_relacionada_rep_leg,
           entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
             id,
             id_tipo_entidad,
+            id_estatus_persona,
+            id_proyecto,
             tipos_entidad!inner (
               padre
+            ),
+            estatus_persona (
+              id,
+              nombre
+            ),
+            proyectos (
+              id,
+              nombre
             )
           ),
           representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
@@ -77,7 +94,6 @@ export default function Prospectos() {
         .eq('activo', true)
         .eq('entidades_relacionadas.activo', true)
         .eq('entidades_relacionadas.tipos_entidad.padre', 'c')
-        .is('entidades_relacionadas.id_proyecto', null)
         .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
@@ -93,8 +109,13 @@ export default function Prospectos() {
         rfc: item.rfc,
         tipo_persona: item.tipo_persona,
         activo: item.activo,
+        fecha_creacion: item.fecha_creacion,
         id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
         representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
+        id_estatus_persona: item.entidades_relacionadas[0].id_estatus_persona,
+        estatus_nombre: item.entidades_relacionadas[0].estatus_persona?.nombre,
+        id_proyecto: item.entidades_relacionadas[0].id_proyecto,
+        proyecto_nombre: item.entidades_relacionadas[0].proyectos?.nombre,
       })) as (Prospecto & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
@@ -113,12 +134,23 @@ export default function Prospectos() {
           rfc,
           tipo_persona,
           activo,
+          fecha_creacion,
           id_entidad_relacionada_rep_leg,
           entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
             id,
             id_tipo_entidad,
+            id_estatus_persona,
+            id_proyecto,
             tipos_entidad!inner (
               padre
+            ),
+            estatus_persona (
+              id,
+              nombre
+            ),
+            proyectos (
+              id,
+              nombre
             )
           ),
           representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
@@ -132,7 +164,6 @@ export default function Prospectos() {
         .eq('activo', false)
         .eq('entidades_relacionadas.activo', true)
         .eq('entidades_relacionadas.tipos_entidad.padre', 'c')
-        .is('entidades_relacionadas.id_proyecto', null)
         .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
@@ -148,8 +179,13 @@ export default function Prospectos() {
         rfc: item.rfc,
         tipo_persona: item.tipo_persona,
         activo: item.activo,
+        fecha_creacion: item.fecha_creacion,
         id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
         representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
+        id_estatus_persona: item.entidades_relacionadas[0].id_estatus_persona,
+        estatus_nombre: item.entidades_relacionadas[0].estatus_persona?.nombre,
+        id_proyecto: item.entidades_relacionadas[0].id_proyecto,
+        proyecto_nombre: item.entidades_relacionadas[0].proyectos?.nombre,
       })) as (Prospecto & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
@@ -365,6 +401,40 @@ export default function Prospectos() {
     prospecto.telefono?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Helper function to get status badge variant and color
+  const getStatusBadge = (statusId?: number, statusName?: string) => {
+    if (!statusName) return null;
+    
+    // Define color variants based on status ID or name
+    const getVariantFromId = (id?: number) => {
+      switch (id) {
+        case 1: return { variant: "default" as const, className: "bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300" };
+        case 2: return { variant: "secondary" as const, className: "bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300" };
+        case 3: return { variant: "destructive" as const, className: "bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300" };
+        case 4: return { variant: "outline" as const, className: "bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300" };
+        case 5: return { variant: "default" as const, className: "bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300" };
+        default: return { variant: "outline" as const, className: "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-900/30 dark:text-gray-300" };
+      }
+    };
+    
+    const { variant, className } = getVariantFromId(statusId);
+    
+    return (
+      <Badge variant={variant} className={className}>
+        {statusName}
+      </Badge>
+    );
+  };
+
+  // Helper function to format date
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-MX', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+  };
+
   const canDeleteProspect = (prospectId: number) => {
     const canDeleteInfo = canDeleteData.find(c => c.prospectId === prospectId);
     return canDeleteInfo?.canDelete ?? false;
@@ -440,10 +510,10 @@ export default function Prospectos() {
             <TableRow className="bg-muted/30 hover:bg-muted/30">
               <TableHead className="font-semibold text-foreground">Nombre</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
-              <TableHead className="font-semibold text-foreground">Tipo</TableHead>
-              <TableHead className="font-semibold text-foreground">CURP/RFC</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-              <TableHead className="font-semibold text-foreground">Rep. Legal</TableHead>
+              <TableHead className="font-semibold text-foreground">Estatus</TableHead>
+              <TableHead className="font-semibold text-foreground">Proyecto de Interés</TableHead>
+              <TableHead className="font-semibold text-foreground">Fecha de Creación</TableHead>
               <TableHead className="font-semibold text-foreground text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -456,23 +526,21 @@ export default function Prospectos() {
                 <TableCell className="text-muted-foreground">
                   {prospecto.email}
                 </TableCell>
-                <TableCell>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    prospecto.tipo_persona === 'pf' 
-                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' 
-                      : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                  }`}>
-                    {prospecto.tipo_persona === 'pf' ? 'Física' : 'Moral'}
-                  </span>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {prospecto.curp || prospecto.rfc || 'N/A'}
-                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {prospecto.telefono || 'N/A'}
                 </TableCell>
+                <TableCell>
+                  {getStatusBadge(prospecto.id_estatus_persona, prospecto.estatus_nombre) || (
+                    <Badge variant="outline" className="bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-900/30 dark:text-gray-300">
+                      Sin estatus
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {prospecto.representante_legal_nombre || 'N/A'}
+                  {prospecto.proyecto_nombre || 'N/A'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(prospecto.fecha_creacion)}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-center gap-2">
@@ -496,22 +564,6 @@ export default function Prospectos() {
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleBeneficiarios(prospecto)}
-                          className="h-8 px-2 text-xs hover:bg-accent"
-                        >
-                          Benef.
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleBankAccounts(prospecto)}
-                          className="h-8 px-2 text-xs hover:bg-accent"
-                        >
-                          Cuentas
-                        </Button>
                       </>
                     ) : (
                       <Button
@@ -621,36 +673,6 @@ export default function Prospectos() {
              }}
              entityType="client"
            />
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog para gestionar beneficiarios */}
-      <Dialog open={isBeneficiariosDialogOpen} onOpenChange={setIsBeneficiariosDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Gestionar Beneficiarios - {selectedProspectoForBeneficiarios?.nombre_legal}</DialogTitle>
-          </DialogHeader>
-          {selectedProspectoForBeneficiarios && (
-            <BeneficiariosForm
-              personaId={selectedProspectoForBeneficiarios.id}
-              personaNombre={selectedProspectoForBeneficiarios.nombre_legal}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog para cuentas bancarias */}
-      <Dialog open={isBankAccountsDialogOpen} onOpenChange={setIsBankAccountsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Cuentas Bancarias - {selectedProspectoForBankAccounts?.nombre_legal}</DialogTitle>
-          </DialogHeader>
-          {selectedProspectoForBankAccounts && (
-            <BankAccountsSection
-              personId={selectedProspectoForBankAccounts.id}
-              showStpCheckbox={false}
-            />
-          )}
         </DialogContent>
       </Dialog>
 
