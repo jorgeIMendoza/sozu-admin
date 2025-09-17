@@ -10,9 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { DocumentsTab } from "./DocumentsTab";
 import { PropertyMultimediaTab } from "./PropertyMultimediaTab";
-import { PropertyDescriptionSection } from "./PropertyDescriptionSection";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
 interface Property {
   id: number;
@@ -254,8 +252,8 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
         numero_piso: fullPropertyData.numero_piso || 0,
         m2_reales: fullPropertyData.m2_reales || 0,
         m2_escriturables: fullPropertyData.m2_escriturables || 0,
-        precio_lista: formData.precio_lista,
-        monto_apartado: formData.monto_apartado || 0,
+        precio_lista: fullPropertyData.precio_lista || 0,
+        monto_apartado: fullPropertyData.monto_apartado || 0,
         clabe_stp_tmp_apartado: currentProperty.clabe_stp || '', // This comes from the function with COALESCE logic
         descripcion: fullPropertyData.descripcion || '',
         url_imagen_portada: fullPropertyData.url_imagen_portada || '',
@@ -282,19 +280,19 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
           numero_propiedad: formData.numero_propiedad,
           numero_piso: formData.numero_piso,
           m2_reales: formData.m2_reales,
-        m2_escriturables: formData.m2_escriturables,
-        precio_lista: formData.precio_lista,
-        monto_apartado: formData.monto_apartado,
-        clabe_stp_tmp_apartado: formData.clabe_stp_tmp_apartado,
-        descripcion: formData.descripcion || null,
-        url_imagen_portada: formData.url_imagen_portada || null,
-        id_vista: parseInt(formData.id_vista),
-        id_tipo_transaccion: parseInt(formData.id_tipo_transaccion),
-        id_tipo_propiedad: parseInt(formData.id_tipo_propiedad),
-        id_estatus_disponibilidad: parseInt(formData.id_estatus_disponibilidad),
-        id_entidad_relacionada_dueno: parseInt(formData.id_entidad_relacionada_dueno),
-        id_edificio_modelo: parseInt(formData.id_edificio_modelo),
-        es_aprobado: false // Cuando se edita una propiedad, se pone en draft
+          m2_escriturables: formData.m2_escriturables,
+          precio_lista: formData.precio_lista,
+          monto_apartado: formData.monto_apartado,
+          clabe_stp_tmp_apartado: formData.clabe_stp_tmp_apartado,
+          descripcion: formData.descripcion || null,
+          url_imagen_portada: formData.url_imagen_portada || null,
+          id_vista: parseInt(formData.id_vista),
+          id_tipo_transaccion: parseInt(formData.id_tipo_transaccion),
+          id_tipo_propiedad: parseInt(formData.id_tipo_propiedad),
+          id_estatus_disponibilidad: parseInt(formData.id_estatus_disponibilidad),
+          id_entidad_relacionada_dueno: parseInt(formData.id_entidad_relacionada_dueno),
+          id_edificio_modelo: parseInt(formData.id_edificio_modelo),
+          es_aprobado: false // Cuando se edita una propiedad, se pone en draft
         })
         .eq('id', property.id);
 
@@ -329,268 +327,318 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
         </DialogHeader>
 
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-4 bg-muted">
-            <TabsTrigger value="general" className="text-foreground">Características Generales</TabsTrigger>
-            <TabsTrigger value="description" className="text-foreground">Descripción</TabsTrigger>
-            <TabsTrigger value="multimedia" className="text-foreground">Multimedia</TabsTrigger>
-            <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="general">Características Generales</TabsTrigger>
+            <TabsTrigger value="descripcion">Descripción</TabsTrigger>
+            <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
+            <TabsTrigger value="documentos">Documentos</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="basic">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="numero_propiedad">Número de Propiedad</Label>
-                  <Input
-                    id="numero_propiedad"
-                    value={formData.numero_propiedad}
-                    onChange={(e) => setFormData(prev => ({ ...prev, numero_propiedad: e.target.value }))}
-                    required
-                  />
-                </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <TabsContent value="general" className="space-y-6">
+              {/* Datos Básicos de la Propiedad */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Datos Básicos</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="numero_propiedad">Número de la Propiedad *</Label>
+                    <Input
+                      id="numero_propiedad"
+                      value={formData.numero_propiedad}
+                      onChange={(e) => setFormData(prev => ({ ...prev, numero_propiedad: e.target.value }))}
+                      placeholder="Ej: A-101"
+                      required
+                    />
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="numero_piso">Número de Piso</Label>
-              <Input
-                id="numero_piso"
-                type="number"
-                value={formData.numero_piso}
-                onChange={(e) => setFormData(prev => ({ ...prev, numero_piso: parseInt(e.target.value) || 0 }))}
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="numero_piso">Número de Piso *</Label>
+                    <Input
+                      id="numero_piso"
+                      type="number"
+                      value={formData.numero_piso}
+                      onChange={(e) => setFormData(prev => ({ ...prev, numero_piso: parseInt(e.target.value) || 0 }))}
+                      placeholder="Ej: 1"
+                    />
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="m2_reales">M² Reales</Label>
-              <Input
-                id="m2_reales"
-                type="number"
-                step="0.01"
-                value={formData.m2_reales}
-                onChange={(e) => setFormData(prev => ({ ...prev, m2_reales: parseFloat(e.target.value) || 0 }))}
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="m2_reales">M² Reales *</Label>
+                    <Input
+                      id="m2_reales"
+                      type="number"
+                      step="0.01"
+                      value={formData.m2_reales}
+                      onChange={(e) => setFormData(prev => ({ ...prev, m2_reales: parseFloat(e.target.value) || 0 }))}
+                      placeholder="Ej: 85.50"
+                    />
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="m2_escriturables">M² Escriturables</Label>
-              <Input
-                id="m2_escriturables"
-                type="number"
-                step="0.01"
-                value={formData.m2_escriturables}
-                onChange={(e) => setFormData(prev => ({ ...prev, m2_escriturables: parseFloat(e.target.value) || 0 }))}
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="m2_escriturables">M² Escriturables *</Label>
+                    <Input
+                      id="m2_escriturables"
+                      type="number"
+                      step="0.01"
+                      value={formData.m2_escriturables}
+                      onChange={(e) => setFormData(prev => ({ ...prev, m2_escriturables: parseFloat(e.target.value) || 0 }))}
+                      placeholder="Ej: 80.00"
+                    />
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="precio_lista">Precio Lista</Label>
-              <Input
-                id="precio_lista"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.precio_lista}
-                onChange={(e) => setFormData(prev => ({ ...prev, precio_lista: parseFloat(e.target.value) || 0 }))}
-                placeholder="0.00"
-                required
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="precio_lista">Precio de Lista *</Label>
+                    <Input
+                      id="precio_lista"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.precio_lista}
+                      onChange={(e) => setFormData(prev => ({ ...prev, precio_lista: parseFloat(e.target.value) || 0 }))}
+                      placeholder="Ej: 2500000"
+                      required
+                    />
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="monto_apartado">Monto Apartado</Label>
-              <Input
-                id="monto_apartado"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.monto_apartado}
-                onChange={(e) => setFormData(prev => ({ ...prev, monto_apartado: parseFloat(e.target.value) || 0 }))}
-                placeholder="0.00"
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="monto_apartado">Monto Apartado (Opcional)</Label>
+                    <Input
+                      id="monto_apartado"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.monto_apartado}
+                      onChange={(e) => setFormData(prev => ({ ...prev, monto_apartado: parseFloat(e.target.value) || 0 }))}
+                      placeholder="Ej: 50000"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
 
-            <div className="space-y-2">
-              <Label htmlFor="clabe_stp">CLABE STP</Label>
-              <Input
-                id="clabe_stp"
-                value={formData.clabe_stp_tmp_apartado}
-                readOnly
-              />
-            </div>
+              {/* Clasificación de la Propiedad */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Clasificación de la Propiedad</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tipo_transaccion">Tipo de Transacción *</Label>
+                    <Select value={formData.id_tipo_transaccion} onValueChange={(value) => setFormData(prev => ({ ...prev, id_tipo_transaccion: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona tipo de transacción" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tiposTransaccion?.map((tipo) => (
+                          <SelectItem key={tipo.id} value={tipo.id.toString()}>
+                            {tipo.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="descripcion">Descripción</Label>
-              <textarea
-                id="descripcion"
-                className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={formData.descripcion}
-                onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
-                placeholder="Descripción de la propiedad (opcional)"
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tipo_propiedad">Tipo de Propiedad *</Label>
+                    <Select value={formData.id_tipo_propiedad} onValueChange={(value) => setFormData(prev => ({ ...prev, id_tipo_propiedad: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona tipo de propiedad" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tiposPropiedad?.map((tipo) => (
+                          <SelectItem key={tipo.id} value={tipo.id.toString()}>
+                            {tipo.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="vista">Vista</Label>
-              <Select value={formData.id_vista} onValueChange={(value) => setFormData(prev => ({ ...prev, id_vista: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona una vista" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vistas?.map((vista) => (
-                    <SelectItem key={vista.id} value={vista.id.toString()}>
-                      {vista.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="estatus_disponibilidad">Estatus de Disponibilidad *</Label>
+                    <Select value={formData.id_estatus_disponibilidad} onValueChange={(value) => setFormData(prev => ({ ...prev, id_estatus_disponibilidad: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona estatus" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {estatusDisponibilidad?.map((estatus) => (
+                          <SelectItem key={estatus.id} value={estatus.id.toString()}>
+                            {estatus.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tipo_transaccion">Tipo de Transacción</Label>
-              <Select value={formData.id_tipo_transaccion} onValueChange={(value) => setFormData(prev => ({ ...prev, id_tipo_transaccion: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona tipo de transacción" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiposTransaccion?.map((tipo) => (
-                    <SelectItem key={tipo.id} value={tipo.id.toString()}>
-                      {tipo.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="vista">Vista *</Label>
+                    <Select value={formData.id_vista} onValueChange={(value) => setFormData(prev => ({ ...prev, id_vista: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona una vista" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vistas?.map((vista) => (
+                          <SelectItem key={vista.id} value={vista.id.toString()}>
+                            {vista.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
 
-            <div className="space-y-2">
-              <Label htmlFor="tipo_propiedad">Tipo de Propiedad</Label>
-              <Select value={formData.id_tipo_propiedad} onValueChange={(value) => setFormData(prev => ({ ...prev, id_tipo_propiedad: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona tipo de propiedad" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiposPropiedad?.map((tipo) => (
-                    <SelectItem key={tipo.id} value={tipo.id.toString()}>
-                      {tipo.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              {/* Información del Proyecto y Propietario */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Información del Proyecto</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="propietario">Propietario *</Label>
+                    <Select 
+                      value={formData.id_entidad_relacionada_dueno} 
+                      onValueChange={async (value) => {
+                        setFormData(prev => ({ ...prev, id_entidad_relacionada_dueno: value }));
+                        
+                        // Generate new CLABE STP when owner changes (but don't save to DB yet)
+                        if (value) {
+                          try {
+                            const { data: nuevaClabe, error } = await supabase
+                              .rpc('crear_referencia_bancaria', { id_er_dueno: parseInt(value) });
+                            
+                            if (error) {
+                              console.error('Error generating new CLABE STP:', error);
+                              toast({
+                                title: "Error",
+                                description: "No se pudo generar la nueva CLABE STP.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
 
-            <div className="space-y-2">
-              <Label htmlFor="estatus_disponibilidad">Estatus de Disponibilidad</Label>
-              <Select value={formData.id_estatus_disponibilidad} onValueChange={(value) => setFormData(prev => ({ ...prev, id_estatus_disponibilidad: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona estatus" />
-                </SelectTrigger>
-                <SelectContent>
-                  {estatusDisponibilidad?.map((estatus) => (
-                    <SelectItem key={estatus.id} value={estatus.id.toString()}>
-                      {estatus.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                            // Update only form state (don't save to database until submit)
+                            setFormData(prev => ({ ...prev, clabe_stp_tmp_apartado: nuevaClabe || '' }));
+                            
+                            toast({
+                              title: "CLABE STP generada",
+                              description: "Se ha generado una nueva CLABE STP. Guarda los cambios para aplicarla.",
+                            });
+                          } catch (error) {
+                            console.error('Error in CLABE STP generation:', error);
+                            toast({
+                              title: "Error",
+                              description: "Error inesperado al generar la CLABE STP.",
+                              variant: "destructive",
+                            });
+                          }
+                        }
+                      }}
+                      disabled={parseInt(formData.id_estatus_disponibilidad) > 2}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona propietario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {entidadesRelacionadas?.map((entidad) => (
+                          <SelectItem key={entidad.id} value={entidad.id.toString()}>
+                            {entidad.personas?.nombre_legal}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="propietario">Propietario</Label>
-              <Select 
-                value={formData.id_entidad_relacionada_dueno} 
-                onValueChange={async (value) => {
-                  setFormData(prev => ({ ...prev, id_entidad_relacionada_dueno: value }));
-                  
-                  // Generate new CLABE STP when owner changes (but don't save to DB yet)
-                  if (value) {
-                    try {
-                      const { data: nuevaClabe, error } = await supabase
-                        .rpc('crear_referencia_bancaria', { id_er_dueno: parseInt(value) });
-                      
-                      if (error) {
-                        console.error('Error generating new CLABE STP:', error);
-                        toast({
-                          title: "Error",
-                          description: "No se pudo generar la nueva CLABE STP.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
+                  <div className="space-y-2">
+                    <Label htmlFor="edificio_modelo">Edificio-Modelo *</Label>
+                    <Select value={formData.id_edificio_modelo} onValueChange={(value) => setFormData(prev => ({ ...prev, id_edificio_modelo: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona modelo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {edificiosModelos?.map((em) => (
+                          <SelectItem key={em.id} value={em.id.toString()}>
+                            {em.edificios?.nombre} - {em.modelos?.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                      // Update only form state (don't save to database until submit)
-                      setFormData(prev => ({ ...prev, clabe_stp_tmp_apartado: nuevaClabe || '' }));
-                      
-                      toast({
-                        title: "CLABE STP generada",
-                        description: "Se ha generado una nueva CLABE STP. Guarda los cambios para aplicarla.",
-                      });
-                    } catch (error) {
-                      console.error('Error in CLABE STP generation:', error);
-                      toast({
-                        title: "Error",
-                        description: "Error inesperado al generar la CLABE STP.",
-                        variant: "destructive",
-                      });
-                    }
-                  }
+                  <div className="space-y-2 col-span-2">
+                    <Label htmlFor="clabe_stp">CLABE STP</Label>
+                    <Input
+                      id="clabe_stp"
+                      value={formData.clabe_stp_tmp_apartado}
+                      readOnly
+                      className="bg-muted"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Esta CLABE se genera automáticamente al seleccionar un propietario
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="descripcion" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Descripción de la Propiedad</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="descripcion">Descripción</Label>
+                    <textarea
+                      id="descripcion"
+                      className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={formData.descripcion}
+                      onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
+                      placeholder="Descripción de la propiedad (opcional)"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="url_imagen_portada">URL Imagen Portada</Label>
+                    <Input
+                      id="url_imagen_portada"
+                      value={formData.url_imagen_portada}
+                      onChange={(e) => setFormData(prev => ({ ...prev, url_imagen_portada: e.target.value }))}
+                      placeholder="https://ejemplo.com/imagen.jpg"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="multimedia">
+              <PropertyMultimediaTab propertyId={property.id} />
+            </TabsContent>
+
+            <TabsContent value="documentos">
+              <DocumentsTab 
+                entityId={property.id} 
+                entityType="propiedad"
+                onDocumentAdded={() => {
+                  toast({
+                    title: "Documento agregado",
+                    description: "El documento se ha agregado correctamente."
+                  });
                 }}
-                disabled={parseInt(formData.id_estatus_disponibilidad) > 2}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona propietario" />
-                </SelectTrigger>
-                <SelectContent>
-                  {entidadesRelacionadas?.map((entidad) => (
-                    <SelectItem key={entidad.id} value={entidad.id.toString()}>
-                      {entidad.personas?.nombre_legal}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
+            </TabsContent>
+
+            {/* Botones de acción - visibles en todas las pestañas */}
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? "Guardando..." : "Guardar Cambios"}
+              </Button>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edificio_modelo">Edificio-Modelo</Label>
-              <Select value={formData.id_edificio_modelo} onValueChange={(value) => setFormData(prev => ({ ...prev, id_edificio_modelo: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona modelo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {edificiosModelos?.map((em) => (
-                    <SelectItem key={em.id} value={em.id.toString()}>
-                      {em.edificios?.nombre} - {em.modelos?.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={onClose}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? "Guardando..." : "Guardar Cambios"}
-                </Button>
-              </div>
-            </form>
-          </TabsContent>
-          
-          <TabsContent value="documents">
-            <DocumentsTab 
-              entityId={property.id} 
-              entityType="propiedad"
-              onDocumentAdded={() => {
-                toast({
-                  title: "Documento agregado",
-                  description: "El documento se ha agregado correctamente."
-                });
-              }}
-            />
-          </TabsContent>
-
-          <TabsContent value="multimedia">
-            <PropertyMultimediaTab propertyId={property.id} />
-          </TabsContent>
+          </form>
         </Tabs>
       </DialogContent>
     </Dialog>
