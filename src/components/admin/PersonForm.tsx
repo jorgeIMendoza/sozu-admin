@@ -768,7 +768,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 </div>
 
                 <div>
-                  <Label htmlFor="rfc">RFC *</Label>
+                  <Label htmlFor="rfc">RFC</Label>
                   <Input
                     id="rfc"
                     type="text"
@@ -794,7 +794,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 {(entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria') && (
                   <div>
                     <Label htmlFor="idTipoEntidad">
-                      Tipo de Entidad Legal *
+                      Tipo de Entidad Legal
                     </Label>
                     <Select 
                       value={idTipoEntidad?.toString() || ''} 
@@ -882,7 +882,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     <h3 className="text-lg font-medium">Dirección</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="calle">Calle *</Label>
+                        <Label htmlFor="calle">Calle</Label>
                         <Input
                           id="calle"
                           type="text"
@@ -911,7 +911,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="codigoPostal">Código Postal *</Label>
+                        <Label htmlFor="codigoPostal">Código Postal</Label>
                         <Input
                           id="codigoPostal"
                           type="text"
@@ -922,7 +922,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="pais">País *</Label>
+                        <Label htmlFor="pais">País</Label>
                         <Select value={idPaisDireccion} onValueChange={setIdPaisDireccion}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona un país" />
@@ -938,7 +938,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="estado">Estado *</Label>
+                        <Label htmlFor="estado">Estado</Label>
                         <Select value={idEstadoDireccion} onValueChange={setIdEstadoDireccion}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona un estado" />
@@ -954,7 +954,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="municipio">Municipio *</Label>
+                        <Label htmlFor="municipio">Municipio</Label>
                         <Select value={idMunicipioDireccion} onValueChange={setIdMunicipioDireccion}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona un municipio" />
@@ -1040,7 +1040,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     <h3 className="text-lg font-medium">Información Fiscal</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="nacionalidad">Nacionalidad *</Label>
+                        <Label htmlFor="nacionalidad">Nacionalidad</Label>
                         <Select value={idPaisNacimiento} onValueChange={setIdPaisNacimiento}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona nacionalidad" />
@@ -1056,7 +1056,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="curp">CURP *</Label>
+                        <Label htmlFor="curp">CURP</Label>
                         <Input
                           id="curp"
                           type="text"
@@ -1067,7 +1067,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="rfc">RFC *</Label>
+                        <Label htmlFor="rfc">RFC</Label>
                         <Input
                           id="rfc"
                           type="text"
@@ -1078,7 +1078,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="sexo">Sexo *</Label>
+                        <Label htmlFor="sexo">Sexo</Label>
                         <Select value={sexo} onValueChange={setSexo}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona sexo" />
@@ -1091,7 +1091,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                        <div>
-                         <Label htmlFor="regimen">Régimen *</Label>
+                         <Label htmlFor="regimen">Régimen</Label>
                          <Select value={regimen} onValueChange={setRegimen}>
                            <SelectTrigger>
                              <SelectValue placeholder="Ingresa el régimen fiscal" />
@@ -1107,7 +1107,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                        </div>
 
                        <div>
-                         <Label htmlFor="usoCfdi">Uso del CFDI *</Label>
+                         <Label htmlFor="usoCfdi">Uso del CFDI</Label>
                          <Select value={usoCfdi} onValueChange={setUsoCfdi}>
                            <SelectTrigger>
                              <SelectValue placeholder="Ingresa el uso del CFDI" />
@@ -1123,7 +1123,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                        </div>
 
                       <div>
-                        <Label htmlFor="estadoCivil">Estado Civil *</Label>
+                        <Label htmlFor="estadoCivil">Estado Civil</Label>
                         <Select value={idEstadoCivil} onValueChange={setIdEstadoCivil}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona estado civil" />
@@ -1139,7 +1139,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="tipoIdentificacion">Tipo de identificación *</Label>
+                        <Label htmlFor="tipoIdentificacion">Tipo de identificación</Label>
                         <Select value={idTipoIdentificacion} onValueChange={setIdTipoIdentificacion}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona tipo de identificación" />
@@ -1153,7 +1153,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="numeroIdentificacion">Número de identificación *</Label>
+                        <Label htmlFor="numeroIdentificacion">Número de identificación</Label>
                         <Input
                           id="numeroIdentificacion"
                           type="text"
@@ -1173,7 +1173,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label>Fecha de Nacimiento *</Label>
+                        <Label>Fecha de Nacimiento</Label>
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
@@ -1197,7 +1197,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="estadoNacimiento">Estado de Nacimiento *</Label>
+                        <Label htmlFor="estadoNacimiento">Estado de Nacimiento</Label>
                         <Select value={idEstadoNacimiento} onValueChange={setIdEstadoNacimiento}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona estado" />
@@ -1213,7 +1213,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
 
                       <div>
-                        <Label htmlFor="municipioNacimiento">Ciudad de Nacimiento *</Label>
+                        <Label htmlFor="municipioNacimiento">Ciudad de Nacimiento</Label>
                         <Select value={idMunicipioNacimiento} onValueChange={setIdMunicipioNacimiento}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona ciudad" />
@@ -1247,7 +1247,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       <h4 className="text-md font-medium">Dirección Fiscal</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <Label htmlFor="calleFiscal">Calle *</Label>
+                          <Label htmlFor="calleFiscal">Calle</Label>
                           <Input
                             id="calleFiscal"
                             type="text"
@@ -1259,7 +1259,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         </div>
 
                         <div>
-                          <Label htmlFor="codigoPostalFiscal">Código Postal *</Label>
+                          <Label htmlFor="codigoPostalFiscal">Código Postal</Label>
                           <Input
                             id="codigoPostalFiscal"
                             type="text"
@@ -1271,7 +1271,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         </div>
 
                         <div>
-                          <Label htmlFor="paisFiscal">País *</Label>
+                          <Label htmlFor="paisFiscal">País</Label>
                           <Select value={idPaisFiscal} onValueChange={setIdPaisFiscal} disabled={copiarDireccionFiscal}>
                             <SelectTrigger>
                               <SelectValue placeholder="Selecciona un país" />
@@ -1287,7 +1287,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         </div>
 
                         <div>
-                          <Label htmlFor="estadoFiscal">Estado *</Label>
+                          <Label htmlFor="estadoFiscal">Estado</Label>
                           <Select value={idEstadoFiscal} onValueChange={setIdEstadoFiscal} disabled={copiarDireccionFiscal}>
                             <SelectTrigger>
                               <SelectValue placeholder="Selecciona un estado" />
@@ -1303,7 +1303,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         </div>
 
                         <div>
-                          <Label htmlFor="municipioFiscal">Municipio *</Label>
+                          <Label htmlFor="municipioFiscal">Municipio</Label>
                           <Select value={idMunicipioFiscal} onValueChange={setIdMunicipioFiscal} disabled={copiarDireccionFiscal}>
                             <SelectTrigger>
                               <SelectValue placeholder="Selecciona un municipio" />
@@ -1362,7 +1362,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
           // User form (simplified)
           <div className="space-y-4">
             <div>
-              <Label htmlFor="nombre">Nombre Completo *</Label>
+              <Label htmlFor="nombre">Nombre Completo</Label>
               <Input
                 id="nombre"
                 type="text"
@@ -1375,7 +1375,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
             </div>
 
             <div>
-              <Label htmlFor="curp">CURP *</Label>
+              <Label htmlFor="curp">CURP</Label>
               <Input
                 id="curp"
                 type="text"
