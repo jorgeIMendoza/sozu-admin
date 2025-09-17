@@ -516,7 +516,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
               {/* Clasificación de la Propiedad */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Clasificación de la Propiedad</CardTitle>
+                  <CardTitle>Clasificaciones</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -567,21 +567,6 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="vista">Vista *</Label>
-                    <Select value={formData.id_vista} onValueChange={(value) => setFormData(prev => ({ ...prev, id_vista: value }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona una vista" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {vistas?.map((vista) => (
-                          <SelectItem key={vista.id} value={vista.id.toString()}>
-                            {vista.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
