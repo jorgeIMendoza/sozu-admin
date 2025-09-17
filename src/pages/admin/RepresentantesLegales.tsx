@@ -370,7 +370,7 @@ export default function RepresentantesLegales() {
             onSubmit={(data) => createMutation.mutate(data)}
             isLoading={createMutation.isPending}
             onCancel={() => setIsNewDialogOpen(false)}
-            entityType="representative"
+            entityType="representante_legal"
           />
         </DialogContent>
       </Dialog>
@@ -389,7 +389,7 @@ export default function RepresentantesLegales() {
               setIsEditDialogOpen(false);
               setEditingRepresentant(null);
             }}
-            entityType="representative"
+            entityType="representante_legal"
           />
         </DialogContent>
       </Dialog>

@@ -23,7 +23,7 @@ interface PersonFormProps {
   initialData?: any;
   isLoading?: boolean;
   onCancel: () => void;
-  entityType?: 'legal' | 'client' | 'representative' | 'user' | 'desarrollador' | 'inmobiliaria' | 'administradora' | 'banco' | 'buyer' | 'seller' | 'owner' | 'resident' | 'agent' | 'administrator';
+  entityType?: 'legal' | 'client' | 'representative' | 'user' | 'desarrollador' | 'inmobiliaria' | 'administradora' | 'banco' | 'buyer' | 'seller' | 'owner' | 'resident' | 'agent' | 'administrator' | 'vendedor' | 'dueno' | 'residente' | 'agente' | 'administrador' | 'representante_legal';
   fixedEntityType?: boolean;
 }
 
@@ -509,21 +509,103 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
   const isUser = entityType === 'user';
 
+  // Check if this is one of the specific entity types that need new tab structure
+  const isSpecialEntityType = ['vendedor', 'dueno', 'residente', 'agente', 'administrador', 'representante_legal'].includes(entityType);
+
   return (
     <Card className="p-6">
       <form onSubmit={handleSubmit} className="space-y-6">
         {!isUser ? (
           <Tabs defaultValue="basic" className="w-full">
+            {isSpecialEntityType ? (
+              <TabsList className="grid w-full mb-4 bg-muted grid-cols-4">
+                <TabsTrigger value="basic" className="text-foreground">Información Básica</TabsTrigger>
+                <TabsTrigger value="address" className="text-foreground">Dirección</TabsTrigger>
+                <TabsTrigger value="fiscal" className="text-foreground">Información Fiscal</TabsTrigger>
+                <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>
+              </TabsList>
+            ) : (
               <TabsList className="grid w-full mb-4 bg-muted grid-cols-1">
                 <TabsTrigger value="basic" className="text-foreground">Información Básica</TabsTrigger>
-                {/* Temporarily hidden - <TabsTrigger value="address" className="text-foreground">Dirección</TabsTrigger> */}
-                {/* Temporarily hidden - {shouldShowLegalTab() && <TabsTrigger value="legal" className="text-foreground">Información Legal</TabsTrigger>} */}
-                {/* Temporarily hidden - {shouldShowBeneficiariosTab() && <TabsTrigger value="beneficiarios" className="text-foreground">Beneficiarios</TabsTrigger>} */}
-                {/* Temporarily hidden - {shouldShowDocumentsTab() && <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>} */}
-            </TabsList>
+              </TabsList>
+            )}
 
             <TabsContent value="basic" className="space-y-4 mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {isSpecialEntityType ? (
+                // New structured form for specific entity types
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="nombres">Nombre(s) *</Label>
+                    <Input
+                      id="nombres"
+                      type="text"
+                      value={nombre.split(' ')[0] || ''}
+                      onChange={(e) => {
+                        const nombres = e.target.value;
+                        const apellidos = nombre.split(' ').slice(1).join(' ');
+                        setNombre(`${nombres} ${apellidos}`.trim());
+                      }}
+                      placeholder="Ingresa el nombre"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="primerApellido">Primer Apellido *</Label>
+                    <Input
+                      id="primerApellido"
+                      type="text"
+                      value={nombre.split(' ')[1] || ''}
+                      onChange={(e) => {
+                        const nombreArray = nombre.split(' ');
+                        const nombres = nombreArray[0] || '';
+                        const segundoApellido = nombreArray[2] || '';
+                        setNombre(`${nombres} ${e.target.value} ${segundoApellido}`.trim());
+                      }}
+                      placeholder="Ingresa el primer apellido"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="segundoApellido">Segundo Apellido</Label>
+                    <Input
+                      id="segundoApellido"
+                      type="text"
+                      value={nombre.split(' ')[2] || ''}
+                      onChange={(e) => {
+                        const nombreArray = nombre.split(' ');
+                        const nombres = nombreArray[0] || '';
+                        const primerApellido = nombreArray[1] || '';
+                        setNombre(`${nombres} ${primerApellido} ${e.target.value}`.trim());
+                      }}
+                      placeholder="Ingresa el segundo apellido"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="email">Correo Electrónico *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Ingresa el correo electrónico"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="telefono">Teléfono *</Label>
+                    <Input
+                      id="telefono"
+                      type="tel"
+                      value={telefono}
+                      onChange={(e) => setTelefono(e.target.value)}
+                      placeholder="Ingresa el teléfono"
+                    />
+                  </div>
+                </div>
+              ) : (
+                // Original form structure for other entity types
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Project selection for prospects - shown as first field */}
                 {isProspectForm() && (
                   <div className="md:col-span-2">
@@ -762,67 +844,76 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     </Select>
                   </div>
                 )}
-              </div>
+                </div>
+              )}
             </TabsContent>
 
-            {/* Temporarily hidden - Address Tab 
-            <TabsContent value="address" className="space-y-4 mt-6">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium mb-4">Dirección Principal</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <Label htmlFor="direccionCalle">Calle y Número</Label>
-                      <Input
-                        id="direccionCalle"
-                        type="text"
-                        value={direccionCalle}
-                        onChange={(e) => setDireccionCalle(e.target.value)}
-                        placeholder="Ingresa la calle y número"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="direccionColonia">Colonia</Label>
-                      <Input
-                        id="direccionColonia"
-                        type="text"
-                        value={direccionColonia}
-                        onChange={(e) => setDireccionColonia(e.target.value)}
-                        placeholder="Ingresa la colonia"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="direccionCp">Código Postal</Label>
-                      <Input
-                        id="direccionCp"
-                        type="text"
-                        value={direccionCp}
-                        onChange={(e) => setDireccionCp(e.target.value)}
-                        placeholder="Ingresa el código postal"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="idPaisDireccion">País</Label>
-                      <Select value={idPaisDireccion} onValueChange={setIdPaisDireccion}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona un país" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {paises.map((pais) => (
-                            <SelectItem key={pais.id} value={pais.id}>
-                              {pais.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {idPaisDireccion === 'MX' && (
+            {/* New tabs only for special entity types */}
+            {isSpecialEntityType && (
+              <>
+                {/* Address Tab */}
+                <TabsContent value="address" className="space-y-4 mt-6">
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-medium">Dirección</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="idEstadoDireccion">Estado (Mx)</Label>
+                        <Label htmlFor="calle">Calle *</Label>
+                        <Input
+                          id="calle"
+                          type="text"
+                          value={direccionCalle}
+                          onChange={(e) => setDireccionCalle(e.target.value)}
+                          placeholder="Ingresa la calle y número"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="numeroExterno">Número Externo</Label>
+                        <Input
+                          id="numeroExterno"
+                          type="text"
+                          placeholder="Número externo"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="numeroInterno">Número Interno</Label>
+                        <Input
+                          id="numeroInterno"
+                          type="text"
+                          placeholder="Número interno"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="codigoPostal">Código Postal *</Label>
+                        <Input
+                          id="codigoPostal"
+                          type="text"
+                          value={direccionCp}
+                          onChange={(e) => setDireccionCp(e.target.value)}
+                          placeholder="Ingresa el código postal"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="pais">País *</Label>
+                        <Select value={idPaisDireccion} onValueChange={setIdPaisDireccion}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona un país" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paises.map((pais) => (
+                              <SelectItem key={pais.id} value={pais.id}>
+                                {pais.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="estado">Estado *</Label>
                         <Select value={idEstadoDireccion} onValueChange={setIdEstadoDireccion}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona un estado" />
@@ -836,101 +927,181 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
 
-                    {idPaisDireccion === 'MX' && idEstadoDireccion && (
                       <div>
-                        <Label htmlFor="idMunicipioDireccion">Municipio</Label>
+                        <Label htmlFor="municipio">Municipio *</Label>
                         <Select value={idMunicipioDireccion} onValueChange={setIdMunicipioDireccion}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona un municipio" />
                           </SelectTrigger>
                           <SelectContent>
-                            {municipios
-                              .filter(m => m.id_estado === parseInt(idEstadoDireccion))
-                              .map((municipio) => (
-                                <SelectItem key={municipio.id} value={municipio.id.toString()}>
-                                  {municipio.nombre}
-                                </SelectItem>
-                              ))}
+                            {municipios.map((municipio) => (
+                              <SelectItem key={municipio.id} value={municipio.id.toString()}>
+                                {municipio.nombre}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                <div>
-                  <div className="flex items-center space-x-2 mb-4">
-                    <Checkbox 
-                      id="copiarDireccionFiscal" 
-                      checked={copiarDireccionFiscal}
-                      onCheckedChange={(checked) => setCopiarDireccionFiscal(checked === true)}
-                    />
-                    <Label htmlFor="copiarDireccionFiscal">
-                      Usar la misma dirección para dirección fiscal
-                    </Label>
-                  </div>
-                  <h3 className="text-lg font-medium mb-4">Dirección Fiscal</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <Label htmlFor="direccionFiscalCalle">Calle y Número</Label>
-                      <Input
-                        id="direccionFiscalCalle"
-                        type="text"
-                        value={direccionFiscalCalle}
-                        onChange={(e) => setDireccionFiscalCalle(e.target.value)}
-                        placeholder="Ingresa la calle y número fiscal"
-                        disabled={copiarDireccionFiscal}
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="direccionFiscalColonia">Colonia</Label>
-                      <Input
-                        id="direccionFiscalColonia"
-                        type="text"
-                        value={direccionFiscalColonia}
-                        onChange={(e) => setDireccionFiscalColonia(e.target.value)}
-                        placeholder="Ingresa la colonia fiscal"
-                        disabled={copiarDireccionFiscal}
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="direccionFiscalCp">Código Postal</Label>
-                      <Input
-                        id="direccionFiscalCp"
-                        type="text"
-                        value={direccionFiscalCp}
-                        onChange={(e) => setDireccionFiscalCp(e.target.value)}
-                        placeholder="Ingresa el código postal fiscal"
-                        disabled={copiarDireccionFiscal}
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="idPaisFiscal">País</Label>
-                      <Select value={idPaisFiscal} onValueChange={setIdPaisFiscal} disabled={copiarDireccionFiscal}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona un país" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {paises.map((pais) => (
-                            <SelectItem key={pais.id} value={pais.id}>
-                              {pais.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {idPaisFiscal === 'MX' && (
                       <div>
-                        <Label htmlFor="idEstadoFiscal">Estado (Mx)</Label>
-                        <Select value={idEstadoFiscal} onValueChange={setIdEstadoFiscal} disabled={copiarDireccionFiscal}>
+                        <Label htmlFor="colonia">Colonia/Barrio</Label>
+                        <Input
+                          id="colonia"
+                          type="text"
+                          value={direccionColonia}
+                          onChange={(e) => setDireccionColonia(e.target.value)}
+                          placeholder="Ingresa la colonia o barrio"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Ubicación en Google Maps</Label>
+                      <div className="h-64 bg-muted rounded-md flex items-center justify-center">
+                        <p className="text-muted-foreground">Mapa de Google Maps aquí</p>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Fiscal Information Tab */}
+                <TabsContent value="fiscal" className="space-y-4 mt-6">
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-medium">Información Fiscal</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="nacionalidad">Nacionalidad *</Label>
+                        <Select value={idPaisNacimiento} onValueChange={setIdPaisNacimiento}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecciona un estado" />
+                            <SelectValue placeholder="Selecciona nacionalidad" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paises.map((pais) => (
+                              <SelectItem key={pais.id} value={pais.id}>
+                                {pais.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="curp">CURP *</Label>
+                        <Input
+                          id="curp"
+                          type="text"
+                          value={curp}
+                          onChange={(e) => setCurp(e.target.value)}
+                          placeholder="Ingresa la CURP"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="rfc">RFC *</Label>
+                        <Input
+                          id="rfc"
+                          type="text"
+                          value={rfc}
+                          onChange={(e) => setRfc(e.target.value)}
+                          placeholder="Ingresa el RFC"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="sexo">Sexo *</Label>
+                        <Select value={sexo} onValueChange={setSexo}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona sexo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="M">Masculino</SelectItem>
+                            <SelectItem value="F">Femenino</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="regimen">Régimen *</Label>
+                        <Input
+                          id="regimen"
+                          type="text"
+                          value={regimen}
+                          onChange={(e) => setRegimen(e.target.value)}
+                          placeholder="Ingresa el régimen fiscal"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="usoCfdi">Uso del CFDI *</Label>
+                        <Input
+                          id="usoCfdi"
+                          type="text"
+                          value={usoCfdi}
+                          onChange={(e) => setUsoCfdi(e.target.value)}
+                          placeholder="Ingresa el uso del CFDI"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="estadoCivil">Estado Civil *</Label>
+                        <Select value={idEstadoCivil} onValueChange={setIdEstadoCivil}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona estado civil" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {estadosCivil.map((estado) => (
+                              <SelectItem key={estado.id} value={estado.id.toString()}>
+                                {estado.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="tipoId">Tipo de ID *</Label>
+                        <Select value={idTipoIdentificacion} onValueChange={setIdTipoIdentificacion}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona tipo de identificación" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">INE</SelectItem>
+                            <SelectItem value="2">Pasaporte</SelectItem>
+                            <SelectItem value="3">Licencia de Conducir</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label>Fecha de Nacimiento *</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start text-left font-normal"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {fechaNacimiento ? format(fechaNacimiento, "dd/MM/yyyy") : "Selecciona fecha"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={fechaNacimiento}
+                              onSelect={setFechaNacimiento}
+                              initialFocus
+                              className="pointer-events-auto"
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="estadoNacimiento">Estado de Nacimiento *</Label>
+                        <Select value={idEstadoNacimiento} onValueChange={setIdEstadoNacimiento}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona estado" />
                           </SelectTrigger>
                           <SelectContent>
                             {estados.map((estado) => (
@@ -941,18 +1112,16 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
 
-                    {idPaisFiscal === 'MX' && idEstadoFiscal && (
                       <div>
-                        <Label htmlFor="idMunicipioFiscal">Municipio</Label>
-                        <Select value={idMunicipioFiscal} onValueChange={setIdMunicipioFiscal} disabled={copiarDireccionFiscal}>
+                        <Label htmlFor="municipioNacimiento">Ciudad de Nacimiento *</Label>
+                        <Select value={idMunicipioNacimiento} onValueChange={setIdMunicipioNacimiento}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecciona un municipio" />
+                            <SelectValue placeholder="Selecciona ciudad" />
                           </SelectTrigger>
                           <SelectContent>
                             {municipios
-                              .filter(m => m.id_estado === parseInt(idEstadoFiscal))
+                              .filter(m => m.id_estado === parseInt(idEstadoNacimiento))
                               .map((municipio) => (
                                 <SelectItem key={municipio.id} value={municipio.id.toString()}>
                                   {municipio.nombre}
@@ -961,173 +1130,141 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-            */}
-
-            {/* Temporarily hidden - Legal Information Tab */}
-            {/* {shouldShowLegalTab() && (
-              <TabsContent value="legal" className="space-y-4 mt-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="numeroEscritura">Número de Escritura</Label>
-                    <Input
-                      id="numeroEscritura"
-                      type="text"
-                      value={numeroEscritura}
-                      onChange={(e) => setNumeroEscritura(e.target.value)}
-                      placeholder="Ingresa el número de escritura"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="numeroLibro">Número de Libro</Label>
-                    <Input
-                      id="numeroLibro"
-                      type="text"
-                      value={numeroLibro}
-                      onChange={(e) => setNumeroLibro(e.target.value)}
-                      placeholder="Ingresa el número de libro"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="folioMercantil">Folio Mercantil</Label>
-                    <Input
-                      id="folioMercantil"
-                      type="text"
-                      value={folioMercantil}
-                      onChange={(e) => setFolioMercantil(e.target.value)}
-                      placeholder="Ingresa el folio mercantil"
-                    />
-                  </div>
-
-                  <div>
-                    <Label>Fecha de Escritura</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full justify-start text-left font-normal"
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {fechaEscritura ? format(fechaEscritura, "dd/MM/yyyy") : "Selecciona una fecha"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={fechaEscritura}
-                          onSelect={setFechaEscritura}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div>
-                    <Label>Fecha de Registro</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full justify-start text-left font-normal"
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {fechaRegistro ? format(fechaRegistro, "dd/MM/yyyy") : "Selecciona una fecha"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={fechaRegistro}
-                          onSelect={setFechaRegistro}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="idNotario">Notario</Label>
-                    <Select value={idNotario} onValueChange={setIdNotario}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona un notario" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {notarios.map((notario) => (
-                          <SelectItem key={notario.id} value={notario.id.toString()}>
-                            {notario.nombre} - {notario.notaria}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {(entityType === 'legal' || (entityType === 'client' && tipoPersona === 'pm')) && (
-                    <div>
-                      <Label htmlFor="idRepresentanteLegal">Representante Legal</Label>
-                      <Select value={idRepresentanteLegal} onValueChange={setIdRepresentanteLegal}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona un representante legal" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Sin representante legal</SelectItem>
-                          {representantesLegales.map((rep) => (
-                            <SelectItem key={rep.id} value={rep.id.toString()}>
-                              {rep.nombre_legal}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                     </div>
-                  )}
-                </div>
-              </TabsContent>
-            )} */}
 
-            {/* Temporarily hidden - Beneficiarios Tab
-            {shouldShowBeneficiariosTab() && (
-              <TabsContent value="beneficiarios" className="space-y-4 mt-6">
-                {initialData && initialData.id ? (
-                  <BeneficiariosForm 
-                    personaId={initialData.id} 
-                    personaNombre={initialData.nombre_legal || initialData.nombre} 
-                  />
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-lg mb-2">Beneficiarios</p>
-                    <p className="text-sm">
-                      Guarda primero la información del cliente para poder agregar beneficiarios
-                    </p>
+                    {/* Fiscal Address Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="copiarDireccion"
+                          checked={copiarDireccionFiscal}
+                          onChange={(e) => setCopiarDireccionFiscal(e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                        <Label htmlFor="copiarDireccion">Copiar dirección física a dirección fiscal</Label>
+                      </div>
+
+                      <h4 className="text-md font-medium">Dirección Fiscal</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="calleFiscal">Calle *</Label>
+                          <Input
+                            id="calleFiscal"
+                            type="text"
+                            value={direccionFiscalCalle}
+                            onChange={(e) => setDireccionFiscalCalle(e.target.value)}
+                            placeholder="Ingresa la calle y número fiscal"
+                            disabled={copiarDireccionFiscal}
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="codigoPostalFiscal">Código Postal *</Label>
+                          <Input
+                            id="codigoPostalFiscal"
+                            type="text"
+                            value={direccionFiscalCp}
+                            onChange={(e) => setDireccionFiscalCp(e.target.value)}
+                            placeholder="Ingresa el código postal fiscal"
+                            disabled={copiarDireccionFiscal}
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="paisFiscal">País *</Label>
+                          <Select value={idPaisFiscal} onValueChange={setIdPaisFiscal} disabled={copiarDireccionFiscal}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un país" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {paises.map((pais) => (
+                                <SelectItem key={pais.id} value={pais.id}>
+                                  {pais.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="estadoFiscal">Estado *</Label>
+                          <Select value={idEstadoFiscal} onValueChange={setIdEstadoFiscal} disabled={copiarDireccionFiscal}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un estado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {estados.map((estado) => (
+                                <SelectItem key={estado.id} value={estado.id.toString()}>
+                                  {estado.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="municipioFiscal">Municipio *</Label>
+                          <Select value={idMunicipioFiscal} onValueChange={setIdMunicipioFiscal} disabled={copiarDireccionFiscal}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un municipio" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {municipios
+                                .filter(m => m.id_estado === parseInt(idEstadoFiscal))
+                                .map((municipio) => (
+                                  <SelectItem key={municipio.id} value={municipio.id.toString()}>
+                                    {municipio.nombre}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="coloniaFiscal">Colonia/Barrio</Label>
+                          <Input
+                            id="coloniaFiscal"
+                            type="text"
+                            value={direccionFiscalColonia}
+                            onChange={(e) => setDireccionFiscalColonia(e.target.value)}
+                            placeholder="Ingresa la colonia o barrio fiscal"
+                            disabled={copiarDireccionFiscal}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Ubicación Fiscal en Google Maps</Label>
+                        <div className="h-64 bg-muted rounded-md flex items-center justify-center">
+                          <p className="text-muted-foreground">Mapa de Google Maps aquí</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </TabsContent>
-            )}
-            */}
+                </TabsContent>
 
-            {/* Temporarily hidden - Documents Tab
-            {shouldShowDocumentsTab() && (
-              <TabsContent value="documents" className="space-y-4 mt-6">
-            <DocumentsTab 
-              entityId={initialData?.id || undefined} 
-              entityType="persona"
-              tipoPersona={tipoPersona as 'pf' | 'pm'}
-              pendingDocuments={pendingDocuments}
-              onPendingDocumentsChange={setPendingDocuments}
-              onDocumentAdded={() => {
-                toast({
-                  title: "Documento agregado",
-                  description: "El documento se ha agregado correctamente."
-                });
-              }}
-            />
-              </TabsContent>
+                {/* Documents Tab */}
+                <TabsContent value="documents" className="space-y-4 mt-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Documentos</h3>
+                    <DocumentsTab 
+                      entityId={initialData?.id || undefined} 
+                      entityType="persona"
+                      tipoPersona="pf"
+                      pendingDocuments={pendingDocuments}
+                      onPendingDocumentsChange={setPendingDocuments}
+                      onDocumentAdded={() => {
+                        toast({
+                          title: "Documento agregado",
+                          description: "El documento se ha agregado correctamente."
+                        });
+                      }}
+                    />
+                  </div>
+                </TabsContent>
+              </>
             )}
-            */}
           </Tabs>
         ) : (
           // User form (simplified)

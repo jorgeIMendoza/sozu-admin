@@ -520,7 +520,7 @@ export default function Vendedores() {
              onSubmit={(data) => createMutation.mutate(data)}
              isLoading={createMutation.isPending}
              onCancel={() => setIsNewDialogOpen(false)}
-             entityType="seller"
+            entityType="vendedor"
            />
         </DialogContent>
       </Dialog>
@@ -542,7 +542,7 @@ export default function Vendedores() {
                setIsEditDialogOpen(false);
                setEditingVendedor(null);
              }}
-             entityType="seller"
+             entityType="vendedor"
            />
         </DialogContent>
       </Dialog>
