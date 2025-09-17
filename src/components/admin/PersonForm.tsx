@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BeneficiariosForm } from "./BeneficiariosForm";
+import { BankAccountsSection } from "./BankAccountsSection";
 import { ImageUploadField } from "./ImageUploadField";
 import { DocumentsTab } from "./DocumentsTab";
 import { GoogleMapComponent } from "./GoogleMapComponent";
@@ -536,11 +537,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         {!isUser ? (
           <Tabs defaultValue="basic" className="w-full">
             {isSpecialEntityType ? (
-              <TabsList className="grid w-full mb-4 bg-muted grid-cols-4">
+              <TabsList className="grid w-full mb-4 bg-muted grid-cols-6">
                 <TabsTrigger value="basic" className="text-foreground">Información Básica</TabsTrigger>
                 <TabsTrigger value="address" className="text-foreground">Dirección</TabsTrigger>
                 <TabsTrigger value="fiscal" className="text-foreground">Información Fiscal</TabsTrigger>
                 <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>
+                <TabsTrigger value="bank-accounts" className="text-foreground">Cuentas Bancarias</TabsTrigger>
+                <TabsTrigger value="beneficiarios" className="text-foreground">Beneficiarios</TabsTrigger>
               </TabsList>
             ) : (
               <TabsList className="grid w-full mb-4 bg-muted grid-cols-1">
@@ -1353,6 +1356,40 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         });
                       }}
                     />
+                  </div>
+                </TabsContent>
+
+                {/* Bank Accounts Tab */}
+                <TabsContent value="bank-accounts" className="space-y-4 mt-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Cuentas Bancarias</h3>
+                    {initialData?.id ? (
+                      <BankAccountsSection 
+                        personId={initialData.id}
+                        showStpCheckbox={true}
+                      />
+                    ) : (
+                      <p className="text-muted-foreground">
+                        Las cuentas bancarias se pueden agregar después de guardar la persona.
+                      </p>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Beneficiarios Tab */}
+                <TabsContent value="beneficiarios" className="space-y-4 mt-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Beneficiarios</h3>
+                    {initialData?.id ? (
+                      <BeneficiariosForm 
+                        personaId={initialData.id}
+                        personaNombre={nombre}
+                      />
+                    ) : (
+                      <p className="text-muted-foreground">
+                        Los beneficiarios se pueden agregar después de guardar la persona.
+                      </p>
+                    )}
                   </div>
                 </TabsContent>
               </>
