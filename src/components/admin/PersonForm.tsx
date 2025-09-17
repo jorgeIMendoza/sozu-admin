@@ -572,8 +572,11 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       id="telefono"
                       type="tel"
                       value={telefono}
-                      onChange={(e) => setTelefono(e.target.value)}
-                      placeholder="Ingresa el teléfono"
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setTelefono(value);
+                      }}
+                      placeholder="Ingresa el teléfono (solo números, máx. 10 dígitos)"
                       className="flex-1"
                     />
                   </div>
