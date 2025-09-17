@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { BeneficiariosForm } from "./BeneficiariosForm";
 import { ImageUploadField } from "./ImageUploadField";
 import { DocumentsTab } from "./DocumentsTab";
+import { GoogleMapComponent } from "./GoogleMapComponent";
 
 interface PersonFormProps {
   onSubmit: (data: any) => void;
@@ -84,6 +85,12 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   
   // Copy address checkbox
   const [copiarDireccionFiscal, setCopiarDireccionFiscal] = useState(false);
+  
+  // Google Maps coordinates and address
+  const [coordenadas, setCoordenadas] = useState<{lat: number, lng: number} | null>(
+    initialData?.coordenadas ? initialData.coordenadas : null
+  );
+  const [direccionMapa, setDireccionMapa] = useState(initialData?.direccion_mapa || '');
 
   // Legal info (for legal entities)
   const [numeroEscritura, setNumeroEscritura] = useState(initialData?.numero_escritura || '');
@@ -468,6 +475,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       fecha_registro: fechaRegistro?.toISOString() || null,
       id_notario: idNotario ? parseInt(idNotario) : null,
       url_logo: urlLogo.trim() || null,
+      coordenadas: coordenadas,
+      direccion_mapa: direccionMapa.trim() || null,
       activo: true,
     };
 
@@ -956,10 +965,49 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-4">
                       <Label>Ubicación en Google Maps</Label>
-                      <div className="h-64 bg-muted rounded-md flex items-center justify-center">
-                        <p className="text-muted-foreground">Mapa de Google Maps aquí</p>
+                      <GoogleMapComponent
+                        onLocationSelect={(location) => setCoordenadas(location)}
+                        onAddressSelect={(address) => setDireccionMapa(address)}
+                        initialLocation={coordenadas}
+                      />
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="coordenadas">Coordenadas</Label>
+                          <div className="flex space-x-2">
+                            <Input
+                              value={coordenadas ? `${coordenadas.lat}, ${coordenadas.lng}` : ''}
+                              readOnly
+                              placeholder="Selecciona ubicación en el mapa"
+                              className="bg-muted"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                if (coordenadas) {
+                                  navigator.clipboard.writeText(`${coordenadas.lat}, ${coordenadas.lng}`);
+                                }
+                              }}
+                              disabled={!coordenadas}
+                            >
+                              Copiar
+                            </Button>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="direccionMapa">Dirección del Mapa</Label>
+                          <Input
+                            id="direccionMapa"
+                            value={direccionMapa}
+                            onChange={(e) => setDireccionMapa(e.target.value)}
+                            placeholder="Dirección obtenida del mapa"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
