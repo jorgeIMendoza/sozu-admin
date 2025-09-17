@@ -38,7 +38,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [tipoPersona, setTipoPersona] = useState(
     initialData?.tipo_persona || 
     (entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || entityType === 'administradora' || entityType === 'banco' ? 'pm' : 
-     entityType === 'representative' ? 'pf' : 
+     entityType === 'representative' || entityType === 'representante_legal' ? 'pf' : 
      'pf')
   );
   const [idTipoEntidad, setIdTipoEntidad] = useState(initialData?.id_tipo_entidad || getDefaultTipoEntidad(entityType));
@@ -358,17 +358,24 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       case 'legal': return undefined; // Will be selected by user
       case 'client': return 7; // Prospecto by default
       case 'representative': return 1; // Representante Legal
+      case 'representante_legal': return 1; // Representante Legal
       case 'desarrollador': return undefined; // Will be set by the parent component
       case 'inmobiliaria': return undefined; // Will be set by the parent component
       case 'administradora': return undefined; // Will be set by the parent component
       case 'banco': return undefined; // Will be set by the parent component
+      case 'comprador': return 2; // Comprador
+      case 'vendedor': return 4; // Vendedor
+      case 'dueno': return 15; // Dueño
+      case 'residente': return 18; // Residente
+      case 'agente': return 19; // Agente
+      case 'administrador': return 20; // Administrador personas
       default: return undefined;
     }
   }
 
   function shouldShowTaxFields() {
-    // Show tax fields for all entities except representatives for users and prospects
-    const shouldShow = entityType !== 'representative' && !isProspectForm();
+    // Show tax fields for all entities except representatives and prospects
+    const shouldShow = entityType !== 'representative' && entityType !== 'representante_legal' && !isProspectForm();
     console.log('shouldShowTaxFields for entityType:', entityType, 'tipoPersona:', tipoPersona, 'result:', shouldShow);
     return shouldShow;
   }
@@ -645,7 +652,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       disabled
                       className="bg-muted"
                     />
-                  ) : entityType === 'representative' ? (
+                  ) : entityType === 'representative' || entityType === 'representante_legal' ? (
                     <Input
                       id="tipoPersona"
                       type="text"
@@ -653,7 +660,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       disabled
                       className="bg-muted"
                     />
-                  ) : entityType === 'buyer' || entityType === 'client' ? (
+                  ) : entityType === 'buyer' || entityType === 'client' || entityType === 'comprador' || entityType === 'vendedor' || entityType === 'dueno' || entityType === 'residente' || entityType === 'agente' || entityType === 'administrador' ? (
                     <Select value={tipoPersona} onValueChange={setTipoPersona}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecciona tipo de persona" />
