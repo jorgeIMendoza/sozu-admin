@@ -551,72 +551,87 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 // New structured form for specific entity types
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="nombres">Nombre(s) *</Label>
-                    <Input
-                      id="nombres"
-                      type="text"
-                      value={nombre.split(' ')[0] || ''}
-                      onChange={(e) => {
-                        const nombres = e.target.value;
-                        const apellidos = nombre.split(' ').slice(1).join(' ');
-                        setNombre(`${nombres} ${apellidos}`.trim());
-                      }}
-                      placeholder="Ingresa el nombre"
-                    />
+                    <Label htmlFor="tipoPersona">Tipo de Persona *</Label>
+                    {entityType === 'representante_legal' ? (
+                      <Input
+                        id="tipoPersona"
+                        type="text"
+                        value="Persona Física"
+                        disabled
+                        className="bg-muted"
+                      />
+                    ) : (
+                      <Select value={tipoPersona} onValueChange={setTipoPersona}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona tipo de persona" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pf">Persona Física</SelectItem>
+                          <SelectItem value="pm">Persona Moral</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
 
                   <div>
-                    <Label htmlFor="primerApellido">Primer Apellido *</Label>
+                    <Label htmlFor="nombre">
+                      {tipoPersona === 'pm' ? 'Razón Social *' : 'Nombre Completo *'}
+                    </Label>
                     <Input
-                      id="primerApellido"
+                      id="nombre"
                       type="text"
-                      value={nombre.split(' ')[1] || ''}
-                      onChange={(e) => {
-                        const nombreArray = nombre.split(' ');
-                        const nombres = nombreArray[0] || '';
-                        const segundoApellido = nombreArray[2] || '';
-                        setNombre(`${nombres} ${e.target.value} ${segundoApellido}`.trim());
-                      }}
-                      placeholder="Ingresa el primer apellido"
+                      value={nombre}
+                      onChange={(e) => setNombre(e.target.value)}
+                      placeholder={tipoPersona === 'pm' ? "Ingresa la razón social" : "Ingresa el nombre completo"}
                     />
                   </div>
 
-                  <div>
-                    <Label htmlFor="segundoApellido">Segundo Apellido</Label>
-                    <Input
-                      id="segundoApellido"
-                      type="text"
-                      value={nombre.split(' ')[2] || ''}
-                      onChange={(e) => {
-                        const nombreArray = nombre.split(' ');
-                        const nombres = nombreArray[0] || '';
-                        const primerApellido = nombreArray[1] || '';
-                        setNombre(`${nombres} ${primerApellido} ${e.target.value}`.trim());
-                      }}
-                      placeholder="Ingresa el segundo apellido"
-                    />
-                  </div>
+                  {tipoPersona === 'pm' && (
+                    <div>
+                      <Label htmlFor="nombreComercial">Nombre Comercial</Label>
+                      <Input
+                        id="nombreComercial"
+                        type="text"
+                        value={nombreComercial}
+                        onChange={(e) => setNombreComercial(e.target.value)}
+                        placeholder="Ingresa el nombre comercial"
+                      />
+                    </div>
+                  )}
 
                   <div>
-                    <Label htmlFor="email">Correo Electrónico *</Label>
+                    <Label htmlFor="email">Email *</Label>
                     <Input
                       id="email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Ingresa el correo electrónico"
+                      placeholder="Ingresa el email"
                     />
                   </div>
 
-                  <div>
+                  <div className="flex items-center gap-2">
                     <Label htmlFor="telefono">Teléfono *</Label>
-                    <Input
-                      id="telefono"
-                      type="tel"
-                      value={telefono}
-                      onChange={(e) => setTelefono(e.target.value)}
-                      placeholder="Ingresa el teléfono"
-                    />
+                    <div className="flex gap-2 flex-1">
+                      <Select value={clavePaisTelefono} onValueChange={setClavePaisTelefono}>
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MX">MX</SelectItem>
+                          <SelectItem value="US">US</SelectItem>
+                          <SelectItem value="CA">CA</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        id="telefono"
+                        type="tel"
+                        value={telefono}
+                        onChange={(e) => setTelefono(e.target.value)}
+                        placeholder="Ingresa el teléfono (10 dígitos obligatorios)"
+                        className="flex-1"
+                      />
+                    </div>
                   </div>
                 </div>
               ) : (
