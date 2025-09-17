@@ -48,26 +48,29 @@ export type Database = {
           id_concepto: number
           id_cuenta_cobranza: number
           monto: number
+          orden: number
         }
         Insert: {
           activo?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_pago: string
-          id?: never
+          id?: number
           id_concepto: number
           id_cuenta_cobranza: number
           monto: number
+          orden: number
         }
         Update: {
           activo?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_pago?: string
-          id?: never
+          id?: number
           id_concepto?: number
           id_cuenta_cobranza?: number
           monto?: number
+          orden?: number
         }
         Relationships: [
           {
@@ -233,6 +236,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      bancos: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre?: string
+        }
+        Relationships: []
       }
       beneficiarios: {
         Row: {
@@ -586,34 +613,40 @@ export type Database = {
       cuentas_bancarias: {
         Row: {
           activo: boolean
+          cuenta_clabe: string | null
+          cuenta_swift: string | null
           es_cuenta_fisica_para_stp: boolean
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
+          id_banco: number | null
           id_persona: number
-          nombre_banco: string
           numero_cuenta: string
           url_evidencia: string | null
         }
         Insert: {
           activo?: boolean
+          cuenta_clabe?: string | null
+          cuenta_swift?: string | null
           es_cuenta_fisica_para_stp?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: never
+          id_banco?: number | null
           id_persona: number
-          nombre_banco: string
           numero_cuenta: string
           url_evidencia?: string | null
         }
         Update: {
           activo?: boolean
+          cuenta_clabe?: string | null
+          cuenta_swift?: string | null
           es_cuenta_fisica_para_stp?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: never
+          id_banco?: number | null
           id_persona?: number
-          nombre_banco?: string
           numero_cuenta?: string
           url_evidencia?: string | null
         }
@@ -630,6 +663,13 @@ export type Database = {
             columns: ["id_persona"]
             isOneToOne: false
             referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_cuentas_bancarias_banco"
+            columns: ["id_banco"]
+            isOneToOne: false
+            referencedRelation: "bancos"
             referencedColumns: ["id"]
           },
         ]

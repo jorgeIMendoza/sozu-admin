@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
@@ -20,18 +21,39 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
   const [newAccount, setNewAccount] = useState({
-    nombre_banco: "",
+    id_banco: "",
     numero_cuenta: "",
+    cuenta_clabe: "",
+    cuenta_swift: "",
     url_evidencia: "",
     es_cuenta_fisica_para_stp: false
   });
 
+  // Fetch available banks
+  const { data: banks = [] } = useQuery({
+    queryKey: ['banks'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bancos')
+        .select('id, nombre')
+        .eq('activo', true)
+        .order('nombre', { ascending: true });
+      
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Fetch bank accounts with bank names
   const { data: bankAccounts = [] } = useQuery({
     queryKey: ['bankAccounts', personId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('cuentas_bancarias')
-        .select('*')
+        .select(`
+          *,
+          banco:bancos(nombre)
+        `)
         .eq('id_persona', personId)
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
@@ -47,6 +69,7 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
         .from('cuentas_bancarias')
         .insert([{
           ...accountData,
+          id_banco: parseInt(accountData.id_banco),
           id_persona: personId
         }])
         .select()
@@ -58,8 +81,10 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bankAccounts', personId] });
       setNewAccount({
-        nombre_banco: "",
+        id_banco: "",
         numero_cuenta: "",
+        cuenta_clabe: "",
+        cuenta_swift: "",
         url_evidencia: "",
         es_cuenta_fisica_para_stp: false
       });
@@ -91,7 +116,7 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAccount.nombre_banco || !newAccount.numero_cuenta) {
+    if (!newAccount.id_banco || !newAccount.numero_cuenta) {
       toast({ title: "Por favor completa los campos requeridos", variant: "destructive" });
       return;
     }
@@ -119,13 +144,23 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="nombre_banco">Nombre del Banco *</Label>
-                <Input
-                  id="nombre_banco"
-                  value={newAccount.nombre_banco}
-                  onChange={(e) => setNewAccount(prev => ({ ...prev, nombre_banco: e.target.value }))}
+                <Label htmlFor="id_banco">Banco *</Label>
+                <Select 
+                  value={newAccount.id_banco} 
+                  onValueChange={(value) => setNewAccount(prev => ({ ...prev, id_banco: value }))}
                   required
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un banco" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {banks.map((bank) => (
+                      <SelectItem key={bank.id} value={bank.id.toString()}>
+                        {bank.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
@@ -135,6 +170,27 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
                   value={newAccount.numero_cuenta}
                   onChange={(e) => setNewAccount(prev => ({ ...prev, numero_cuenta: e.target.value }))}
                   required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="cuenta_clabe">CLABE</Label>
+                <Input
+                  id="cuenta_clabe"
+                  value={newAccount.cuenta_clabe}
+                  onChange={(e) => setNewAccount(prev => ({ ...prev, cuenta_clabe: e.target.value }))}
+                  placeholder="18 dígitos"
+                  maxLength={18}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="cuenta_swift">Código SWIFT</Label>
+                <Input
+                  id="cuenta_swift"
+                  value={newAccount.cuenta_swift}
+                  onChange={(e) => setNewAccount(prev => ({ ...prev, cuenta_swift: e.target.value }))}
+                  placeholder="8 u 11 caracteres"
                 />
               </div>
 
@@ -181,8 +237,14 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
             <CardContent className="p-4">
               <div className="flex justify-between items-start">
                 <div className="space-y-2">
-                  <p><strong>Banco:</strong> {account.nombre_banco}</p>
+                  <p><strong>Banco:</strong> {account.banco?.nombre || 'N/A'}</p>
                   <p><strong>Número de Cuenta:</strong> {account.numero_cuenta}</p>
+                  {account.cuenta_clabe && (
+                    <p><strong>CLABE:</strong> {account.cuenta_clabe}</p>
+                  )}
+                  {account.cuenta_swift && (
+                    <p><strong>SWIFT:</strong> {account.cuenta_swift}</p>
+                  )}
                   {account.url_evidencia && (
                     <p>
                       <strong>Evidencia:</strong>{" "}
