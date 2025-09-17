@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trash2, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 
 interface BankAccountsSectionProps {
   personId: number;
@@ -137,15 +138,12 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
                 />
               </div>
 
-              <div>
-                <Label htmlFor="url_evidencia">URL de Evidencia</Label>
-                <Input
-                  id="url_evidencia"
-                  type="url"
-                  value={newAccount.url_evidencia}
-                  onChange={(e) => setNewAccount(prev => ({ ...prev, url_evidencia: e.target.value }))}
-                />
-              </div>
+              <ImageUploadField
+                label="Evidencia"
+                value={newAccount.url_evidencia}
+                onChange={(url) => setNewAccount(prev => ({ ...prev, url_evidencia: url }))}
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+              />
 
               {showStpCheckbox && (
                 <div className="flex items-center space-x-2">
