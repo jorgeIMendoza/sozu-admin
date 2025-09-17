@@ -373,6 +373,15 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       return;
     }
 
+    if (telefono.length !== 10) {
+      toast({
+        title: "Error", 
+        description: "El teléfono debe tener exactamente 10 dígitos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const formData: any = {
       nombre_legal: nombre.trim(),
       nombre_comercial: nombreComercial.trim() || null,
@@ -576,7 +585,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         const value = e.target.value.replace(/\D/g, '').slice(0, 10);
                         setTelefono(value);
                       }}
-                      placeholder="Ingresa el teléfono (solo números, máx. 10 dígitos)"
+                      placeholder="Ingresa el teléfono (10 dígitos obligatorios)"
                       className="flex-1"
                     />
                   </div>
