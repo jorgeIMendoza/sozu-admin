@@ -321,8 +321,7 @@ export default function Prospectos() {
   const filteredProspectos = prospectos.filter(prospecto => 
     prospecto.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     prospecto.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    prospecto.curp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    prospecto.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
+    prospecto.telefono?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const canDeleteProspect = (prospectId: number) => {
@@ -528,7 +527,7 @@ export default function Prospectos() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   type="text"
-                  placeholder="Buscar por nombre, email, CURP, RFC..."
+                  placeholder="Buscar por nombre, correo y teléfono..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 border-border focus:ring-primary/20"
