@@ -5,14 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { PropertyCharacteristicsSection } from "./PropertyCharacteristicsSection";
+import { PropertyCharacteristicsSelectionSection } from "./PropertyCharacteristicsSelectionSection";
 
 interface PropertyDescriptionSectionProps {
   form: any;
   selectedModelId?: string;
   propertyId?: number;
+  onCharacteristicsChange?: (selectedIds: number[]) => void;
 }
 
-export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId }: PropertyDescriptionSectionProps) => {
+export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, onCharacteristicsChange }: PropertyDescriptionSectionProps) => {
   // Fetch model details when model is selected
   const { data: modelDetails } = useQuery({
     queryKey: ["model-details", selectedModelId],
@@ -108,7 +110,7 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId }
       )}
 
       {/* Características */}
-      {propertyId && (
+      {propertyId ? (
         <Card>
           <CardHeader>
             <CardTitle>Características</CardTitle>
@@ -117,19 +119,10 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId }
             <PropertyCharacteristicsSection propertyId={propertyId} />
           </CardContent>
         </Card>
-      )}
-
-      {!propertyId && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Características</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              Las características se podrán asignar después de crear la propiedad.
-            </p>
-          </CardContent>
-        </Card>
+      ) : (
+        <PropertyCharacteristicsSelectionSection 
+          onCharacteristicsChange={onCharacteristicsChange}
+        />
       )}
     </div>
   );

@@ -14,6 +14,7 @@ import { ProjectModelSelectionSection } from "./ProjectModelSelectionSection";
 import { PropertyBasicDataSection } from "./PropertyBasicDataSection";
 import { PropertyClassificationSection } from "./PropertyClassificationSection";
 import { PropertyDescriptionSection } from "./PropertyDescriptionSection";
+import { PropertyMultimediaSection } from "./PropertyMultimediaSection";
 
 const formSchema = z.object({
   id_proyecto: z.string().min(1, "El proyecto es requerido"),
@@ -33,6 +34,7 @@ const formSchema = z.object({
     message: "Se deben asignar Entidades Legales (Dueños vendedor o Aportante) al proyecto"
   }),
   descripcion: z.string().optional(),
+  url_imagen_portada: z.string().optional(),
 });
 
 interface NewPropertyDialogProps {
@@ -45,6 +47,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedBuildingId, setSelectedBuildingId] = useState("");
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
+  const [selectedCharacteristics, setSelectedCharacteristics] = useState<number[]>([]);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -65,6 +68,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
       id_vista: "",
       id_entidad_relacionada_dueno: "",
       descripcion: "",
+      url_imagen_portada: "",
     },
   });
 
@@ -107,6 +111,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
         id_vista: parseInt(values.id_vista),
         id_entidad_relacionada_dueno: parseInt(values.id_entidad_relacionada_dueno),
         descripcion: values.descripcion || null,
+        url_imagen_portada: values.url_imagen_portada || null,
         es_aprobado: false,
         activo: true,
       };
@@ -119,7 +124,27 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
 
       if (error) throw error;
 
-      setPropertyId(data?.id || null);
+      const propertyId = data?.id;
+      setPropertyId(propertyId || null);
+
+      // Si hay características seleccionadas, insertarlas
+      if (selectedCharacteristics.length > 0 && propertyId) {
+        const characteristicsData = selectedCharacteristics.map(caracteristicaId => ({
+          id_propiedad: propertyId,
+          id_caracteristica: caracteristicaId,
+          activo: true
+        }));
+
+        const { error: characteristicsError } = await supabase
+          .from("propiedades_caracteristicas")
+          .insert(characteristicsData);
+
+        if (characteristicsError) {
+          console.error("Error inserting characteristics:", characteristicsError);
+          // No blocking error, just log it
+        }
+      }
+
       onPropertyAdded();
 
       toast({
@@ -132,6 +157,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
       setSelectedProjectId("");
       setSelectedBuildingId("");
       setSelectedOwnerId("");
+      setSelectedCharacteristics([]);
       setOpen(false);
     } catch (error) {
       console.error("Error creating property:", error);
@@ -150,6 +176,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
       setSelectedProjectId("");
       setSelectedBuildingId("");
       setSelectedOwnerId("");
+      setSelectedCharacteristics([]);
     }
     setOpen(newOpen);
   };
@@ -166,58 +193,74 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
         <DialogHeader>
           <DialogTitle>Nueva Propiedad</DialogTitle>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Selección de Proyecto y Modelo - siempre visible */}
-            <ProjectModelSelectionSection
-              form={form}
-              selectedProjectId={selectedProjectId}
-              selectedBuildingId={selectedBuildingId}
-              selectedOwnerId={selectedOwnerId}
-              setSelectedProjectId={setSelectedProjectId}
-              setSelectedBuildingId={setSelectedBuildingId}
-              setSelectedOwnerId={setSelectedOwnerId}
-              ownerClabe={ownerClabe}
-              isLoadingClabe={isLoadingClabe}
-              clabeError={clabeError}
-            />
-            
-            {/* Tabs aparecen cuando se selecciona propietario */}
-            {selectedOwnerId && selectedOwnerId !== "no-owners" && (
-              <Tabs defaultValue="general" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="general">Características Generales</TabsTrigger>
-                  <TabsTrigger value="descripcion">Descripción</TabsTrigger>
-                  <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
-                </TabsList>
+        <Tabs defaultValue="general" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="general">Características Generales</TabsTrigger>
+            <TabsTrigger value="descripcion">Descripción</TabsTrigger>
+            <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
+          </TabsList>
+          
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <TabsContent value="general" className="space-y-6">
+                {/* Selección de Proyecto y Modelo */}
+                <ProjectModelSelectionSection
+                  form={form}
+                  selectedProjectId={selectedProjectId}
+                  selectedBuildingId={selectedBuildingId}
+                  selectedOwnerId={selectedOwnerId}
+                  setSelectedProjectId={setSelectedProjectId}
+                  setSelectedBuildingId={setSelectedBuildingId}
+                  setSelectedOwnerId={setSelectedOwnerId}
+                  ownerClabe={ownerClabe}
+                  isLoadingClabe={isLoadingClabe}
+                  clabeError={clabeError}
+                />
                 
-                <TabsContent value="general" className="space-y-6">
-                  <PropertyBasicDataSection form={form} />
-                  <PropertyClassificationSection form={form} />
-                </TabsContent>
-                
-                <TabsContent value="descripcion" className="space-y-6">
+                {/* Datos Básicos y Clasificaciones - aparecen cuando se selecciona propietario */}
+                {selectedOwnerId && selectedOwnerId !== "no-owners" && (
+                  <>
+                    <PropertyBasicDataSection form={form} />
+                    <PropertyClassificationSection form={form} />
+                  </>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="descripcion" className="space-y-6">
+                {selectedOwnerId && selectedOwnerId !== "no-owners" ? (
                   <PropertyDescriptionSection 
                     form={form} 
                     selectedModelId={form.watch("id_modelo")}
+                    onCharacteristicsChange={setSelectedCharacteristics}
                   />
-                </TabsContent>
-                
-                <TabsContent value="multimedia" className="space-y-6">
+                ) : (
                   <div className="text-center py-8 text-muted-foreground">
-                    La multimedia se podrá gestionar una vez que la propiedad sea creada.
+                    Selecciona un propietario para continuar con la descripción
                   </div>
-                </TabsContent>
-                
+                )}
+              </TabsContent>
+              
+              <TabsContent value="multimedia" className="space-y-6">
+                {selectedOwnerId && selectedOwnerId !== "no-owners" ? (
+                  <PropertyMultimediaSection form={form} />
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Selecciona un propietario para continuar con la multimedia
+                  </div>
+                )}
+              </TabsContent>
+              
+              {/* Botón de crear - visible en todas las pestañas cuando hay propietario */}
+              {selectedOwnerId && selectedOwnerId !== "no-owners" && (
                 <div className="flex justify-end pt-4">
                   <Button type="submit" disabled={form.formState.isSubmitting}>
                     {form.formState.isSubmitting ? "Creando..." : "Crear Propiedad"}
                   </Button>
                 </div>
-              </Tabs>
-            )}
-          </form>
-        </Form>
+              )}
+            </form>
+          </Form>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

@@ -54,27 +54,13 @@ export const PropertyClassificationSection = ({ form }: PropertyClassificationSe
     },
   });
 
-  // Query para obtener vistas
-  const { data: vistas } = useQuery({
-    queryKey: ["vistas"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vistas")
-        .select("*")
-        .eq("activo", true)
-        .order("nombre");
-      
-      if (error) throw error;
-      return data || [];
-    },
-  });
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Clasificaciones</CardTitle>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4">
+      <CardContent className="grid grid-cols-3 gap-4">
         <FormField
           control={form.control}
           name="id_tipo_transaccion"
@@ -150,30 +136,6 @@ export const PropertyClassificationSection = ({ form }: PropertyClassificationSe
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="id_vista"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Vista *</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona la vista" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {vistas?.map((vista) => (
-                    <SelectItem key={vista.id} value={vista.id.toString()}>
-                      {vista.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
       </CardContent>
     </Card>
   );
