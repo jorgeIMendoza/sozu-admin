@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Upload, CalendarIcon, MapPin } from "lucide-react";
+import { Camera, Upload, CalendarIcon, MapPin, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -979,32 +979,31 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         Haz clic en el mapa para seleccionar la ubicación
                       </p>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="coordenadas">Coordenadas</Label>
-                          <div className="flex space-x-2">
-                            <Input
-                              value={coordenadas ? `${coordenadas.lat}, ${coordenadas.lng}` : ''}
-                              readOnly
-                              placeholder="Selecciona ubicación en el mapa"
-                              className="bg-muted"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                if (coordenadas) {
-                                  navigator.clipboard.writeText(`${coordenadas.lat}, ${coordenadas.lng}`);
-                                }
-                              }}
-                              disabled={!coordenadas}
-                            >
-                              Copiar
-                            </Button>
+                      {coordenadas && (
+                        <div className="flex items-center justify-between text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                          <div className="flex items-center space-x-2">
+                            <MapPin className="w-4 h-4" />
+                            <div>
+                              <p className="font-medium">Coordenadas seleccionadas:</p>
+                              <p>Lat: {coordenadas.lat.toFixed(6)}</p>
+                              <p>Lng: {coordenadas.lng.toFixed(6)}</p>
+                            </div>
                           </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${coordenadas.lat}, ${coordenadas.lng}`);
+                              toast({ title: "Coordenadas copiadas al portapapeles" });
+                            }}
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
                         </div>
-                        
+                      )}
+
+                      <div className="grid grid-cols-1 gap-4">
                         <div>
                           <Label htmlFor="direccionMapa">Dirección del Mapa</Label>
                           <Input
@@ -1014,9 +1013,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                             placeholder="Dirección obtenida del mapa"
                           />
                         </div>
-                      </div>
-                    </div>
-                  </div>
+                       </div>
+                     </div>
+                   </div>
                 </TabsContent>
 
                 {/* Fiscal Information Tab */}
