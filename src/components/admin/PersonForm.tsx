@@ -364,19 +364,10 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     e.preventDefault();
     
     // Basic validation
-    if (!nombre.trim() || !email.trim()) {
+    if (!nombre.trim() || !email.trim() || !telefono.trim() || !rfc.trim()) {
       toast({
         title: "Error",
-        description: "Por favor completa todos los campos requeridos (nombre y email).",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (tipoPersona === 'pf' && !curp.trim()) {
-      toast({
-        title: "Error",
-        description: "La CURP es requerida para personas físicas.",
+        description: "Por favor completa todos los campos requeridos (nombre, email, teléfono y RFC).",
         variant: "destructive",
       });
       return;
@@ -563,7 +554,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 )}
 
                 <div>
-                  <Label htmlFor="telefono">Teléfono</Label>
+                  <Label htmlFor="telefono">Teléfono *</Label>
                   <div className="flex gap-2">
                     <Select value={clavePaisTelefono} onValueChange={setClavePaisTelefono}>
                       <SelectTrigger className="w-24">
@@ -588,9 +579,20 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                   </div>
                 </div>
 
+                <div>
+                  <Label htmlFor="rfc">RFC *</Label>
+                  <Input
+                    id="rfc"
+                    type="text"
+                    value={rfc}
+                    onChange={(e) => setRfc(e.target.value)}
+                    placeholder="Ingresa el RFC"
+                  />
+                </div>
+
                 {tipoPersona === 'pf' && (
                   <div>
-                    <Label htmlFor="curp">CURP *</Label>
+                    <Label htmlFor="curp">CURP</Label>
                     <Input
                       id="curp"
                       type="text"
@@ -600,17 +602,6 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     />
                   </div>
                 )}
-
-                <div>
-                  <Label htmlFor="rfc">RFC</Label>
-                  <Input
-                    id="rfc"
-                    type="text"
-                    value={rfc}
-                    onChange={(e) => setRfc(e.target.value)}
-                    placeholder="Ingresa el RFC"
-                  />
-                </div>
 
                 {(entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria') && (
                   <div>
