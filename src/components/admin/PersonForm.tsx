@@ -1088,27 +1088,37 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         </Select>
                       </div>
 
-                      <div>
-                        <Label htmlFor="regimen">Régimen *</Label>
-                        <Input
-                          id="regimen"
-                          type="text"
-                          value={regimen}
-                          onChange={(e) => setRegimen(e.target.value)}
-                          placeholder="Ingresa el régimen fiscal"
-                        />
-                      </div>
+                       <div>
+                         <Label htmlFor="regimen">Régimen *</Label>
+                         <Select value={regimen} onValueChange={setRegimen}>
+                           <SelectTrigger>
+                             <SelectValue placeholder="Ingresa el régimen fiscal" />
+                           </SelectTrigger>
+                           <SelectContent>
+                             {regimenes.map((regimen_item) => (
+                               <SelectItem key={regimen_item.id} value={regimen_item.id}>
+                                 {regimen_item.nombre}
+                               </SelectItem>
+                             ))}
+                           </SelectContent>
+                         </Select>
+                       </div>
 
-                      <div>
-                        <Label htmlFor="usoCfdi">Uso del CFDI *</Label>
-                        <Input
-                          id="usoCfdi"
-                          type="text"
-                          value={usoCfdi}
-                          onChange={(e) => setUsoCfdi(e.target.value)}
-                          placeholder="Ingresa el uso del CFDI"
-                        />
-                      </div>
+                       <div>
+                         <Label htmlFor="usoCfdi">Uso del CFDI *</Label>
+                         <Select value={usoCfdi} onValueChange={setUsoCfdi}>
+                           <SelectTrigger>
+                             <SelectValue placeholder="Ingresa el uso del CFDI" />
+                           </SelectTrigger>
+                           <SelectContent>
+                             {usosCfdi.map((uso) => (
+                               <SelectItem key={uso.codigo} value={uso.codigo}>
+                                 {uso.codigo} - {uso.nombre}
+                               </SelectItem>
+                             ))}
+                           </SelectContent>
+                         </Select>
+                       </div>
 
                       <div>
                         <Label htmlFor="estadoCivil">Estado Civil *</Label>
