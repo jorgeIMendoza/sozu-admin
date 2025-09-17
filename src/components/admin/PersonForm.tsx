@@ -360,8 +360,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   }
 
   function shouldShowTaxFields() {
-    // Show tax fields for all entities except representatives for users
-    const shouldShow = entityType !== 'representative';
+    // Show tax fields for all entities except representatives for users and prospects
+    const shouldShow = entityType !== 'representative' && !isProspectForm();
     console.log('shouldShowTaxFields for entityType:', entityType, 'tipoPersona:', tipoPersona, 'result:', shouldShow);
     return shouldShow;
   }
