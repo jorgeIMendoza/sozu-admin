@@ -537,7 +537,7 @@ export default function Prospectos() {
                   )}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {prospecto.proyecto_nombre || 'N/A'}
+                  {prospecto.proyecto_nombre || 'Sin proyecto asignado'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {formatDate(prospecto.fecha_creacion)}
