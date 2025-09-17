@@ -10,10 +10,9 @@ import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
-import { DocumentsTab } from "./DocumentsTab";
-import { PropertyBasicInfoSection } from "./PropertyBasicInfoSection";
-import { PropertyDescriptionSection } from "./PropertyDescriptionSection";
-import { PropertyMultimediaTab } from "./PropertyMultimediaTab";
+import { ProjectModelSelectionSection } from "./ProjectModelSelectionSection";
+import { PropertyBasicDataSection } from "./PropertyBasicDataSection";
+import { PropertyClassificationSection } from "./PropertyClassificationSection";
 
 const formSchema = z.object({
   id_proyecto: z.string().min(1, "El proyecto es requerido"),
@@ -25,12 +24,9 @@ const formSchema = z.object({
   m2_escriturables: z.string().min(1, "Los metros cuadrados escriturables son requeridos"),
   precio_lista: z.string().min(1, "El precio de lista es requerido"),
   monto_apartado: z.string().optional(),
-  descripcion: z.string().optional(),
-  url_imagen_portada: z.string().url("Debe ser una URL válida").optional().or(z.literal("")),
   id_tipo_transaccion: z.string().min(1, "El tipo de transacción es requerido"),
   id_tipo_propiedad: z.string().min(1, "El tipo de propiedad es requerido"),
   id_estatus_disponibilidad: z.string().min(1, "El estatus de disponibilidad es requerido"),
-  id_vista: z.string().min(1, "La vista es requerida"),
   id_entidad_relacionada_dueno: z.string().min(1, "El propietario es requerido").refine((val) => val !== "no-owners", {
     message: "Se deben asignar Entidades Legales (Dueños vendedor o Aportante) al proyecto"
   }),
@@ -60,12 +56,9 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
       m2_escriturables: "",
       precio_lista: "",
       monto_apartado: "",
-      descripcion: "",
-      url_imagen_portada: "",
       id_tipo_transaccion: "",
       id_tipo_propiedad: "",
       id_estatus_disponibilidad: "",
-      id_vista: "",
       id_entidad_relacionada_dueno: "",
     },
   });
@@ -102,13 +95,10 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
         m2_escriturables: parseFloat(values.m2_escriturables),
         precio_lista: parseFloat(values.precio_lista),
         monto_apartado: values.monto_apartado ? parseFloat(values.monto_apartado) : null,
-        descripcion: values.descripcion || null,
-        url_imagen_portada: values.url_imagen_portada || null,
         id_edificio_modelo: parseInt(values.id_modelo),
         id_tipo_transaccion: parseInt(values.id_tipo_transaccion),
         id_tipo_propiedad: parseInt(values.id_tipo_propiedad),
         id_estatus_disponibilidad: parseInt(values.id_estatus_disponibilidad),
-        id_vista: parseInt(values.id_vista),
         id_entidad_relacionada_dueno: parseInt(values.id_entidad_relacionada_dueno),
         es_aprobado: false,
         activo: true,
@@ -169,63 +159,63 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
         <DialogHeader>
           <DialogTitle>Nueva Propiedad</DialogTitle>
         </DialogHeader>
-        <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-4 bg-muted">
-            <TabsTrigger value="general" className="text-foreground">Características Generales</TabsTrigger>
-            <TabsTrigger value="description" className="text-foreground">Descripción</TabsTrigger>
-            <TabsTrigger value="multimedia" className="text-foreground">Multimedia</TabsTrigger>
-            <TabsTrigger value="documents" disabled={!propertyId} className="text-foreground">Documentos</TabsTrigger>
+        <Tabs defaultValue="selection" className="w-full">
+          <TabsList className={`grid w-full mb-4 bg-muted ${selectedOwnerId && selectedOwnerId !== "no-owners" ? "grid-cols-3" : "grid-cols-1"}`}>
+            <TabsTrigger value="selection" className="text-foreground">Selección de Proyecto y Modelo</TabsTrigger>
+            {selectedOwnerId && selectedOwnerId !== "no-owners" && (
+              <>
+                <TabsTrigger value="basic" className="text-foreground">Datos Básicos</TabsTrigger>
+                <TabsTrigger value="classification" className="text-foreground">Clasificaciones</TabsTrigger>
+              </>
+            )}
           </TabsList>
           
-          <TabsContent value="general">
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <PropertyBasicInfoSection
-                  form={form}
-                  selectedProjectId={selectedProjectId}
-                  selectedBuildingId={selectedBuildingId}
-                  selectedOwnerId={selectedOwnerId}
-                  setSelectedProjectId={setSelectedProjectId}
-                  setSelectedBuildingId={setSelectedBuildingId}
-                  setSelectedOwnerId={setSelectedOwnerId}
-                  ownerClabe={ownerClabe}
-                  isLoadingClabe={isLoadingClabe}
-                  clabeError={clabeError}
-                />
-                
-                <div className="flex justify-end pt-4">
-                  <Button type="submit" disabled={form.formState.isSubmitting}>
-                    {form.formState.isSubmitting ? "Creando..." : "Crear Propiedad"}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </TabsContent>
-          
-          <TabsContent value="description">
-            <PropertyDescriptionSection
+          <TabsContent value="selection">
+            <ProjectModelSelectionSection
               form={form}
-              selectedModelId={form.watch("id_modelo")}
-              propertyId={propertyId}
+              selectedProjectId={selectedProjectId}
+              selectedBuildingId={selectedBuildingId}
+              selectedOwnerId={selectedOwnerId}
+              setSelectedProjectId={setSelectedProjectId}
+              setSelectedBuildingId={setSelectedBuildingId}
+              setSelectedOwnerId={setSelectedOwnerId}
+              ownerClabe={ownerClabe}
+              isLoadingClabe={isLoadingClabe}
+              clabeError={clabeError}
             />
           </TabsContent>
           
-          <TabsContent value="multimedia">
-            <PropertyMultimediaTab
-              form={form}
-              propertyId={propertyId}
-            />
-          </TabsContent>
-          
-          <TabsContent value="documents">
-            {propertyId ? (
-              <DocumentsTab entityId={propertyId} entityType="propiedad" />
-            ) : (
-              <div className="text-center text-muted-foreground py-8">
-                Los documentos se pueden agregar después de crear la propiedad.
-              </div>
-            )}
-          </TabsContent>
+          {selectedOwnerId && selectedOwnerId !== "no-owners" && (
+            <>
+              <TabsContent value="basic">
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <PropertyBasicDataSection form={form} />
+                    
+                    <div className="flex justify-end pt-4">
+                      <Button type="submit" disabled={form.formState.isSubmitting}>
+                        {form.formState.isSubmitting ? "Creando..." : "Crear Propiedad"}
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+              </TabsContent>
+              
+              <TabsContent value="classification">
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <PropertyClassificationSection form={form} />
+                    
+                    <div className="flex justify-end pt-4">
+                      <Button type="submit" disabled={form.formState.isSubmitting}>
+                        {form.formState.isSubmitting ? "Creando..." : "Crear Propiedad"}
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+              </TabsContent>
+            </>
+          )}
         </Tabs>
       </DialogContent>
     </Dialog>
