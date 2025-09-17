@@ -56,7 +56,7 @@ export const PropertyMultimediaSection = ({ form, propertyId, onMultimediaChange
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vistas")
-        .select("id, nombre")
+        .select("id, nombre, url")
         .eq("activo", true)
         .order("nombre");
 
@@ -326,7 +326,7 @@ export const PropertyMultimediaSection = ({ form, propertyId, onMultimediaChange
         <CardHeader>
           <CardTitle>Vista de la Propiedad</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <FormField
             control={form.control}
             name="id_vista"
@@ -355,6 +355,48 @@ export const PropertyMultimediaSection = ({ form, propertyId, onMultimediaChange
               </FormItem>
             )}
           />
+          
+          {/* Mostrar imagen de la vista seleccionada */}
+          {form.watch("id_vista") && (
+            <div className="mt-4">
+              <Label>Imagen de la Vista</Label>
+              {(() => {
+                const selectedVistaId = form.watch("id_vista");
+                const selectedVista = vistas?.find(v => v.id.toString() === selectedVistaId);
+                
+                if (selectedVista?.url) {
+                  return (
+                    <div className="mt-2 border rounded-lg overflow-hidden">
+                      <img
+                        src={selectedVista.url}
+                        alt={selectedVista.nombre}
+                        className="w-full h-48 object-cover"
+                        onError={(e) => {
+                          const imgElement = e.currentTarget as HTMLImageElement;
+                          const nextElement = imgElement.nextElementSibling as HTMLElement;
+                          imgElement.style.display = 'none';
+                          if (nextElement) nextElement.style.display = 'flex';
+                        }}
+                      />
+                      <div 
+                        className="hidden w-full h-48 bg-muted flex-col items-center justify-center text-muted-foreground"
+                      >
+                        <p>Imagen no disponible</p>
+                        <p className="text-sm">{selectedVista.nombre}</p>
+                      </div>
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div className="mt-2 w-full h-48 bg-muted rounded-lg flex flex-col items-center justify-center text-muted-foreground border">
+                      <p>Sin imagen disponible</p>
+                      <p className="text-sm">{selectedVista?.nombre}</p>
+                    </div>
+                  );
+                }
+              })()}
+            </div>
+          )}
         </CardContent>
       </Card>
 

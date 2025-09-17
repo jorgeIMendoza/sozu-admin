@@ -523,32 +523,7 @@ export const PropertyBasicInfoSection = ({
                 <FormMessage />
               </FormItem>
             )}
-          />
-
-          <FormField
-            control={form.control}
-            name="id_vista"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Vista *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona la vista" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {vistas?.map((vista) => (
-                      <SelectItem key={vista.id} value={vista.id.toString()}>
-                        {vista.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+           />
         </CardContent>
       </Card>
     </div>
