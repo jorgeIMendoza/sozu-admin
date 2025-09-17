@@ -15,6 +15,7 @@ import { PersonForm } from "@/components/admin/PersonForm";
 import { BeneficiariosForm } from "@/components/admin/BeneficiariosForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
+import { format } from "date-fns";
 
 type Prospecto = {
   id: number;
@@ -523,11 +524,17 @@ export default function Prospectos() {
 
   // Helper function to format date
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-MX', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
+    const date = new Date(dateString);
+    const monthNames = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+    ];
+    
+    const day = date.getDate();
+    const month = monthNames[date.getMonth()];
+    const year = date.getFullYear();
+    
+    return `${day} de ${month} de ${year}`;
   };
 
   const canDeleteProspect = (prospectId: number) => {
@@ -606,7 +613,7 @@ export default function Prospectos() {
               <TableHead className="font-semibold text-foreground">Nombre</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-              <TableHead className="font-semibold text-foreground">Estatus</TableHead>
+              <TableHead className="font-semibold text-foreground w-40">Estatus</TableHead>
               <TableHead className="font-semibold text-foreground">Proyecto de Interés</TableHead>
               <TableHead className="font-semibold text-foreground">Fecha de Creación</TableHead>
               <TableHead className="font-semibold text-foreground text-center">Acciones</TableHead>
