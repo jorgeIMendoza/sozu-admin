@@ -209,6 +209,22 @@ export default function Prospectos() {
     },
   });
 
+  // Query for available status for prospects
+  const { data: estatusPersona = [] } = useQuery({
+    queryKey: ['estatus_persona_prospects'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('estatus_persona')
+        .select('id, nombre')
+        .eq('activo', true)
+        .eq('id_tipo_entidad', 7) // Prospecto type
+        .order('nombre', { ascending: true });
+      
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   // Check if prospect can be deleted (not in any offers)
   const { data: canDeleteData = [] } = useQuery({
     queryKey: ['prospect_offers', prospectos.map(c => c.id)],
@@ -448,6 +464,32 @@ export default function Prospectos() {
     },
   });
 
+  // Mutation to update status
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ entidadRelacionadaId, estatusId }: { entidadRelacionadaId: number; estatusId: number | null }) => {
+      const { error } = await supabase
+        .from('entidades_relacionadas')
+        .update({ id_estatus_persona: estatusId })
+        .eq('id', entidadRelacionadaId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prospectos'] });
+      toast({
+        title: "Éxito",
+        description: "Estatus actualizado correctamente.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: `Error al actualizar el estatus: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredProspectos = prospectos.filter(prospecto => 
     prospecto.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     prospecto.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -583,11 +625,28 @@ export default function Prospectos() {
                   {prospecto.telefono || 'N/A'}
                 </TableCell>
                 <TableCell>
-                  {getStatusBadge(prospecto.id_estatus_persona, prospecto.estatus_nombre) || (
-                    <Badge variant="outline" className="bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-900/30 dark:text-gray-300">
-                      Sin estatus
-                    </Badge>
-                  )}
+                  <Select
+                    value={prospecto.id_estatus_persona?.toString() || "null"}
+                    onValueChange={(value) => {
+                      const estatusId = value === "null" ? null : parseInt(value);
+                      updateStatusMutation.mutate({
+                        entidadRelacionadaId: (prospecto as any).entidad_relacionada_id,
+                        estatusId
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Sin estatus asignado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="null">Sin estatus</SelectItem>
+                      {estatusPersona.map((estatus) => (
+                        <SelectItem key={estatus.id} value={estatus.id.toString()}>
+                          {estatus.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </TableCell>
                 <TableCell>
                   <Select
