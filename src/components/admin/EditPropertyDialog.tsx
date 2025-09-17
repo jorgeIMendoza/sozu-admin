@@ -9,8 +9,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { DocumentsTab } from "./DocumentsTab";
-import { PropertyMultimediaSection } from "./PropertyMultimediaSection";
-import { PropertyCharacteristicsSection } from "./PropertyCharacteristicsSection";
+import { PropertyMultimediaTab } from "./PropertyMultimediaTab";
+import { PropertyDescriptionSection } from "./PropertyDescriptionSection";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 interface Property {
   id: number;
@@ -326,12 +328,12 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="basic" className="w-full">
+        <Tabs defaultValue="general" className="w-full">
           <TabsList className="grid w-full grid-cols-4 mb-4 bg-muted">
-            <TabsTrigger value="basic" className="text-foreground">Datos Básicos</TabsTrigger>
-            <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>
+            <TabsTrigger value="general" className="text-foreground">Características Generales</TabsTrigger>
+            <TabsTrigger value="description" className="text-foreground">Descripción</TabsTrigger>
             <TabsTrigger value="multimedia" className="text-foreground">Multimedia</TabsTrigger>
-            <TabsTrigger value="characteristics" className="text-foreground">Características</TabsTrigger>
+            <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>
           </TabsList>
           
           <TabsContent value="basic">
@@ -587,11 +589,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
           </TabsContent>
 
           <TabsContent value="multimedia">
-            <PropertyMultimediaSection propertyId={property.id} />
-          </TabsContent>
-
-          <TabsContent value="characteristics">
-            <PropertyCharacteristicsSection propertyId={property.id} />
+            <PropertyMultimediaTab propertyId={property.id} />
           </TabsContent>
         </Tabs>
       </DialogContent>
