@@ -340,6 +340,98 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
           
           <form onSubmit={handleSubmit} className="space-y-6">
             <TabsContent value="general" className="space-y-6">
+              {/* Información del Proyecto y Propietario */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Información del Proyecto</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edificio_modelo">Edificio-Modelo *</Label>
+                    <Select value={formData.id_edificio_modelo} onValueChange={(value) => setFormData(prev => ({ ...prev, id_edificio_modelo: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona modelo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {edificiosModelos?.map((em) => (
+                          <SelectItem key={em.id} value={em.id.toString()}>
+                            {em.edificios?.nombre} - {em.modelos?.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="propietario">Propietario *</Label>
+                    <Select 
+                      value={formData.id_entidad_relacionada_dueno} 
+                      onValueChange={async (value) => {
+                        setFormData(prev => ({ ...prev, id_entidad_relacionada_dueno: value }));
+                        
+                        // Generate new CLABE STP when owner changes (but don't save to DB yet)
+                        if (value) {
+                          try {
+                            const { data: nuevaClabe, error } = await supabase
+                              .rpc('crear_referencia_bancaria', { id_er_dueno: parseInt(value) });
+                            
+                            if (error) {
+                              console.error('Error generating new CLABE STP:', error);
+                              toast({
+                                title: "Error",
+                                description: "No se pudo generar la nueva CLABE STP.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            // Update only form state (don't save to database until submit)
+                            setFormData(prev => ({ ...prev, clabe_stp_tmp_apartado: nuevaClabe || '' }));
+                            
+                            toast({
+                              title: "CLABE STP generada",
+                              description: "Se ha generado una nueva CLABE STP. Guarda los cambios para aplicarla.",
+                            });
+                          } catch (error) {
+                            console.error('Error in CLABE STP generation:', error);
+                            toast({
+                              title: "Error",
+                              description: "Error inesperado al generar la CLABE STP.",
+                              variant: "destructive",
+                            });
+                          }
+                        }
+                      }}
+                      disabled={parseInt(formData.id_estatus_disponibilidad) > 2}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona propietario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {entidadesRelacionadas?.map((entidad) => (
+                          <SelectItem key={entidad.id} value={entidad.id.toString()}>
+                            {entidad.personas?.nombre_legal}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2 col-span-2">
+                    <Label htmlFor="clabe_stp">CLABE STP</Label>
+                    <Input
+                      id="clabe_stp"
+                      value={formData.clabe_stp_tmp_apartado}
+                      readOnly
+                      className="bg-muted"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Esta CLABE se genera automáticamente al seleccionar un propietario
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Datos Básicos de la Propiedad */}
               <Card>
                 <CardHeader>
@@ -489,98 +581,6 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Información del Proyecto y Propietario */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Información del Proyecto</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="propietario">Propietario *</Label>
-                    <Select 
-                      value={formData.id_entidad_relacionada_dueno} 
-                      onValueChange={async (value) => {
-                        setFormData(prev => ({ ...prev, id_entidad_relacionada_dueno: value }));
-                        
-                        // Generate new CLABE STP when owner changes (but don't save to DB yet)
-                        if (value) {
-                          try {
-                            const { data: nuevaClabe, error } = await supabase
-                              .rpc('crear_referencia_bancaria', { id_er_dueno: parseInt(value) });
-                            
-                            if (error) {
-                              console.error('Error generating new CLABE STP:', error);
-                              toast({
-                                title: "Error",
-                                description: "No se pudo generar la nueva CLABE STP.",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-
-                            // Update only form state (don't save to database until submit)
-                            setFormData(prev => ({ ...prev, clabe_stp_tmp_apartado: nuevaClabe || '' }));
-                            
-                            toast({
-                              title: "CLABE STP generada",
-                              description: "Se ha generado una nueva CLABE STP. Guarda los cambios para aplicarla.",
-                            });
-                          } catch (error) {
-                            console.error('Error in CLABE STP generation:', error);
-                            toast({
-                              title: "Error",
-                              description: "Error inesperado al generar la CLABE STP.",
-                              variant: "destructive",
-                            });
-                          }
-                        }
-                      }}
-                      disabled={parseInt(formData.id_estatus_disponibilidad) > 2}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona propietario" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {entidadesRelacionadas?.map((entidad) => (
-                          <SelectItem key={entidad.id} value={entidad.id.toString()}>
-                            {entidad.personas?.nombre_legal}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edificio_modelo">Edificio-Modelo *</Label>
-                    <Select value={formData.id_edificio_modelo} onValueChange={(value) => setFormData(prev => ({ ...prev, id_edificio_modelo: value }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona modelo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {edificiosModelos?.map((em) => (
-                          <SelectItem key={em.id} value={em.id.toString()}>
-                            {em.edificios?.nombre} - {em.modelos?.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2 col-span-2">
-                    <Label htmlFor="clabe_stp">CLABE STP</Label>
-                    <Input
-                      id="clabe_stp"
-                      value={formData.clabe_stp_tmp_apartado}
-                      readOnly
-                      className="bg-muted"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Esta CLABE se genera automáticamente al seleccionar un propietario
-                    </p>
                   </div>
                 </CardContent>
               </Card>
