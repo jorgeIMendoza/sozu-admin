@@ -13,6 +13,7 @@ import { PersonForm } from "@/components/admin/PersonForm";
 import { BeneficiariosForm } from "@/components/admin/BeneficiariosForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
+import { saveTempPersonData } from "@/utils/personUtils";
 
 type Vendedor = {
   id: number;
@@ -153,7 +154,7 @@ export default function Vendedores() {
 
   const createMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { entityType, representativeId, ...cleanPersonData } = personData;
+      const { entityType, representativeId, tempBankAccounts, tempBeneficiaries, ...cleanPersonData } = personData;
       
       const { data: personResult, error: personError } = await supabase
         .from('personas')
@@ -182,6 +183,9 @@ export default function Vendedores() {
           
         if (updateError) throw updateError;
       }
+
+      // Save temporary bank accounts and beneficiaries
+      await saveTempPersonData(personResult.id, tempBankAccounts, tempBeneficiaries);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendedores'] });

@@ -16,6 +16,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BeneficiariosForm } from "./BeneficiariosForm";
 import { BankAccountsSection } from "./BankAccountsSection";
+import { TempBankAccountsSection } from "./TempBankAccountsSection";
+import { TempBeneficiariosSection } from "./TempBeneficiariosSection";
 import { ImageUploadField } from "./ImageUploadField";
 import { DocumentsTab } from "./DocumentsTab";
 import { GoogleMapComponent } from "./GoogleMapComponent";
@@ -116,6 +118,26 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     file: File;
     tipoDocumento: string;
     tempId: string;
+  }>>([]);
+
+  // Temporary bank accounts and beneficiaries for new persons
+  const [tempBankAccounts, setTempBankAccounts] = useState<Array<{
+    tempId: string;
+    id_banco: string;
+    numero_cuenta: string;
+    cuenta_clabe: string;
+    cuenta_swift: string;
+    url_evidencia: string;
+    es_cuenta_fisica_para_stp: boolean;
+  }>>([]);
+
+  const [tempBeneficiaries, setTempBeneficiaries] = useState<Array<{
+    tempId: string;
+    nombre_beneficiario: string;
+    email: string;
+    telefono: string;
+    id_parentesco: string;
+    porcentaje_participacion: string;
   }>>([]);
   
   const { toast } = useToast();
@@ -498,6 +520,15 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     // Store documents info if provided
     if (pendingDocuments.length > 0) {
       formData.pendingDocuments = pendingDocuments;
+    }
+
+    // Store temporary bank accounts and beneficiaries if provided
+    if (tempBankAccounts.length > 0) {
+      formData.tempBankAccounts = tempBankAccounts;
+    }
+
+    if (tempBeneficiaries.length > 0) {
+      formData.tempBeneficiaries = tempBeneficiaries;
     }
 
     // For backwards compatibility with user form
@@ -1362,16 +1393,17 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 {/* Bank Accounts Tab */}
                 <TabsContent value="bank-accounts" className="space-y-4 mt-6">
                   <div className="space-y-4">
-                    <h3 className="text-lg font-medium">Cuentas Bancarias</h3>
                     {initialData?.id ? (
                       <BankAccountsSection 
                         personId={initialData.id}
                         showStpCheckbox={true}
                       />
                     ) : (
-                      <p className="text-muted-foreground">
-                        Las cuentas bancarias se pueden agregar después de guardar la persona.
-                      </p>
+                      <TempBankAccountsSection
+                        bankAccounts={tempBankAccounts}
+                        onBankAccountsChange={setTempBankAccounts}
+                        showStpCheckbox={true}
+                      />
                     )}
                   </div>
                 </TabsContent>
@@ -1379,16 +1411,17 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 {/* Beneficiarios Tab */}
                 <TabsContent value="beneficiarios" className="space-y-4 mt-6">
                   <div className="space-y-4">
-                    <h3 className="text-lg font-medium">Beneficiarios</h3>
                     {initialData?.id ? (
                       <BeneficiariosForm 
                         personaId={initialData.id}
                         personaNombre={nombre}
                       />
                     ) : (
-                      <p className="text-muted-foreground">
-                        Los beneficiarios se pueden agregar después de guardar la persona.
-                      </p>
+                      <TempBeneficiariosSection
+                        beneficiaries={tempBeneficiaries}
+                        onBeneficiariesChange={setTempBeneficiaries}
+                        personaNombre={nombre || "Nueva Persona"}
+                      />
                     )}
                   </div>
                 </TabsContent>
