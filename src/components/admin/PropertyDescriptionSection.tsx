@@ -77,7 +77,7 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Depende del modelo seleccionado
+                  Modelo seleccionado: {modelDetails.nombre || "No especificado"}
                 </p>
               </div>
 
@@ -89,7 +89,7 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Depende del modelo seleccionado
+                  Modelo seleccionado: {modelDetails.nombre || "No especificado"}
                 </p>
               </div>
 
@@ -101,7 +101,7 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Depende del modelo seleccionado
+                  Modelo seleccionado: {modelDetails.nombre || "No especificado"}
                 </p>
               </div>
             </div>
