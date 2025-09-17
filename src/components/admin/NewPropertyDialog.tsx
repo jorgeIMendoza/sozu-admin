@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,6 +26,7 @@ const formSchema = z.object({
   id_tipo_transaccion: z.string().min(1, "El tipo de transacción es requerido"),
   id_tipo_propiedad: z.string().min(1, "El tipo de propiedad es requerido"),
   id_estatus_disponibilidad: z.string().min(1, "El estatus de disponibilidad es requerido"),
+  id_vista: z.string().min(1, "La vista es requerida"),
   id_entidad_relacionada_dueno: z.string().min(1, "El propietario es requerido").refine((val) => val !== "no-owners", {
     message: "Se deben asignar Entidades Legales (Dueños vendedor o Aportante) al proyecto"
   }),
@@ -59,6 +59,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
       id_tipo_transaccion: "",
       id_tipo_propiedad: "",
       id_estatus_disponibilidad: "",
+      id_vista: "",
       id_entidad_relacionada_dueno: "",
     },
   });
@@ -99,6 +100,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
         id_tipo_transaccion: parseInt(values.id_tipo_transaccion),
         id_tipo_propiedad: parseInt(values.id_tipo_propiedad),
         id_estatus_disponibilidad: parseInt(values.id_estatus_disponibilidad),
+        id_vista: parseInt(values.id_vista),
         id_entidad_relacionada_dueno: parseInt(values.id_entidad_relacionada_dueno),
         es_aprobado: false,
         activo: true,
@@ -160,52 +162,33 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
           <DialogTitle>Nueva Propiedad</DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <Tabs defaultValue="selection" className="w-full">
-              <TabsList className={`grid w-full mb-4 bg-muted ${selectedOwnerId && selectedOwnerId !== "no-owners" ? "grid-cols-3" : "grid-cols-1"}`}>
-                <TabsTrigger value="selection" className="text-foreground">Selección de Proyecto y Modelo</TabsTrigger>
-                {selectedOwnerId && selectedOwnerId !== "no-owners" && (
-                  <>
-                    <TabsTrigger value="basic" className="text-foreground">Datos Básicos</TabsTrigger>
-                    <TabsTrigger value="classification" className="text-foreground">Clasificaciones</TabsTrigger>
-                  </>
-                )}
-              </TabsList>
-              
-              <TabsContent value="selection">
-                <ProjectModelSelectionSection
-                  form={form}
-                  selectedProjectId={selectedProjectId}
-                  selectedBuildingId={selectedBuildingId}
-                  selectedOwnerId={selectedOwnerId}
-                  setSelectedProjectId={setSelectedProjectId}
-                  setSelectedBuildingId={setSelectedBuildingId}
-                  setSelectedOwnerId={setSelectedOwnerId}
-                  ownerClabe={ownerClabe}
-                  isLoadingClabe={isLoadingClabe}
-                  clabeError={clabeError}
-                />
-              </TabsContent>
-              
-              {selectedOwnerId && selectedOwnerId !== "no-owners" && (
-                <>
-                  <TabsContent value="basic">
-                    <PropertyBasicDataSection form={form} />
-                  </TabsContent>
-                  
-                  <TabsContent value="classification">
-                    <PropertyClassificationSection form={form} />
-                  </TabsContent>
-                </>
-              )}
-            </Tabs>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Selección de Proyecto y Modelo - siempre visible */}
+            <ProjectModelSelectionSection
+              form={form}
+              selectedProjectId={selectedProjectId}
+              selectedBuildingId={selectedBuildingId}
+              selectedOwnerId={selectedOwnerId}
+              setSelectedProjectId={setSelectedProjectId}
+              setSelectedBuildingId={setSelectedBuildingId}
+              setSelectedOwnerId={setSelectedOwnerId}
+              ownerClabe={ownerClabe}
+              isLoadingClabe={isLoadingClabe}
+              clabeError={clabeError}
+            />
             
+            {/* Datos Básicos y Clasificaciones - aparecen cuando se selecciona propietario */}
             {selectedOwnerId && selectedOwnerId !== "no-owners" && (
-              <div className="flex justify-end pt-4">
-                <Button type="submit" disabled={form.formState.isSubmitting}>
-                  {form.formState.isSubmitting ? "Creando..." : "Crear Propiedad"}
-                </Button>
-              </div>
+              <>
+                <PropertyBasicDataSection form={form} />
+                <PropertyClassificationSection form={form} />
+                
+                <div className="flex justify-end pt-4">
+                  <Button type="submit" disabled={form.formState.isSubmitting}>
+                    {form.formState.isSubmitting ? "Creando..." : "Crear Propiedad"}
+                  </Button>
+                </div>
+              </>
             )}
           </form>
         </Form>

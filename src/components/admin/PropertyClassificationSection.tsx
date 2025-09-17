@@ -54,6 +54,21 @@ export const PropertyClassificationSection = ({ form }: PropertyClassificationSe
     },
   });
 
+  // Query para obtener vistas
+  const { data: vistas } = useQuery({
+    queryKey: ["vistas"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("vistas")
+        .select("*")
+        .eq("activo", true)
+        .order("nombre");
+      
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   return (
     <Card>
       <CardHeader>
@@ -110,32 +125,55 @@ export const PropertyClassificationSection = ({ form }: PropertyClassificationSe
           )}
         />
 
-        <div className="col-span-2">
-          <FormField
-            control={form.control}
-            name="id_estatus_disponibilidad"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Disponibilidad *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona la disponibilidad" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {estatusDisponibilidad?.map((estatus) => (
-                      <SelectItem key={estatus.id} value={estatus.id.toString()}>
-                        {estatus.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+        <FormField
+          control={form.control}
+          name="id_estatus_disponibilidad"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Disponibilidad *</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona la disponibilidad" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {estatusDisponibilidad?.map((estatus) => (
+                    <SelectItem key={estatus.id} value={estatus.id.toString()}>
+                      {estatus.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="id_vista"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Vista *</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona la vista" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {vistas?.map((vista) => (
+                    <SelectItem key={vista.id} value={vista.id.toString()}>
+                      {vista.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
       </CardContent>
     </Card>
   );
