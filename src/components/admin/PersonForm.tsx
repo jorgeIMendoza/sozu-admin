@@ -768,7 +768,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 </div>
 
                 <div>
-                  <Label htmlFor="rfc">RFC</Label>
+                  <Label htmlFor="rfc">RFC *</Label>
                   <Input
                     id="rfc"
                     type="text"
