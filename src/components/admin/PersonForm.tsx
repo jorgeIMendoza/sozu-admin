@@ -483,16 +483,15 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       <form onSubmit={handleSubmit} className="space-y-6">
         {!isUser ? (
           <Tabs defaultValue="basic" className="w-full">
-             <TabsList className={`grid w-full mb-4 bg-muted ${
-               shouldShowBeneficiariosTab() && shouldShowDocumentsTab() ? 'grid-cols-5' :
-               shouldShowBeneficiariosTab() || shouldShowDocumentsTab() ? 'grid-cols-4' : 
-               shouldShowLegalTab() ? 'grid-cols-3' : 'grid-cols-2'
-             }`}>
-               <TabsTrigger value="basic" className="text-foreground">Información Básica</TabsTrigger>
-               <TabsTrigger value="address" className="text-foreground">Dirección</TabsTrigger>
-               {shouldShowLegalTab() && <TabsTrigger value="legal" className="text-foreground">Información Legal</TabsTrigger>}
-               {shouldShowBeneficiariosTab() && <TabsTrigger value="beneficiarios" className="text-foreground">Beneficiarios</TabsTrigger>}
-               {shouldShowDocumentsTab() && <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>}
+              <TabsList className={`grid w-full mb-4 bg-muted ${
+                shouldShowBeneficiariosTab() ? 'grid-cols-3' :
+                shouldShowLegalTab() ? 'grid-cols-2' : 'grid-cols-1'
+              }`}>
+                <TabsTrigger value="basic" className="text-foreground">Información Básica</TabsTrigger>
+                {/* Temporarily hidden - <TabsTrigger value="address" className="text-foreground">Dirección</TabsTrigger> */}
+                {shouldShowLegalTab() && <TabsTrigger value="legal" className="text-foreground">Información Legal</TabsTrigger>}
+                {shouldShowBeneficiariosTab() && <TabsTrigger value="beneficiarios" className="text-foreground">Beneficiarios</TabsTrigger>}
+                {/* Temporarily hidden - {shouldShowDocumentsTab() && <TabsTrigger value="documents" className="text-foreground">Documentos</TabsTrigger>} */}
             </TabsList>
 
             <TabsContent value="basic" className="space-y-4 mt-6">
@@ -718,6 +717,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
               </div>
             </TabsContent>
 
+            {/* Temporarily hidden - Address Tab 
             <TabsContent value="address" className="space-y-4 mt-6">
               <div className="space-y-6">
                 <div>
@@ -918,6 +918,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 </div>
               </div>
             </TabsContent>
+            */}
 
             {shouldShowLegalTab() && (
               <TabsContent value="legal" className="space-y-4 mt-6">
@@ -1057,6 +1058,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
               </TabsContent>
             )}
 
+            {/* Temporarily hidden - Documents Tab
             {shouldShowDocumentsTab() && (
               <TabsContent value="documents" className="space-y-4 mt-6">
             <DocumentsTab 
@@ -1074,6 +1076,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
             />
               </TabsContent>
             )}
+            */}
           </Tabs>
         ) : (
           // User form (simplified)
