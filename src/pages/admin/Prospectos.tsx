@@ -78,7 +78,7 @@ export default function Prospectos() {
               id,
               nombre
             ),
-            proyectos (
+            proyectos!entidades_relacionadas_id_proyecto_fkey (
               id,
               nombre
             )
@@ -93,7 +93,7 @@ export default function Prospectos() {
         `)
         .eq('activo', true)
         .eq('entidades_relacionadas.activo', true)
-        .eq('entidades_relacionadas.tipos_entidad.padre', 'c')
+        .eq('entidades_relacionadas.id_tipo_entidad', 7)
         .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
@@ -148,7 +148,7 @@ export default function Prospectos() {
               id,
               nombre
             ),
-            proyectos (
+            proyectos!entidades_relacionadas_id_proyecto_fkey (
               id,
               nombre
             )
@@ -163,7 +163,7 @@ export default function Prospectos() {
         `)
         .eq('activo', false)
         .eq('entidades_relacionadas.activo', true)
-        .eq('entidades_relacionadas.tipos_entidad.padre', 'c')
+        .eq('entidades_relacionadas.id_tipo_entidad', 7)
         .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
@@ -233,7 +233,7 @@ export default function Prospectos() {
         .from('entidades_relacionadas')
         .insert([{
           id_persona: personResult.id,
-          id_tipo_entidad: entityType,
+          id_tipo_entidad: 7, // Prospecto
           id_proyecto: null,
           activo: true
         }]);
