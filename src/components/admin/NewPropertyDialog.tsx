@@ -219,7 +219,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
           
           <TabsContent value="documents">
             {propertyId ? (
-              <DocumentsTab propertyId={propertyId} />
+              <DocumentsTab entityId={propertyId} entityType="propiedad" />
             ) : (
               <div className="text-center text-muted-foreground py-8">
                 Los documentos se pueden agregar después de crear la propiedad.

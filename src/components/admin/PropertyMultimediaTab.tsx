@@ -52,15 +52,16 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     enabled: !!propertyId
   });
 
-  // Fetch existing vistas
+  // Since vistas_propiedad table doesn't exist, we'll use multimedias_propiedad for now
   const { data: vistasPropiedad = [] } = useQuery({
     queryKey: ['propertyVistas', propertyId],
     queryFn: async () => {
       if (!propertyId) return [];
       const { data, error } = await supabase
-        .from('vistas_propiedad')
+        .from('multimedias_propiedad')
         .select('*')
         .eq('id_propiedad', propertyId)
+        .eq('es_imagen', true)
         .order('fecha_creacion', { ascending: false });
       
       if (error) throw error;
@@ -100,17 +101,18 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     }
   });
 
-  // Mutation to add vista
+  // Mutation to add vista using multimedias_propiedad
   const addVistaMutation = useMutation({
     mutationFn: async (vistaData: typeof vistaForm) => {
       if (!propertyId) throw new Error('Property ID is required');
       
       const { data, error } = await supabase
-        .from('vistas_propiedad')
+        .from('multimedias_propiedad')
         .insert([{
-          nombre: vistaData.nombre,
+          descripcion: vistaData.nombre,
           url: vistaData.url,
           id_propiedad: propertyId,
+          es_imagen: true,
           activo: true
         }])
         .select()
@@ -430,10 +432,10 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
               {vistasPropiedad.map((vista) => (
                 <Card key={vista.id}>
                   <CardContent className="pt-4">
-                    <h4 className="font-medium mb-2">{vista.nombre}</h4>
+                    <h4 className="font-medium mb-2">{vista.descripcion || 'Vista'}</h4>
                     <img 
                       src={vista.url} 
-                      alt={vista.nombre}
+                      alt={vista.descripcion || 'Vista'}
                       className="w-full h-32 object-cover rounded-md"
                       onError={(e) => {
                         e.currentTarget.src = '/placeholder.svg';
