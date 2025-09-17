@@ -382,6 +382,28 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       return;
     }
 
+    // RFC validation
+    const rfcRegex = /^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
+    if (rfc.trim() && !rfcRegex.test(rfc.trim().toUpperCase())) {
+      toast({
+        title: "Error",
+        description: "El RFC no tiene un formato válido.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // CURP validation (only if CURP is provided)
+    const curpRegex = /^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9]{2}$/;
+    if (curp.trim() && !curpRegex.test(curp.trim().toUpperCase())) {
+      toast({
+        title: "Error",
+        description: "La CURP no tiene un formato válido.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const formData: any = {
       nombre_legal: nombre.trim(),
       nombre_comercial: nombreComercial.trim() || null,
@@ -597,8 +619,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     id="rfc"
                     type="text"
                     value={rfc}
-                    onChange={(e) => setRfc(e.target.value)}
-                    placeholder="Ingresa el RFC"
+                    onChange={(e) => setRfc(e.target.value.toUpperCase())}
+                    placeholder="Ingresa el RFC (Ej: ABC123456DEF)"
                   />
                 </div>
 
@@ -609,8 +631,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       id="curp"
                       type="text"
                       value={curp}
-                      onChange={(e) => setCurp(e.target.value)}
-                      placeholder="Ingresa la CURP"
+                      onChange={(e) => setCurp(e.target.value.toUpperCase())}
+                      placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFD01)"
                     />
                   </div>
                 )}
