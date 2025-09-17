@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface DocumentsTabProps {
   entityId?: number;
   entityType: 'persona' | 'propiedad';
+  tipoPersona?: 'pf' | 'pm'; // Tipo de persona para filtrar documentos
   pendingDocuments?: Array<{
     file: File;
     tipoDocumento: string;
@@ -47,6 +48,7 @@ interface Documento {
 export function DocumentsTab({ 
   entityId, 
   entityType, 
+  tipoPersona = 'pf',
   pendingDocuments = [], 
   onPendingDocumentsChange, 
   onDocumentAdded 
@@ -60,20 +62,28 @@ export function DocumentsTab({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { toast } = useToast();
 
-  // Load document types based on entity type
+  // Load document types based on entity type and person type
   const loadTiposDocumento = async () => {
     try {
       // Filter by asignado_a based on entity type
       const asignadoA = entityType === 'propiedad' ? 'prop' : 'per';
       
-      // Bypass TypeScript issues for now
-      const result: any = await (supabase as any)
+      // Build query
+      let query = supabase
         .from('tipos_documento')
         .select('id, nombre')
         .eq('activo', true)
         .eq('asignado_a', asignadoA);
       
-      const { data, error } = result;
+      // For persona entity type, filter by padre based on tipoPersona
+      if (entityType === 'persona' && tipoPersona) {
+        // For personas físicas: padre = 'pf' or 'a'
+        // For personas morales: padre = 'pm' or 'a'
+        const filtros = tipoPersona === 'pf' ? ['pf', 'a'] : ['pm', 'a'];
+        query = query.in('padre', filtros);
+      }
+      
+      const { data, error } = await query;
       
       if (error) {
         console.error('Error loading document types:', error);
@@ -132,11 +142,11 @@ export function DocumentsTab({
     }
   };
 
-  // Initialize data when component mounts or entityId changes
+  // Initialize data when component mounts or entityId/tipoPersona changes
   useEffect(() => {
     loadTiposDocumento();
     loadDocumentos();
-  }, [entityId, entityType]);
+  }, [entityId, entityType, tipoPersona]);
 
   const handleUpload = async () => {
     if (!selectedFile || !selectedTipoDocumento) {

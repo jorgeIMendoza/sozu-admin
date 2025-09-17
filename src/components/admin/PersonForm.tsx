@@ -1034,18 +1034,19 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
             {shouldShowDocumentsTab() && (
               <TabsContent value="documents" className="space-y-4 mt-6">
-                <DocumentsTab 
-                  entityId={initialData?.id || undefined} 
-                  entityType="persona"
-                  pendingDocuments={pendingDocuments}
-                  onPendingDocumentsChange={setPendingDocuments}
-                  onDocumentAdded={() => {
-                    toast({
-                      title: "Documento agregado",
-                      description: "El documento se ha agregado correctamente."
-                    });
-                  }}
-                />
+            <DocumentsTab 
+              entityId={initialData?.id || undefined} 
+              entityType="persona"
+              tipoPersona={tipoPersona as 'pf' | 'pm'}
+              pendingDocuments={pendingDocuments}
+              onPendingDocumentsChange={setPendingDocuments}
+              onDocumentAdded={() => {
+                toast({
+                  title: "Documento agregado",
+                  description: "El documento se ha agregado correctamente."
+                });
+              }}
+            />
               </TabsContent>
             )}
           </Tabs>
