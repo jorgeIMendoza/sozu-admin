@@ -65,7 +65,9 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
       {modelDetails && (
         <Card>
           <CardHeader>
-            <CardTitle>Configuración del Modelo</CardTitle>
+            <CardTitle>
+              Configuración del Modelo {modelDetails.nombre ? modelDetails.nombre : ""}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4">
@@ -76,9 +78,6 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
                     {modelDetails.numero_recamaras || 0} recámaras
                   </Badge>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Modelo seleccionado: {modelDetails.nombre || "No especificado"}
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -88,9 +87,6 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
                     {modelDetails.numero_completo_banos || 0} baños completos
                   </Badge>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Modelo seleccionado: {modelDetails.nombre || "No especificado"}
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -100,9 +96,6 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
                     {modelDetails.numero_medio_bano || 0} medios baños
                   </Badge>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Modelo seleccionado: {modelDetails.nombre || "No especificado"}
-                </p>
               </div>
             </div>
           </CardContent>
