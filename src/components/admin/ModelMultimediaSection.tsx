@@ -157,9 +157,15 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                 <Label htmlFor="tipo">Tipo de Multimedia</Label>
                 <Select
                   value={newMultimedia.es_imagen ? "imagen" : "video"}
-                  onValueChange={(value) => 
-                    setNewMultimedia(prev => ({ ...prev, es_imagen: value === "imagen" }))
-                  }
+                  onValueChange={(value) => {
+                    const esImagen = value === "imagen";
+                    setNewMultimedia(prev => ({ 
+                      ...prev, 
+                      es_imagen: esImagen,
+                      // Reset ubicacion en oferta if switching to video
+                      ver_como_ubicacion_en_oferta: esImagen ? prev.ver_como_ubicacion_en_oferta : false
+                    }));
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -239,18 +245,20 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                 </div>
               )}
 
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="ver_como_ubicacion_en_oferta"
-                  checked={newMultimedia.ver_como_ubicacion_en_oferta}
-                  onCheckedChange={(checked) => 
-                    setNewMultimedia(prev => ({ ...prev, ver_como_ubicacion_en_oferta: !!checked }))
-                  }
-                />
-                <Label htmlFor="ver_como_ubicacion_en_oferta" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Ver como ubicacion en oferta
-                </Label>
-              </div>
+              {newMultimedia.es_imagen && (
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="ver_como_ubicacion_en_oferta"
+                    checked={newMultimedia.ver_como_ubicacion_en_oferta}
+                    onCheckedChange={(checked) => 
+                      setNewMultimedia(prev => ({ ...prev, ver_como_ubicacion_en_oferta: !!checked }))
+                    }
+                  />
+                  <Label htmlFor="ver_como_ubicacion_en_oferta" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Ver como ubicacion en oferta
+                  </Label>
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <Button type="submit" disabled={addMutation.isPending || uploading}>
@@ -284,7 +292,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                   <Badge variant={item.activo ? "default" : "secondary"}>
                     {item.activo ? "Activo" : "Inactivo"}
                   </Badge>
-                  {item.ver_como_ubicacion_en_oferta && (
+                  {item.es_imagen && item.ver_como_ubicacion_en_oferta && (
                     <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
                       <MapPin className="w-3 h-3 mr-1" />
                       Ubicación en oferta
@@ -298,12 +306,12 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                     multimediaId: item.id, 
                     newStatus: !item.activo 
                   })}
-                  disabled={toggleStatusMutation.isPending}
+                  disabled={toggleStatusMutation.isPending || (item.activo && item.ver_como_ubicacion_en_oferta)}
                 >
                   {item.activo ? (
                     <>
                       <PowerOff className="w-4 h-4 mr-1" />
-                      Inactivar
+                      {item.ver_como_ubicacion_en_oferta ? "No se puede inactivar" : "Inactivar"}
                     </>
                   ) : (
                     <>
