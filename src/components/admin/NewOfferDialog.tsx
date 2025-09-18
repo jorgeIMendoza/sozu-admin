@@ -248,10 +248,12 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
 
   const createOfferMutation = useMutation({
     mutationFn: async (data: FormData) => {
+      console.log("Mutation function called with:", data);
       let personId = data.selectedPersonId;
       
       // Create, get, or update person
       if (!personId) {
+        console.log("No person ID, checking for existing person...");
         // Check if person already exists by RFC
         const { data: existingPerson } = await supabase
           .from("personas")
@@ -261,8 +263,10 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           .maybeSingle();
 
         if (existingPerson) {
+          console.log("Found existing person:", existingPerson);
           personId = existingPerson.id;
         } else {
+          console.log("Creating new person...");
           // Create new person
           const personData = {
             tipo_persona: data.tipo_persona,
@@ -280,10 +284,15 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
             .select("id")
             .single();
 
-          if (personError) throw personError;
+          if (personError) {
+            console.error("Person creation error:", personError);
+            throw personError;
+          }
+          console.log("Created new person:", newPerson);
           personId = newPerson.id;
         }
       } else if (selectedPerson) {
+        console.log("Updating existing person if needed...");
         // Update existing person if data has changed
         const hasChanges = 
           selectedPerson.tipo_persona !== data.tipo_persona ||
@@ -294,6 +303,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           selectedPerson.curp !== data.curp;
 
         if (hasChanges) {
+          console.log("Person has changes, updating...");
           const updateData = {
             tipo_persona: data.tipo_persona,
             nombre_legal: data.nombre_completo,
@@ -308,7 +318,11 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
             .update(updateData)
             .eq("id", personId);
 
-          if (updateError) throw updateError;
+          if (updateError) {
+            console.error("Person update error:", updateError);
+            throw updateError;
+          }
+          console.log("Person updated successfully");
         }
       }
 
@@ -316,22 +330,30 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
 
       // If manual mode, create payment scheme
       if (data.mode === "manual") {
+        console.log("Manual mode, creating payment scheme...");
         // Validate percentages sum to 100 before attempting to save
         const enganche = parseFloat(data.porcentaje_enganche || "0");
         const mensualidades = parseFloat(data.porcentaje_mensualidades || "0");
         const entrega = parseFloat(data.porcentaje_entrega || "0");
         const total = enganche + mensualidades + entrega;
         
+        console.log("Payment percentages - Enganche:", enganche, "Mensualidades:", mensualidades, "Entrega:", entrega, "Total:", total);
+        
         if (Math.abs(total - 100) >= 0.01) {
+          console.error("Percentages don't sum to 100:", total);
           throw new Error("Los porcentajes de enganche, mensualidades y entrega deben sumar exactamente 100%");
         }
 
         const projectId = propertyDetails?.entidades_relacionadas?.proyectos?.id;
         const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
         
+        console.log("Project details:", { projectId, projectName });
+        
         if (projectId && projectName) {
           const initials = getInitials(data.nombre_completo);
           const schemeName = `manual_${propertyNumber}_${projectName}_${initials}`;
+          
+          console.log("Creating scheme with name:", schemeName);
           
           const schemeData = {
             id_proyecto: projectId,
@@ -351,12 +373,17 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
             .select("id")
             .single();
 
-          if (schemeError) throw schemeError;
+          if (schemeError) {
+            console.error("Scheme creation error:", schemeError);
+            throw schemeError;
+          }
+          console.log("Created scheme:", newScheme);
           schemeId = newScheme.id;
         }
       }
 
       // Finally, create the offer
+      console.log("Creating offer...");
       const offerData = {
         id_propiedad: propertyId,
         id_persona_lead: personId,
@@ -366,13 +393,20 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         // Remove fecha_generacion to let the database set it with DEFAULT CURRENT_TIMESTAMP
       };
 
+      console.log("Offer data:", offerData);
+
       const { data: newOffer, error: offerError } = await supabase
         .from("ofertas")
         .insert(offerData)
         .select('id')
         .single();
 
-      if (offerError) throw offerError;
+      if (offerError) {
+        console.error("Offer creation error:", offerError);
+        throw offerError;
+      }
+
+      console.log("Created offer:", newOffer);
 
       // Return data needed for PDF generation
       return {
@@ -463,6 +497,18 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   });
 
   const onSubmit = (data: FormData) => {
+    console.log("Form submitted with data:", data);
+    console.log("Form validation state:", form.formState);
+    console.log("Form errors:", form.formState.errors);
+    
+    // Check if form is valid
+    if (!form.formState.isValid) {
+      console.log("Form is not valid, triggering validation");
+      form.trigger();
+      return;
+    }
+    
+    console.log("Starting mutation...");
     createOfferMutation.mutate(data);
   };
 
