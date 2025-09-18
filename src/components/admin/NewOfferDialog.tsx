@@ -83,7 +83,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     resolver: zodResolver(formSchema),
     defaultValues: {
       mode: "precargada",
-      tipo_persona: "",
+      tipo_persona: "pf",
       nombre_completo: "",
       email: "",
       telefono: "",
