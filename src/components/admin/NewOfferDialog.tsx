@@ -383,13 +383,44 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       setSelectedPerson(null);
       setSearchTerm("");
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      console.error("Error creating offer:", error);
+      
+      // Handle specific database constraint errors
+      if (error?.code === "23505" && error?.details?.includes("rfc")) {
+        form.setError("rfc", {
+          type: "manual",
+          message: "Este RFC ya está registrado en el sistema. Use otro RFC o busque la persona existente."
+        });
+        return;
+      }
+      
+      // Handle other constraint errors
+      if (error?.code === "23505") {
+        toast({
+          title: "Error de datos duplicados",
+          description: "Ya existe un registro con estos datos. Verifique la información ingresada.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Handle date constraint error
+      if (error?.code === "23514" && error?.message?.includes("chk_ofertas_fecha_no_futuro")) {
+        toast({
+          title: "Error de fecha",
+          description: "La fecha de generación no puede ser futura. Contacte al administrador.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Generic error
       toast({
         title: "Error",
         description: "No se pudo generar la oferta. Inténtalo de nuevo.",
         variant: "destructive",
       });
-      console.error("Error creating offer:", error);
     },
   });
 
