@@ -162,11 +162,13 @@ const Propiedades = () => {
         id_persona_lead,
         personas!ofertas_id_persona_lead_fkey(nombre_legal, email, telefono),
         esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(
+          id,
           nombre,
           porcentaje_enganche,
           porcentaje_mensualidades,
           porcentaje_entrega,
-          numero_mensualidades
+          numero_mensualidades,
+          es_manual
         )
       `)
       .eq('id_propiedad', propertyId)
@@ -175,7 +177,7 @@ const Propiedades = () => {
     
     if (error) throw error;
 
-    // Fetch cuentas_cobranza separately to avoid relationship conflicts
+    // Fetch cuentas_cobranza separately
     const offersWithAccounts = await Promise.all((data || []).map(async (offer) => {
       const { data: accountData } = await supabase
         .from('cuentas_cobranza')
@@ -927,57 +929,51 @@ const Propiedades = () => {
           </DialogHeader>
           <div className="space-y-4">
             {selectedPropertyOffers && selectedPropertyOffers.length > 0 ? (
-              selectedPropertyOffers.map((offer: any, index: number) => (
-                <Card key={offer.id} className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="font-semibold text-lg mb-2">Oferta #{index + 1}</h4>
-                      <div className="space-y-2 text-sm">
-                        <p><strong>Cliente:</strong> {offer.personas?.nombre_legal || 'N/A'}</p>
-                        <p><strong>Email:</strong> {offer.personas?.email || 'N/A'}</p>
-                        <p><strong>Teléfono:</strong> {offer.personas?.telefono || 'N/A'}</p>
-                        <p><strong>Fecha de Generación:</strong> {new Date(offer.fecha_generacion).toLocaleDateString()}</p>
-                        <p><strong>Estado:</strong> 
-                          <Badge variant={offer.activo ? "default" : "secondary"} className="ml-2">
-                            {offer.activo ? "Activa" : "Inactiva"}
-                          </Badge>
-                        </p>
-                      </div>
-                    </div>
-                    <div>
-                      <h5 className="font-semibold mb-2">Esquema de Pago</h5>
-                      {offer.esquemas_pago ? (
-                        <div className="space-y-1 text-sm">
-                          <p><strong>Nombre:</strong> {offer.esquemas_pago.nombre}</p>
-                          <p><strong>Enganche:</strong> {offer.esquemas_pago.porcentaje_enganche}%</p>
-                          <p><strong>Mensualidades:</strong> {offer.esquemas_pago.porcentaje_mensualidades}% ({offer.esquemas_pago.numero_mensualidades} meses)</p>
-                          <p><strong>Entrega:</strong> {offer.esquemas_pago.porcentaje_entrega}%</p>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground text-sm">Sin esquema de pago</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {offer.cuentas_cobranza && offer.cuentas_cobranza.length > 0 && (
-                    <div className="mt-4 pt-4 border-t">
-                      <h5 className="font-semibold mb-2">Información de Compra</h5>
-                      {offer.cuentas_cobranza.map((cuenta: any, cuentaIndex: number) => (
-                        <div key={cuentaIndex} className="space-y-1 text-sm">
-                          <p><strong>Precio Final:</strong> ${cuenta.precio_final?.toLocaleString() || 'N/A'}</p>
-                          <p><strong>Fecha de Compra:</strong> {cuenta.fecha_compra ? new Date(cuenta.fecha_compra).toLocaleDateString() : 'N/A'}</p>
-                          <p><strong>Aprobado:</strong> 
-                            <Badge variant={cuenta.es_aprobado ? "default" : "outline"} className="ml-2">
-                              {cuenta.es_aprobado ? "Sí" : "No"}
-                            </Badge>
-                          </p>
-                          <p><strong>CLABE STP:</strong> {cuenta.clabe_stp || 'Sin asignar'}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              ))
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Folio</TableHead>
+                    <TableHead>Agente</TableHead>
+                    <TableHead>Lead</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Esquema de Pago</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedPropertyOffers.map((offer: any, index: number) => (
+                    <TableRow key={offer.id}>
+                      <TableCell className="font-medium">
+                        {String(offer.id).padStart(6, '0')}
+                      </TableCell>
+                      <TableCell>
+                        Agente por definir
+                      </TableCell>
+                      <TableCell>
+                        {offer.personas?.nombre_legal || 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(offer.fecha_generacion).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {offer.esquemas_pago?.es_manual ? (
+                          <span className="text-sm">{offer.esquemas_pago.nombre}</span>
+                        ) : (
+                          <Select value={offer.esquemas_pago?.id?.toString()} disabled>
+                            <SelectTrigger className="w-48">
+                              <SelectValue placeholder="Seleccionar esquema" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={offer.esquemas_pago?.id?.toString() || ''}>
+                                {offer.esquemas_pago?.nombre || 'Sin esquema'}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 No se encontraron ofertas para esta propiedad
