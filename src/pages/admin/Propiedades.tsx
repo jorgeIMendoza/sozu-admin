@@ -167,12 +167,6 @@ const Propiedades = () => {
           porcentaje_mensualidades,
           porcentaje_entrega,
           numero_mensualidades
-        ),
-        cuentas_cobranza!fk_cuentas_cobranza_oferta(
-          precio_final,
-          fecha_compra,
-          es_aprobado,
-          clabe_stp
         )
       `)
       .eq('id_propiedad', propertyId)
@@ -180,7 +174,22 @@ const Propiedades = () => {
       .order('fecha_generacion', { ascending: false });
     
     if (error) throw error;
-    return data || [];
+
+    // Fetch cuentas_cobranza separately to avoid relationship conflicts
+    const offersWithAccounts = await Promise.all((data || []).map(async (offer) => {
+      const { data: accountData } = await supabase
+        .from('cuentas_cobranza')
+        .select('precio_final, fecha_compra, es_aprobado, clabe_stp')
+        .eq('id_oferta', offer.id)
+        .single();
+      
+      return {
+        ...offer,
+        cuentas_cobranza: accountData
+      };
+    }));
+
+    return offersWithAccounts;
   };
 
   const handleViewOffers = async (property: Property) => {
