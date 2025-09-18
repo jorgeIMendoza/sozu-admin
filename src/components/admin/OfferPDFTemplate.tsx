@@ -17,6 +17,7 @@ interface PropertyDetails {
   m2_escriturables: number | null;
   descripcion: string | null;
   numero_piso?: number | null;
+  clabe_stp_tmp_apartado?: string | null;
   building?: {
     id: number;
     nombre: string;
@@ -121,19 +122,30 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           {/* Background gradient */}
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/10"></div>
           
+          {/* Project Image at top */}
+          {propertyDetails.projectData?.url_imagen_portada && (
+            <div className="relative z-10 mb-8 rounded-2xl overflow-hidden shadow-2xl">
+              <img
+                src={propertyDetails.projectData.url_imagen_portada}
+                alt={propertyDetails.projectData.nombre}
+                className="w-full h-48 object-cover"
+              />
+            </div>
+          )}
+
           {/* Header */}
-          <div className="relative z-10 flex justify-between items-start mb-12">
+          <div className="relative z-10 flex justify-between items-start mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-primary mb-2">
+              <h1 className="text-xl font-bold text-primary mb-1">
                 Cotización departamento {propertyDetails.numero_propiedad} de {propertyDetails.projectData?.nombre}
               </h1>
-              <p className="text-lg text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {formatOfferNumber(offerData.id)}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-muted-foreground">Fecha de generación</p>
-              <p className="text-base font-semibold">
+              <p className="text-xs text-muted-foreground">Fecha de generación</p>
+              <p className="text-sm font-semibold">
                 {new Date(offerData.fecha_generacion).toLocaleDateString('es-MX', {
                   year: 'numeric',
                   month: 'long',
@@ -143,20 +155,9 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
             </div>
           </div>
 
-          {/* Project Image */}
-          {propertyDetails.projectData?.url_imagen_portada && (
-            <div className="relative z-10 mb-12 rounded-2xl overflow-hidden shadow-2xl">
-              <img
-                src={propertyDetails.projectData.url_imagen_portada}
-                alt={propertyDetails.projectData.nombre}
-                className="w-full h-48 object-cover"
-              />
-            </div>
-          )}
-
           {/* Property Summary */}
           <div className="relative z-10 bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-border">
-            <h3 className="text-2xl font-bold mb-4 text-primary">Detalles de la Propiedad</h3>
+            <h3 className="text-lg font-bold mb-4 text-primary">Detalles de la Propiedad</h3>
             <div className="grid grid-cols-2 gap-8">
               {/* Left Column - Property Details */}
               <div className="space-y-1">
@@ -208,9 +209,9 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
         {/* Payment Options Page */}
         <div className="min-h-screen p-12 break-before-page">
-          <h2 className="text-3xl font-bold mb-8 text-primary text-center">Opciones de Pago Disponibles</h2>
+          <h2 className="text-xl font-bold mb-8 text-primary text-center">Opciones de Pago Disponibles</h2>
           
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 gap-6">
             {filteredPaymentSchemes.map((scheme) => {
               const calculation = calculatePaymentAmounts(scheme);
               return (
@@ -251,12 +252,12 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
         {/* Contacts Page */}
         <div className="min-h-screen p-12 break-before-page">
-          <h2 className="text-3xl font-bold mb-8 text-primary text-center">Contactos</h2>
+          <h2 className="text-xl font-bold mb-8 text-primary text-center">Contactos</h2>
           
           <div className="grid grid-cols-2 gap-8 mb-12">
-            {/* Seller Info */}
+            {/* Agent Info */}
             <div className="bg-white rounded-2xl p-8 shadow-lg">
-              <h3 className="text-2xl font-bold mb-6 text-primary">Información del Vendedor</h3>
+              <h3 className="text-lg font-bold mb-6 text-primary">Información del Agente</h3>
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Nombre</p>
@@ -277,7 +278,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
             {/* Lead/Prospect Info */}
             <div className="bg-white rounded-2xl p-8 shadow-lg">
-              <h3 className="text-2xl font-bold mb-6 text-primary">Información del Comprador</h3>
+              <h3 className="text-lg font-bold mb-6 text-primary">Información del Prospecto</h3>
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Nombre</p>
@@ -300,12 +301,12 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
         {/* Banking Data Page */}
         <div className="min-h-screen p-12 break-before-page">
-          <h2 className="text-3xl font-bold mb-8 text-primary text-center">Datos Bancarios</h2>
+          <h2 className="text-xl font-bold mb-8 text-primary text-center">Datos Bancarios</h2>
           
           <div className="bg-white rounded-2xl p-8 shadow-lg">
             <div className="space-y-6">
               <div>
-                <h3 className="text-xl font-bold mb-4 text-primary">Información de Transferencia</h3>
+                <h3 className="text-lg font-bold mb-4 text-primary">Información de Transferencia</h3>
                 <div className="grid grid-cols-2 gap-8">
                   <div>
                     <p className="text-sm text-muted-foreground">Beneficiario</p>
@@ -313,11 +314,11 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Banco</p>
-                    <p className="font-semibold">STP</p>
+                    <p className="font-semibold">Sistema de Transacciones y Pagos</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">CLABE</p>
-                    <p className="font-semibold font-mono">Por asignar</p>
+                    <p className="font-semibold font-mono">{propertyDetails.clabe_stp_tmp_apartado || 'Por asignar'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Concepto de Pago</p>
