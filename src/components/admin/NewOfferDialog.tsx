@@ -54,14 +54,26 @@ const baseProspectSchema = z.object({
   nombre_completo: z.string().min(1, "El nombre completo es requerido"),
   email: z.string().email("Email inválido"),
   telefono: z.string().min(10, "El teléfono debe tener al menos 10 dígitos"),
-  rfc: z.string().min(1, "El RFC es requerido"),
-  curp: z.string().optional(),
+  rfc: z.string()
+    .min(1, "El RFC es requerido")
+    .regex(/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/, "Formato de RFC inválido")
+    .max(13, "El RFC no puede tener más de 13 caracteres"),
+  curp: z.string()
+    .optional()
+    .refine((val) => {
+      if (!val || val === "") return true;
+      return /^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[0-9A-Z][0-9]$/.test(val);
+    }, "Formato de CURP inválido")
+    .refine((val) => {
+      if (!val || val === "") return true;
+      return val.length === 18;
+    }, "La CURP debe tener exactamente 18 caracteres"),
 });
 
 const manualPaymentSchema = z.object({
-  porcentaje_enganche: z.string().min(1, "El porcentaje de enganche es requerido"),
-  porcentaje_mensualidades: z.string().min(1, "El porcentaje de mensualidades es requerido"),
-  porcentaje_entrega: z.string().min(1, "El porcentaje de entrega es requerido"),
+  porcentaje_enganche: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0, "Debe ser un número válido mayor o igual a 0"),
+  porcentaje_mensualidades: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0, "Debe ser un número válido mayor o igual a 0"),
+  porcentaje_entrega: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0, "Debe ser un número válido mayor o igual a 0"),
   numero_mensualidades: z.string().min(1, "El número de mensualidades es requerido"),
   porcentaje_descuento_aumento: z.string().optional(),
 });
@@ -326,9 +338,9 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         id_propiedad: propertyId,
         id_persona_lead: personId,
         id_esquema_pago_seleccionado: schemeId,
-        fecha_generacion: new Date().toISOString(),
         activo: true,
         email_creador: 'admin@system.com' // Default creator email
+        // Remove fecha_generacion to let the database set it with DEFAULT CURRENT_TIMESTAMP
       };
 
       const { error: offerError } = await supabase
@@ -589,35 +601,43 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="rfc"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>RFC *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ingresa el RFC (Ej: ABC123456DEF)" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                     <FormField
+                       control={form.control}
+                       name="rfc"
+                       render={({ field }) => (
+                         <FormItem>
+                           <FormLabel>RFC *</FormLabel>
+                           <FormControl>
+                             <Input 
+                               placeholder="Ingresa el RFC (Ej: ABC123456DEF)" 
+                               maxLength={13}
+                               {...field} 
+                             />
+                           </FormControl>
+                           <FormMessage />
+                         </FormItem>
+                       )}
+                     />
 
-                {selectedPersonType === "pf" && (
-                  <FormField
-                    control={form.control}
-                    name="curp"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>CURP</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
+                     {selectedPersonType === "pf" && (
+                       <FormField
+                         control={form.control}
+                         name="curp"
+                         render={({ field }) => (
+                           <FormItem>
+                             <FormLabel>CURP</FormLabel>
+                             <FormControl>
+                               <Input 
+                                 placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)" 
+                                 maxLength={18}
+                                 {...field} 
+                               />
+                             </FormControl>
+                             <FormMessage />
+                           </FormItem>
+                         )}
+                       />
+                     )}
               </div>
             </div>
 
