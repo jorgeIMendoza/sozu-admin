@@ -1677,6 +1677,7 @@ export type Database = {
           id: number
           id_modelo: number
           url: string
+          ver_como_ubicacion_en_oferta: boolean
         }
         Insert: {
           activo?: boolean | null
@@ -1687,6 +1688,7 @@ export type Database = {
           id?: never
           id_modelo: number
           url: string
+          ver_como_ubicacion_en_oferta?: boolean
         }
         Update: {
           activo?: boolean | null
@@ -1697,6 +1699,7 @@ export type Database = {
           id?: never
           id_modelo?: number
           url?: string
+          ver_como_ubicacion_en_oferta?: boolean
         }
         Relationships: [
           {

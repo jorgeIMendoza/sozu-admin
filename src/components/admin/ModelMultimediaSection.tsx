@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Power, PowerOff, Plus, Upload } from "lucide-react";
+import { Power, PowerOff, Plus, Upload, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 
 interface ModelMultimediaSectionProps {
@@ -21,7 +22,8 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
   const [newMultimedia, setNewMultimedia] = useState({
     es_imagen: true,
     url: "",
-    descripcion: ""
+    descripcion: "",
+    ver_como_ubicacion_en_oferta: false
   });
   const [uploading, setUploading] = useState(false);
 
@@ -55,7 +57,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['modelMultimedia', modelId] });
-      setNewMultimedia({ es_imagen: true, url: "", descripcion: "" });
+      setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false });
       setIsAdding(false);
       toast({ title: "Multimedia agregado exitosamente" });
     },
@@ -237,6 +239,19 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                 </div>
               )}
 
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="ver_como_ubicacion_en_oferta"
+                  checked={newMultimedia.ver_como_ubicacion_en_oferta}
+                  onCheckedChange={(checked) => 
+                    setNewMultimedia(prev => ({ ...prev, ver_como_ubicacion_en_oferta: !!checked }))
+                  }
+                />
+                <Label htmlFor="ver_como_ubicacion_en_oferta" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Ver como ubicacion en oferta
+                </Label>
+              </div>
+
               <div className="flex gap-2">
                 <Button type="submit" disabled={addMutation.isPending || uploading}>
                   {addMutation.isPending ? "Guardando..." : "Guardar"}
@@ -244,7 +259,10 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => setIsAdding(false)}
+                  onClick={() => {
+                    setIsAdding(false);
+                    setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false });
+                  }}
                 >
                   Cancelar
                 </Button>
@@ -266,6 +284,12 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                   <Badge variant={item.activo ? "default" : "secondary"}>
                     {item.activo ? "Activo" : "Inactivo"}
                   </Badge>
+                  {item.ver_como_ubicacion_en_oferta && (
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      <MapPin className="w-3 h-3 mr-1" />
+                      Ubicación en oferta
+                    </Badge>
+                  )}
                 </div>
                 <Button
                   variant="outline"
