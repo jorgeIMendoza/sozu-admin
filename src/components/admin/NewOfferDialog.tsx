@@ -69,7 +69,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           )
         `)
         .eq("id", propertyId)
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
       return data;
@@ -162,6 +162,9 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
+
+  // Debug log to see data structure
+  console.log('Property Details:', propertyDetails);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
