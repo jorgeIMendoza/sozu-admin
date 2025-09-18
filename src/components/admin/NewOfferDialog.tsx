@@ -98,6 +98,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   });
 
   const selectedMode = form.watch("mode");
+  const selectedPersonType = form.watch("tipo_persona");
 
   // Fetch property details with project information
   const { data: propertyDetails } = useQuery({
@@ -266,7 +267,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
 
             <Separator />
 
-            {/* Prospect Information Section */}
+          {/* Prospect Information Section */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Información del Prospecto</h3>
               
@@ -284,8 +285,8 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="Persona Física">Persona Física</SelectItem>
-                          <SelectItem value="Persona Moral">Persona Moral</SelectItem>
+                          <SelectItem value="pf">Persona Física</SelectItem>
+                          <SelectItem value="pm">Persona Moral</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -298,9 +299,14 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                   name="nombre_completo"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nombre Completo *</FormLabel>
+                      <FormLabel>
+                        {selectedPersonType === "pm" ? "Razón Social *" : "Nombre Completo *"}
+                      </FormLabel>
                       <FormControl>
-                        <Input placeholder="Ingresa el nombre completo" {...field} />
+                        <Input 
+                          placeholder={selectedPersonType === "pm" ? "Ingresa la razón social" : "Ingresa el nombre completo"} 
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -353,19 +359,21 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="curp"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>CURP</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {selectedPersonType === "pf" && (
+                  <FormField
+                    control={form.control}
+                    name="curp"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CURP</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </div>
             </div>
 
