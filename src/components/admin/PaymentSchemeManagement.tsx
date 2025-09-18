@@ -108,8 +108,10 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
   };
 
   const PaymentSchemeDetailsDialog = ({ scheme }: { scheme: any }) => {
-    const totalPercentage = scheme.porcentaje_enganche + scheme.porcentaje_mensualidades + scheme.porcentaje_entrega;
-    const isValidScheme = totalPercentage === 100;
+    const discountAmount = scheme.porcentaje_descuento_aumento || 0;
+    const isIncrement = discountAmount > 0;
+    const isDiscount = discountAmount < 0;
+    const hasDiscountIncrement = discountAmount !== 0;
 
     return (
       <Dialog>
@@ -137,25 +139,19 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
               <div>
                 <span className="font-medium">No. Mensualidades:</span> {scheme.numero_mensualidades}
               </div>
-              {scheme.porcentaje_descuento_aumento !== 0 && (
-                <div>
-                  <span className="font-medium">Descuento/Aumento:</span> {scheme.porcentaje_descuento_aumento}%
+            </div>
+            {hasDiscountIncrement && (
+              <div className="pt-2 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">
+                    {isIncrement ? "Incremento:" : "Descuento:"}
+                  </span>
+                  <Badge variant={isIncrement ? "default" : "secondary"}>
+                    {Math.abs(discountAmount)}%
+                  </Badge>
                 </div>
-              )}
-            </div>
-            <div className="pt-2 border-t">
-              <div className="flex justify-between items-center">
-                <span className="font-medium">Total:</span>
-                <Badge variant={isValidScheme ? "default" : "destructive"}>
-                  {totalPercentage}%
-                </Badge>
               </div>
-              {!isValidScheme && (
-                <p className="text-sm text-destructive mt-1">
-                  Los porcentajes deben sumar exactamente 100%
-                </p>
-              )}
-            </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
