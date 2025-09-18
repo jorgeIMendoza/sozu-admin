@@ -31,6 +31,7 @@ interface Property {
   // Relaciones
   propietario: string;
   proyecto: string;
+  proyecto_id: number;
   edificio: string;
   modelo: string;
   vista: string;
@@ -52,6 +53,7 @@ const Propiedades = () => {
   const [selectedPropertyOffers, setSelectedPropertyOffers] = useState<any[] | null>(null);
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState<number[]>([]);
+  const [availableSchemes, setAvailableSchemes] = useState<any[]>([]);
   
   // Filtros de texto
   const [proyectoFilter, setProyectoFilter] = useState("");
@@ -86,7 +88,7 @@ const Propiedades = () => {
           edificios_modelos!inner(
             edificios!edificios_modelos_id_edificio_fkey!inner(
               nombre,
-              proyectos!edificios_id_proyecto_fkey!inner(nombre)
+              proyectos!edificios_id_proyecto_fkey!inner(id, nombre)
             ),
             modelos!edificios_modelos_id_modelo_fkey!inner(
               nombre,
@@ -121,6 +123,7 @@ const Propiedades = () => {
         es_aprobado: property.es_aprobado,
         propietario: property.entidades_relacionadas?.personas?.nombre_legal || 'Sin propietario',
         proyecto: property.edificios_modelos?.edificios?.proyectos?.nombre || 'Sin proyecto',
+        proyecto_id: property.edificios_modelos?.edificios?.proyectos?.id || 0,
         edificio: property.edificios_modelos?.edificios?.nombre || 'Sin edificio',
         modelo: property.edificios_modelos?.modelos?.nombre || 'Sin modelo',
         vista: property.vistas?.nombre || 'Sin vista',
@@ -165,12 +168,34 @@ const Propiedades = () => {
     return offersData || [];
   };
 
+  // Función para obtener esquemas de pago disponibles para un proyecto
+  const fetchAvailableSchemes = async (projectId: number) => {
+    const { data, error } = await supabase
+      .from('esquemas_pago')
+      .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+      .eq('id_proyecto', projectId)
+      .eq('es_manual', false)
+      .eq('activo', true)
+      .order('nombre');
+    
+    if (error) {
+      console.error('Error fetching schemes:', error);
+      return [];
+    }
+
+    return data || [];
+  };
+
   const handleViewOffers = async (property: Property) => {
     if (!property.tieneOfertas) return;
     
     try {
-      const offers = await fetchPropertyOffers(property.id);
+      const [offers, schemes] = await Promise.all([
+        fetchPropertyOffers(property.id),
+        fetchAvailableSchemes(property.proyecto_id)
+      ]);
       setSelectedPropertyOffers(offers);
+      setAvailableSchemes(schemes);
       setOffersDialogOpen(true);
     } catch (error) {
       console.error('Error fetching offers:', error);
@@ -940,7 +965,18 @@ const Propiedades = () => {
                             </SelectContent>
                           </Select>
                         ) : (
-                          <span className="text-sm text-muted-foreground">Sin esquema</span>
+                           <Select defaultValue="">
+                             <SelectTrigger className="w-48">
+                              <SelectValue placeholder="Seleccionar esquema de pago" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableSchemes.map((scheme) => (
+                                <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                                  {scheme.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         )}
                       </TableCell>
                     </TableRow>
