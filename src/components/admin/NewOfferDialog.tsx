@@ -366,17 +366,55 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         // Remove fecha_generacion to let the database set it with DEFAULT CURRENT_TIMESTAMP
       };
 
-      const { error: offerError } = await supabase
+      const { data: newOffer, error: offerError } = await supabase
         .from("ofertas")
-        .insert(offerData);
+        .insert(offerData)
+        .select('id')
+        .single();
 
       if (offerError) throw offerError;
+
+      // Return data needed for PDF generation
+      return {
+        offerId: newOffer.id,
+        personId,
+        leadName: data.nombre_completo,
+        leadEmail: data.email,
+        leadPhone: data.telefono
+      };
     },
-    onSuccess: () => {
+    onSuccess: async (result) => {
       toast({
         title: "Oferta creada",
         description: `La oferta para la propiedad ${propertyNumber} ha sido generada exitosamente.`,
       });
+      
+      // Generate PDF
+      try {
+        const { generateOfferPDF } = await import('@/services/pdfGenerationService');
+        await generateOfferPDF({
+          propertyId,
+          offerId: result.offerId,
+          propertyNumber,
+          leadName: result.leadName,
+          leadEmail: result.leadEmail,
+          leadPhone: result.leadPhone,
+          creatorEmail: 'jorge.mendoza@sozu.com'
+        });
+        
+        toast({
+          title: "PDF generado",
+          description: "El PDF de la oferta se ha descargado automáticamente.",
+        });
+      } catch (pdfError) {
+        console.error('Error generating PDF:', pdfError);
+        toast({
+          title: "Error al generar PDF",
+          description: "La oferta se creó correctamente, pero hubo un error al generar el PDF.",
+          variant: "destructive",
+        });
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["properties"] });
       setOpen(false);
       form.reset();
