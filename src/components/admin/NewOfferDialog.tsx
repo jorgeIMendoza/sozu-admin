@@ -179,7 +179,8 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         <DialogHeader>
           <DialogTitle>Generar Oferta</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Crear una nueva oferta para la propiedad <span className="font-semibold">{propertyNumber}{projectName ? ` ${projectName}` : ''}</span>
+            Crear una nueva oferta para la propiedad <span className="font-semibold">{propertyNumber}</span>
+            {projectName && <span className="font-semibold"> de {projectName}</span>}
           </p>
         </DialogHeader>
         <Form {...form}>
