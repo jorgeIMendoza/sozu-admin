@@ -362,7 +362,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         id_persona_lead: personId,
         id_esquema_pago_seleccionado: schemeId,
         activo: true,
-        email_creador: 'admin@system.com' // Default creator email
+        email_creador: 'jorge.mendoza@sozu.com' // Fixed user email
         // Remove fecha_generacion to let the database set it with DEFAULT CURRENT_TIMESTAMP
       };
 
