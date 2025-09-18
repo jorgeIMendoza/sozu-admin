@@ -158,6 +158,29 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     enabled: searchTerm.length >= 2,
   });
 
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        mode: "precargada",
+        selectedPersonId: undefined,
+        tipo_persona: "pf",
+        nombre_completo: "",
+        email: "",
+        telefono: "",
+        rfc: "",
+        curp: "",
+        porcentaje_enganche: "",
+        porcentaje_mensualidades: "",
+        porcentaje_entrega: "",
+        numero_mensualidades: "",
+        porcentaje_descuento_aumento: "",
+      });
+      setSelectedPerson(null);
+      setSearchTerm("");
+    }
+  }, [open, form]);
+
   // Fill form when person is selected
   useEffect(() => {
     if (selectedPerson) {
