@@ -63,7 +63,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           id,
           numero_propiedad,
           entidades_relacionadas!id_entidad_relacionada_dueno(
-            proyectos!id_proyecto(
+            proyectos!entidades_relacionadas_id_proyecto_fkey(
               nombre
             )
           )
