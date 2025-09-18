@@ -24,6 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,10 +35,36 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { FileText } from "lucide-react";
 
+const baseProspectSchema = z.object({
+  tipo_persona: z.string().min(1, "El tipo de persona es requerido"),
+  nombre_completo: z.string().min(1, "El nombre completo es requerido"),
+  email: z.string().email("Email inválido"),
+  telefono: z.string().min(10, "El teléfono debe tener al menos 10 dígitos"),
+  rfc: z.string().optional(),
+  curp: z.string().optional(),
+});
+
+const manualPaymentSchema = z.object({
+  porcentaje_enganche: z.string().optional(),
+  porcentaje_mensualidades: z.string().optional(),
+  porcentaje_entrega: z.string().optional(),
+  numero_mensualidades: z.string().optional(),
+  porcentaje_descuento_aumento: z.string().optional(),
+});
+
 const formSchema = z.object({
-  id_persona_lead: z.string().min(1, "Debe seleccionar un lead"),
-  id_esquema_pago_seleccionado: z.string().optional(),
-  id_producto: z.string().optional(),
+  mode: z.enum(["precargada", "manual"]).default("precargada"),
+  ...baseProspectSchema.shape,
+  ...manualPaymentSchema.shape,
+}).refine((data) => {
+  if (data.mode === "manual") {
+    return data.porcentaje_enganche && data.porcentaje_mensualidades && 
+           data.porcentaje_entrega && data.numero_mensualidades;
+  }
+  return true;
+}, {
+  message: "En modo manual, todos los campos de pago son requeridos",
+  path: ["mode"]
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -51,7 +81,23 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
+    defaultValues: {
+      mode: "precargada",
+      tipo_persona: "",
+      nombre_completo: "",
+      email: "",
+      telefono: "",
+      rfc: "",
+      curp: "",
+      porcentaje_enganche: "0",
+      porcentaje_mensualidades: "0", 
+      porcentaje_entrega: "0",
+      numero_mensualidades: "12",
+      porcentaje_descuento_aumento: "0",
+    },
   });
+
+  const selectedMode = form.watch("mode");
 
   // Fetch property details with project information
   const { data: propertyDetails } = useQuery({
@@ -64,6 +110,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           numero_propiedad,
           entidades_relacionadas!id_entidad_relacionada_dueno(
             proyectos!entidades_relacionadas_id_proyecto_fkey(
+              id,
               nombre
             )
           )
@@ -76,67 +123,71 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     },
   });
 
-  // Fetch potential leads (personas)
-  const { data: leads } = useQuery({
-    queryKey: ["leads"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("personas")
-        .select("id, nombre_legal, email")
-        .eq("activo", true)
-        .order("nombre_legal");
-      
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Fetch payment schemes
-  const { data: paymentSchemes } = useQuery({
-    queryKey: ["payment-schemes"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("esquemas_pago")
-        .select("id, nombre")
-        .eq("activo", true)
-        .order("nombre");
-      
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Fetch products
-  const { data: products } = useQuery({
-    queryKey: ["products"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("productos_servicios")
-        .select("id, nombre")
-        .eq("activo", true)
-        .eq("es_producto", true)
-        .order("nombre");
-      
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
   const createOfferMutation = useMutation({
     mutationFn: async (data: FormData) => {
-      const { error } = await supabase
-        .from("ofertas")
-        .insert({
-          id_propiedad: propertyId,
-          id_persona_lead: parseInt(data.id_persona_lead),
-          id_esquema_pago_seleccionado: data.id_esquema_pago_seleccionado 
-            ? parseInt(data.id_esquema_pago_seleccionado) 
-            : null,
-          id_producto: data.id_producto ? parseInt(data.id_producto) : null,
-          fecha_generacion: new Date().toISOString(),
-        });
+      // First, create the person/prospect
+      const personData = {
+        tipo_persona: data.tipo_persona,
+        nombre_legal: data.nombre_completo,
+        email: data.email,
+        telefono: data.telefono,
+        rfc: data.rfc || null,
+        curp: data.curp || null,
+        activo: true
+      };
 
-      if (error) throw error;
+      const { data: newPerson, error: personError } = await supabase
+        .from("personas")
+        .insert(personData)
+        .select("id")
+        .single();
+
+      if (personError) throw personError;
+
+      let schemeId = null;
+
+      // If manual mode, create payment scheme
+      if (data.mode === "manual") {
+        const projectId = propertyDetails?.entidades_relacionadas?.proyectos?.id;
+        
+        if (projectId) {
+          const schemeData = {
+            id_proyecto: projectId,
+            nombre: `Esquema personalizado - ${data.nombre_completo}`,
+            porcentaje_enganche: parseFloat(data.porcentaje_enganche || "0"),
+            porcentaje_mensualidades: parseFloat(data.porcentaje_mensualidades || "0"),
+            porcentaje_entrega: parseFloat(data.porcentaje_entrega || "0"),
+            numero_mensualidades: parseInt(data.numero_mensualidades || "12"),
+            porcentaje_descuento_aumento: parseFloat(data.porcentaje_descuento_aumento || "0"),
+            es_manual: true,
+            activo: true
+          };
+
+          const { data: newScheme, error: schemeError } = await supabase
+            .from("esquemas_pago")
+            .insert(schemeData)
+            .select("id")
+            .single();
+
+          if (schemeError) throw schemeError;
+          schemeId = newScheme.id;
+        }
+      }
+
+      // Finally, create the offer
+      const offerData = {
+        id_propiedad: propertyId,
+        id_persona_lead: newPerson.id,
+        id_esquema_pago_seleccionado: schemeId,
+        id_producto: null,
+        fecha_generacion: new Date().toISOString(),
+      };
+
+      const { error: offerError } = await supabase
+        .from("ofertas")
+        .insert(offerData);
+
+      if (offerError) throw offerError;
     },
     onSuccess: () => {
       toast({
@@ -163,9 +214,6 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
 
-  // Debug log to see data structure
-  console.log('Property Details:', propertyDetails);
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -178,7 +226,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           <FileText className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Generar Oferta</DialogTitle>
           <p className="text-sm text-muted-foreground">
@@ -187,81 +235,223 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           </p>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Mode Selection */}
             <FormField
               control={form.control}
-              name="id_persona_lead"
+              name="mode"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Lead/Cliente *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar lead" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {leads?.map((lead) => (
-                        <SelectItem key={lead.id} value={lead.id.toString()}>
-                          {lead.nombre_legal} - {lead.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <FormItem className="space-y-3">
+                  <FormLabel>Tipo de Oferta</FormLabel>
+                  <FormControl>
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      className="flex space-x-6"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="precargada" id="precargada" />
+                        <Label htmlFor="precargada">Precargada</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="manual" id="manual" />
+                        <Label htmlFor="manual">Manual</Label>
+                      </div>
+                    </RadioGroup>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="id_esquema_pago_seleccionado"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Esquema de Pago (Opcional)</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar esquema de pago" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {paymentSchemes?.map((scheme) => (
-                        <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                          {scheme.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <Separator />
 
-            <FormField
-              control={form.control}
-              name="id_producto"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Producto/Servicio (Opcional)</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar producto" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {products?.map((product) => (
-                        <SelectItem key={product.id} value={product.id.toString()}>
-                          {product.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Prospect Information Section */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Información del Prospecto</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="tipo_persona"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tipo de Persona *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Persona Física">Persona Física</SelectItem>
+                          <SelectItem value="Persona Moral">Persona Moral</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nombre_completo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre Completo *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ingresa el nombre completo" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email *</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="Ingresa el email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="telefono"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Teléfono *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ingresa el teléfono (10 dígitos obligatorios)" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="rfc"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>RFC</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ingresa el RFC (Ej: ABC123456DEF)" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="curp"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>CURP</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Manual Payment Scheme Section */}
+            {selectedMode === "manual" && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Esquema de Pago Personalizado</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="porcentaje_enganche"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Porcentaje Enganche (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="porcentaje_mensualidades"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Porcentaje Mensualidades (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="porcentaje_entrega"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Porcentaje Entrega (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="numero_mensualidades"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número de Mensualidades</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="12" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="porcentaje_descuento_aumento"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Porcentaje Descuento/Aumento (%)</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" placeholder="0" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </>
+            )}
 
             <div className="flex justify-end space-x-2 pt-4">
               <Button
