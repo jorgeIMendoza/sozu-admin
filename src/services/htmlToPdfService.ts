@@ -204,8 +204,16 @@ class HTMLToPDFService {
         currentY += pageHeight;
       }
 
-      // Generate filename
-      const filename = `Oferta_${this.formatOfferNumber(offerData.id)}_${propertyDetails.projectData?.nombre || 'Propiedad'}.pdf`;
+      // Generate filename: Oferta_{numero_departamento}_{nombre_proyecto}_{numero_oferta}.pdf
+      const projectName = propertyDetails.projectData?.nombre || 'Proyecto';
+      const propertyNumber = offerData.propertyNumber || 'N/A';
+      const offerNumber = offerData.id || 'N/A';
+      
+      // Clean names for filename (remove special characters)
+      const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
+      const cleanPropertyNumber = propertyNumber.replace(/[^a-zA-Z0-9]/g, '_');
+      
+      const filename = `Oferta_${cleanPropertyNumber}_${cleanProjectName}_${offerNumber}.pdf`;
 
       // Download the PDF
       pdf.save(filename);

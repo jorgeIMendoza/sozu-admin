@@ -118,7 +118,9 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           {/* Header */}
           <div className="relative z-10 flex justify-between items-start mb-12">
             <div>
-              <h1 className="text-5xl font-bold text-primary mb-3">OFERTA INMOBILIARIA</h1>
+              <h1 className="text-5xl font-bold text-primary mb-3">
+                Cotización departamento {offerData.propertyNumber} de {propertyDetails.projectData?.nombre}
+              </h1>
               <p className="text-2xl text-muted-foreground">
                 {formatOfferNumber(offerData.id)}
               </p>
@@ -141,17 +143,8 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
               <img
                 src={propertyDetails.projectData.url_imagen_portada}
                 alt={propertyDetails.projectData.nombre}
-                className="w-full h-96 object-cover"
+                className="w-full h-64 object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-              <div className="absolute bottom-8 left-8 text-white">
-                <h2 className="text-4xl font-bold mb-3">
-                  {propertyDetails.projectData.nombre}
-                </h2>
-                <p className="text-2xl opacity-90">
-                  {propertyDetails.building?.nombre} - {offerData.propertyNumber}
-                </p>
-              </div>
             </div>
           )}
 
