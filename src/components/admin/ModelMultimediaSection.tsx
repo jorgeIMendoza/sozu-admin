@@ -66,6 +66,24 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
     }
   });
 
+  const updateUbicacionMutation = useMutation({
+    mutationFn: async ({ multimediaId, newValue }: { multimediaId: number; newValue: boolean }) => {
+      const { error } = await supabase
+        .from('multimedias_modelo')
+        .update({ ver_como_ubicacion_en_oferta: newValue })
+        .eq('id', multimediaId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modelMultimedia', modelId] });
+      toast({ title: "Ubicación en oferta actualizada exitosamente" });
+    },
+    onError: () => {
+      toast({ title: "Error al actualizar ubicación en oferta", variant: "destructive" });
+    }
+  });
+
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ multimediaId, newStatus }: { multimediaId: number; newStatus: boolean }) => {
       const { error } = await supabase
@@ -285,7 +303,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
           <Card key={item.id}>
             <CardContent className="p-4">
               <div className="flex justify-between items-start mb-2">
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Badge variant="outline">
                     {item.es_imagen ? "Imagen" : "Video"}
                   </Badge>
@@ -321,6 +339,25 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                   )}
                 </Button>
               </div>
+              
+              {item.es_imagen && item.activo && (
+                <div className="flex items-center space-x-2 mb-2">
+                  <Checkbox
+                    id={`ubicacion_${item.id}`}
+                    checked={item.ver_como_ubicacion_en_oferta}
+                    onCheckedChange={(checked) => 
+                      updateUbicacionMutation.mutate({ 
+                        multimediaId: item.id, 
+                        newValue: !!checked 
+                      })
+                    }
+                    disabled={updateUbicacionMutation.isPending}
+                  />
+                  <Label htmlFor={`ubicacion_${item.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Ver como ubicación en oferta
+                  </Label>
+                </div>
+              )}
               
               <div className="aspect-video bg-muted rounded-md overflow-hidden">
                 {item.es_imagen && isImageUrl(item.url) ? (
