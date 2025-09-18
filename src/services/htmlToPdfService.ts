@@ -206,8 +206,8 @@ class HTMLToPDFService {
 
       // Generate filename: Oferta_{numero_departamento}_{nombre_proyecto}_{numero_oferta}.pdf
       const projectName = propertyDetails.projectData?.nombre || 'Proyecto';
-      const propertyNumber = offerData.propertyNumber || 'N/A';
-      const offerNumber = offerData.id || 'N/A';
+      const propertyNumber = propertyDetails.numero_propiedad || 'N/A';
+      const offerNumber = offerData.id.toString().padStart(6, '0') || '000000';
       
       // Clean names for filename (remove special characters)
       const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');

@@ -118,16 +118,16 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           {/* Header */}
           <div className="relative z-10 flex justify-between items-start mb-12">
             <div>
-              <h1 className="text-5xl font-bold text-primary mb-3">
-                Cotización departamento {offerData.propertyNumber} de {propertyDetails.projectData?.nombre}
+              <h1 className="text-3xl font-bold text-primary mb-2">
+                Cotización departamento {propertyDetails.numero_propiedad} de {propertyDetails.projectData?.nombre}
               </h1>
-              <p className="text-2xl text-muted-foreground">
+              <p className="text-lg text-muted-foreground">
                 {formatOfferNumber(offerData.id)}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-base text-muted-foreground">Fecha de generación</p>
-              <p className="text-xl font-semibold">
+              <p className="text-sm text-muted-foreground">Fecha de generación</p>
+              <p className="text-base font-semibold">
                 {new Date(offerData.fecha_generacion).toLocaleDateString('es-MX', {
                   year: 'numeric',
                   month: 'long',
@@ -143,7 +143,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
               <img
                 src={propertyDetails.projectData.url_imagen_portada}
                 alt={propertyDetails.projectData.nombre}
-                className="w-full h-64 object-cover"
+                className="w-full h-48 object-cover"
               />
             </div>
           )}
