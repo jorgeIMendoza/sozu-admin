@@ -182,7 +182,7 @@ export class PDFGenerationService {
       if (entidadData.id_proyecto) {
         const { data: proyecto } = await supabase
           .from('proyectos')
-          .select('id, nombre')
+          .select('id, nombre, url_imagen_portada')
           .eq('id', entidadData.id_proyecto)
           .maybeSingle();
         
@@ -190,9 +190,13 @@ export class PDFGenerationService {
       }
     }
 
-    // Get project image
+    // Get project image - use url_imagen_portada first
     let proyectoImage = null;
-    if (projectData?.id) {
+    if (projectData?.url_imagen_portada) {
+      proyectoImage = projectData.url_imagen_portada;
+      console.log('Project image found from url_imagen_portada:', proyectoImage);
+    } else if (projectData?.id) {
+      // Fallback to multimedias_proyecto
       const { data: multimedia } = await supabase
         .from('multimedias_proyecto')
         .select('url')
@@ -202,7 +206,7 @@ export class PDFGenerationService {
         .maybeSingle();
       
       proyectoImage = multimedia?.url;
-      console.log('Project image found:', proyectoImage); // Debug log
+      console.log('Project image found from multimedias_proyecto:', proyectoImage);
     }
 
     // Get ubicacion image from model multimedia
