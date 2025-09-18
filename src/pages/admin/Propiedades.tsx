@@ -596,10 +596,12 @@ const Propiedades = () => {
                       </div>
                      ) : (
                        <div className="flex space-x-2">
-                         <NewOfferDialog 
-                           propertyId={property.id} 
-                           propertyNumber={property.numero_propiedad} 
-                         />
+                         {property.disponibilidad === "Disponible" && (
+                           <NewOfferDialog 
+                             propertyId={property.id} 
+                             propertyNumber={property.numero_propiedad} 
+                           />
+                         )}
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
