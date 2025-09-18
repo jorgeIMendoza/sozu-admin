@@ -68,18 +68,27 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
 
   const updateUbicacionMutation = useMutation({
     mutationFn: async ({ multimediaId, newValue }: { multimediaId: number; newValue: boolean }) => {
-      const { error } = await supabase
+      console.log('Updating ubicacion:', { multimediaId, newValue });
+      const { data, error } = await supabase
         .from('multimedias_modelo')
         .update({ ver_como_ubicacion_en_oferta: newValue })
-        .eq('id', multimediaId);
+        .eq('id', multimediaId)
+        .select();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating ubicacion:', error);
+        throw error;
+      }
+      
+      console.log('Successfully updated:', data);
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['modelMultimedia', modelId] });
       toast({ title: "Ubicación en oferta actualizada exitosamente" });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Mutation error:', error);
       toast({ title: "Error al actualizar ubicación en oferta", variant: "destructive" });
     }
   });
