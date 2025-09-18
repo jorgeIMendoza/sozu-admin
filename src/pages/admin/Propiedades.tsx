@@ -957,17 +957,19 @@ const Propiedades = () => {
                       <TableCell>
                         {offer.esquemas_pago?.es_manual ? (
                           <span className="text-sm">{offer.esquemas_pago.nombre}</span>
-                        ) : (
-                          <Select value={offer.esquemas_pago?.id?.toString()} disabled>
+                        ) : offer.esquemas_pago?.id ? (
+                          <Select value={offer.esquemas_pago.id.toString()} disabled>
                             <SelectTrigger className="w-48">
                               <SelectValue placeholder="Seleccionar esquema" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value={offer.esquemas_pago?.id?.toString() || ''}>
-                                {offer.esquemas_pago?.nombre || 'Sin esquema'}
+                              <SelectItem value={offer.esquemas_pago.id.toString()}>
+                                {offer.esquemas_pago.nombre || 'Sin esquema'}
                               </SelectItem>
                             </SelectContent>
                           </Select>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Sin esquema</span>
                         )}
                       </TableCell>
                     </TableRow>
