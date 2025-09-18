@@ -25,9 +25,11 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
       const { data, error } = await supabase
         .from("esquemas_pago")
         .select("*")
-        .eq("id_proyecto", projectId)
-        .eq("activo", true)
-        .eq("es_manual", false)
+        .match({ 
+          id_proyecto: projectId,
+          activo: true,
+          es_manual: false 
+        })
         .order("nombre");
       
       if (error) {
@@ -35,7 +37,7 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
         throw error;
       }
       
-      return data;
+      return data || [];
     },
     enabled: !!projectId && projectId > 0,
   });
