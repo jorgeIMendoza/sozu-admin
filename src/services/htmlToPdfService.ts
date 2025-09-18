@@ -117,8 +117,10 @@ class HTMLToPDFService {
     container.style.position = 'fixed';
     container.style.top = '-9999px';
     container.style.left = '-9999px';
-    container.style.width = '210mm'; // A4 width
+    container.style.width = '8.5in'; // Letter width
+    container.style.minHeight = '11in'; // Letter height
     container.style.backgroundColor = 'white';
+    container.style.fontSize = '16px'; // Increase base font size
     document.body.appendChild(container);
 
     try {
@@ -145,7 +147,7 @@ class HTMLToPDFService {
 
       // Convert to PDF
       const canvas = await html2canvas(container, {
-        scale: 2,
+        scale: 2.5, // Higher scale for better quality
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
@@ -154,19 +156,53 @@ class HTMLToPDFService {
       });
 
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdf = new jsPDF('p', 'in', 'letter'); // Use inches and letter size
       
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const pdfWidth = pdf.internal.pageSize.getWidth(); // 8.5 inches
+      const pdfHeight = pdf.internal.pageSize.getHeight(); // 11 inches
+      
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
       
-      // Calculate the ratio to fit the content in the PDF
-      const ratio = Math.min(pdfWidth / (imgWidth * 0.264583), pdfHeight / (imgHeight * 0.264583));
-      const finalWidth = imgWidth * 0.264583 * ratio;
-      const finalHeight = imgHeight * 0.264583 * ratio;
-
-      pdf.addImage(imgData, 'PNG', 0, 0, finalWidth, finalHeight);
+      // Convert pixels to inches (assuming 96 DPI)
+      const imgWidthInches = imgWidth / (96 * 2.5); // Account for scale
+      const imgHeightInches = imgHeight / (96 * 2.5);
+      
+      let currentY = 0;
+      let remainingHeight = imgHeightInches;
+      
+      // Split content across multiple pages if needed
+      while (remainingHeight > 0) {
+        const pageHeight = Math.min(remainingHeight, pdfHeight - 0.5); // Leave 0.5" margin
+        const sourceY = (imgHeightInches - remainingHeight) * (96 * 2.5);
+        const sourceHeight = pageHeight * (96 * 2.5);
+        
+        // Create canvas for this page
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = imgWidth;
+        pageCanvas.height = sourceHeight;
+        const pageCtx = pageCanvas.getContext('2d');
+        
+        if (pageCtx) {
+          pageCtx.drawImage(canvas, 0, sourceY, imgWidth, sourceHeight, 0, 0, imgWidth, sourceHeight);
+          const pageImgData = pageCanvas.toDataURL('image/png');
+          
+          if (currentY > 0) {
+            pdf.addPage();
+          }
+          
+          // Center the content with margins
+          const xMargin = 0.25; // 0.25" margin
+          const yMargin = 0.25;
+          const contentWidth = Math.min(imgWidthInches, pdfWidth - (2 * xMargin));
+          const contentHeight = pageHeight;
+          
+          pdf.addImage(pageImgData, 'PNG', xMargin, yMargin, contentWidth, contentHeight);
+        }
+        
+        remainingHeight -= pageHeight;
+        currentY += pageHeight;
+      }
 
       // Generate filename
       const filename = `Oferta_${this.formatOfferNumber(offerData.id)}_${propertyDetails.projectData?.nombre || 'Propiedad'}.pdf`;

@@ -109,23 +109,23 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
     const paymentCalculation = selectedPaymentScheme ? calculatePaymentAmounts(selectedPaymentScheme) : null;
 
     return (
-      <div ref={ref} className="bg-white text-gray-900 font-sans">
+      <div ref={ref} className="bg-white text-gray-900 font-sans text-base leading-relaxed">
         {/* Cover Page */}
-        <div className="min-h-screen p-8 flex flex-col relative overflow-hidden">
+        <div className="min-h-screen p-12 flex flex-col relative overflow-hidden">
           {/* Background gradient */}
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/10"></div>
           
           {/* Header */}
-          <div className="relative z-10 flex justify-between items-start mb-8">
+          <div className="relative z-10 flex justify-between items-start mb-12">
             <div>
-              <h1 className="text-4xl font-bold text-primary mb-2">OFERTA INMOBILIARIA</h1>
-              <p className="text-xl text-muted-foreground">
+              <h1 className="text-5xl font-bold text-primary mb-3">OFERTA INMOBILIARIA</h1>
+              <p className="text-2xl text-muted-foreground">
                 {formatOfferNumber(offerData.id)}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-muted-foreground">Fecha de generación</p>
-              <p className="text-lg font-semibold">
+              <p className="text-base text-muted-foreground">Fecha de generación</p>
+              <p className="text-xl font-semibold">
                 {new Date(offerData.fecha_generacion).toLocaleDateString('es-MX', {
                   year: 'numeric',
                   month: 'long',
@@ -137,18 +137,18 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
           {/* Project Image */}
           {propertyDetails.projectData?.url_imagen_portada && (
-            <div className="relative z-10 mb-8 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="relative z-10 mb-12 rounded-2xl overflow-hidden shadow-2xl">
               <img
                 src={propertyDetails.projectData.url_imagen_portada}
                 alt={propertyDetails.projectData.nombre}
-                className="w-full h-80 object-cover"
+                className="w-full h-96 object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-              <div className="absolute bottom-6 left-6 text-white">
-                <h2 className="text-3xl font-bold mb-2">
+              <div className="absolute bottom-8 left-8 text-white">
+                <h2 className="text-4xl font-bold mb-3">
                   {propertyDetails.projectData.nombre}
                 </h2>
-                <p className="text-xl opacity-90">
+                <p className="text-2xl opacity-90">
                   {propertyDetails.building?.nombre} - {offerData.propertyNumber}
                 </p>
               </div>
@@ -156,12 +156,12 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           )}
 
           {/* Property Summary */}
-          <div className="relative z-10 bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-border">
-            <div className="grid grid-cols-2 gap-8">
+          <div className="relative z-10 bg-white/80 backdrop-blur-sm rounded-2xl p-10 shadow-lg border border-border">
+            <div className="grid grid-cols-2 gap-12">
               <div>
-                <h3 className="text-2xl font-bold mb-4 text-primary">Detalles de la Propiedad</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
+                <h3 className="text-3xl font-bold mb-6 text-primary">Detalles de la Propiedad</h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between text-lg">
                     <span className="text-muted-foreground">Modelo:</span>
                     <span className="font-semibold">{propertyDetails.model?.nombre}</span>
                   </div>
@@ -188,8 +188,8 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
               </div>
               
               <div>
-                <h3 className="text-2xl font-bold mb-4 text-primary">Información Financiera</h3>
-                <div className="space-y-3">
+                <h3 className="text-3xl font-bold mb-6 text-primary">Información Financiera</h3>
+                <div className="space-y-4">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Precio Lista:</span>
                     <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista)}</span>
@@ -229,7 +229,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
         {/* Payment Plans Page */}
         {paymentCalculation && (
-          <div className="min-h-screen p-8 break-before-page">
+          <div className="min-h-screen p-12 break-before-page">
             <h2 className="text-3xl font-bold mb-8 text-primary text-center">Plan de Pagos</h2>
             
             <div className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-2xl p-8 mb-8">
@@ -316,7 +316,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
         {/* Amenities Page */}
         {amenities.length > 0 && (
-          <div className="min-h-screen p-8 break-before-page">
+          <div className="min-h-screen p-12 break-before-page">
             <h2 className="text-3xl font-bold mb-8 text-primary text-center">Amenidades del Proyecto</h2>
             
             <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
@@ -339,7 +339,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
         )}
 
         {/* Contact Information Page */}
-        <div className="min-h-screen p-8 break-before-page">
+        <div className="min-h-screen p-12 break-before-page">
           <h2 className="text-3xl font-bold mb-8 text-primary text-center">Información de Contacto</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
