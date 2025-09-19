@@ -758,7 +758,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                      <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                        Cancelar
                      </Button>
-                     <Button type="button" onClick={() => form.handleSubmit(onSubmit)()}>Actualizar Proyecto</Button>
                    </div>
                 </TabsContent>
 
@@ -918,7 +917,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                          Cancelar
                        </Button>
-                       <Button type="button" onClick={() => form.handleSubmit(onSubmit)()}>Actualizar Proyecto</Button>
                      </div>
                   </div>
                 </TabsContent>
