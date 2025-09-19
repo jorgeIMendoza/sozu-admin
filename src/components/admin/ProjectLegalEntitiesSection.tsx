@@ -28,15 +28,28 @@ export const ProjectLegalEntitiesSection = ({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch available legal entity types
+  // Fetch available legal entity types (only specific allowed types)
   const { data: legalEntityTypes = [] } = useQuery({
     queryKey: ["legal-entity-types"],
     queryFn: async () => {
+      const allowedEntityTypes = [
+        "administrador",
+        "aportante", 
+        "Contratista",
+        "desarrollador",
+        "dueño vendedor",
+        "inmobiliaria",
+        "inversionista",
+        "proveedor",
+        "Socio"
+      ];
+
       const { data, error } = await supabase
         .from("tipos_entidad")
         .select("id, nombre")
         .eq("padre", "p")
         .eq("activo", true)
+        .in("nombre", allowedEntityTypes)
         .order("nombre");
       
       if (error) throw error;
