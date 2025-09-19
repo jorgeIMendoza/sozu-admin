@@ -41,7 +41,7 @@ const Bodegas = () => {
         .from('bodegas')
         .select(`
           *,
-          propiedades!bodegas_id_propiedad_fkey(
+          propiedades!fk_bodegas_propiedad(
             numero_propiedad,
             entidades_relacionadas!propiedades_id_entidad_relacionada_dueno_fkey(
               proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
