@@ -47,8 +47,8 @@ interface ProjectLegalNoticesSectionProps {
 // Sortable Card Component
 const SortableCard = ({ notice, onEdit, onDelete }: { 
   notice: LegalNotice; 
-  onEdit: (notice: LegalNotice) => void; 
-  onDelete: (id: number) => void; 
+  onEdit: (e: React.MouseEvent, notice: LegalNotice) => void; 
+  onDelete: (e: React.MouseEvent, id: number) => void; 
 }) => {
   const {
     attributes,
@@ -77,14 +77,14 @@ const SortableCard = ({ notice, onEdit, onDelete }: {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onEdit(notice)}
+              onClick={(e) => onEdit(e, notice)}
             >
               <Edit className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onDelete(notice.id)}
+              onClick={(e) => onDelete(e, notice.id)}
               className="text-red-600 hover:text-red-700"
             >
               <Trash2 className="h-4 w-4" />
@@ -363,6 +363,21 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
     }
   };
 
+  const handleAddClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDialogOpen(true);
+  };
+
+  const handleEditClick = (e: React.MouseEvent, notice: LegalNotice) => {
+    e.stopPropagation();
+    handleEdit(notice);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, noticeId: number) => {
+    e.stopPropagation();
+    handleDelete(noticeId);
+  };
+
   if (isLoading) {
     return <div className="flex justify-center py-4">Cargando avisos legales...</div>;
   }
@@ -371,17 +386,17 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium">Avisos Legales del Proyecto</h3>
-        <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
+        <Dialog open={isDialogOpen} onOpenChange={handleDialogClose} modal={false}>
           <DialogTrigger asChild>
             <Button 
-              onClick={() => setIsDialogOpen(true)}
+              onClick={handleAddClick}
               disabled={legalNotices.length >= 5}
             >
               <Plus className="h-4 w-4 mr-2" />
               Agregar Aviso Legal
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent onPointerDownOutside={(e) => e.preventDefault()}>
             <DialogHeader>
               <DialogTitle>
                 {editingNotice ? "Editar Aviso Legal" : "Agregar Aviso Legal"}
@@ -482,8 +497,8 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
                 <SortableCard
                   key={notice.id}
                   notice={notice}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
+                  onEdit={handleEditClick}
+                  onDelete={handleDeleteClick}
                 />
               ))}
             </SortableContext>
