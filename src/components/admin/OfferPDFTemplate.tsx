@@ -38,6 +38,14 @@ interface PropertyDetails {
     id: number;
     nombre: string;
     url_imagen_portada?: string;
+    mostrar_precio_m2_en_oferta?: boolean;
+    mostrar_piso_en_oferta?: boolean;
+    mostrar_seccion_efectivo_en_oferta?: boolean;
+    mostrar_estacionamientos_en_oferta?: boolean;
+    mostrar_bodega_en_oferta?: boolean;
+    mostrar_modelo_en_oferta?: boolean;
+    mostrar_edificio_en_oferta?: boolean;
+    precio_m2?: number;
   };
   ownerData?: {
     id: number;
@@ -78,10 +86,12 @@ interface OfferPDFTemplateProps {
   creatorInfo: any;
   leadInfo: any;
   legalNotices: string[];
+  estacionamientos: any[];
+  bodegas: any[];
 }
 
 export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps>(
-  ({ offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices }, ref) => {
+  ({ offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas }, ref) => {
     const formatCurrency = (amount: number) => {
       return new Intl.NumberFormat('es-MX', {
         style: 'currency',
@@ -161,34 +171,60 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
             <h3 className="text-base font-bold mb-4 text-primary">Detalles de la Propiedad</h3>
             <div className="grid grid-cols-2 gap-8">
               {/* Left Column - Property Details */}
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Número de departamento:</span>
-                  <span className="font-semibold">{propertyDetails.numero_propiedad}</span>
-                </div>
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Número de departamento:</span>
+                <span className="font-semibold">{propertyDetails.numero_propiedad}</span>
+              </div>
+              {propertyDetails.projectData?.mostrar_modelo_en_oferta !== false && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Modelo:</span>
                   <span className="font-semibold">{propertyDetails.model?.nombre || 'N/A'}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Configuración:</span>
-                  <span className="font-semibold">
-                    {propertyDetails.model?.numero_recamaras || 0} rec, {propertyDetails.model?.numero_completo_banos || 0} baños, {propertyDetails.model?.numero_medio_bano || 0} 1/2 baños
-                  </span>
-                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Configuración:</span>
+                <span className="font-semibold">
+                  {propertyDetails.model?.numero_recamaras || 0} rec, {propertyDetails.model?.numero_completo_banos || 0} baños, {propertyDetails.model?.numero_medio_bano || 0} 1/2 baños
+                </span>
+              </div>
+              {propertyDetails.projectData?.mostrar_edificio_en_oferta !== false && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Edificio:</span>
                   <span className="font-semibold">{propertyDetails.building?.nombre || 'N/A'}</span>
                 </div>
+              )}
+              {propertyDetails.projectData?.mostrar_piso_en_oferta !== false && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Piso:</span>
                   <span className="font-semibold">{propertyDetails.numero_piso !== null && propertyDetails.numero_piso !== undefined ? propertyDetails.numero_piso : 'N/A'}</span>
                 </div>
+              )}
+              {propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && propertyDetails.projectData?.precio_m2 && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Precio de lista:</span>
-                  <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista)}</span>
+                  <span className="text-muted-foreground">Precio por m²:</span>
+                  <span className="font-semibold">{formatCurrency(propertyDetails.projectData.precio_m2)}</span>
                 </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Precio de lista:</span>
+                <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista)}</span>
               </div>
+              {propertyDetails.projectData?.mostrar_estacionamientos_en_oferta !== false && estacionamientos && estacionamientos.length > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Estacionamientos:</span>
+                  <span className="font-semibold">
+                    {estacionamientos.length} ({estacionamientos.map(e => e.tipos_estacionamiento?.nombre).filter(Boolean).join(', ')})
+                  </span>
+                </div>
+              )}
+              {propertyDetails.projectData?.mostrar_bodega_en_oferta !== false && bodegas && bodegas.length > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Bodega:</span>
+                  <span className="font-semibold">{bodegas.length}</span>
+                </div>
+              )}
+            </div>
               
               {/* Right Column - Amenities */}
               <div>
@@ -302,6 +338,22 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
               );
             })}
           </div>
+          
+          {/* Sección En efectivo */}
+          {propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && paymentCalculation && (
+            <div className="mt-8">
+              <h3 className="text-base font-bold mb-4 text-primary text-center">En Efectivo</h3>
+              <div className="bg-white rounded-xl p-6 shadow-lg border border-border">
+                <div className="text-center">
+                  <p className="text-lg font-bold text-primary">{formatCurrency(propertyDetails.precio_lista)}</p>
+                  <p className="text-sm text-muted-foreground">Precio de contado</p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Sin financiamiento - Pago único al momento de la escrituración
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Banking Data Page */}

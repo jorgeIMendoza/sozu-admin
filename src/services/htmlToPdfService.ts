@@ -44,6 +44,14 @@ interface PropertyDetails {
     id: number;
     nombre: string;
     url_imagen_portada?: string;
+    mostrar_precio_m2_en_oferta?: boolean;
+    mostrar_piso_en_oferta?: boolean;
+    mostrar_seccion_efectivo_en_oferta?: boolean;
+    mostrar_estacionamientos_en_oferta?: boolean;
+    mostrar_bodega_en_oferta?: boolean;
+    mostrar_modelo_en_oferta?: boolean;
+    mostrar_edificio_en_oferta?: boolean;
+    precio_m2?: number;
   };
   ownerData?: {
     id: number;
@@ -89,13 +97,15 @@ class HTMLToPDFService {
       }
 
       // Fetch all required data
-      const [propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices] = await Promise.all([
+      const [propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas] = await Promise.all([
         this.fetchPropertyDetails(offerData.propertyId),
         this.fetchPaymentSchemes(offerData.propertyId, offerData.offerId),
         this.fetchProjectAmenities(offerData.propertyId),
         this.fetchCreatorInfo(offerDetails.email_creador),
         this.fetchLeadInfo(offerDetails.id_persona_lead),
-        this.fetchLegalNotices(offerData.propertyId)
+        this.fetchLegalNotices(offerData.propertyId),
+        this.fetchEstacionamientos(offerData.propertyId),
+        this.fetchBodegas(offerData.propertyId)
       ]);
 
       console.log('Data fetched successfully, generating PDF...');
@@ -110,7 +120,7 @@ class HTMLToPDFService {
       };
 
       // Generate PDF using the React component
-      await this.generatePDFFromHTML(templateOfferData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices);
+      await this.generatePDFFromHTML(templateOfferData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas);
 
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -131,7 +141,9 @@ class HTMLToPDFService {
     amenities: ProjectAmenity[],
     creatorInfo: any,
     leadInfo: any,
-    legalNotices: string[]
+    legalNotices: string[],
+    estacionamientos: any[],
+    bodegas: any[]
   ): Promise<void> {
     // Create a temporary container for the React component
     const container = document.createElement('div');
@@ -156,7 +168,9 @@ class HTMLToPDFService {
           nombre_legal: offerData.leadName,
           email: offerData.leadEmail
         },
-        legalNotices
+        legalNotices,
+        estacionamientos,
+        bodegas
       });
 
       // Render the component
@@ -304,7 +318,19 @@ class HTMLToPDFService {
           if (edificioData.id_proyecto) {
             const { data: proyecto } = await supabase
               .from('proyectos')
-              .select('id, nombre, url_imagen_portada')
+              .select(`
+                id, 
+                nombre, 
+                url_imagen_portada,
+                mostrar_precio_m2_en_oferta,
+                mostrar_piso_en_oferta,
+                mostrar_seccion_efectivo_en_oferta,
+                mostrar_estacionamientos_en_oferta,
+                mostrar_bodega_en_oferta,
+                mostrar_modelo_en_oferta,
+                mostrar_edificio_en_oferta,
+                precio_m2
+              `)
               .eq('id', edificioData.id_proyecto)
               .single();
 
@@ -632,6 +658,57 @@ class HTMLToPDFService {
       console.error('Error fetching legal notices:', error);
       return [];
     }
+  }
+  
+  private async fetchEstacionamientos(propertyId: number): Promise<any[]> {
+    console.log('Fetching estacionamientos for property:', propertyId);
+    
+    const { data, error } = await supabase
+      .from('estacionamientos')
+      .select(`
+        id,
+        nombre,
+        m2,
+        ubicacion,
+        es_incluido,
+        id_tipo,
+        tipos_estacionamiento!inner (
+          id,
+          nombre
+        )
+      `)
+      .eq('id_propiedad', propertyId)
+      .eq('activo', true);
+
+    if (error) {
+      console.error('Error fetching estacionamientos:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+  
+  private async fetchBodegas(propertyId: number): Promise<any[]> {
+    console.log('Fetching bodegas for property:', propertyId);
+    
+    const { data, error } = await supabase
+      .from('bodegas')
+      .select(`
+        id,
+        nombre,
+        m2,
+        ubicacion,
+        es_incluido
+      `)
+      .eq('id_propiedad', propertyId)
+      .eq('activo', true);
+
+    if (error) {
+      console.error('Error fetching bodegas:', error);
+      return [];
+    }
+
+    return data || [];
   }
 
   private formatOfferNumber(offerId: number): string {
