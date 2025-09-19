@@ -62,6 +62,10 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
   // Mutation to create a new legal notice
   const createMutation = useMutation({
     mutationFn: async (values: z.infer<typeof legalNoticeSchema>) => {
+      if (legalNotices.length >= 5) {
+        throw new Error("No se pueden agregar más de 5 avisos legales por proyecto");
+      }
+      
       const { data, error } = await supabase
         .from("avisos_legales")
         .insert({
@@ -81,7 +85,10 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
         title: "Aviso legal creado",
         description: "El aviso legal se ha creado exitosamente.",
       });
-      form.reset();
+      form.reset({
+        contenido: "",
+        orden: "",
+      });
       setIsDialogOpen(false);
     },
     onError: () => {
@@ -115,7 +122,10 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
         title: "Aviso legal actualizado",
         description: "El aviso legal se ha actualizado exitosamente.",
       });
-      form.reset();
+      form.reset({
+        contenido: "",
+        orden: "",
+      });
       setIsDialogOpen(false);
       setEditingNotice(null);
     },
@@ -177,10 +187,15 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
     }
   };
 
-  const handleDialogClose = () => {
-    setIsDialogOpen(false);
-    setEditingNotice(null);
-    form.reset();
+  const handleDialogClose = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEditingNotice(null);
+      form.reset({
+        contenido: "",
+        orden: "",
+      });
+    }
   };
 
   if (isLoading) {
@@ -193,7 +208,10 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
         <h3 className="text-lg font-medium">Avisos Legales del Proyecto</h3>
         <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
           <DialogTrigger asChild>
-            <Button onClick={() => setIsDialogOpen(true)}>
+            <Button 
+              onClick={() => setIsDialogOpen(true)}
+              disabled={legalNotices.length >= 5}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Agregar Aviso Legal
             </Button>
@@ -241,10 +259,13 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
                   )}
                 />
                 <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={handleDialogClose}>
+                  <Button type="button" variant="outline" onClick={() => handleDialogClose(false)}>
                     Cancelar
                   </Button>
-                  <Button type="submit">
+                  <Button 
+                    type="submit" 
+                    disabled={!editingNotice && legalNotices.length >= 5}
+                  >
                     {editingNotice ? "Actualizar" : "Crear"}
                   </Button>
                 </div>
