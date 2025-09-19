@@ -21,7 +21,8 @@ import {
   ChevronDown,
   ChevronRight,
   Car,
-  Warehouse
+  Warehouse,
+  Eye
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -41,9 +42,9 @@ const navigationItems = [
     icon: Building2,
     children: [
       { title: "Proyectos", href: "/admin/proyectos", icon: Building2 },
-      { title: "Propiedades", href: "/admin/propiedades", icon: MapPin },
+      { title: "Propiedades", href: "/admin/propiedades", icon: Building },
       { title: "Modelos", href: "/admin/modelos", icon: Home },
-      { title: "Vistas", href: "/admin/vistas", icon: MapPin },
+      { title: "Vistas", href: "/admin/vistas", icon: Eye },
       { title: "Estacionamientos", href: "/admin/estacionamientos", icon: Car },
       { title: "Bodegas", href: "/admin/bodegas", icon: Warehouse },
     ]
