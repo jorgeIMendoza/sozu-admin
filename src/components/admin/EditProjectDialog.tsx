@@ -22,6 +22,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { GoogleMapComponent } from "./GoogleMapComponent";
 import { NewAmenityDialog } from "./NewAmenityDialog";
 import { ImageUploadField } from "./ImageUploadField";
+import { ProjectLegalNoticesSection } from "./ProjectLegalNoticesSection";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -347,11 +348,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" id="edit-project-form">
               <Tabs defaultValue="information" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="information">Información</TabsTrigger>
                   <TabsTrigger value="images">Configuración general</TabsTrigger>
                   <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
                   <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
+                  <TabsTrigger value="legal-notices">Avisos Legales</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="information" className="mt-6">
@@ -895,6 +897,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                 
                 <TabsContent value="legal-entities" className="mt-6">
                   <ProjectLegalEntitiesSection projectId={projectId} />
+                </TabsContent>
+                
+                <TabsContent value="legal-notices" className="mt-6">
+                  <ProjectLegalNoticesSection projectId={projectId} />
                 </TabsContent>
               </Tabs>
             </form>

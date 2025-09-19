@@ -377,9 +377,10 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" id="new-project-form">
             <Tabs defaultValue="information" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="information">Información</TabsTrigger>
                 <TabsTrigger value="images">Configuración general</TabsTrigger>
+                <TabsTrigger value="legal-notices">Avisos Legales</TabsTrigger>
               </TabsList>
               
               <TabsContent value="information" className="mt-6">
@@ -900,8 +901,17 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                     <Button type="button" onClick={() => form.handleSubmit(onSubmit)()}>Crear Proyecto</Button>
                   </div>
                 </div>
-              </TabsContent>
-            </Tabs>
+                </TabsContent>
+                
+                <TabsContent value="legal-notices" className="mt-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Avisos Legales del Proyecto</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Los avisos legales se pueden agregar después de crear el proyecto editándolo.
+                    </p>
+                  </div>
+                </TabsContent>
+              </Tabs>
           </form>
         </Form>
       </DialogContent>
