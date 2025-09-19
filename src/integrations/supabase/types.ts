@@ -237,6 +237,44 @@ export type Database = {
           },
         ]
       }
+      avisos_legales: {
+        Row: {
+          activo: boolean
+          contenido: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_proyecto: number
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          contenido: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_proyecto: number
+          orden: number
+        }
+        Update: {
+          activo?: boolean
+          contenido?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_proyecto?: number
+          orden?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_avisos_legales_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bancos: {
         Row: {
           activo: boolean
