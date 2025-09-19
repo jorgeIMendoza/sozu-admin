@@ -157,7 +157,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
           {/* Property Summary */}
           <div className="relative z-10 bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-border">
-            <h3 className="text-lg font-bold mb-4 text-primary">Detalles de la Propiedad</h3>
+            <h3 className="text-base font-bold mb-4 text-primary">Detalles de la Propiedad</h3>
             <div className="grid grid-cols-2 gap-8">
               {/* Left Column - Property Details */}
               <div className="space-y-1">
@@ -205,11 +205,62 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
             </div>
           </div>
 
+          {/* Contacts Section */}
+          <div className="relative z-10 mt-8 grid grid-cols-2 gap-6">
+            {/* Agent Info Card */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-border">
+              <h3 className="text-base font-bold mb-4 text-primary">Información del Agente</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">Nombre</p>
+                  <p className="font-semibold">{creatorInfo?.nombre_legal || 'No disponible'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="font-semibold">{creatorInfo?.email || 'No disponible'}</p>
+                </div>
+                {creatorInfo?.telefono && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Teléfono</p>
+                    <p className="font-semibold">{creatorInfo.telefono}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Buyer Info Card */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-border">
+              <h3 className="text-base font-bold mb-4 text-primary">Información del Comprador</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">Nombre</p>
+                  <p className="font-semibold">{leadInfo?.nombre_legal || offerData.leadName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="font-semibold">{leadInfo?.email || offerData.leadEmail}</p>
+                </div>
+                {leadInfo?.telefono && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Teléfono</p>
+                    <p className="font-semibold">{leadInfo.telefono}</p>
+                  </div>
+                )}
+                {leadInfo?.rfc && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">RFC</p>
+                    <p className="font-semibold">{leadInfo.rfc}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
         </div>
 
         {/* Payment Options Page */}
         <div className="min-h-screen p-12 break-before-page">
-          <h2 className="text-xl font-bold mb-8 text-primary text-center">Opciones de Pago Disponibles</h2>
+          <h2 className="text-base font-bold mb-8 text-primary text-center">Opciones de Pago Disponibles</h2>
           
           <div className="grid grid-cols-2 gap-6">
             {filteredPaymentSchemes.map((scheme) => {
@@ -250,63 +301,14 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           </div>
         </div>
 
-        {/* Contacts Page */}
-        <div className="min-h-screen p-12 break-before-page">
-          <h2 className="text-xl font-bold mb-8 text-primary text-center">Contactos</h2>
-          
-          <div className="grid grid-cols-2 gap-8 mb-12">
-            {/* Agent Info */}
-            <div className="bg-white rounded-2xl p-8 shadow-lg">
-              <h3 className="text-lg font-bold mb-6 text-primary">Información del Agente</h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Nombre</p>
-                  <p className="font-semibold text-lg">{creatorInfo?.nombre_legal || 'No disponible'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="font-semibold">{creatorInfo?.email || 'No disponible'}</p>
-                </div>
-                {creatorInfo?.telefono && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Teléfono</p>
-                    <p className="font-semibold">{creatorInfo.telefono}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Lead/Prospect Info */}
-            <div className="bg-white rounded-2xl p-8 shadow-lg">
-              <h3 className="text-lg font-bold mb-6 text-primary">Información del Prospecto</h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Nombre</p>
-                  <p className="font-semibold text-lg">{leadInfo?.nombre_legal || offerData.leadName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="font-semibold">{leadInfo?.email || offerData.leadEmail}</p>
-                </div>
-                {leadInfo?.telefono && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Teléfono</p>
-                    <p className="font-semibold">{leadInfo.telefono}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Banking Data Page */}
         <div className="min-h-screen p-12 break-before-page">
-          <h2 className="text-xl font-bold mb-8 text-primary text-center">Datos Bancarios</h2>
+          <h2 className="text-base font-bold mb-8 text-primary text-center">Datos Bancarios</h2>
           
           <div className="bg-white rounded-2xl p-8 shadow-lg">
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-bold mb-4 text-primary">Información de Transferencia</h3>
+                <h3 className="text-base font-bold mb-4 text-primary">Información de Transferencia</h3>
                 <div className="grid grid-cols-2 gap-8">
                   <div>
                     <p className="text-sm text-muted-foreground">Beneficiario</p>

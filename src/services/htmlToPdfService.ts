@@ -20,6 +20,7 @@ interface PropertyDetails {
   m2_escriturables: number | null;
   descripcion: string | null;
   numero_piso?: number | null;
+  clabe_stp_tmp_apartado?: string | null;
   building?: {
     id: number;
     nombre: string;
@@ -81,6 +82,9 @@ class HTMLToPDFService {
         this.fetchCreatorInfo(offerData.creatorEmail)
       ]);
 
+      // Fetch lead info separately
+      const leadInfo = await this.fetchLeadInfo(offerData.leadEmail);
+
       console.log('Data fetched successfully, generating PDF...');
 
       // Transform data for the template
@@ -93,7 +97,7 @@ class HTMLToPDFService {
       };
 
       // Generate PDF using the React component
-      await this.generatePDFFromHTML(templateOfferData, propertyDetails, paymentSchemes, amenities, creatorInfo);
+      await this.generatePDFFromHTML(templateOfferData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo);
 
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -112,7 +116,8 @@ class HTMLToPDFService {
     propertyDetails: PropertyDetails,
     paymentSchemes: PaymentScheme[],
     amenities: ProjectAmenity[],
-    creatorInfo: any
+    creatorInfo: any,
+    leadInfo: any
   ): Promise<void> {
     // Create a temporary container for the React component
     const container = document.createElement('div');
@@ -138,7 +143,7 @@ class HTMLToPDFService {
         paymentSchemes,
         amenities,
         creatorInfo,
-        leadInfo: {
+        leadInfo: leadInfo || {
           nombre_legal: offerData.leadName,
           email: offerData.leadEmail
         }
@@ -246,6 +251,7 @@ class HTMLToPDFService {
         m2_escriturables,
         descripcion,
         numero_piso,
+        clabe_stp_tmp_apartado,
         id_edificio_modelo,
         id_vista,
         id_entidad_relacionada_dueno
@@ -367,6 +373,7 @@ class HTMLToPDFService {
       m2_escriturables: propiedad.m2_escriturables,
       descripcion: propiedad.descripcion,
       numero_piso: propiedad.numero_piso,
+      clabe_stp_tmp_apartado: propiedad.clabe_stp_tmp_apartado,
       building,
       model,
       vista,
@@ -499,6 +506,23 @@ class HTMLToPDFService {
 
     if (error) {
       console.error('Error fetching creator info:', error);
+      return null;
+    }
+
+    return persona;
+  }
+
+  private async fetchLeadInfo(leadEmail: string): Promise<any> {
+    console.log('Fetching lead info for email:', leadEmail);
+
+    const { data: persona, error } = await supabase
+      .from('personas')
+      .select('id, nombre_legal, email, telefono, rfc')
+      .eq('email', leadEmail)
+      .single();
+
+    if (error) {
+      console.error('Error fetching lead info:', error);
       return null;
     }
 
