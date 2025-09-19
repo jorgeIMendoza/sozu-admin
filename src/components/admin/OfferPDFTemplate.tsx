@@ -245,22 +245,22 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           </div>
 
           {/* Contacts Section */}
-          <div className="relative z-10 mt-8 grid grid-cols-2 gap-6">
+          <div className="relative z-10 mt-4 grid grid-cols-2 gap-6">
             {/* Agent Info Card */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-border">
-              <h3 className="text-base font-bold mb-4 text-primary">Información del Agente</h3>
-              <div className="space-y-3">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-border">
+              <h3 className="text-sm font-bold mb-3 text-primary">Información del Agente</h3>
+              <div className="space-y-2 text-xs leading-tight">
                 <div>
-                  <p className="text-sm text-muted-foreground">Nombre</p>
+                  <p className="text-xs text-muted-foreground">Nombre</p>
                   <p className="font-semibold">{creatorInfo?.nombre_legal || 'No disponible'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="text-xs text-muted-foreground">Email</p>
                   <p className="font-semibold">{creatorInfo?.email || 'No disponible'}</p>
                 </div>
                 {creatorInfo?.telefono && (
                   <div>
-                    <p className="text-sm text-muted-foreground">Teléfono</p>
+                    <p className="text-xs text-muted-foreground">Teléfono</p>
                     <p className="font-semibold">{creatorInfo.telefono}</p>
                   </div>
                 )}
@@ -268,26 +268,26 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
             </div>
 
             {/* Buyer Info Card */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-border">
-              <h3 className="text-base font-bold mb-4 text-primary">Información del Comprador</h3>
-              <div className="space-y-3">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-border">
+              <h3 className="text-sm font-bold mb-3 text-primary">Información del Comprador</h3>
+              <div className="space-y-2 text-xs leading-tight">
                 <div>
-                  <p className="text-sm text-muted-foreground">Nombre</p>
-                  <p className="font-semibold">{leadInfo?.nombre_legal || offerData.leadName}</p>
+                  <p className="text-xs text-muted-foreground">Nombre</p>
+                  <p className="font-semibold">{(leadInfo?.nombre_legal || offerData.leadName).toUpperCase()}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="text-xs text-muted-foreground">Email</p>
                   <p className="font-semibold">{leadInfo?.email || offerData.leadEmail}</p>
                 </div>
                 {leadInfo?.telefono && (
                   <div>
-                    <p className="text-sm text-muted-foreground">Teléfono</p>
+                    <p className="text-xs text-muted-foreground">Teléfono</p>
                     <p className="font-semibold">{leadInfo.telefono}</p>
                   </div>
                 )}
                 {leadInfo?.rfc && (
                   <div>
-                    <p className="text-sm text-muted-foreground">RFC</p>
+                    <p className="text-xs text-muted-foreground">RFC</p>
                     <p className="font-semibold">{leadInfo.rfc}</p>
                   </div>
                 )}
@@ -339,51 +339,57 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
             })}
           </div>
           
-          {/* Sección En efectivo */}
-          {propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && paymentCalculation && (
-            <div className="mt-8">
-              <h3 className="text-base font-bold mb-4 text-primary text-center">En Efectivo</h3>
-              <div className="bg-white rounded-xl p-6 shadow-lg border border-border">
-                <div className="text-center">
-                  <p className="text-lg font-bold text-primary">{formatCurrency(propertyDetails.precio_lista)}</p>
-                  <p className="text-sm text-muted-foreground">Precio de contado</p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Sin financiamiento - Pago único al momento de la escrituración
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Banking Data Page */}
         <div className="min-h-screen p-10 break-before-page">
           <h2 className="text-sm font-bold mb-6 text-primary text-center">Datos Bancarios</h2>
           
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-bold mb-3 text-primary">Información de Transferencia</h3>
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Beneficiario</p>
-                    <p className="text-xs font-semibold">{propertyDetails.ownerData?.nombre_legal || 'No disponible'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Banco</p>
-                    <p className="text-xs font-semibold">Sistema de Transacciones y Pagos</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">CLABE</p>
-                    <p className="text-xs font-semibold font-mono">{propertyDetails.clabe_stp_tmp_apartado || 'Por asignar'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Concepto de Pago</p>
-                    <p className="text-xs font-semibold">Apartado Depto. {propertyDetails.numero_propiedad}</p>
-                  </div>
+          <div className="grid grid-cols-2 gap-6">
+            {/* Transfer Card */}
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-border">
+              <h3 className="text-sm font-bold mb-4 text-primary">Transferencia</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Beneficiario</p>
+                  <p className="text-xs font-semibold">{propertyDetails.ownerData?.nombre_legal || 'No disponible'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Banco</p>
+                  <p className="text-xs font-semibold">Sistema de Transacciones y Pagos</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">CLABE</p>
+                  <p className="text-xs font-semibold font-mono">{propertyDetails.clabe_stp_tmp_apartado || 'Por asignar'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Concepto de Pago</p>
+                  <p className="text-xs font-semibold">Apartado Depto. {propertyDetails.numero_propiedad}</p>
                 </div>
               </div>
             </div>
+
+            {/* Cash Payment Card */}
+            {propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && (
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-border">
+                <h3 className="text-sm font-bold mb-4 text-primary">En Efectivo</h3>
+                <div className="space-y-3">
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-primary">{formatCurrency(propertyDetails.precio_lista)}</p>
+                    <p className="text-xs text-muted-foreground">Precio de contado</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">
+                      Sin financiamiento - Pago único al momento de la escrituración
+                    </p>
+                  </div>
+                  <div className="text-center bg-gray-50 p-3 rounded-lg">
+                    <p className="text-xs font-semibold text-muted-foreground">Datos dummy temporales</p>
+                    <p className="text-xs text-muted-foreground">Información por definir</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Legal Notice */}
