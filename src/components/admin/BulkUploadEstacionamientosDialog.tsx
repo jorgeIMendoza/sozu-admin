@@ -75,7 +75,7 @@ export const BulkUploadEstacionamientosDialog = ({
       }, 500);
 
       const response = await fetch(
-        'https://automatizacion-n8n.fbqqbe.easypanel.host/webhook-test/cargar-archivo-estacionamientos',
+        'https://automatizacion-n8n.fbqqbe.easypanel.host/webhook/cargar-archivo-estacionamientos',
         {
           method: 'POST',
           body: formData,
