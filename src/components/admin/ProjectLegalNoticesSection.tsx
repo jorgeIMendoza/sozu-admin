@@ -352,30 +352,40 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
     }
   };
 
-  const handleFormClose = (open: boolean) => {
-    setIsFormOpen(open);
-    if (!open) {
-      setEditingNotice(null);
-      form.reset({
-        contenido: "",
-        orden: "",
-      });
-    }
-  };
 
   const handleAddClick = (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     setIsFormOpen(true);
   };
 
   const handleEditClick = (e: React.MouseEvent, notice: LegalNotice) => {
+    e.preventDefault();
     e.stopPropagation();
     handleEdit(notice);
   };
 
   const handleDeleteClick = (e: React.MouseEvent, noticeId: number) => {
+    e.preventDefault();
     e.stopPropagation();
     handleDelete(noticeId);
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    form.handleSubmit(onSubmit)(e);
+  };
+
+  const handleCancelClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsFormOpen(false);
+    setEditingNotice(null);
+    form.reset({
+      contenido: "",
+      orden: "",
+    });
   };
 
   if (isLoading) {
@@ -396,66 +406,71 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
       </div>
 
       {isFormOpen && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {editingNotice ? "Editar Aviso Legal" : "Agregar Aviso Legal"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="contenido"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contenido</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Ingrese el contenido del aviso legal" 
-                          rows={5}
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="orden"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Orden</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="Orden de aparición"
-                          min={1}
-                          max={5}
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => handleFormClose(false)}>
-                    Cancelar
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={!editingNotice && legalNotices.length >= 5}
-                  >
-                    {editingNotice ? "Actualizar" : "Crear"}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
+        <div onClick={(e) => e.stopPropagation()}>
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                {editingNotice ? "Editar Aviso Legal" : "Agregar Aviso Legal"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={handleFormSubmit} className="space-y-4" onClick={(e) => e.stopPropagation()}>
+                  <FormField
+                    control={form.control}
+                    name="contenido"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contenido</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Ingrese el contenido del aviso legal" 
+                            rows={5}
+                            {...field} 
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="orden"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Orden</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="Orden de aparición"
+                            min={1}
+                            max={5}
+                            {...field} 
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex justify-end space-x-2">
+                    <Button type="button" variant="outline" onClick={handleCancelClick}>
+                      Cancelar
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      disabled={!editingNotice && legalNotices.length >= 5}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {editingNotice ? "Actualizar" : "Crear"}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <AlertDialog open={deleteNoticeId !== null}>
