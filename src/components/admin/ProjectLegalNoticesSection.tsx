@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -103,6 +104,7 @@ const SortableCard = ({ notice, onEdit, onDelete }: {
 export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSectionProps) => {
   const [editingNotice, setEditingNotice] = useState<LegalNotice | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteNoticeId, setDeleteNoticeId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -267,6 +269,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
         title: "Aviso legal eliminado",
         description: "El aviso legal se ha eliminado exitosamente.",
       });
+      setDeleteNoticeId(null);
     },
     onError: () => {
       toast({
@@ -274,6 +277,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
         description: "Hubo un error al eliminar el aviso legal.",
         variant: "destructive",
       });
+      setDeleteNoticeId(null);
     },
   });
 
@@ -339,8 +343,12 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
   };
 
   const handleDelete = (noticeId: number) => {
-    if (confirm("¿Está seguro de que desea eliminar este aviso legal?")) {
-      deleteMutation.mutate(noticeId);
+    setDeleteNoticeId(noticeId);
+  };
+
+  const confirmDelete = () => {
+    if (deleteNoticeId) {
+      deleteMutation.mutate(deleteNoticeId);
     }
   };
 
@@ -433,6 +441,28 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
           </DialogContent>
         </Dialog>
       </div>
+
+      <AlertDialog open={deleteNoticeId !== null} onOpenChange={(open) => !open && setDeleteNoticeId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar aviso legal?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. El aviso legal será eliminado permanentemente del proyecto.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteNoticeId(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="space-y-2">
         {legalNotices.length === 0 ? (
