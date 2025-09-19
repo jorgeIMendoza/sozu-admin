@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { BulkUploadBodegasDialog } from "@/components/admin/BulkUploadBodegasDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { EditBodegaDialog } from "@/components/admin/EditBodegaDialog";
 
 interface Bodega {
   id: number;
@@ -29,6 +30,7 @@ const Bodegas = () => {
   const [activeTab, setActiveTab] = useState("activos");
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [proyectoFilter, setProyectoFilter] = useState("");
+  const [editingBodega, setEditingBodega] = useState<Bodega | null>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -119,6 +121,35 @@ const Bodegas = () => {
       toast({
         title: "Error",
         description: "No se pudo eliminar la bodega.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdate = async (id: number, data: Partial<Bodega>) => {
+    try {
+      // Exclude readonly fields  
+      const { id: _, proyecto_nombre, numero_propiedad, activo, ...updateData } = data;
+      
+      const { error } = await supabase
+        .from('bodegas')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Bodega actualizada",
+        description: "Los cambios se han guardado correctamente.",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['bodegas'] });
+      setEditingBodega(null);
+    } catch (error) {
+      console.error('Error updating bodega:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar la bodega.",
         variant: "destructive",
       });
     }
@@ -266,7 +297,11 @@ const Bodegas = () => {
                         <TableCell>{bodega.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => setEditingBodega(bodega)}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
                             <AlertDialog>
@@ -337,15 +372,33 @@ const Bodegas = () => {
                         </TableCell>
                         <TableCell>{bodega.ubicacion || "N/A"}</TableCell>
                         <TableCell>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => handleRestore(bodega.id)}
-                            className="gap-2"
-                          >
-                            <Undo2 className="h-4 w-4" />
-                            Restaurar
-                          </Button>
+                          <div className="flex gap-2">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  <Undo2 className="h-4 w-4" />
+                                  Restaurar
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>¿Restaurar bodega?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Esta acción reactivará la bodega.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => handleRestore(bodega.id)}
+                                    className="bg-green-600 text-white hover:bg-green-700"
+                                  >
+                                    Restaurar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -364,6 +417,12 @@ const Bodegas = () => {
           queryClient.invalidateQueries({ queryKey: ['bodegas'] });
           setBulkUploadOpen(false);
         }}
+      />
+      <EditBodegaDialog
+        bodega={editingBodega}
+        open={!!editingBodega}
+        onClose={() => setEditingBodega(null)}
+        onSave={handleUpdate}
       />
     </div>
   );

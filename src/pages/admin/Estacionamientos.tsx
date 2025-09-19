@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { BulkUploadEstacionamientosDialog } from "@/components/admin/BulkUploadEstacionamientosDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { EditEstacionamientoDialog } from "@/components/admin/EditEstacionamientoDialog";
 
 interface Estacionamiento {
   id: number;
@@ -30,6 +31,7 @@ const Estacionamientos = () => {
   const [activeTab, setActiveTab] = useState("activos");
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [proyectoFilter, setProyectoFilter] = useState("");
+  const [editingEstacionamiento, setEditingEstacionamiento] = useState<Estacionamiento | null>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -122,6 +124,35 @@ const Estacionamientos = () => {
       toast({
         title: "Error",
         description: "No se pudo eliminar el estacionamiento.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdate = async (id: number, data: Partial<Estacionamiento>) => {
+    try {
+      // Exclude readonly fields
+      const { id: _, proyecto_nombre, numero_propiedad, tipo_nombre, activo, ...updateData } = data;
+      
+      const { error } = await supabase
+        .from('estacionamientos')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Estacionamiento actualizado",
+        description: "Los cambios se han guardado correctamente.",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['estacionamientos'] });
+      setEditingEstacionamiento(null);
+    } catch (error) {
+      console.error('Error updating estacionamiento:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el estacionamiento.",
         variant: "destructive",
       });
     }
@@ -271,7 +302,11 @@ const Estacionamientos = () => {
                         <TableCell>{estacionamiento.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => setEditingEstacionamiento(estacionamiento)}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
                             <AlertDialog>
@@ -344,15 +379,33 @@ const Estacionamientos = () => {
                         </TableCell>
                         <TableCell>{estacionamiento.ubicacion || "N/A"}</TableCell>
                         <TableCell>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => handleRestore(estacionamiento.id)}
-                            className="gap-2"
-                          >
-                            <Undo2 className="h-4 w-4" />
-                            Restaurar
-                          </Button>
+                          <div className="flex gap-2">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  <Undo2 className="h-4 w-4" />
+                                  Restaurar
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>¿Restaurar estacionamiento?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Esta acción reactivará el estacionamiento.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => handleRestore(estacionamiento.id)}
+                                    className="bg-green-600 text-white hover:bg-green-700"
+                                  >
+                                    Restaurar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -371,6 +424,13 @@ const Estacionamientos = () => {
           queryClient.invalidateQueries({ queryKey: ['estacionamientos'] });
           setBulkUploadOpen(false);
         }}
+      />
+      
+      <EditEstacionamientoDialog
+        estacionamiento={editingEstacionamiento}
+        open={!!editingEstacionamiento}
+        onClose={() => setEditingEstacionamiento(null)}
+        onSave={handleUpdate}
       />
     </div>
   );
