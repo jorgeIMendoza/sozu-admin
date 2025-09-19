@@ -442,7 +442,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
         </Dialog>
       </div>
 
-      <AlertDialog open={deleteNoticeId !== null} onOpenChange={(open) => !open && setDeleteNoticeId(null)}>
+      <AlertDialog open={deleteNoticeId !== null}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar aviso legal?</AlertDialogTitle>
