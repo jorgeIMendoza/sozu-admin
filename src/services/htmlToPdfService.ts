@@ -792,19 +792,35 @@ class HTMLToPDFService {
 
     const projectId = edificio.id_proyecto;
 
+    // Join amenidades_proyectos with amenidades to get the actual amenity data
     const { data: amenities, error } = await supabase
       .from('amenidades_proyectos')
-      .select('id, nombre, url')
+      .select(`
+        amenidades:id_amenidad (
+          id,
+          nombre,
+          url
+        )
+      `)
       .eq('id_proyecto', projectId)
-      .eq('activo', true)
-      .order('nombre');
+      .eq('activo', true);
 
     if (error) {
       console.error('Error fetching project amenities:', error);
       return [];
     }
 
-    return amenities || [];
+    // Transform the nested structure to flat array
+    const transformedAmenities = amenities
+      ?.map(item => item.amenidades)
+      .filter(amenity => amenity !== null)  // Just filter out null values
+      .map(amenity => ({
+        id: amenity.id,
+        nombre: amenity.nombre,
+        url: amenity.url
+      })) || [];
+
+    return transformedAmenities;
   }
 
   private async fetchCreatorInfo(creatorEmail: string): Promise<any> {
@@ -875,7 +891,7 @@ class HTMLToPDFService {
     if (!edificio?.id_proyecto) return [];
 
     const { data: notices, error } = await supabase
-      .from('avisos_legales_proyecto')
+      .from('avisos_legales')
       .select('contenido')
       .eq('id_proyecto', edificio.id_proyecto)
       .eq('activo', true)
