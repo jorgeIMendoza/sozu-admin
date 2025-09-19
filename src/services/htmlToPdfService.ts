@@ -1,6 +1,9 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { supabase } from '@/integrations/supabase/client';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { OfferPDFTemplate } from '@/components/admin/OfferPDFTemplate';
 
 interface OfferData {
   propertyId: number;
@@ -142,11 +145,6 @@ class HTMLToPDFService {
     document.body.appendChild(container);
 
     try {
-      // Dynamically import React and render the component
-      const React = await import('react');
-      const ReactDOM = await import('react-dom/client');
-      const { OfferPDFTemplate } = await import('@/components/admin/OfferPDFTemplate');
-
       // Create the React element
       const element = React.createElement(OfferPDFTemplate, {
         offerData,
@@ -162,7 +160,7 @@ class HTMLToPDFService {
       });
 
       // Render the component
-      const root = ReactDOM.createRoot(container);
+      const root = createRoot(container);
       root.render(element);
 
       // Wait for rendering to complete
