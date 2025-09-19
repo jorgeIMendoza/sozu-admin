@@ -130,7 +130,7 @@ export const EditEstacionamientoDialog = ({
           <div className="space-y-2">
             <Label htmlFor="tipo">Tipo de Estacionamiento</Label>
             <Select 
-              value={formData.id_tipo.toString()} 
+              value={formData.id_tipo ? formData.id_tipo.toString() : ""} 
               onValueChange={(value) => setFormData({ ...formData, id_tipo: parseInt(value) })}
             >
               <SelectTrigger>
