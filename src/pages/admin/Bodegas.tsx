@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Edit, Trash2, Upload, Plus, Undo2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -33,11 +33,11 @@ const Bodegas = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Query para obtener bodegas
-  const { data: bodegas = [], isLoading } = useQuery({
-    queryKey: ['bodegas', activeTab, searchTerm, proyectoFilter],
+  // Query para obtener TODAS las bodegas (activas e inactivas)
+  const { data: allBodegas = [], isLoading } = useQuery({
+    queryKey: ['bodegas'],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('bodegas')
         .select(`
           *,
@@ -47,18 +47,8 @@ const Bodegas = () => {
               proyectos!inner(nombre)
             )
           )
-        `)
-        .eq('activo', activeTab === 'activos');
+        `);
 
-      if (searchTerm) {
-        query = query.or(`nombre.ilike.%${searchTerm}%,propiedades.numero_propiedad.ilike.%${searchTerm}%`);
-      }
-
-      if (proyectoFilter) {
-        query = query.eq('propiedades.entidades_relacionadas.proyectos.nombre', proyectoFilter);
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
 
       return data.map((item: any) => ({
@@ -72,6 +62,7 @@ const Bodegas = () => {
         numero_propiedad: item.propiedades?.numero_propiedad || 'N/A'
       }));
     },
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 
   // Query para obtener proyectos para el filtro
@@ -86,6 +77,7 @@ const Bodegas = () => {
       if (error) throw error;
       return data;
     },
+    staleTime: 10 * 60 * 1000, // 10 minutos
   });
 
   const handleDelete = async (bodegaId: number) => {
@@ -138,16 +130,24 @@ const Bodegas = () => {
     }
   };
 
-  const filteredBodegas = bodegas.filter((bodega) => {
-    const matchesSearch = searchTerm === "" || 
-      bodega.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bodega.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesProyecto = proyectoFilter === "" || proyectoFilter === "all" || 
-      bodega.proyecto_nombre === proyectoFilter;
+  // Filtrado optimizado del lado del cliente usando useMemo
+  const filteredBodegas = useMemo(() => {
+    return allBodegas.filter((bodega) => {
+      // Filtrar por status activo/inactivo según la pestaña
+      const matchesStatus = activeTab === 'activos' ? bodega.activo : !bodega.activo;
+      
+      // Filtrar por búsqueda
+      const matchesSearch = searchTerm === "" || 
+        bodega.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        bodega.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Filtrar por proyecto
+      const matchesProyecto = proyectoFilter === "" || proyectoFilter === "all" || 
+        bodega.proyecto_nombre === proyectoFilter;
 
-    return matchesSearch && matchesProyecto;
-  });
+      return matchesStatus && matchesSearch && matchesProyecto;
+    });
+  }, [allBodegas, activeTab, searchTerm, proyectoFilter]);
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-64">Cargando...</div>;
