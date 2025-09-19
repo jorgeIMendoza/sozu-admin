@@ -64,7 +64,7 @@ const SortableCard = ({ notice, onEdit, onDelete }: {
   };
 
   return (
-    <Card ref={setNodeRef} style={style} className="touch-none">
+    <Card ref={setNodeRef} style={style} className="touch-none" onClick={(e) => e.stopPropagation()}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -75,6 +75,7 @@ const SortableCard = ({ notice, onEdit, onDelete }: {
           </div>
           <div className="flex space-x-1">
             <Button
+              type="button"
               variant="outline"
               size="sm"
               onClick={(e) => onEdit(e, notice)}
@@ -82,6 +83,7 @@ const SortableCard = ({ notice, onEdit, onDelete }: {
               <Edit className="h-4 w-4" />
             </Button>
             <Button
+              type="button"
               variant="outline"
               size="sm"
               onClick={(e) => onDelete(e, notice.id)}
@@ -393,10 +395,11 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium">Avisos Legales del Proyecto</h3>
         <Button 
+          type="button"
           onClick={handleAddClick}
           disabled={legalNotices.length >= 5}
         >
@@ -482,11 +485,19 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteNoticeId(null)}>
+            <AlertDialogCancel onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDeleteNoticeId(null);
+            }}>
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction 
-              onClick={confirmDelete}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                confirmDelete();
+              }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Eliminar
