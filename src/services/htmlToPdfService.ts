@@ -145,120 +145,166 @@ class HTMLToPDFService {
     estacionamientos: any[],
     bodegas: any[]
   ): Promise<void> {
-    // Create a temporary container for the React component
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.top = '-9999px';
-    container.style.left = '-9999px';
-    container.style.width = '8.5in'; // Letter width
-    container.style.minHeight = '11in'; // Letter height
-    container.style.backgroundColor = 'white';
-    container.style.fontSize = '16px'; // Increase base font size
-    document.body.appendChild(container);
+    const pdf = new jsPDF('p', 'in', 'letter');
+    
+    // Generate each section as a separate page
+    await this.generateCoverPage(pdf, offerData, propertyDetails, amenities, creatorInfo, leadInfo, estacionamientos, bodegas);
+    
+    // Add payment options page
+    pdf.addPage();
+    await this.generatePaymentOptionsPage(pdf, offerData, propertyDetails, paymentSchemes);
+    
+    // Add banking data page (this ensures it starts on a new page)
+    pdf.addPage();
+    await this.generateBankingDataPage(pdf, offerData, propertyDetails, legalNotices);
 
+    // Generate filename
+    const projectName = propertyDetails.projectData?.nombre || 'Proyecto';
+    const propertyNumber = propertyDetails.numero_propiedad || 'N/A';
+    const offerNumber = offerData.id.toString().padStart(6, '0') || '000000';
+    
+    const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
+    const cleanPropertyNumber = propertyNumber.replace(/[^a-zA-Z0-9]/g, '_');
+    
+    const filename = `Oferta_${cleanPropertyNumber}_${cleanProjectName}_${offerNumber}.pdf`;
+
+    // Download the PDF
+    pdf.save(filename);
+
+    console.log('PDF generated successfully:', filename);
+  }
+
+  private async generateCoverPage(
+    pdf: jsPDF,
+    offerData: any,
+    propertyDetails: PropertyDetails,
+    amenities: ProjectAmenity[],
+    creatorInfo: any,
+    leadInfo: any,
+    estacionamientos: any[],
+    bodegas: any[]
+  ): Promise<void> {
+    const container = this.createContainer();
+    
     try {
-      // Create the React element
-      const element = React.createElement(OfferPDFTemplate, {
-        offerData,
-        propertyDetails,
-        paymentSchemes,
-        amenities,
-        creatorInfo,
-        leadInfo: leadInfo || {
-          nombre_legal: offerData.leadName,
-          email: offerData.leadEmail
-        },
-        legalNotices,
-        estacionamientos,
-        bodegas
-      });
-
-      // Render the component
+      // Create cover page content
+      const coverPageContent = this.createCoverPageElement(offerData, propertyDetails, amenities, creatorInfo, leadInfo, estacionamientos, bodegas);
+      
       const root = createRoot(container);
-      root.render(element);
-
-      // Wait for rendering to complete
+      root.render(coverPageContent);
+      
       await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Convert to PDF
+      
       const canvas = await html2canvas(container, {
-        scale: 2.5, // Higher scale for better quality
+        scale: 2.5,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         width: container.scrollWidth,
         height: container.scrollHeight
       });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'in', 'letter'); // Use inches and letter size
       
-      const pdfWidth = pdf.internal.pageSize.getWidth(); // 8.5 inches
-      const pdfHeight = pdf.internal.pageSize.getHeight(); // 11 inches
+      this.addCanvasToPage(pdf, canvas, false);
       
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      
-      // Convert pixels to inches (assuming 96 DPI)
-      const imgWidthInches = imgWidth / (96 * 2.5); // Account for scale
-      const imgHeightInches = imgHeight / (96 * 2.5);
-      
-      let currentY = 0;
-      let remainingHeight = imgHeightInches;
-      
-      // Split content across multiple pages if needed
-      while (remainingHeight > 0) {
-        const pageHeight = Math.min(remainingHeight, pdfHeight - 0.5); // Leave 0.5" margin
-        const sourceY = (imgHeightInches - remainingHeight) * (96 * 2.5);
-        const sourceHeight = pageHeight * (96 * 2.5);
-        
-        // Create canvas for this page
-        const pageCanvas = document.createElement('canvas');
-        pageCanvas.width = imgWidth;
-        pageCanvas.height = sourceHeight;
-        const pageCtx = pageCanvas.getContext('2d');
-        
-        if (pageCtx) {
-          pageCtx.drawImage(canvas, 0, sourceY, imgWidth, sourceHeight, 0, 0, imgWidth, sourceHeight);
-          const pageImgData = pageCanvas.toDataURL('image/png');
-          
-          if (currentY > 0) {
-            pdf.addPage();
-          }
-          
-          // Center the content with margins
-          const xMargin = 0.25; // 0.25" margin
-          const yMargin = 0.25;
-          const contentWidth = Math.min(imgWidthInches, pdfWidth - (2 * xMargin));
-          const contentHeight = pageHeight;
-          
-          pdf.addImage(pageImgData, 'PNG', xMargin, yMargin, contentWidth, contentHeight);
-        }
-        
-        remainingHeight -= pageHeight;
-        currentY += pageHeight;
-      }
-
-      // Generate filename: Oferta_{numero_departamento}_{nombre_proyecto}_{numero_oferta}.pdf
-      const projectName = propertyDetails.projectData?.nombre || 'Proyecto';
-      const propertyNumber = propertyDetails.numero_propiedad || 'N/A';
-      const offerNumber = offerData.id.toString().padStart(6, '0') || '000000';
-      
-      // Clean names for filename (remove special characters)
-      const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
-      const cleanPropertyNumber = propertyNumber.replace(/[^a-zA-Z0-9]/g, '_');
-      
-      const filename = `Oferta_${cleanPropertyNumber}_${cleanProjectName}_${offerNumber}.pdf`;
-
-      // Download the PDF
-      pdf.save(filename);
-
-      console.log('PDF generated successfully:', filename);
-
     } finally {
-      // Clean up
       document.body.removeChild(container);
     }
+  }
+
+  private async generatePaymentOptionsPage(
+    pdf: jsPDF,
+    offerData: any,
+    propertyDetails: PropertyDetails,
+    paymentSchemes: PaymentScheme[]
+  ): Promise<void> {
+    const container = this.createContainer();
+    
+    try {
+      const paymentPageContent = this.createPaymentOptionsElement(offerData, propertyDetails, paymentSchemes);
+      
+      const root = createRoot(container);
+      root.render(paymentPageContent);
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const canvas = await html2canvas(container, {
+        scale: 2.5,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        width: container.scrollWidth,
+        height: container.scrollHeight
+      });
+      
+      this.addCanvasToPage(pdf, canvas, false);
+      
+    } finally {
+      document.body.removeChild(container);
+    }
+  }
+
+  private async generateBankingDataPage(
+    pdf: jsPDF,
+    offerData: any,
+    propertyDetails: PropertyDetails,
+    legalNotices: string[]
+  ): Promise<void> {
+    const container = this.createContainer();
+    
+    try {
+      const bankingPageContent = this.createBankingDataElement(offerData, propertyDetails, legalNotices);
+      
+      const root = createRoot(container);
+      root.render(bankingPageContent);
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const canvas = await html2canvas(container, {
+        scale: 2.5,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        width: container.scrollWidth,
+        height: container.scrollHeight
+      });
+      
+      this.addCanvasToPage(pdf, canvas, false);
+      
+    } finally {
+      document.body.removeChild(container);
+    }
+  }
+
+  private createContainer(): HTMLDivElement {
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.top = '-9999px';
+    container.style.left = '-9999px';
+    container.style.width = '8.5in';
+    container.style.minHeight = '11in';
+    container.style.backgroundColor = 'white';
+    container.style.fontSize = '16px';
+    document.body.appendChild(container);
+    return container;
+  }
+
+  private addCanvasToPage(pdf: jsPDF, canvas: HTMLCanvasElement, isNewPage: boolean): void {
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    
+    const imgData = canvas.toDataURL('image/png');
+    const imgWidth = canvas.width;
+    const imgHeight = canvas.height;
+    
+    const imgWidthInches = imgWidth / (96 * 2.5);
+    const imgHeightInches = imgHeight / (96 * 2.5);
+    
+    const xMargin = 0.25;
+    const yMargin = 0.25;
+    const contentWidth = Math.min(imgWidthInches, pdfWidth - (2 * xMargin));
+    const contentHeight = Math.min(imgHeightInches, pdfHeight - (2 * yMargin));
+    
+    pdf.addImage(imgData, 'PNG', xMargin, yMargin, contentWidth, contentHeight);
   }
 
   private async fetchPropertyDetails(propertyId: number): Promise<PropertyDetails> {
@@ -713,6 +759,504 @@ class HTMLToPDFService {
 
   private formatOfferNumber(offerId: number): string {
     return `OFE-${offerId.toString().padStart(6, '0')}`;
+  }
+
+  private createCoverPageElement(
+    offerData: any,
+    propertyDetails: PropertyDetails,
+    amenities: ProjectAmenity[],
+    creatorInfo: any,
+    leadInfo: any,
+    estacionamientos: any[],
+    bodegas: any[]
+  ) {
+    const formatOfferNumber = (offerId: number) => {
+      return `OFE-${offerId.toString().padStart(6, '0')}`;
+    };
+
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+      }).format(amount);
+    };
+
+    return React.createElement('div', {
+      className: 'bg-white text-gray-900 font-sans text-base leading-relaxed min-h-screen p-12 flex flex-col relative overflow-hidden'
+    }, [
+      // Background gradient
+      React.createElement('div', {
+        key: 'bg',
+        className: 'absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/10'
+      }),
+      
+      // Project Image
+      propertyDetails.projectData?.url_imagen_portada && React.createElement('div', {
+        key: 'image',
+        className: 'relative z-10 mb-8 rounded-2xl overflow-hidden shadow-2xl'
+      }, [
+        React.createElement('img', {
+          key: 'img',
+          src: propertyDetails.projectData.url_imagen_portada,
+          alt: propertyDetails.projectData.nombre,
+          className: 'w-full h-48 object-cover'
+        })
+      ]),
+
+      // Header
+      React.createElement('div', {
+        key: 'header',
+        className: 'relative z-10 flex justify-between items-start mb-8'
+      }, [
+        React.createElement('div', { key: 'left' }, [
+          React.createElement('h1', {
+            key: 'title',
+            className: 'text-xl font-bold text-primary mb-1'
+          }, `Cotización departamento ${propertyDetails.numero_propiedad} de ${propertyDetails.projectData?.nombre}`),
+          React.createElement('p', {
+            key: 'offer-id',
+            className: 'text-sm text-muted-foreground'
+          }, formatOfferNumber(offerData.id))
+        ]),
+        React.createElement('div', {
+          key: 'right',
+          className: 'text-right'
+        }, [
+          React.createElement('p', {
+            key: 'date-label',
+            className: 'text-xs text-muted-foreground'
+          }, 'Fecha de generación'),
+          React.createElement('p', {
+            key: 'date-value',
+            className: 'text-sm font-semibold'
+          }, new Date(offerData.fecha_generacion).toLocaleDateString('es-MX', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }))
+        ])
+      ]),
+
+      // Property Summary
+      React.createElement('div', {
+        key: 'summary',
+        className: 'relative z-10 bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-border'
+      }, [
+        React.createElement('h3', {
+          key: 'summary-title',
+          className: 'text-base font-bold mb-4 text-primary'
+        }, 'Detalles de la Propiedad'),
+        React.createElement('div', {
+          key: 'summary-grid',
+          className: 'grid grid-cols-2 gap-8'
+        }, [
+          // Left Column - Property Details
+          React.createElement('div', {
+            key: 'left-col',
+            className: 'space-y-1'
+          }, [
+            React.createElement('div', {
+              key: 'prop-num',
+              className: 'flex justify-between'
+            }, [
+              React.createElement('span', {
+                key: 'label',
+                className: 'text-muted-foreground'
+              }, 'Número de departamento:'),
+              React.createElement('span', {
+                key: 'value',
+                className: 'font-semibold'
+              }, propertyDetails.numero_propiedad)
+            ]),
+            React.createElement('div', {
+              key: 'price',
+              className: 'flex justify-between'
+            }, [
+              React.createElement('span', {
+                key: 'label',
+                className: 'text-muted-foreground'
+              }, 'Precio de lista:'),
+              React.createElement('span', {
+                key: 'value',
+                className: 'font-semibold'
+              }, formatCurrency(propertyDetails.precio_lista))
+            ])
+          ]),
+          
+          // Right Column - Amenities
+          React.createElement('div', { key: 'right-col' }, [
+            React.createElement('h4', {
+              key: 'amenities-title',
+              className: 'text-sm font-bold mb-3 text-primary'
+            }, 'Amenidades'),
+            React.createElement('div', {
+              key: 'amenities-grid',
+              className: 'grid grid-cols-5 gap-2'
+            }, amenities.filter(amenity => amenity.url).slice(0, 15).map((amenity) =>
+              React.createElement('div', {
+                key: amenity.id,
+                className: 'flex justify-center'
+              }, [
+                React.createElement('img', {
+                  key: 'icon',
+                  src: amenity.url,
+                  alt: amenity.nombre,
+                  className: 'w-8 h-8 object-contain'
+                })
+              ])
+            ))
+          ])
+        ])
+      ]),
+
+      // Contacts Section
+      React.createElement('div', {
+        key: 'contacts',
+        className: 'relative z-10 mt-4 grid grid-cols-2 gap-6'
+      }, [
+        // Agent Info Card
+        React.createElement('div', {
+          key: 'agent',
+          className: 'bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-border'
+        }, [
+          React.createElement('h3', {
+            key: 'agent-title',
+            className: 'text-sm font-bold mb-3 text-primary'
+          }, 'Información del Agente'),
+          React.createElement('div', {
+            key: 'agent-info',
+            className: 'space-y-2 text-xs leading-tight'
+          }, [
+            React.createElement('div', { key: 'name' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Nombre'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'font-semibold'
+              }, creatorInfo?.nombre_legal || 'No disponible')
+            ]),
+            React.createElement('div', { key: 'email' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Email'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'font-semibold'
+              }, creatorInfo?.email || 'No disponible')
+            ])
+          ])
+        ]),
+
+        // Buyer Info Card
+        React.createElement('div', {
+          key: 'buyer',
+          className: 'bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-border'
+        }, [
+          React.createElement('h3', {
+            key: 'buyer-title',
+            className: 'text-sm font-bold mb-3 text-primary'
+          }, 'Información del Comprador'),
+          React.createElement('div', {
+            key: 'buyer-info',
+            className: 'space-y-2 text-xs leading-tight'
+          }, [
+            React.createElement('div', { key: 'name' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Nombre'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'font-semibold'
+              }, (leadInfo?.nombre_legal || offerData.leadName).toUpperCase())
+            ]),
+            React.createElement('div', { key: 'email' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Email'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'font-semibold'
+              }, leadInfo?.email || offerData.leadEmail)
+            ])
+          ])
+        ])
+      ])
+    ]);
+  }
+
+  private createPaymentOptionsElement(
+    offerData: any,
+    propertyDetails: PropertyDetails,
+    paymentSchemes: PaymentScheme[]
+  ) {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+      }).format(amount);
+    };
+
+    const calculatePaymentAmounts = (scheme: PaymentScheme) => {
+      const basePrice = propertyDetails.precio_lista;
+      const discount = basePrice * (scheme.porcentaje_descuento_aumento / 100);
+      const finalPrice = basePrice - discount;
+      
+      return {
+        enganche: finalPrice * (scheme.porcentaje_enganche / 100),
+        mensualidad: (finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades,
+        entrega: finalPrice * (scheme.porcentaje_entrega / 100),
+        finalPrice,
+        discount
+      };
+    };
+
+    const selectedPaymentScheme = paymentSchemes[0];
+    const filteredPaymentSchemes = selectedPaymentScheme?.es_manual 
+      ? paymentSchemes.filter(scheme => scheme.es_manual)
+      : paymentSchemes.filter(scheme => !scheme.es_manual);
+
+    return React.createElement('div', {
+      className: 'bg-white text-gray-900 font-sans text-base leading-relaxed min-h-screen p-10'
+    }, [
+      React.createElement('h2', {
+        key: 'title',
+        className: 'text-sm font-bold mb-6 text-primary text-center'
+      }, 'Opciones de Pago Disponibles'),
+      
+      React.createElement('div', {
+        key: 'schemes-grid',
+        className: 'grid grid-cols-2 gap-4'
+      }, filteredPaymentSchemes.map((scheme) => {
+        const calculation = calculatePaymentAmounts(scheme);
+        return React.createElement('div', {
+          key: scheme.id,
+          className: 'bg-white rounded-xl p-4 shadow-lg border border-border'
+        }, [
+          React.createElement('div', {
+            key: 'scheme-title',
+            className: 'text-center mb-3'
+          }, [
+            React.createElement('h4', {
+              key: 'name',
+              className: 'text-sm font-bold'
+            }, scheme.nombre)
+          ]),
+          
+          React.createElement('div', {
+            key: 'scheme-details',
+            className: 'space-y-2'
+          }, [
+            React.createElement('div', {
+              key: 'enganche',
+              className: 'text-center'
+            }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Enganche'),
+              React.createElement('p', {
+                key: 'amount',
+                className: 'font-bold text-xs'
+              }, formatCurrency(calculation.enganche)),
+              React.createElement('p', {
+                key: 'percent',
+                className: 'text-xs text-muted-foreground'
+              }, `(${scheme.porcentaje_enganche}%)`)
+            ]),
+            React.createElement('div', {
+              key: 'mensualidad',
+              className: 'text-center'
+            }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Mensualidad'),
+              React.createElement('p', {
+                key: 'amount',
+                className: 'font-bold text-xs'
+              }, formatCurrency(calculation.mensualidad)),
+              React.createElement('p', {
+                key: 'months',
+                className: 'text-xs text-muted-foreground'
+              }, `${scheme.numero_mensualidades} meses`)
+            ]),
+            React.createElement('div', {
+              key: 'entrega',
+              className: 'text-center'
+            }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Contra Entrega'),
+              React.createElement('p', {
+                key: 'amount',
+                className: 'font-bold text-xs'
+              }, formatCurrency(calculation.entrega)),
+              React.createElement('p', {
+                key: 'percent',
+                className: 'text-xs text-muted-foreground'
+              }, `(${scheme.porcentaje_entrega}%)`)
+            ]),
+            React.createElement('div', {
+              key: 'final',
+              className: 'text-center'
+            }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Precio Final'),
+              React.createElement('p', {
+                key: 'amount',
+                className: 'font-bold text-primary text-xs'
+              }, formatCurrency(calculation.finalPrice))
+            ])
+          ])
+        ]);
+      }))
+    ]);
+  }
+
+  private createBankingDataElement(
+    offerData: any,
+    propertyDetails: PropertyDetails,
+    legalNotices: string[]
+  ) {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+      }).format(amount);
+    };
+
+    return React.createElement('div', {
+      className: 'bg-white text-gray-900 font-sans text-base leading-relaxed min-h-screen p-10'
+    }, [
+      React.createElement('h2', {
+        key: 'title',
+        className: 'text-sm font-bold mb-6 text-primary text-center'
+      }, 'Datos Bancarios'),
+      
+      React.createElement('div', {
+        key: 'banking-grid',
+        className: 'grid grid-cols-2 gap-6'
+      }, [
+        // Transfer Card
+        React.createElement('div', {
+          key: 'transfer',
+          className: 'bg-white rounded-2xl p-6 shadow-lg border border-border'
+        }, [
+          React.createElement('h3', {
+            key: 'transfer-title',
+            className: 'text-sm font-bold mb-4 text-primary'
+          }, 'Transferencia'),
+          React.createElement('div', {
+            key: 'transfer-details',
+            className: 'space-y-3'
+          }, [
+            React.createElement('div', { key: 'beneficiary' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Beneficiario'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'text-xs font-semibold'
+              }, propertyDetails.ownerData?.nombre_legal || 'No disponible')
+            ]),
+            React.createElement('div', { key: 'bank' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Banco'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'text-xs font-semibold'
+              }, 'Sistema de Transacciones y Pagos')
+            ]),
+            React.createElement('div', { key: 'clabe' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'CLABE'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'text-xs font-semibold font-mono'
+              }, propertyDetails.clabe_stp_tmp_apartado || 'Por asignar')
+            ]),
+            React.createElement('div', { key: 'concept' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Concepto de Pago'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'text-xs font-semibold'
+              }, `Apartado Depto. ${propertyDetails.numero_propiedad}`)
+            ])
+          ])
+        ]),
+
+        // Cash Payment Card
+        propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && React.createElement('div', {
+          key: 'cash',
+          className: 'bg-white rounded-2xl p-6 shadow-lg border border-border'
+        }, [
+          React.createElement('h3', {
+            key: 'cash-title',
+            className: 'text-sm font-bold mb-4 text-primary'
+          }, 'En Efectivo'),
+          React.createElement('div', {
+            key: 'cash-details',
+            className: 'space-y-3'
+          }, [
+            React.createElement('div', {
+              key: 'price',
+              className: 'text-center'
+            }, [
+              React.createElement('p', {
+                key: 'amount',
+                className: 'text-lg font-bold text-primary'
+              }, formatCurrency(propertyDetails.precio_lista)),
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Precio de contado')
+            ]),
+            React.createElement('div', {
+              key: 'note',
+              className: 'text-center'
+            }, [
+              React.createElement('p', {
+                key: 'text',
+                className: 'text-xs text-muted-foreground'
+              }, 'Sin financiamiento - Pago único al momento de la escrituración')
+            ])
+          ])
+        ])
+      ]),
+
+      // Legal Notice
+      React.createElement('div', {
+        key: 'legal',
+        className: 'mt-8 p-4 bg-muted rounded-xl'
+      }, [
+        React.createElement('h4', {
+          key: 'legal-title',
+          className: 'text-xs font-bold mb-2'
+        }, 'Aviso Legal'),
+        React.createElement('p', {
+          key: 'legal-text',
+          className: 'text-xs text-muted-foreground leading-relaxed'
+        }, legalNotices && legalNotices.length > 0 
+          ? legalNotices.join('. ')
+          : 'Esta cotización es válida por 30 días a partir de la fecha de generación. Los precios están sujetos a cambios sin previo aviso.')
+      ])
+    ]);
   }
 }
 
