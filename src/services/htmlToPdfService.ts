@@ -74,30 +74,40 @@ class HTMLToPDFService {
     try {
       console.log('Starting PDF generation for offer:', offerData.offerId);
 
+      // Fetch offer details from database
+      const { data: offerDetails, error: offerError } = await supabase
+        .from('ofertas')
+        .select('*')
+        .eq('id', offerData.offerId)
+        .single();
+
+      if (offerError || !offerDetails) {
+        throw new Error('Error fetching offer details');
+      }
+
       // Fetch all required data
-      const [propertyDetails, paymentSchemes, amenities, creatorInfo] = await Promise.all([
+      const [propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices] = await Promise.all([
         this.fetchPropertyDetails(offerData.propertyId),
         this.fetchPaymentSchemes(offerData.propertyId),
         this.fetchProjectAmenities(offerData.propertyId),
-        this.fetchCreatorInfo(offerData.creatorEmail)
+        this.fetchCreatorInfo(offerDetails.email_creador),
+        this.fetchLeadInfo(offerDetails.id_persona_lead),
+        this.fetchLegalNotices(offerData.propertyId)
       ]);
-
-      // Fetch lead info separately
-      const leadInfo = await this.fetchLeadInfo(offerData.leadEmail);
 
       console.log('Data fetched successfully, generating PDF...');
 
       // Transform data for the template
       const templateOfferData = {
         id: offerData.offerId,
-        fecha_generacion: new Date().toISOString(),
+        fecha_generacion: offerDetails.fecha_generacion,
         propertyNumber: offerData.propertyNumber,
         leadName: offerData.leadName,
         leadEmail: offerData.leadEmail,
       };
 
       // Generate PDF using the React component
-      await this.generatePDFFromHTML(templateOfferData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo);
+      await this.generatePDFFromHTML(templateOfferData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices);
 
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -117,7 +127,8 @@ class HTMLToPDFService {
     paymentSchemes: PaymentScheme[],
     amenities: ProjectAmenity[],
     creatorInfo: any,
-    leadInfo: any
+    leadInfo: any,
+    legalNotices: string[]
   ): Promise<void> {
     // Create a temporary container for the React component
     const container = document.createElement('div');
@@ -146,7 +157,8 @@ class HTMLToPDFService {
         leadInfo: leadInfo || {
           nombre_legal: offerData.leadName,
           email: offerData.leadEmail
-        }
+        },
+        legalNotices
       });
 
       // Render the component
@@ -498,6 +510,22 @@ class HTMLToPDFService {
   private async fetchCreatorInfo(creatorEmail: string): Promise<any> {
     console.log('Fetching creator info for email:', creatorEmail);
 
+    // Try to fetch from usuarios table first
+    const { data: usuario, error: usuarioError } = await supabase
+      .from('usuarios')
+      .select('nombre, email, telefono')
+      .eq('email', creatorEmail)
+      .single();
+
+    if (!usuarioError && usuario) {
+      return {
+        nombre_legal: usuario.nombre,
+        email: usuario.email,
+        telefono: usuario.telefono
+      };
+    }
+
+    // If not found in usuarios, try personas table
     const { data: persona, error } = await supabase
       .from('personas')
       .select('id, nombre_legal, email, telefono')
@@ -512,13 +540,13 @@ class HTMLToPDFService {
     return persona;
   }
 
-  private async fetchLeadInfo(leadEmail: string): Promise<any> {
-    console.log('Fetching lead info for email:', leadEmail);
+  private async fetchLeadInfo(leadId: number): Promise<any> {
+    console.log('Fetching lead info for ID:', leadId);
 
     const { data: persona, error } = await supabase
       .from('personas')
       .select('id, nombre_legal, email, telefono, rfc')
-      .eq('email', leadEmail)
+      .eq('id', leadId)
       .single();
 
     if (error) {
@@ -527,6 +555,50 @@ class HTMLToPDFService {
     }
 
     return persona;
+  }
+
+  private async fetchLegalNotices(propertyId: number): Promise<string[]> {
+    console.log('Fetching legal notices for property:', propertyId);
+    
+    try {
+      // Get project ID first
+      const { data: propertyData } = await supabase
+        .from('propiedades')
+        .select('id_edificio_modelo')
+        .eq('id', propertyId)
+        .single();
+
+      if (!propertyData?.id_edificio_modelo) {
+        return [];
+      }
+
+      const { data: edificioModelo } = await supabase
+        .from('edificios_modelos')
+        .select('id_edificio')
+        .eq('id', propertyData.id_edificio_modelo)
+        .single();
+
+      if (!edificioModelo?.id_edificio) {
+        return [];
+      }
+
+      const { data: edificio } = await supabase
+        .from('edificios')
+        .select('id_proyecto')
+        .eq('id', edificioModelo.id_edificio)
+        .single();
+
+      if (!edificio?.id_proyecto) {
+        return [];
+      }
+
+      // TODO: Create and implement query for legal notices from project
+      // For now, return empty array as the table doesn't exist yet
+      return [];
+    } catch (error) {
+      console.error('Error fetching legal notices:', error);
+      return [];
+    }
   }
 
   private formatOfferNumber(offerId: number): string {

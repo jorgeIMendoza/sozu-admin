@@ -77,10 +77,11 @@ interface OfferPDFTemplateProps {
   amenities: ProjectAmenity[];
   creatorInfo: any;
   leadInfo: any;
+  legalNotices: string[];
 }
 
 export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps>(
-  ({ offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo }, ref) => {
+  ({ offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices }, ref) => {
     const formatCurrency = (amount: number) => {
       return new Intl.NumberFormat('es-MX', {
         style: 'currency',
@@ -259,37 +260,37 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
         </div>
 
         {/* Payment Options Page */}
-        <div className="min-h-screen p-12 break-before-page">
-          <h2 className="text-base font-bold mb-8 text-primary text-center">Opciones de Pago Disponibles</h2>
+        <div className="min-h-screen p-10 break-before-page">
+          <h2 className="text-sm font-bold mb-6 text-primary text-center">Opciones de Pago Disponibles</h2>
           
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-2 gap-4">
             {filteredPaymentSchemes.map((scheme) => {
               const calculation = calculatePaymentAmounts(scheme);
               return (
-                <div key={scheme.id} className="bg-white rounded-xl p-6 shadow-lg border border-border">
-                  <div className="text-center mb-4">
-                    <h4 className="text-lg font-bold">{scheme.nombre}</h4>
+                <div key={scheme.id} className="bg-white rounded-xl p-4 shadow-lg border border-border">
+                  <div className="text-center mb-3">
+                    <h4 className="text-sm font-bold">{scheme.nombre}</h4>
                   </div>
                   
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Enganche</p>
-                      <p className="font-bold text-sm">{formatCurrency(calculation.enganche)}</p>
+                      <p className="font-bold text-xs">{formatCurrency(calculation.enganche)}</p>
                       <p className="text-xs text-muted-foreground">({scheme.porcentaje_enganche}%)</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Mensualidad</p>
-                      <p className="font-bold text-sm">{formatCurrency(calculation.mensualidad)}</p>
+                      <p className="font-bold text-xs">{formatCurrency(calculation.mensualidad)}</p>
                       <p className="text-xs text-muted-foreground">{scheme.numero_mensualidades} meses</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Contra Entrega</p>
-                      <p className="font-bold text-sm">{formatCurrency(calculation.entrega)}</p>
+                      <p className="font-bold text-xs">{formatCurrency(calculation.entrega)}</p>
                       <p className="text-xs text-muted-foreground">({scheme.porcentaje_entrega}%)</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Precio Final</p>
-                      <p className="font-bold text-primary text-sm">{formatCurrency(calculation.finalPrice)}</p>
+                      <p className="font-bold text-primary text-xs">{formatCurrency(calculation.finalPrice)}</p>
                       {calculation.discount > 0 && (
                         <p className="text-xs text-green-600">Ahorro: {formatCurrency(calculation.discount)}</p>
                       )}
@@ -302,29 +303,29 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
         </div>
 
         {/* Banking Data Page */}
-        <div className="min-h-screen p-12 break-before-page">
-          <h2 className="text-base font-bold mb-8 text-primary text-center">Datos Bancarios</h2>
+        <div className="min-h-screen p-10 break-before-page">
+          <h2 className="text-sm font-bold mb-6 text-primary text-center">Datos Bancarios</h2>
           
-          <div className="bg-white rounded-2xl p-8 shadow-lg">
-            <div className="space-y-6">
+          <div className="bg-white rounded-2xl p-6 shadow-lg">
+            <div className="space-y-4">
               <div>
-                <h3 className="text-base font-bold mb-4 text-primary">Información de Transferencia</h3>
-                <div className="grid grid-cols-2 gap-8">
+                <h3 className="text-sm font-bold mb-3 text-primary">Información de Transferencia</h3>
+                <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <p className="text-sm text-muted-foreground">Beneficiario</p>
-                    <p className="font-semibold">{propertyDetails.ownerData?.nombre_legal || 'No disponible'}</p>
+                    <p className="text-xs text-muted-foreground">Beneficiario</p>
+                    <p className="text-xs font-semibold">{propertyDetails.ownerData?.nombre_legal || 'No disponible'}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Banco</p>
-                    <p className="font-semibold">Sistema de Transacciones y Pagos</p>
+                    <p className="text-xs text-muted-foreground">Banco</p>
+                    <p className="text-xs font-semibold">Sistema de Transacciones y Pagos</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">CLABE</p>
-                    <p className="font-semibold font-mono">{propertyDetails.clabe_stp_tmp_apartado || 'Por asignar'}</p>
+                    <p className="text-xs text-muted-foreground">CLABE</p>
+                    <p className="text-xs font-semibold font-mono">{propertyDetails.clabe_stp_tmp_apartado || 'Por asignar'}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Concepto de Pago</p>
-                    <p className="font-semibold">Apartado Depto. {propertyDetails.numero_propiedad}</p>
+                    <p className="text-xs text-muted-foreground">Concepto de Pago</p>
+                    <p className="text-xs font-semibold">Apartado Depto. {propertyDetails.numero_propiedad}</p>
                   </div>
                 </div>
               </div>
@@ -332,14 +333,13 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           </div>
 
           {/* Legal Notice */}
-          <div className="mt-12 p-6 bg-muted rounded-xl">
-            <h4 className="font-bold mb-3">Aviso Legal</h4>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Esta oferta es válida por 30 días calendario a partir de la fecha de generación. 
-              Los precios y condiciones están sujetos a disponibilidad y pueden cambiar sin previo aviso. 
-              Para formalizar la compra se requiere la firma del contrato correspondiente y el cumplimiento 
-              de todos los requisitos legales aplicables. Las imágenes y descripciones son referenciales 
-              y pueden no corresponder exactamente al inmueble final.
+          <div className="mt-8 p-4 bg-muted rounded-xl">
+            <h4 className="text-xs font-bold mb-2">Aviso Legal</h4>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {legalNotices && legalNotices.length > 0 
+                ? legalNotices.join('. ')
+                : 'Esta oferta es válida por 30 días calendario a partir de la fecha de generación. Los precios y condiciones están sujetos a disponibilidad y pueden cambiar sin previo aviso. Para formalizar la compra se requiere la firma del contrato correspondiente y el cumplimiento de todos los requisitos legales aplicables. Las imágenes y descripciones son referenciales y pueden no corresponder exactamente al inmueble final.'
+              }
             </p>
           </div>
         </div>
