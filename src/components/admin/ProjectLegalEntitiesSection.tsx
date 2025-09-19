@@ -33,14 +33,14 @@ export const ProjectLegalEntitiesSection = ({
     queryKey: ["legal-entity-types"],
     queryFn: async () => {
       const allowedEntityTypes = [
-        "administrador",
-        "aportante", 
+        "Administrador",
+        "Aportante", 
         "Contratista",
-        "desarrollador",
-        "dueño vendedor",
-        "inmobiliaria",
-        "inversionista",
-        "proveedor",
+        "Desarrollador",
+        "Dueño Vendedor",
+        "Inmobiliaria",
+        "Inversionista",
+        "Proveedor",
         "Socio"
       ];
 
@@ -57,10 +57,22 @@ export const ProjectLegalEntitiesSection = ({
     },
   });
 
-  // Fetch available legal entities with their entity relations
+  // Fetch available legal entities with their entity relations (only allowed types)
   const { data: availableLegalEntities = [] } = useQuery({
     queryKey: ["available-legal-entities"],
     queryFn: async () => {
+      const allowedEntityTypes = [
+        "Administrador",
+        "Aportante", 
+        "Contratista",
+        "Desarrollador",
+        "Dueño Vendedor",
+        "Inmobiliaria",
+        "Inversionista",
+        "Proveedor",
+        "Socio"
+      ];
+
       const { data, error } = await supabase
         .from("personas")
         .select(`
@@ -80,7 +92,8 @@ export const ProjectLegalEntitiesSection = ({
         .eq("activo", true)
         .eq("tipo_persona", "pm")
         .eq("entidades_relacionadas.activo", true)
-        .eq("entidades_relacionadas.tipos_entidad.padre", "p");
+        .eq("entidades_relacionadas.tipos_entidad.padre", "p")
+        .in("entidades_relacionadas.tipos_entidad.nombre", allowedEntityTypes);
       
       if (error) throw error;
       
@@ -88,16 +101,18 @@ export const ProjectLegalEntitiesSection = ({
       const entityMap = new Map();
       (data || []).forEach((item: any) => {
         item.entidades_relacionadas.forEach((rel: any) => {
-          const key = `${item.id}-${rel.id_tipo_entidad}`;
-          if (!entityMap.has(key)) {
-            entityMap.set(key, {
-              id: item.id,
-              nombre_legal: item.nombre_legal,
-              email: item.email,
-              telefono: item.telefono,
-              tipo_entidad_id: rel.id_tipo_entidad,
-              tipo_entidad_nombre: rel.tipos_entidad?.nombre,
-            });
+          if (allowedEntityTypes.includes(rel.tipos_entidad?.nombre)) {
+            const key = `${item.id}-${rel.id_tipo_entidad}`;
+            if (!entityMap.has(key)) {
+              entityMap.set(key, {
+                id: item.id,
+                nombre_legal: item.nombre_legal,
+                email: item.email,
+                telefono: item.telefono,
+                tipo_entidad_id: rel.id_tipo_entidad,
+                tipo_entidad_nombre: rel.tipos_entidad?.nombre,
+              });
+            }
           }
         });
       });
@@ -106,11 +121,23 @@ export const ProjectLegalEntitiesSection = ({
     },
   });
 
-  // Fetch project's current legal entities
+  // Fetch project's current legal entities (only allowed types)
   const { data: projectLegalEntities = [] } = useQuery({
     queryKey: ["project-legal-entities", projectId],
     queryFn: async () => {
       if (!projectId) return [];
+      
+      const allowedEntityTypes = [
+        "Administrador",
+        "Aportante", 
+        "Contratista",
+        "Desarrollador",
+        "Dueño Vendedor",
+        "Inmobiliaria",
+        "Inversionista",
+        "Proveedor",
+        "Socio"
+      ];
       
       const { data, error } = await supabase
         .from("entidades_relacionadas")
@@ -130,7 +157,8 @@ export const ProjectLegalEntitiesSection = ({
         `)
         .eq("id_proyecto", projectId)
         .eq("activo", true)
-        .eq("tipos_entidad.padre", "p");
+        .eq("tipos_entidad.padre", "p")
+        .in("tipos_entidad.nombre", allowedEntityTypes);
       
       if (error) throw error;
       return data || [];
