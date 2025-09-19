@@ -19,7 +19,9 @@ import {
   Calendar,
   Briefcase,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Car,
+  Warehouse
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -42,8 +44,8 @@ const navigationItems = [
       { title: "Propiedades", href: "/admin/propiedades", icon: MapPin },
       { title: "Modelos", href: "/admin/modelos", icon: Home },
       { title: "Vistas", href: "/admin/vistas", icon: MapPin },
-      { title: "Estacionamientos", href: "/admin/estacionamientos", icon: MapPin },
-      { title: "Bodegas", href: "/admin/bodegas", icon: MapPin },
+      { title: "Estacionamientos", href: "/admin/estacionamientos", icon: Car },
+      { title: "Bodegas", href: "/admin/bodegas", icon: Warehouse },
     ]
   },
   {

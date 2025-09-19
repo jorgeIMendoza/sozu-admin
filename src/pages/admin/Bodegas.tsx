@@ -228,8 +228,8 @@ const Bodegas = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="activos">Activos</TabsTrigger>
-          <TabsTrigger value="eliminados">Eliminados</TabsTrigger>
+          <TabsTrigger value="activos">Bodegas Activas ({allBodegas.filter(b => b.activo).length})</TabsTrigger>
+          <TabsTrigger value="eliminados">Bodegas Eliminadas ({allBodegas.filter(b => !b.activo).length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="activos" className="space-y-4">

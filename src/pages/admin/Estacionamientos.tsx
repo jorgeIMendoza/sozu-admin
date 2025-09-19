@@ -231,8 +231,8 @@ const Estacionamientos = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="activos">Activos</TabsTrigger>
-          <TabsTrigger value="eliminados">Eliminados</TabsTrigger>
+          <TabsTrigger value="activos">Estacionamientos Activos ({allEstacionamientos.filter(e => e.activo).length})</TabsTrigger>
+          <TabsTrigger value="eliminados">Estacionamientos Eliminados ({allEstacionamientos.filter(e => !e.activo).length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="activos" className="space-y-4">
