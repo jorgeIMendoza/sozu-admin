@@ -24,7 +24,7 @@ interface Estacionamiento {
   tipo_nombre: string;
   proyecto_nombre: string;
   numero_propiedad: string;
-  id_tipo: number;
+  id_tipo: number | null;
 }
 
 const Estacionamientos = () => {

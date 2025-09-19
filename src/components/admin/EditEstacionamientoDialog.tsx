@@ -19,7 +19,7 @@ interface Estacionamiento {
   tipo_nombre: string;
   proyecto_nombre: string;
   numero_propiedad: string;
-  id_tipo: number;
+  id_tipo: number | null;
 }
 
 interface EditEstacionamientoDialogProps {
@@ -40,7 +40,7 @@ export const EditEstacionamientoDialog = ({
     m2: estacionamiento?.m2 || 0,
     ubicacion: estacionamiento?.ubicacion || "",
     es_incluido: estacionamiento?.es_incluido || false,
-    id_tipo: estacionamiento?.id_tipo || 0,
+    id_tipo: estacionamiento?.id_tipo || null,
   }));
 
   // Query para obtener tipos de estacionamiento
@@ -84,7 +84,7 @@ export const EditEstacionamientoDialog = ({
       m2: 0,
       ubicacion: "",
       es_incluido: false,
-      id_tipo: 0,
+      id_tipo: null,
     });
   };
 
@@ -131,7 +131,7 @@ export const EditEstacionamientoDialog = ({
             <Label htmlFor="tipo">Tipo de Estacionamiento</Label>
             <Select 
               value={formData.id_tipo ? formData.id_tipo.toString() : ""} 
-              onValueChange={(value) => setFormData({ ...formData, id_tipo: parseInt(value) })}
+              onValueChange={(value) => setFormData({ ...formData, id_tipo: value ? parseInt(value) : null })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecciona un tipo" />
