@@ -143,7 +143,7 @@ const Bodegas = () => {
       bodega.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       bodega.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesProyecto = proyectoFilter === "" || 
+    const matchesProyecto = proyectoFilter === "" || proyectoFilter === "all" || 
       bodega.proyecto_nombre === proyectoFilter;
 
     return matchesSearch && matchesProyecto;
@@ -194,7 +194,7 @@ const Bodegas = () => {
                   <SelectValue placeholder="Todos los proyectos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos los proyectos</SelectItem>
+                  <SelectItem value="all">Todos los proyectos</SelectItem>
                   {proyectos.map((proyecto) => (
                     <SelectItem key={proyecto.nombre} value={proyecto.nombre}>
                       {proyecto.nombre}
