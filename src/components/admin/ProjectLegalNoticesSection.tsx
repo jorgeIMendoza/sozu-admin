@@ -12,15 +12,41 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
-const legalNoticeSchema = z.object({
+const createLegalNoticeSchema = (existingNotices: LegalNotice[], editingId?: number) => z.object({
   contenido: z.string().min(1, "El contenido es requerido"),
   orden: z.string()
     .min(1, "El orden es requerido")
     .refine((val) => {
       const num = parseInt(val);
       return num >= 1 && num <= 5;
-    }, "El orden debe estar entre 1 y 5"),
+    }, "El orden debe estar entre 1 y 5")
+    .refine((val) => {
+      const num = parseInt(val);
+      const isDuplicate = existingNotices.some(notice => 
+        notice.orden === num && notice.id !== editingId
+      );
+      return !isDuplicate;
+    }, "Ya existe un aviso legal con este orden"),
 });
 
 interface LegalNotice {
@@ -34,14 +60,81 @@ interface ProjectLegalNoticesSectionProps {
   projectId: number;
 }
 
+// Sortable Card Component
+const SortableCard = ({ notice, onEdit, onDelete }: { 
+  notice: LegalNotice; 
+  onEdit: (notice: LegalNotice) => void; 
+  onDelete: (id: number) => void; 
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: notice.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <Card ref={setNodeRef} style={style} className="touch-none">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <CardTitle className="text-sm">Orden {notice.orden}</CardTitle>
+          </div>
+          <div className="flex space-x-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEdit(notice)}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onDelete(notice.id)}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+          {notice.contenido}
+        </p>
+      </CardContent>
+    </Card>
+  );
+};
+
 export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSectionProps) => {
   const [editingNotice, setEditingNotice] = useState<LegalNotice | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const form = useForm<z.infer<typeof legalNoticeSchema>>({
-    resolver: zodResolver(legalNoticeSchema),
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Create dynamic schema with validation
+  const getSchema = () => createLegalNoticeSchema(legalNotices, editingNotice?.id);
+
+  const form = useForm({
+    resolver: zodResolver(getSchema()),
     defaultValues: {
       contenido: "",
       orden: "",
@@ -66,7 +159,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
 
   // Mutation to create a new legal notice
   const createMutation = useMutation({
-    mutationFn: async (values: z.infer<typeof legalNoticeSchema>) => {
+    mutationFn: async (values: z.infer<ReturnType<typeof getSchema>>) => {
       if (legalNotices.length >= 5) {
         throw new Error("No se pueden agregar más de 5 avisos legales por proyecto");
       }
@@ -94,7 +187,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
         contenido: "",
         orden: "",
       });
-      setIsDialogOpen(false);
+      // Don't close dialog after creation
     },
     onError: () => {
       toast({
@@ -107,7 +200,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
 
   // Mutation to update a legal notice
   const updateMutation = useMutation({
-    mutationFn: async (values: z.infer<typeof legalNoticeSchema> & { id: number }) => {
+    mutationFn: async (values: z.infer<ReturnType<typeof getSchema>> & { id: number }) => {
       const { data, error } = await supabase
         .from("avisos_legales")
         .update({
@@ -169,11 +262,59 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof legalNoticeSchema>) => {
+  // Mutation to update order via drag
+  const updateOrderMutation = useMutation({
+    mutationFn: async (updates: { id: number; orden: number }[]) => {
+      const promises = updates.map(({ id, orden }) =>
+        supabase
+          .from("avisos_legales")
+          .update({ orden })
+          .eq("id", id)
+      );
+      
+      const results = await Promise.all(promises);
+      const errors = results.filter(result => result.error);
+      
+      if (errors.length > 0) {
+        throw new Error("Error updating orders");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["legal-notices", projectId] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Hubo un error al reordenar los avisos legales.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = async (values: z.infer<ReturnType<typeof getSchema>>) => {
     if (editingNotice) {
       updateMutation.mutate({ ...values, id: editingNotice.id });
     } else {
       createMutation.mutate(values);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (active.id !== over?.id) {
+      const oldIndex = legalNotices.findIndex((notice) => notice.id === active.id);
+      const newIndex = legalNotices.findIndex((notice) => notice.id === over?.id);
+
+      const newOrder = arrayMove(legalNotices, oldIndex, newIndex);
+      
+      // Update orders based on new positions
+      const updates = newOrder.map((notice, index) => ({
+        id: notice.id,
+        orden: index + 1,
+      }));
+
+      updateOrderMutation.mutate(updates);
     }
   };
 
@@ -290,40 +431,22 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
             </CardContent>
           </Card>
         ) : (
-          legalNotices.map((notice) => (
-            <Card key={notice.id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-sm">Orden {notice.orden}</CardTitle>
-                  </div>
-                  <div className="flex space-x-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEdit(notice)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(notice.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  {notice.contenido}
-                </p>
-              </CardContent>
-            </Card>
-          ))
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={legalNotices.map(n => n.id)} strategy={verticalListSortingStrategy}>
+              {legalNotices.map((notice) => (
+                <SortableCard
+                  key={notice.id}
+                  notice={notice}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
         )}
       </div>
     </div>
