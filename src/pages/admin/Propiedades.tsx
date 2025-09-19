@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { generateOfferPDF } from "@/services/pdfGenerationService";
+import { EstacionamientosDetailDialog } from "@/components/admin/EstacionamientosDetailDialog";
+import { BodegasDetailDialog } from "@/components/admin/BodegasDetailDialog";
 
 interface Property {
   id: number;
@@ -44,6 +46,9 @@ interface Property {
   };
   // Nueva propiedad para verificar si tiene ofertas
   tieneOfertas: boolean;
+  // Nuevas propiedades para estacionamientos y bodegas
+  estacionamientos_count: number;
+  bodegas_count: number;
 }
 
 const Propiedades = () => {
@@ -56,6 +61,13 @@ const Propiedades = () => {
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState<number[]>([]);
   const [availableSchemes, setAvailableSchemes] = useState<any[]>([]);
+  
+  // Estados para modales de detalle
+  const [estacionamientosDialogOpen, setEstacionamientosDialogOpen] = useState(false);
+  const [bodegasDialogOpen, setBodegasDialogOpen] = useState(false);
+  const [selectedPropertyEstacionamientos, setSelectedPropertyEstacionamientos] = useState<any[]>([]);
+  const [selectedPropertyBodegas, setSelectedPropertyBodegas] = useState<any[]>([]);
+  const [selectedPropertyForDetail, setSelectedPropertyForDetail] = useState<Property | null>(null);
   
   // Filtros de texto
   const [proyectoFilter, setProyectoFilter] = useState("");
@@ -115,6 +127,7 @@ const Propiedades = () => {
   const { data: properties, isLoading } = useQuery({
     queryKey: ['properties-detailed'],
     queryFn: async () => {
+      // First, get the base property data
       const { data, error } = await supabase
         .from('propiedades')
         .select(`
@@ -151,8 +164,39 @@ const Propiedades = () => {
         console.error('Error fetching properties:', error);
         throw error;
       }
+
+      // Get parking counts
+      const { data: estacionamientosData, error: estacionamientosError } = await supabase
+        .from('estacionamientos')
+        .select('id_propiedad')
+        .eq('activo', true);
+
+      if (estacionamientosError) {
+        console.error('Error fetching estacionamientos:', estacionamientosError);
+      }
+
+      // Get storage counts  
+      const { data: bodegasData, error: bodegasError } = await supabase
+        .from('bodegas')
+        .select('id_propiedad')
+        .eq('activo', true);
+
+      if (bodegasError) {
+        console.error('Error fetching bodegas:', bodegasError);
+      }
+
+      // Create count maps
+      const estacionamientosCounts = (estacionamientosData || []).reduce((acc: any, item: any) => {
+        acc[item.id_propiedad] = (acc[item.id_propiedad] || 0) + 1;
+        return acc;
+      }, {});
+
+      const bodegasCounts = (bodegasData || []).reduce((acc: any, item: any) => {
+        acc[item.id_propiedad] = (acc[item.id_propiedad] || 0) + 1;
+        return acc;
+      }, {});
       
-      // Transformar los datos para facilitar su uso
+      // Transform the data with counts
       const transformedData = data?.map((property: any) => ({
         id: property.id,
         numero_propiedad: property.numero_propiedad,
@@ -170,6 +214,8 @@ const Propiedades = () => {
         vista: property.vistas?.nombre || 'Sin vista',
         disponibilidad: property.estatus_disponibilidad?.nombre || 'Sin estatus',
         tieneOfertas: property.ofertas && property.ofertas.length > 0,
+        estacionamientos_count: estacionamientosCounts[property.id] || 0,
+        bodegas_count: bodegasCounts[property.id] || 0,
         configuracion_modelo: {
           numero_recamaras: property.edificios_modelos?.modelos?.numero_recamaras || 0,
           numero_completo_banos: property.edificios_modelos?.modelos?.numero_completo_banos || 0,
@@ -227,6 +273,54 @@ const Propiedades = () => {
     return data || [];
   };
 
+  // Función para obtener estacionamientos de una propiedad
+  const fetchPropertyEstacionamientos = async (propertyId: number) => {
+    const { data, error } = await supabase
+      .from('estacionamientos')
+      .select(`
+        id,
+        nombre,
+        m2,
+        ubicacion,
+        es_incluido,
+        tipos_estacionamiento!estacionamientos_id_tipo_fkey(nombre)
+      `)
+      .eq('id_propiedad', propertyId)
+      .eq('activo', true)
+      .order('nombre');
+    
+    if (error) {
+      console.error('Error fetching estacionamientos:', error);
+      return [];
+    }
+
+    return (data || []).map((item: any) => ({
+      id: item.id,
+      nombre: item.nombre,
+      tipo_nombre: item.tipos_estacionamiento?.nombre || 'N/A',
+      m2: item.m2,
+      ubicacion: item.ubicacion,
+      es_incluido: item.es_incluido
+    }));
+  };
+
+  // Función para obtener bodegas de una propiedad
+  const fetchPropertyBodegas = async (propertyId: number) => {
+    const { data, error } = await supabase
+      .from('bodegas')
+      .select('id, nombre, m2, ubicacion, es_incluido')
+      .eq('id_propiedad', propertyId)
+      .eq('activo', true)
+      .order('nombre');
+    
+    if (error) {
+      console.error('Error fetching bodegas:', error);
+      return [];
+    }
+
+    return data || [];
+  };
+
   const handleViewOffers = async (property: Property) => {
     if (!property.tieneOfertas) return;
     
@@ -244,6 +338,42 @@ const Propiedades = () => {
       toast({
         title: "Error",
         description: "No se pudieron cargar las ofertas",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleViewEstacionamientos = async (property: Property) => {
+    if (property.estacionamientos_count === 0) return;
+    
+    try {
+      const estacionamientos = await fetchPropertyEstacionamientos(property.id);
+      setSelectedPropertyEstacionamientos(estacionamientos);
+      setSelectedPropertyForDetail(property);
+      setEstacionamientosDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching estacionamientos:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los estacionamientos",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleViewBodegas = async (property: Property) => {
+    if (property.bodegas_count === 0) return;
+    
+    try {
+      const bodegas = await fetchPropertyBodegas(property.id);
+      setSelectedPropertyBodegas(bodegas);
+      setSelectedPropertyForDetail(property);
+      setBodegasDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching bodegas:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar las bodegas",
         variant: "destructive",
       });
     }
@@ -539,9 +669,24 @@ const Propiedades = () => {
             </PaginationItem>
           </PaginationContent>
         </Pagination>
-      </div>
-    );
-  };
+      
+      {/* Modals para detalles */}
+      <EstacionamientosDetailDialog
+        open={estacionamientosDialogOpen}
+        onClose={() => setEstacionamientosDialogOpen(false)}
+        estacionamientos={selectedPropertyEstacionamientos}
+        propertyNumber={selectedPropertyForDetail?.numero_propiedad || ""}
+      />
+      
+      <BodegasDetailDialog
+        open={bodegasDialogOpen}
+        onClose={() => setBodegasDialogOpen(false)}
+        bodegas={selectedPropertyBodegas}
+        propertyNumber={selectedPropertyForDetail?.numero_propiedad || ""}
+      />
+    </div>
+  );
+};
 
   const renderPropertiesTable = (propertiesToRender: Property[], tabType: string) => (
     <>
@@ -570,6 +715,8 @@ const Propiedades = () => {
               <TableHead>Configuración</TableHead>
               <TableHead>Precio de Lista</TableHead>
               <TableHead>Precio por M2</TableHead>
+              <TableHead>Estacionamientos</TableHead>
+              <TableHead>Bodegas</TableHead>
               <TableHead>Ofertas Comerciales</TableHead>
               <TableHead>Disponibilidad</TableHead>
               <TableHead>Colección Vinculada</TableHead>
@@ -580,7 +727,7 @@ const Propiedades = () => {
           <TableBody>
             {propertiesToRender.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={tabType === "draft" ? 17 : 16} className="text-center py-6">
+                <TableCell colSpan={tabType === "draft" ? 19 : 18} className="text-center py-6">
                   {searchTerm || proyectoFilter || modeloFilter || recamarasFilter || banosFilter || disponibilidadFilter 
                     ? "No se encontraron resultados." 
                     : tabType === "eliminados"
@@ -615,25 +762,59 @@ const Propiedades = () => {
                   <TableCell>{property.vista}</TableCell>
                   <TableCell>{property.m2_reales} m²</TableCell>
                   <TableCell className="text-sm">{formatConfiguracion(property.configuracion_modelo)}</TableCell>
-                  <TableCell>{formatCurrency(property.precio_lista)}</TableCell>
-                  <TableCell>{formatPrecioPorM2(property.precio_lista, property.m2_reales)}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleViewOffers(property)}
-                      disabled={!property.tieneOfertas}
-                      className="p-0 h-auto font-normal"
-                    >
-                      <Badge 
-                        variant={property.tieneOfertas ? "default" : "outline"}
-                        className={property.tieneOfertas ? "cursor-pointer hover:bg-primary/80" : ""}
-                      >
-                        {property.tieneOfertas ? "Sí" : "No"}
-                        {property.tieneOfertas && <Eye className="ml-1 h-3 w-3" />}
-                      </Badge>
-                    </Button>
-                  </TableCell>
+                   <TableCell>{formatCurrency(property.precio_lista)}</TableCell>
+                   <TableCell>{formatPrecioPorM2(property.precio_lista, property.m2_reales)}</TableCell>
+                   <TableCell>
+                     <Button
+                       variant="ghost"
+                       size="sm"
+                       onClick={() => handleViewEstacionamientos(property)}
+                       disabled={property.estacionamientos_count === 0}
+                       className="p-0 h-auto font-normal"
+                     >
+                       <Badge 
+                         variant={property.estacionamientos_count > 0 ? "default" : "outline"}
+                         className={property.estacionamientos_count > 0 ? "cursor-pointer hover:bg-primary/80" : ""}
+                       >
+                         {property.estacionamientos_count}
+                         {property.estacionamientos_count > 0 && <Car className="ml-1 h-3 w-3" />}
+                       </Badge>
+                     </Button>
+                   </TableCell>
+                   <TableCell>
+                     <Button
+                       variant="ghost"
+                       size="sm"
+                       onClick={() => handleViewBodegas(property)}
+                       disabled={property.bodegas_count === 0}
+                       className="p-0 h-auto font-normal"
+                     >
+                       <Badge 
+                         variant={property.bodegas_count > 0 ? "default" : "outline"}
+                         className={property.bodegas_count > 0 ? "cursor-pointer hover:bg-primary/80" : ""}
+                       >
+                         {property.bodegas_count}
+                         {property.bodegas_count > 0 && <Warehouse className="ml-1 h-3 w-3" />}
+                       </Badge>
+                     </Button>
+                   </TableCell>
+                   <TableCell>
+                     <Button
+                       variant="ghost"
+                       size="sm"
+                       onClick={() => handleViewOffers(property)}
+                       disabled={!property.tieneOfertas}
+                       className="p-0 h-auto font-normal"
+                     >
+                       <Badge 
+                         variant={property.tieneOfertas ? "default" : "outline"}
+                         className={property.tieneOfertas ? "cursor-pointer hover:bg-primary/80" : ""}
+                       >
+                         {property.tieneOfertas ? "Sí" : "No"}
+                         {property.tieneOfertas && <Eye className="ml-1 h-3 w-3" />}
+                       </Badge>
+                     </Button>
+                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">{property.disponibilidad}</Badge>
                   </TableCell>
