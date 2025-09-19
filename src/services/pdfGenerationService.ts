@@ -61,7 +61,7 @@ export class PDFGenerationService {
       // Fetch all required data
       const [propertyDetails, paymentSchemes, projectAmenities, creatorInfo] = await Promise.all([
         this.fetchPropertyDetails(offerData.propertyId),
-        this.fetchPaymentSchemes(offerData.propertyId),
+        this.fetchPaymentSchemes(offerData.propertyId, offerData.offerId),
         this.fetchProjectAmenities(offerData.propertyId),
         this.fetchCreatorInfo(offerData.creatorEmail)
       ]);
@@ -243,8 +243,28 @@ export class PDFGenerationService {
     };
   }
 
-  private async fetchPaymentSchemes(propertyId: number): Promise<PaymentScheme[]> {
-    // Get project ID from property
+  private async fetchPaymentSchemes(propertyId: number, offerId: number): Promise<PaymentScheme[]> {
+    // First, get the specific payment scheme selected for this offer
+    const { data: offerData } = await supabase
+      .from('ofertas')
+      .select('id_esquema_pago_seleccionado')
+      .eq('id', offerId)
+      .maybeSingle();
+
+    // If there's a specific payment scheme selected (manual or pre-defined), return only that one
+    if (offerData?.id_esquema_pago_seleccionado) {
+      const { data: specificScheme, error: specificError } = await supabase
+        .from('esquemas_pago')
+        .select('*')
+        .eq('id', offerData.id_esquema_pago_seleccionado)
+        .eq('activo', true)
+        .maybeSingle();
+
+      if (specificError) throw specificError;
+      return specificScheme ? [specificScheme] : [];
+    }
+
+    // Fallback: If no specific scheme selected, get all active non-manual schemes for the project
     const { data: propertyData } = await supabase
       .from('propiedades')
       .select('id_entidad_relacionada_dueno')
