@@ -91,7 +91,7 @@ class HTMLToPDFService {
       // Fetch all required data
       const [propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices] = await Promise.all([
         this.fetchPropertyDetails(offerData.propertyId),
-        this.fetchPaymentSchemes(offerData.propertyId),
+        this.fetchPaymentSchemes(offerData.propertyId, offerData.offerId),
         this.fetchProjectAmenities(offerData.propertyId),
         this.fetchCreatorInfo(offerDetails.email_creador),
         this.fetchLeadInfo(offerDetails.id_persona_lead),
@@ -392,10 +392,31 @@ class HTMLToPDFService {
     };
   }
 
-  private async fetchPaymentSchemes(propertyId: number): Promise<PaymentScheme[]> {
-    console.log('Fetching payment schemes for property:', propertyId);
+  private async fetchPaymentSchemes(propertyId: number, offerId: number): Promise<PaymentScheme[]> {
+    console.log('Fetching payment schemes for property:', propertyId, 'and offer:', offerId);
 
-    // First get the project ID from the property
+    // First, get the specific payment scheme selected for this offer
+    const { data: offerData } = await supabase
+      .from('ofertas')
+      .select('id_esquema_pago_seleccionado')
+      .eq('id', offerId)
+      .maybeSingle();
+
+    // If there's a specific payment scheme selected (manual or pre-defined), return only that one
+    if (offerData?.id_esquema_pago_seleccionado) {
+      const { data: specificScheme, error: specificError } = await supabase
+        .from('esquemas_pago')
+        .select('*')
+        .eq('id', offerData.id_esquema_pago_seleccionado)
+        .eq('activo', true)
+        .maybeSingle();
+
+      if (specificError) throw specificError;
+      console.log('Found specific payment scheme for offer:', specificScheme);
+      return specificScheme ? [specificScheme] : [];
+    }
+
+    // Fallback: If no specific scheme selected, get the project ID from the property
     const { data: propertyData } = await supabase
       .from('propiedades')
       .select('id_edificio_modelo')
