@@ -103,7 +103,7 @@ const SortableCard = ({ notice, onEdit, onDelete }: {
 
 export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSectionProps) => {
   const [editingNotice, setEditingNotice] = useState<LegalNotice | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [deleteNoticeId, setDeleteNoticeId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -241,7 +241,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
         contenido: "",
         orden: "",
       });
-      setIsDialogOpen(false);
+      setIsFormOpen(false);
       setEditingNotice(null);
     },
     onError: () => {
@@ -339,7 +339,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
 
   const handleEdit = (notice: LegalNotice) => {
     setEditingNotice(notice);
-    setIsDialogOpen(true);
+    setIsFormOpen(true);
   };
 
   const handleDelete = (noticeId: number) => {
@@ -352,8 +352,8 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
     }
   };
 
-  const handleDialogClose = (open: boolean) => {
-    setIsDialogOpen(open);
+  const handleFormClose = (open: boolean) => {
+    setIsFormOpen(open);
     if (!open) {
       setEditingNotice(null);
       form.reset({
@@ -365,7 +365,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
 
   const handleAddClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsDialogOpen(true);
+    setIsFormOpen(true);
   };
 
   const handleEditClick = (e: React.MouseEvent, notice: LegalNotice) => {
@@ -386,22 +386,23 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium">Avisos Legales del Proyecto</h3>
-        <Dialog open={isDialogOpen} onOpenChange={handleDialogClose} modal={false}>
-          <DialogTrigger asChild>
-            <Button 
-              onClick={handleAddClick}
-              disabled={legalNotices.length >= 5}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Agregar Aviso Legal
-            </Button>
-          </DialogTrigger>
-          <DialogContent onPointerDownOutside={(e) => e.preventDefault()}>
-            <DialogHeader>
-              <DialogTitle>
-                {editingNotice ? "Editar Aviso Legal" : "Agregar Aviso Legal"}
-              </DialogTitle>
-            </DialogHeader>
+        <Button 
+          onClick={handleAddClick}
+          disabled={legalNotices.length >= 5}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Agregar Aviso Legal
+        </Button>
+      </div>
+
+      {isFormOpen && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {editingNotice ? "Editar Aviso Legal" : "Agregar Aviso Legal"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -441,7 +442,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
                   )}
                 />
                 <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => handleDialogClose(false)}>
+                  <Button type="button" variant="outline" onClick={() => handleFormClose(false)}>
                     Cancelar
                   </Button>
                   <Button 
@@ -453,9 +454,9 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
                 </div>
               </form>
             </Form>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </CardContent>
+        </Card>
+      )}
 
       <AlertDialog open={deleteNoticeId !== null}>
         <AlertDialogContent>
