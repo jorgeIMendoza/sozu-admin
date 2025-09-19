@@ -15,7 +15,12 @@ import { z } from "zod";
 
 const legalNoticeSchema = z.object({
   contenido: z.string().min(1, "El contenido es requerido"),
-  orden: z.string().min(1, "El orden es requerido"),
+  orden: z.string()
+    .min(1, "El orden es requerido")
+    .refine((val) => {
+      const num = parseInt(val);
+      return num >= 1 && num <= 5;
+    }, "El orden debe estar entre 1 y 5"),
 });
 
 interface LegalNotice {
@@ -251,6 +256,8 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
                         <Input 
                           type="number" 
                           placeholder="Orden de aparición"
+                          min={1}
+                          max={5}
                           {...field} 
                         />
                       </FormControl>
