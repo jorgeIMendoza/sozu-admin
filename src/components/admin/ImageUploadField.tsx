@@ -108,20 +108,34 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*" }:
           disabled={uploading}
           className="hidden"
         />
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={uploading}
-                  onClick={(e) => {
-                    console.log('🔧 Click en botón Subir detectado');
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleUploadClick();
-                  }}
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  {uploading ? "Subiendo..." : "Subir"}
-                </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={uploading}
+          onMouseDown={(e) => {
+            console.log('🔧 MouseDown en botón Subir');
+            e.preventDefault();
+          }}
+          onPointerDown={(e) => {
+            console.log('🔧 PointerDown en botón Subir');
+            e.preventDefault();
+          }}
+          onClick={(e) => {
+            console.log('🔧 Click en botón Subir detectado');
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔧 Ejecutando click en input file...');
+            if (fileInputRef.current) {
+              console.log('🔧 fileInputRef encontrado, haciendo click');
+              fileInputRef.current.click();
+            } else {
+              console.log('🔧 ERROR: fileInputRef no encontrado');
+            }
+          }}
+        >
+          <Upload className="w-4 h-4 mr-2" />
+          {uploading ? "Subiendo..." : "Subir"}
+        </Button>
       </div>
       
       {uploading && (
