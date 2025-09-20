@@ -714,7 +714,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                           <FormLabel>Amenidades</FormLabel>
                           <NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />
                         </div>
-                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
                           {amenidades?.map((amenidad) => (
                             <FormField
                               key={amenidad.id}
@@ -740,7 +740,13 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                                         }}
                                       />
                                     </FormControl>
-                                    <FormLabel className="text-sm font-normal">
+                                    <FormLabel 
+                                      className="text-sm font-normal cursor-pointer hover:text-primary transition-colors"
+                                      onClick={() => {
+                                        // TODO: Implement edit amenity dialog
+                                        console.log('Edit amenity:', amenidad.id);
+                                      }}
+                                    >
                                       {amenidad.nombre}
                                     </FormLabel>
                                   </FormItem>

@@ -25,9 +25,10 @@ interface TempBankAccountsSectionProps {
   bankAccounts: TempBankAccount[];
   onBankAccountsChange: (accounts: TempBankAccount[]) => void;
   showStpCheckbox?: boolean;
+  entityTypeId?: number;
 }
 
-export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, showStpCheckbox = false }: TempBankAccountsSectionProps) {
+export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, showStpCheckbox = false, entityTypeId }: TempBankAccountsSectionProps) {
   const { toast } = useToast();
   const [isAdding, setIsAdding] = useState(false);
   const [newAccount, setNewAccount] = useState({
@@ -54,9 +55,21 @@ export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, sh
     }
   });
 
+  const shouldShowStpCheckbox = showStpCheckbox && 
+    entityTypeId && 
+    (entityTypeId === 4 || entityTypeId === 15); // "Dueño Vendedor" or "Aportante"
+
+  const existingStpAccount = bankAccounts.find(account => account.es_cuenta_fisica_para_stp);
+
   const handleAdd = () => {
     if (!newAccount.id_banco || !newAccount.numero_cuenta) {
       toast({ title: "Por favor completa los campos requeridos", variant: "destructive" });
+      return;
+    }
+
+    // If trying to set STP account, check if another exists
+    if (newAccount.es_cuenta_fisica_para_stp && existingStpAccount) {
+      toast({ title: "Solo puede haber una cuenta STP por proyecto", variant: "destructive" });
       return;
     }
 
@@ -168,7 +181,7 @@ export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, sh
                 accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
               />
 
-              {showStpCheckbox && (
+              {shouldShowStpCheckbox && (
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="es_cuenta_fisica_para_stp"
@@ -176,8 +189,16 @@ export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, sh
                     onCheckedChange={(checked) => 
                       setNewAccount(prev => ({ ...prev, es_cuenta_fisica_para_stp: checked as boolean }))
                     }
+                    disabled={!!existingStpAccount}
                   />
-                  <Label htmlFor="es_cuenta_fisica_para_stp">Es cuenta física para STP</Label>
+                  <Label htmlFor="es_cuenta_fisica_para_stp">
+                    Es cuenta física para STP
+                    {existingStpAccount && (
+                      <span className="text-xs text-muted-foreground block">
+                        (Solo puede haber una cuenta STP por proyecto)
+                      </span>
+                    )}
+                  </Label>
                 </div>
               )}
 
@@ -225,8 +246,8 @@ export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, sh
                       </a>
                     </p>
                   )}
-                  {showStpCheckbox && account.es_cuenta_fisica_para_stp && (
-                    <p className="text-sm text-muted-foreground">✓ Cuenta física para STP</p>
+                   {shouldShowStpCheckbox && account.es_cuenta_fisica_para_stp && (
+                    <p className="text-sm text-green-600 font-medium">✓ Cuenta física para STP</p>
                   )}
                 </div>
                 <Button

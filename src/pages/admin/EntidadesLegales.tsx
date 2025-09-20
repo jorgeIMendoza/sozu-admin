@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
-import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
+import { StandardizedBankAccountsButton } from "@/components/admin/StandardizedBankAccountsButton";
 
 type EntidadLegal = {
   id: number;
@@ -41,8 +41,6 @@ export default function EntidadesLegales() {
   const [entityToDelete, setEntityToDelete] = useState<EntidadLegal | null>(null);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [entityToRestore, setEntityToRestore] = useState<EntidadLegal | null>(null);
-  const [selectedEntityForBankAccounts, setSelectedEntityForBankAccounts] = useState<EntidadLegal | null>(null);
-  const [isBankAccountsDialogOpen, setIsBankAccountsDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -397,11 +395,6 @@ export default function EntidadesLegales() {
     }
   };
 
-  const handleBankAccounts = (entidad: EntidadLegal) => {
-    setSelectedEntityForBankAccounts(entidad);
-    setIsBankAccountsDialogOpen(true);
-  };
-
   const renderPagination = () => {
     if (totalPages <= 1) return null;
 
@@ -535,15 +528,10 @@ export default function EntidadesLegales() {
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleBankAccounts(entidad)}
-                          className="hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors"
-                          title="Gestionar cuentas bancarias"
-                        >
-                          💳
-                        </Button>
+                        <StandardizedBankAccountsButton
+                          personId={entidad.id}
+                          personName={entidad.nombre_comercial || entidad.nombre_legal}
+                        />
                         <Button 
                           variant="outline" 
                           size="sm"
@@ -689,19 +677,6 @@ export default function EntidadesLegales() {
         actionType="restore"
       />
 
-      {/* Dialog para gestionar cuentas bancarias */}
-      <Dialog open={isBankAccountsDialogOpen} onOpenChange={setIsBankAccountsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Cuentas Bancarias - {selectedEntityForBankAccounts?.nombre_comercial || selectedEntityForBankAccounts?.nombre_legal}
-            </DialogTitle>
-          </DialogHeader>
-          {selectedEntityForBankAccounts && (
-            <BankAccountsSection personId={selectedEntityForBankAccounts.id} />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

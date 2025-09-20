@@ -14,9 +14,10 @@ import { ImageUploadField } from "@/components/admin/ImageUploadField";
 interface BankAccountsSectionProps {
   personId: number;
   showStpCheckbox?: boolean;
+  projectId?: number;
 }
 
-export function BankAccountsSection({ personId, showStpCheckbox = false }: BankAccountsSectionProps) {
+export function BankAccountsSection({ personId, showStpCheckbox = false, projectId }: BankAccountsSectionProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
@@ -63,8 +64,71 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
     }
   });
 
+  // Check if person has "Dueño Vendedor" or "Aportante" entity type for this project
+  const { data: entityData } = useQuery({
+    queryKey: ['person_entity_type', personId, projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      
+      const { data, error } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_tipo_entidad')
+        .eq('id_persona', personId)
+        .eq('id_proyecto', projectId)
+        .eq('activo', true)
+        .single();
+      
+      if (error) return null;
+      return data;
+    },
+    enabled: !!projectId && showStpCheckbox
+  });
+
+  // Check if there's already an STP account for this project
+  const { data: existingStpAccount } = useQuery({
+    queryKey: ['existing_stp_account', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      
+      const { data, error } = await supabase
+        .from('cuentas_bancarias')
+        .select('id, id_persona')
+        .eq('es_cuenta_fisica_para_stp', true)
+        .eq('activo', true);
+      
+      if (error) throw error;
+      
+      // Filter by project through entidades_relacionadas
+      if (data && data.length > 0) {
+        for (const account of data) {
+          const { data: entityCheck } = await supabase
+            .from('entidades_relacionadas')
+            .select('id')
+            .eq('id_persona', account.id_persona)
+            .eq('id_proyecto', projectId)
+            .eq('activo', true);
+          
+          if (entityCheck && entityCheck.length > 0) {
+            return account;
+          }
+        }
+      }
+      return null;
+    },
+    enabled: !!projectId && showStpCheckbox
+  });
+
+  const shouldShowStpCheckbox = showStpCheckbox && 
+    entityData && 
+    (entityData.id_tipo_entidad === 4 || entityData.id_tipo_entidad === 15); // "Dueño Vendedor" or "Aportante"
+
   const addMutation = useMutation({
     mutationFn: async (accountData: typeof newAccount) => {
+      // If trying to set STP account, check if another exists
+      if (accountData.es_cuenta_fisica_para_stp && existingStpAccount && existingStpAccount.id_persona !== personId) {
+        throw new Error('Ya existe una cuenta STP para este proyecto');
+      }
+
       const { data, error } = await supabase
         .from('cuentas_bancarias')
         .insert([{
@@ -201,7 +265,7 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
                 accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
               />
 
-              {showStpCheckbox && (
+              {shouldShowStpCheckbox && (
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="es_cuenta_fisica_para_stp"
@@ -209,8 +273,16 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
                     onCheckedChange={(checked) => 
                       setNewAccount(prev => ({ ...prev, es_cuenta_fisica_para_stp: checked as boolean }))
                     }
+                    disabled={existingStpAccount && existingStpAccount.id_persona !== personId}
                   />
-                  <Label htmlFor="es_cuenta_fisica_para_stp">Es cuenta física para STP</Label>
+                  <Label htmlFor="es_cuenta_fisica_para_stp">
+                    Es cuenta física para STP
+                    {existingStpAccount && existingStpAccount.id_persona !== personId && (
+                      <span className="text-xs text-muted-foreground block">
+                        (Ya existe una cuenta STP para este proyecto)
+                      </span>
+                    )}
+                  </Label>
                 </div>
               )}
 
@@ -258,8 +330,8 @@ export function BankAccountsSection({ personId, showStpCheckbox = false }: BankA
                       </a>
                     </p>
                   )}
-                  {showStpCheckbox && account.es_cuenta_fisica_para_stp && (
-                    <p className="text-sm text-muted-foreground">✓ Cuenta física para STP</p>
+                   {shouldShowStpCheckbox && account.es_cuenta_fisica_para_stp && (
+                    <p className="text-sm text-green-600 font-medium">✓ Cuenta física para STP</p>
                   )}
                 </div>
                 <Button

@@ -693,41 +693,41 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                         <FormLabel>Amenidades</FormLabel>
                         <NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {amenidades?.map((amenidad) => (
-                          <FormField
-                            key={amenidad.id}
-                            control={form.control}
-                            name="amenidades"
-                            render={({ field }) => {
-                              return (
-                                <FormItem
-                                  key={amenidad.id}
-                                  className="flex flex-row items-start space-x-3 space-y-0"
-                                >
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={field.value?.includes(amenidad.id.toString())}
-                                      onCheckedChange={(checked) => {
-                                        return checked
-                                          ? field.onChange([...field.value, amenidad.id.toString()])
-                                          : field.onChange(
-                                              field.value?.filter(
-                                                (value) => value !== amenidad.id.toString()
+                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                          {amenidades?.map((amenidad) => (
+                            <FormField
+                              key={amenidad.id}
+                              control={form.control}
+                              name="amenidades"
+                              render={({ field }) => {
+                                return (
+                                  <FormItem
+                                    key={amenidad.id}
+                                    className="flex flex-row items-start space-x-3 space-y-0"
+                                  >
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value?.includes(amenidad.id.toString())}
+                                        onCheckedChange={(checked) => {
+                                          return checked
+                                            ? field.onChange([...field.value, amenidad.id.toString()])
+                                            : field.onChange(
+                                                field.value?.filter(
+                                                  (value) => value !== amenidad.id.toString()
+                                                )
                                               )
-                                            )
-                                      }}
-                                    />
-                                  </FormControl>
-                                  <FormLabel className="text-sm font-normal">
-                                    {amenidad.nombre}
-                                  </FormLabel>
-                                </FormItem>
-                              )
-                            }}
-                          />
-                        ))}
-                      </div>
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="text-sm font-normal cursor-pointer hover:text-primary transition-colors">
+                                      {amenidad.nombre}
+                                    </FormLabel>
+                                  </FormItem>
+                                )
+                              }}
+                            />
+                          ))}
+                        </div>
                       <FormMessage />
                     </FormItem>
                   )}

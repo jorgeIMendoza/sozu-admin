@@ -53,6 +53,12 @@ interface PropertyDetails {
     mostrar_edificio_en_oferta?: boolean;
     precio_m2?: number;
   };
+  ownerStpBankAccount?: {
+    numero_cuenta: string;
+    cuenta_clabe: string;
+    cuenta_swift: string;
+    banco_nombre: string;
+  };
   ownerData?: {
     id: number;
     nombre_legal: string;
@@ -337,6 +343,7 @@ class HTMLToPDFService {
     let building = null;
     let model = null;
     let projectData = null;
+    let ownerStpBankAccount = null;
 
     // Get building and model data
     if (propiedad.id_edificio_modelo) {
@@ -382,6 +389,39 @@ class HTMLToPDFService {
 
             if (proyecto) {
               projectData = proyecto;
+              
+              // If cash section should be shown, get the STP bank account
+              if (proyecto.mostrar_seccion_efectivo_en_oferta && propiedad.id_entidad_relacionada_dueno) {
+                const { data: ownerEntity } = await supabase
+                  .from('entidades_relacionadas')
+                  .select('id_persona')
+                  .eq('id', propiedad.id_entidad_relacionada_dueno)
+                  .single();
+
+                if (ownerEntity?.id_persona) {
+                  const { data: stpAccount } = await supabase
+                    .from('cuentas_bancarias')
+                    .select(`
+                      numero_cuenta,
+                      cuenta_clabe,
+                      cuenta_swift,
+                      bancos:id_banco(nombre)
+                    `)
+                    .eq('id_persona', ownerEntity.id_persona)
+                    .eq('es_cuenta_fisica_para_stp', true)
+                    .eq('activo', true)
+                    .single();
+
+                  if (stpAccount) {
+                    ownerStpBankAccount = {
+                      numero_cuenta: stpAccount.numero_cuenta,
+                      cuenta_clabe: stpAccount.cuenta_clabe,
+                      cuenta_swift: stpAccount.cuenta_swift,
+                      banco_nombre: stpAccount.bancos?.nombre
+                    };
+                  }
+                }
+              }
             }
           }
         }
@@ -460,7 +500,7 @@ class HTMLToPDFService {
       model,
       vista,
       projectData,
-      ownerData,
+      ownerStpBankAccount,
     };
   }
 
@@ -1235,6 +1275,46 @@ class HTMLToPDFService {
                 key: 'text',
                 className: 'text-xs text-muted-foreground'
               }, 'Sin financiamiento - Pago único al momento de la escrituración')
+            ]),
+            // Add STP bank account information if available
+            propertyDetails.ownerStpBankAccount && React.createElement('div', {
+              key: 'bank-info',
+              className: 'border-t pt-3 mt-3 space-y-2'
+            }, [
+              React.createElement('h4', {
+                key: 'bank-title',
+                className: 'text-xs font-bold text-primary text-center'
+              }, 'Información Bancaria'),
+              React.createElement('div', { key: 'bank' }, [
+                React.createElement('p', {
+                  key: 'label',
+                  className: 'text-xs text-muted-foreground'
+                }, 'Banco'),
+                React.createElement('p', {
+                  key: 'value',
+                  className: 'text-xs font-semibold'
+                }, propertyDetails.ownerStpBankAccount.banco_nombre)
+              ]),
+              propertyDetails.ownerStpBankAccount.cuenta_clabe && React.createElement('div', { key: 'clabe' }, [
+                React.createElement('p', {
+                  key: 'label',
+                  className: 'text-xs text-muted-foreground'
+                }, 'CLABE'),
+                React.createElement('p', {
+                  key: 'value',
+                  className: 'text-xs font-semibold font-mono'
+                }, propertyDetails.ownerStpBankAccount.cuenta_clabe)
+              ]),
+              React.createElement('div', { key: 'account' }, [
+                React.createElement('p', {
+                  key: 'label',
+                  className: 'text-xs text-muted-foreground'
+                }, 'Número de Cuenta'),
+                React.createElement('p', {
+                  key: 'value',
+                  className: 'text-xs font-semibold font-mono'
+                }, propertyDetails.ownerStpBankAccount.numero_cuenta)
+              ])
             ])
           ])
         ])
