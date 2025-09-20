@@ -513,8 +513,6 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       fecha_registro: fechaRegistro?.toISOString() || null,
       id_notario: idNotario ? parseInt(idNotario) : null,
       url_logo: urlLogo.trim() || null,
-      coordenadas: coordenadas,
-      direccion_mapa: direccionMapa.trim() || null,
       activo: true,
     };
 
