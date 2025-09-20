@@ -119,21 +119,25 @@ export function EditAmenityDialog({
   const generateIconMutation = useMutation({
     mutationFn: async (description: string) => {
       const { data, error } = await supabase.functions.invoke('generate-amenity-icon', {
-        body: { description }
+        body: { 
+          description: description,
+          amenityName: amenityName
+        }
       });
       
       if (error) throw error;
       return data;
     },
     onSuccess: (data) => {
-      if (data?.iconUrl) {
-        setIconUrl(data.iconUrl);
+      if (data?.imageUrl) {
+        setIconUrl(data.imageUrl);
         setShowAiGenerator(false);
         setIconDescription("");
         toast({ title: "Icono generado exitosamente" });
       }
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Error generating icon:', error);
       toast({ title: "Error al generar icono", variant: "destructive" });
     }
   });
