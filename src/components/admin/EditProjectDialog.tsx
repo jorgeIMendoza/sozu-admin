@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { GoogleMapComponent } from "./GoogleMapComponent";
 import { NewAmenityDialog } from "./NewAmenityDialog";
+import { EditAmenityDialog } from "./EditAmenityDialog";
 import { ImageUploadField } from "./ImageUploadField";
 import { ProjectLegalNoticesSection } from "./ProjectLegalNoticesSection";
 
@@ -739,16 +740,18 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                                               )
                                         }}
                                       />
-                                    </FormControl>
-                                    <FormLabel 
-                                      className="text-sm font-normal cursor-pointer hover:text-primary transition-colors"
-                                      onClick={() => {
-                                        // TODO: Implement edit amenity dialog
-                                        console.log('Edit amenity:', amenidad.id);
-                                      }}
-                                    >
-                                      {amenidad.nombre}
-                                    </FormLabel>
+                                     </FormControl>
+                                     <div className="flex items-center justify-between flex-1">
+                                       <FormLabel className="text-sm font-normal">
+                                         {amenidad.nombre}
+                                       </FormLabel>
+                                       <EditAmenityDialog 
+                                         amenityId={amenidad.id}
+                                         amenityName={amenidad.nombre}
+                                         onAmenityUpdated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
+                                         onAmenityDeleted={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
+                                       />
+                                     </div>
                                   </FormItem>
                                 )
                               }}

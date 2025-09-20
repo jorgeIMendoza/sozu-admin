@@ -20,6 +20,7 @@ import { PaymentSchemeFormSection, PaymentScheme } from "./PaymentSchemeFormSect
 import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
 import { GoogleMapComponent } from "./GoogleMapComponent";
 import { NewAmenityDialog } from "./NewAmenityDialog";
+import { EditAmenityDialog } from "./EditAmenityDialog";
 import { ImageUploadField } from "./ImageUploadField";
 
 const BuildingSchema = z.object({
@@ -718,10 +719,18 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                                               )
                                         }}
                                       />
-                                    </FormControl>
-                                    <FormLabel className="text-sm font-normal cursor-pointer hover:text-primary transition-colors">
-                                      {amenidad.nombre}
-                                    </FormLabel>
+                                     </FormControl>
+                                     <div className="flex items-center justify-between flex-1">
+                                       <FormLabel className="text-sm font-normal">
+                                         {amenidad.nombre}
+                                       </FormLabel>
+                                       <EditAmenityDialog 
+                                         amenityId={amenidad.id}
+                                         amenityName={amenidad.nombre}
+                                         onAmenityUpdated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
+                                         onAmenityDeleted={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
+                                       />
+                                     </div>
                                   </FormItem>
                                 )
                               }}

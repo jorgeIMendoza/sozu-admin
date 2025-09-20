@@ -435,6 +435,16 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       return;
     }
 
+    // Validate entity type for legal entities
+    if (entityType === 'legal' && !idTipoEntidad) {
+      toast({
+        title: "Error",
+        description: "Por favor selecciona un tipo de entidad legal.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (telefono.length !== 10) {
       toast({
         title: "Error", 
@@ -537,6 +547,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       // Add entity-specific data (only representativeId, parent components handle entityType)
       const extendedFormData = {
         ...formData,
+        entityType: idTipoEntidad,
         representativeId: idRepresentanteLegal === 'none' || !idRepresentanteLegal ? null : parseInt(idRepresentanteLegal),
       };
       onSubmit(extendedFormData);
