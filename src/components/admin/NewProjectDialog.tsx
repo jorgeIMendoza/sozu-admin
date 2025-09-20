@@ -720,17 +720,19 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                                         }}
                                       />
                                      </FormControl>
-                                     <div className="flex items-center justify-between flex-1">
-                                       <FormLabel className="text-sm font-normal">
-                                         {amenidad.nombre}
-                                       </FormLabel>
-                                       <EditAmenityDialog 
-                                         amenityId={amenidad.id}
-                                         amenityName={amenidad.nombre}
-                                         onAmenityUpdated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
-                                         onAmenityDeleted={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
-                                       />
-                                     </div>
+                                      <div className="flex items-center justify-between flex-1">
+                                        <FormLabel className="text-sm font-normal">
+                                          {amenidad.nombre}
+                                        </FormLabel>
+                                        <div onClick={(e) => e.stopPropagation()}>
+                                          <EditAmenityDialog 
+                                            amenityId={amenidad.id}
+                                            amenityName={amenidad.nombre}
+                                            onAmenityUpdated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
+                                            onAmenityDeleted={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
+                                          />
+                                        </div>
+                                      </div>
                                   </FormItem>
                                 )
                               }}
