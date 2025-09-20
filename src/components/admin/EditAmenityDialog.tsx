@@ -129,8 +129,8 @@ export function EditAmenityDialog({
       return data;
     },
     onSuccess: (data) => {
-      if (data?.imageUrl) {
-        setIconUrl(data.imageUrl);
+      if (data?.iconUrl) {
+        setIconUrl(data.iconUrl);
         setShowAiGenerator(false);
         setIconDescription("");
         toast({ title: "Icono generado exitosamente" });
