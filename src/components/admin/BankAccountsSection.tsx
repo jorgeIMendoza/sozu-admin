@@ -163,7 +163,10 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
         .insert([{
           ...accountData,
           id_banco: parseInt(accountData.id_banco),
-          id_persona: personId
+          id_persona: personId,
+          url_evidencia: accountData.url_evidencia || null,
+          cuenta_clabe: accountData.cuenta_clabe || null,
+          cuenta_swift: accountData.cuenta_swift || null
         }])
         .select()
         .single();

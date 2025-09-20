@@ -75,7 +75,10 @@ export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, sh
 
     const tempAccount: TempBankAccount = {
       tempId: Date.now().toString(),
-      ...newAccount
+      ...newAccount,
+      url_evidencia: newAccount.url_evidencia || "",
+      cuenta_clabe: newAccount.cuenta_clabe || "",
+      cuenta_swift: newAccount.cuenta_swift || ""
     };
 
     onBankAccountsChange([...bankAccounts, tempAccount]);
