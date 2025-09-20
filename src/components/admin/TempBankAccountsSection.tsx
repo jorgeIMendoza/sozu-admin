@@ -174,8 +174,14 @@ export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, sh
                   id="numero_cuenta"
                   value={newAccount.numero_cuenta}
                   onChange={(e) => setNewAccount(prev => ({ ...prev, numero_cuenta: e.target.value }))}
+                  placeholder={newAccount.es_cuenta_fisica_para_stp ? "18 dígitos exactos para STP" : "Entre 8 y 34 caracteres"}
                   required
                 />
+                {newAccount.es_cuenta_fisica_para_stp && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Cuenta STP: debe tener exactamente 18 dígitos
+                  </p>
+                )}
               </div>
 
               <div>
@@ -184,7 +190,7 @@ export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, sh
                   id="cuenta_clabe"
                   value={newAccount.cuenta_clabe}
                   onChange={(e) => setNewAccount(prev => ({ ...prev, cuenta_clabe: e.target.value }))}
-                  placeholder="18 dígitos"
+                  placeholder="18 dígitos (opcional)"
                   maxLength={18}
                 />
               </div>
@@ -195,7 +201,7 @@ export function TempBankAccountsSection({ bankAccounts, onBankAccountsChange, sh
                   id="cuenta_swift"
                   value={newAccount.cuenta_swift}
                   onChange={(e) => setNewAccount(prev => ({ ...prev, cuenta_swift: e.target.value }))}
-                  placeholder="8 u 11 caracteres"
+                  placeholder="8 u 11 caracteres (opcional)"
                 />
               </div>
 
