@@ -920,6 +920,90 @@ class HTMLToPDFService {
                 key: 'value',
                 className: 'font-semibold'
               }, formatCurrency(propertyDetails.precio_lista))
+            ]),
+            // Precio por m² - if configured
+            propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && propertyDetails.m2_escriturables && React.createElement('div', {
+              key: 'price-m2',
+              className: 'flex justify-between'
+            }, [
+              React.createElement('span', {
+                key: 'label',
+                className: 'text-muted-foreground'
+              }, 'Precio por m²:'),
+              React.createElement('span', {
+                key: 'value',
+                className: 'font-semibold'
+              }, formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_escriturables))
+            ]),
+            // Piso - if configured
+            propertyDetails.projectData?.mostrar_piso_en_oferta !== false && propertyDetails.numero_piso && React.createElement('div', {
+              key: 'floor',
+              className: 'flex justify-between'
+            }, [
+              React.createElement('span', {
+                key: 'label',
+                className: 'text-muted-foreground'
+              }, 'Piso:'),
+              React.createElement('span', {
+                key: 'value',
+                className: 'font-semibold'
+              }, propertyDetails.numero_piso)
+            ]),
+            // Modelo - if configured
+            propertyDetails.projectData?.mostrar_modelo_en_oferta !== false && propertyDetails.model?.nombre && React.createElement('div', {
+              key: 'model',
+              className: 'flex justify-between'
+            }, [
+              React.createElement('span', {
+                key: 'label',
+                className: 'text-muted-foreground'
+              }, 'Modelo:'),
+              React.createElement('span', {
+                key: 'value',
+                className: 'font-semibold'
+              }, propertyDetails.model.nombre)
+            ]),
+            // Edificio - if configured
+            propertyDetails.projectData?.mostrar_edificio_en_oferta !== false && propertyDetails.building?.nombre && React.createElement('div', {
+              key: 'building',
+              className: 'flex justify-between'
+            }, [
+              React.createElement('span', {
+                key: 'label',
+                className: 'text-muted-foreground'
+              }, 'Edificio:'),
+              React.createElement('span', {
+                key: 'value',
+                className: 'font-semibold'
+              }, propertyDetails.building.nombre)
+            ]),
+            // Estacionamientos - if configured
+            propertyDetails.projectData?.mostrar_estacionamientos_en_oferta !== false && estacionamientos && estacionamientos.length > 0 && React.createElement('div', {
+              key: 'parking',
+              className: 'flex justify-between'
+            }, [
+              React.createElement('span', {
+                key: 'label',
+                className: 'text-muted-foreground'
+              }, 'Estacionamientos:'),
+              React.createElement('span', {
+                key: 'value',
+                className: 'font-semibold'
+              }, estacionamientos.map(e => e.nombre).join(', '))
+            ]),
+            // Bodegas - if configured
+            propertyDetails.projectData?.mostrar_bodega_en_oferta !== false && bodegas && bodegas.length > 0 && React.createElement('div', {
+              key: 'storage',
+              className: 'flex justify-between'
+            }, [
+              React.createElement('span', {
+                key: 'label',
+                className: 'text-muted-foreground'
+              }, 'Bodega:'),
+              React.createElement('span', {
+                key: 'value',
+                className: 'font-semibold'
+              }, bodegas.map(b => b.nombre).join(', '))
             ])
           ]),
           
@@ -1241,82 +1325,15 @@ class HTMLToPDFService {
           ])
         ]),
 
-        // Cash Payment Card - only show if STP bank account exists
-        propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && propertyDetails.ownerStpBankAccount && React.createElement('div', {
+        // Cash Payment Card - only show if enabled and just the title
+        propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && React.createElement('div', {
           key: 'cash',
           className: 'bg-white rounded-2xl p-6 shadow-lg border border-border'
         }, [
           React.createElement('h3', {
             key: 'cash-title',
-            className: 'text-sm font-bold mb-4 text-primary'
-          }, 'En Efectivo'),
-          React.createElement('div', {
-            key: 'cash-details',
-            className: 'space-y-3'
-          }, [
-            React.createElement('div', {
-              key: 'price',
-              className: 'text-center'
-            }, [
-              React.createElement('p', {
-                key: 'amount',
-                className: 'text-lg font-bold text-primary'
-              }, formatCurrency(propertyDetails.precio_lista)),
-              React.createElement('p', {
-                key: 'label',
-                className: 'text-xs text-muted-foreground'
-              }, 'Precio de contado')
-            ]),
-            React.createElement('div', {
-              key: 'note',
-              className: 'text-center'
-            }, [
-              React.createElement('p', {
-                key: 'text',
-                className: 'text-xs text-muted-foreground'
-              }, 'Sin financiamiento - Pago único al momento de la escrituración')
-            ]),
-            // Add STP bank account information if available
-            propertyDetails.ownerStpBankAccount && React.createElement('div', {
-              key: 'bank-info',
-              className: 'border-t pt-3 mt-3 space-y-2'
-            }, [
-              React.createElement('h4', {
-                key: 'bank-title',
-                className: 'text-xs font-bold text-primary text-center'
-              }, 'Información Bancaria'),
-              React.createElement('div', { key: 'bank' }, [
-                React.createElement('p', {
-                  key: 'label',
-                  className: 'text-xs text-muted-foreground'
-                }, 'Banco'),
-                React.createElement('p', {
-                  key: 'value',
-                  className: 'text-xs font-semibold'
-                }, propertyDetails.ownerStpBankAccount.banco_nombre)
-              ]),
-              propertyDetails.ownerStpBankAccount.cuenta_clabe && React.createElement('div', { key: 'clabe' }, [
-                React.createElement('p', {
-                  key: 'label',
-                  className: 'text-xs text-muted-foreground'
-                }, 'CLABE'),
-                React.createElement('p', {
-                  key: 'value',
-                  className: 'text-xs font-semibold font-mono'
-                }, propertyDetails.ownerStpBankAccount.cuenta_clabe)
-              ]),
-              React.createElement('div', { key: 'account' }, [
-                React.createElement('p', {
-                  key: 'label',
-                  className: 'text-xs text-muted-foreground'
-                }, 'Número de Cuenta'),
-                React.createElement('p', {
-                  key: 'value',
-                  className: 'text-xs font-semibold font-mono'
-                }, propertyDetails.ownerStpBankAccount.numero_cuenta)
-              ])
-            ])
-          ])
+            className: 'text-sm font-bold text-primary text-center'
+          }, 'En Efectivo')
         ])
       ]),
 
