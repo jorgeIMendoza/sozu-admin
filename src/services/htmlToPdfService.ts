@@ -1325,8 +1325,8 @@ class HTMLToPDFService {
           ])
         ]),
 
-        // Cash Payment Card - only show if enabled
-        propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && React.createElement('div', {
+        // Cash Payment Card - only show if enabled with bank data only
+        propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && propertyDetails.ownerStpBankAccount && React.createElement('div', {
           key: 'cash',
           className: 'bg-white rounded-2xl p-6 shadow-lg border border-border'
         }, [
@@ -1335,70 +1335,38 @@ class HTMLToPDFService {
             className: 'text-sm font-bold mb-4 text-primary'
           }, 'En Efectivo'),
           React.createElement('div', {
-            key: 'cash-details',
-            className: 'space-y-3'
+            key: 'bank-info',
+            className: 'space-y-2'
           }, [
-            React.createElement('div', {
-              key: 'price',
-              className: 'text-center'
-            }, [
-              React.createElement('p', {
-                key: 'amount',
-                className: 'text-lg font-bold text-primary'
-              }, formatCurrency(propertyDetails.precio_lista)),
+            React.createElement('div', { key: 'bank' }, [
               React.createElement('p', {
                 key: 'label',
                 className: 'text-xs text-muted-foreground'
-              }, 'Precio de contado')
-            ]),
-            React.createElement('div', {
-              key: 'note',
-              className: 'text-center'
-            }, [
+              }, 'Banco'),
               React.createElement('p', {
-                key: 'text',
-                className: 'text-xs text-muted-foreground'
-              }, 'Sin financiamiento - Pago único al momento de la escrituración')
+                key: 'value',
+                className: 'text-xs font-semibold'
+              }, propertyDetails.ownerStpBankAccount.banco_nombre)
             ]),
-            // Add STP bank account information if available
-            propertyDetails.ownerStpBankAccount && React.createElement('div', {
-              key: 'bank-info',
-              className: 'border-t pt-3 mt-3 space-y-2'
-            }, [
-              React.createElement('h4', {
-                key: 'bank-title',
-                className: 'text-xs font-bold text-primary text-center'
-              }, 'Información Bancaria'),
-              React.createElement('div', { key: 'bank' }, [
-                React.createElement('p', {
-                  key: 'label',
-                  className: 'text-xs text-muted-foreground'
-                }, 'Banco'),
-                React.createElement('p', {
-                  key: 'value',
-                  className: 'text-xs font-semibold'
-                }, propertyDetails.ownerStpBankAccount.banco_nombre)
-              ]),
-              propertyDetails.ownerStpBankAccount.cuenta_clabe && React.createElement('div', { key: 'clabe' }, [
-                React.createElement('p', {
-                  key: 'label',
-                  className: 'text-xs text-muted-foreground'
-                }, 'CLABE'),
-                React.createElement('p', {
-                  key: 'value',
-                  className: 'text-xs font-semibold font-mono'
-                }, propertyDetails.ownerStpBankAccount.cuenta_clabe)
-              ]),
-              React.createElement('div', { key: 'account' }, [
-                React.createElement('p', {
-                  key: 'label',
-                  className: 'text-xs text-muted-foreground'
-                }, 'Número de Cuenta'),
-                React.createElement('p', {
-                  key: 'value',
-                  className: 'text-xs font-semibold font-mono'
-                }, propertyDetails.ownerStpBankAccount.numero_cuenta)
-              ])
+            propertyDetails.ownerStpBankAccount.cuenta_clabe && React.createElement('div', { key: 'clabe' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'CLABE'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'text-xs font-semibold font-mono'
+              }, propertyDetails.ownerStpBankAccount.cuenta_clabe)
+            ]),
+            React.createElement('div', { key: 'account' }, [
+              React.createElement('p', {
+                key: 'label',
+                className: 'text-xs text-muted-foreground'
+              }, 'Número de Cuenta'),
+              React.createElement('p', {
+                key: 'value',
+                className: 'text-xs font-semibold font-mono'
+              }, propertyDetails.ownerStpBankAccount.numero_cuenta)
             ])
           ])
         ])
