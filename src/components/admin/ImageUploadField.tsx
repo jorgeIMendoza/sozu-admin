@@ -104,7 +104,11 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*" }:
           ref={fileInputRef}
           type="file"
           accept={accept}
-          onChange={handleFileUpload}
+          onChange={(event) => {
+            console.log('🔧 onChange del input file disparado');
+            console.log('🔧 event.target.files:', event.target.files);
+            handleFileUpload(event);
+          }}
           disabled={uploading}
           className="hidden"
         />
