@@ -187,10 +187,11 @@ export function EditAmenityDialog({
       setOpen(newOpen);
       if (!newOpen) resetForm();
     }}>
-      <div onClick={(e) => e.stopPropagation()}>
-        <div onClick={() => setOpen(true)}>
-          {trigger || defaultTrigger}
-        </div>
+      <div onClick={(e) => {
+        e.stopPropagation();
+        setOpen(true);
+      }}>
+        {trigger || defaultTrigger}
       </div>
       
       <DialogContent className="sm:max-w-[600px]">
