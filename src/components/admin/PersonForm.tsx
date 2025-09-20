@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Upload, CalendarIcon, MapPin, Copy } from "lucide-react";
+import { Camera, Upload, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -20,7 +20,6 @@ import { TempBankAccountsSection } from "./TempBankAccountsSection";
 import { TempBeneficiariosSection } from "./TempBeneficiariosSection";
 import { ImageUploadField } from "./ImageUploadField";
 import { DocumentsTab } from "./DocumentsTab";
-import { GoogleMapComponent } from "./GoogleMapComponent";
 
 interface PersonFormProps {
   onSubmit: (data: any) => void;
@@ -89,12 +88,6 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   
   // Copy address checkbox
   const [copiarDireccionFiscal, setCopiarDireccionFiscal] = useState(false);
-  
-  // Google Maps coordinates and address
-  const [coordenadas, setCoordenadas] = useState<{lat: number, lng: number} | null>(
-    initialData?.coordenadas ? initialData.coordenadas : null
-  );
-  const [direccionMapa, setDireccionMapa] = useState(initialData?.direccion_mapa || '');
 
   // Legal info (for legal entities)
   const [numeroEscritura, setNumeroEscritura] = useState(initialData?.numero_escritura || '');
@@ -1019,58 +1012,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4" />
-                        <label className="text-sm font-medium">Ubicación en Google Maps</label>
-                      </div>
-                      <GoogleMapComponent
-                        onLocationSelect={(location) => setCoordenadas(location)}
-                        onAddressSelect={(address) => setDireccionMapa(address)}
-                        initialLocation={coordenadas}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Haz clic en el mapa para seleccionar la ubicación
-                      </p>
-                      
-                      {coordenadas && (
-                        <div className="flex items-center justify-between text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                          <div className="flex items-center space-x-2">
-                            <MapPin className="w-4 h-4" />
-                            <div>
-                              <p className="font-medium">Coordenadas seleccionadas:</p>
-                              <p>Lat: {coordenadas.lat.toFixed(6)}</p>
-                              <p>Lng: {coordenadas.lng.toFixed(6)}</p>
-                            </div>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              navigator.clipboard.writeText(`${coordenadas.lat}, ${coordenadas.lng}`);
-                              toast({ title: "Coordenadas copiadas al portapapeles" });
-                            }}
-                          >
-                            <Copy className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 gap-4">
-                        <div>
-                          <Label htmlFor="direccionMapa">Dirección del Mapa</Label>
-                          <Input
-                            id="direccionMapa"
-                            value={direccionMapa}
-                            onChange={(e) => setDireccionMapa(e.target.value)}
-                            placeholder="Dirección obtenida del mapa"
-                          />
-                        </div>
-                       </div>
-                     </div>
-                   </div>
-                </TabsContent>
+                    </div>
+                 </TabsContent>
 
                 {/* Fiscal Information Tab */}
                 <TabsContent value="fiscal" className="space-y-4 mt-6">
