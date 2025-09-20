@@ -116,7 +116,7 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*" }:
           type="button"
           variant="outline"
           disabled={uploading}
-          onClick={(e) => {
+          onClick={async (e) => {
             console.log('🔧 Click en botón Subir detectado');
             e.preventDefault();
             e.stopPropagation();
@@ -126,12 +126,51 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*" }:
             const tempInput = document.createElement('input');
             tempInput.type = 'file';
             tempInput.accept = accept;
-            tempInput.onchange = (event: Event) => {
-              console.log('🔧 onChange del input temporal disparado');
-              const target = event.target as HTMLInputElement;
-              console.log('🔧 target.files:', target.files);
-              handleFileUpload(event as any);
-            };
+            
+            // Crear una promesa para manejar la selección de archivo
+            const fileSelected = new Promise((resolve) => {
+              tempInput.onchange = async (event: Event) => {
+                console.log('🔧 onChange del input temporal disparado');
+                const target = event.target as HTMLInputElement;
+                console.log('🔧 target.files:', target.files);
+                
+                if (target.files && target.files[0]) {
+                  const file = target.files[0];
+                  console.log('🔧 Archivo seleccionado:', file.name);
+                  
+                  // Llamar directamente a la lógica de upload
+                  setUploading(true);
+                  try {
+                    console.log('🔧 Iniciando upload del archivo:', file.name);
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${Date.now()}.${fileExt}`;
+                    const filePath = `projects/images/${fileName}`;
+
+                    console.log('🔧 Subiendo a:', filePath);
+                    const { error: uploadError } = await supabase.storage
+                      .from('documentos')
+                      .upload(filePath, file);
+
+                    if (uploadError) throw uploadError;
+
+                    const { data } = supabase.storage
+                      .from('documentos')
+                      .getPublicUrl(filePath);
+
+                    console.log('🔧 URL pública generada:', data.publicUrl);
+                    onChange(data.publicUrl);
+                    toast({ title: "Imagen subida exitosamente" });
+                  } catch (error) {
+                    console.error('🔧 Error uploading file:', error);
+                    toast({ title: "Error al subir imagen", variant: "destructive" });
+                  } finally {
+                    setUploading(false);
+                  }
+                }
+                resolve(true);
+              };
+            });
+            
             console.log('🔧 Haciendo click en input temporal...');
             tempInput.click();
           }}
