@@ -116,25 +116,24 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*" }:
           type="button"
           variant="outline"
           disabled={uploading}
-          onMouseDown={(e) => {
-            console.log('🔧 MouseDown en botón Subir');
-            e.preventDefault();
-          }}
-          onPointerDown={(e) => {
-            console.log('🔧 PointerDown en botón Subir');
-            e.preventDefault();
-          }}
           onClick={(e) => {
             console.log('🔧 Click en botón Subir detectado');
             e.preventDefault();
             e.stopPropagation();
-            console.log('🔧 Ejecutando click en input file...');
-            if (fileInputRef.current) {
-              console.log('🔧 fileInputRef encontrado, haciendo click');
-              fileInputRef.current.click();
-            } else {
-              console.log('🔧 ERROR: fileInputRef no encontrado');
-            }
+            console.log('🔧 Creando input temporal...');
+            
+            // Crear un input temporal para evitar problemas con el modal
+            const tempInput = document.createElement('input');
+            tempInput.type = 'file';
+            tempInput.accept = accept;
+            tempInput.onchange = (event: Event) => {
+              console.log('🔧 onChange del input temporal disparado');
+              const target = event.target as HTMLInputElement;
+              console.log('🔧 target.files:', target.files);
+              handleFileUpload(event as any);
+            };
+            console.log('🔧 Haciendo click en input temporal...');
+            tempInput.click();
           }}
         >
           <Upload className="w-4 h-4 mr-2" />
