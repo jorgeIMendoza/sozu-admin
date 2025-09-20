@@ -1241,8 +1241,8 @@ class HTMLToPDFService {
           ])
         ]),
 
-        // Cash Payment Card
-        propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && React.createElement('div', {
+        // Cash Payment Card - only show if STP bank account exists
+        propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && propertyDetails.ownerStpBankAccount && React.createElement('div', {
           key: 'cash',
           className: 'bg-white rounded-2xl p-6 shadow-lg border border-border'
         }, [
