@@ -53,6 +53,12 @@ interface PropertyDetails {
     email: string;
     telefono: string | null;
   };
+  ownerStpBankAccount?: {
+    numero_cuenta: string;
+    cuenta_clabe: string;
+    cuenta_swift: string;
+    banco_nombre: string;
+  };
 }
 
 interface PaymentScheme {
@@ -370,7 +376,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
             </div>
 
             {/* Cash Payment Card */}
-            {propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && (
+            {propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta !== false && propertyDetails.ownerStpBankAccount && (
               <div className="bg-white rounded-2xl p-6 shadow-lg border border-border">
                 <h3 className="text-sm font-bold mb-4 text-primary">En Efectivo</h3>
                 <div className="space-y-3">
@@ -383,9 +389,28 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                       Sin financiamiento - Pago único al momento de la escrituración
                     </p>
                   </div>
-                  <div className="text-center bg-gray-50 p-3 rounded-lg">
-                    <p className="text-xs font-semibold text-muted-foreground">Datos dummy temporales</p>
-                    <p className="text-xs text-muted-foreground">Información por definir</p>
+                  
+                  {/* Bank Account Information */}
+                  <div className="border-t pt-3 mt-3 space-y-2">
+                    <h4 className="text-xs font-bold text-primary text-center">Información Bancaria</h4>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Beneficiario</p>
+                      <p className="text-xs font-semibold">{propertyDetails.ownerData?.nombre_legal || 'No disponible'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Banco</p>
+                      <p className="text-xs font-semibold">{propertyDetails.ownerStpBankAccount.banco_nombre}</p>
+                    </div>
+                    {propertyDetails.ownerStpBankAccount.cuenta_clabe && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">CLABE</p>
+                        <p className="text-xs font-semibold font-mono">{propertyDetails.ownerStpBankAccount.cuenta_clabe}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-muted-foreground">Número de Cuenta</p>
+                      <p className="text-xs font-semibold font-mono">{propertyDetails.ownerStpBankAccount.numero_cuenta}</p>
+                    </div>
                   </div>
                 </div>
               </div>
