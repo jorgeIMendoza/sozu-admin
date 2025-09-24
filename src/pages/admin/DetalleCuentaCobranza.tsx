@@ -7,7 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Edit, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -52,6 +55,8 @@ export default function DetalleCuentaCobranza() {
   const { id } = useParams<{ id: string }>();
   const cuentaId = parseInt(id || '0');
   const [openAcuerdos, setOpenAcuerdos] = useState<{ [key: number]: boolean }>({});
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: cuentaDetalle, isLoading: cuentaLoading } = useQuery({
     queryKey: ["cuenta_detalle", cuentaId],
@@ -268,6 +273,46 @@ export default function DetalleCuentaCobranza() {
 
   const totalPendiente = (cuentaDetalle?.precio_final || 0) - totalPagado;
 
+  // Mutation to delete payment application
+  const deletePaymentMutation = useMutation({
+    mutationFn: async (aplicacionId: number) => {
+      const { error } = await supabase
+        .from('aplicaciones_pago')
+        .update({ activo: false })
+        .eq('id', aplicacionId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Pago eliminado",
+        description: "La aplicación de pago ha sido eliminada exitosamente",
+      });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar la aplicación de pago",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeletePayment = (aplicacionId: number) => {
+    if (confirm("¿Está seguro de que desea eliminar esta aplicación de pago?")) {
+      deletePaymentMutation.mutate(aplicacionId);
+    }
+  };
+
+  const handleEditPayment = (aplicacionId: number) => {
+    // TODO: Implementar edición de pago
+    toast({
+      title: "Función pendiente",
+      description: "La edición de pagos será implementada próximamente",
+    });
+  };
+
   if (cuentaLoading || acuerdosLoading) {
     return <div className="text-center py-8">Cargando detalle de cuenta...</div>;
   }
@@ -452,27 +497,69 @@ export default function DetalleCuentaCobranza() {
                                   <TableHead>Clave Rastreo</TableHead>
                                   <TableHead>Monto Aplicado</TableHead>
                                   <TableHead>Fecha Aplicación</TableHead>
+                                  <TableHead>Acciones</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {acuerdo.aplicaciones.map((aplicacion, index) => (
-                                  <TableRow key={aplicacion.id}>
-                                    <TableCell className="font-medium">Parcialidad #{index + 1}</TableCell>
-                                    <TableCell>{formatDate(aplicacion.pago.fecha_pago)}</TableCell>
-                                    <TableCell>{aplicacion.pago.metodo_pago}</TableCell>
-                                    <TableCell>
-                                      {aplicacion.pago.clave_rastreo ? (
-                                        <Badge variant="outline">{aplicacion.pago.clave_rastreo}</Badge>
-                                      ) : (
-                                        <span className="text-muted-foreground">N/A</span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                      {formatCurrency(aplicacion.monto)}
-                                    </TableCell>
-                                    <TableCell>{formatDate(aplicacion.fecha_creacion)}</TableCell>
-                                  </TableRow>
-                                ))}
+                                {acuerdo.aplicaciones.map((aplicacion, index) => {
+                                  const isStpPayment = aplicacion.pago.metodo_pago?.toLowerCase().includes('stp');
+                                  
+                                  return (
+                                    <TableRow key={aplicacion.id}>
+                                      <TableCell className="font-medium">Parcialidad #{index + 1}</TableCell>
+                                      <TableCell>{formatDate(aplicacion.pago.fecha_pago)}</TableCell>
+                                      <TableCell>{aplicacion.pago.metodo_pago}</TableCell>
+                                      <TableCell>
+                                        {aplicacion.pago.clave_rastreo ? (
+                                          <Badge variant="outline">{aplicacion.pago.clave_rastreo}</Badge>
+                                        ) : (
+                                          <span className="text-muted-foreground">N/A</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="font-medium">
+                                        {formatCurrency(aplicacion.monto)}
+                                      </TableCell>
+                                      <TableCell>{formatDate(aplicacion.fecha_creacion)}</TableCell>
+                                      <TableCell>
+                                        <TooltipProvider>
+                                          <div className="flex gap-2">
+                                            {!isStpPayment && (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <Button
+                                                    variant="outline"
+                                                    size="icon"
+                                                    onClick={() => handleEditPayment(aplicacion.id)}
+                                                  >
+                                                    <Edit className="h-4 w-4" />
+                                                  </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <p>Editar Pago</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            )}
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  variant="destructive"
+                                                  size="icon"
+                                                  onClick={() => handleDeletePayment(aplicacion.id)}
+                                                  disabled={deletePaymentMutation.isPending}
+                                                >
+                                                  <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>Eliminar Pago</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </div>
+                                        </TooltipProvider>
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
                               </TableBody>
                             </Table>
                           ) : (

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, CreditCard, Eye, X } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
@@ -323,23 +324,37 @@ export default function Pagos() {
                           {formatCurrency(Number(cuenta.precio_final))}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" asChild>
-                              <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                Ver Detalle
-                              </Link>
-                            </Button>
-                            <Button 
-                              variant="destructive" 
-                              size="sm"
-                              onClick={() => handleCancelCuenta(cuenta)}
-                              disabled={cancelCuentaMutation.isPending}
-                            >
-                              <X className="h-4 w-4 mr-2" />
-                              Cancelar
-                            </Button>
-                          </div>
+                          <TooltipProvider>
+                            <div className="flex gap-2">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="outline" size="icon" asChild>
+                                    <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
+                                      <Eye className="h-4 w-4" />
+                                    </Link>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Ver Detalle</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    variant="destructive" 
+                                    size="icon"
+                                    onClick={() => handleCancelCuenta(cuenta)}
+                                    disabled={cancelCuentaMutation.isPending}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Cancelar Cuenta</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TooltipProvider>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -419,12 +434,20 @@ export default function Pagos() {
                           {formatCurrency(Number(cuenta.precio_final))}
                         </TableCell>
                         <TableCell>
-                          <Button variant="outline" size="sm" asChild>
-                            <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              Ver Detalle
-                            </Link>
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="outline" size="icon" asChild>
+                                  <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
+                                    <Eye className="h-4 w-4" />
+                                  </Link>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Ver Detalle</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </TableCell>
                       </TableRow>
                     ))}
