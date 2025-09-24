@@ -301,8 +301,11 @@ const Propiedades = () => {
       throw error;
     }
 
-    // For each offer that has a cuenta_clabe_stp, get the cuenta_cobranza ID
+    // For each offer that has a cuenta_clabe_stp, get the cuenta_cobranza ID and fetch lead RFC
     const enrichedOffers = await Promise.all((offersData || []).map(async (offer: any) => {
+      let enrichedOffer = { ...offer };
+      
+      // Get cuenta_cobranza ID if available
       if (offer.cuenta_clabe_stp) {
         try {
           const { data: cuentaData, error: cuentaError } = await supabase
@@ -313,13 +316,31 @@ const Propiedades = () => {
             .single();
           
           if (!cuentaError && cuentaData) {
-            return { ...offer, cuenta_cobranza_id: cuentaData.id };
+            enrichedOffer.cuenta_cobranza_id = cuentaData.id;
           }
         } catch (err) {
           console.warn('Error fetching cuenta_cobranza ID for offer:', offer.id);
         }
       }
-      return offer;
+      
+      // Get lead RFC from personas table
+      if (offer.id_persona_lead) {
+        try {
+          const { data: personaData, error: personaError } = await supabase
+            .from('personas')
+            .select('rfc')
+            .eq('id', offer.id_persona_lead)
+            .single();
+          
+          if (!personaError && personaData) {
+            enrichedOffer.lead_rfc = personaData.rfc;
+          }
+        } catch (err) {
+          console.warn('Error fetching RFC for lead:', offer.id_persona_lead);
+        }
+      }
+      
+      return enrichedOffer;
     }));
 
     return enrichedOffers;
