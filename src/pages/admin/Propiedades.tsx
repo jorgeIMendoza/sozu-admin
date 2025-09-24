@@ -30,6 +30,7 @@ interface Property {
   precio_lista: number;
   clabe_stp_tmp_apartado: string | null;
   clabe_stp: string | null; // Nueva propiedad para CLABE de cuentas_cobranza
+  cuenta_cobranza_id: number | null; // Nueva propiedad para ID de cuenta de cobranza
   activo: boolean;
   es_aprobado: boolean;
   // Relaciones
@@ -87,6 +88,30 @@ const Propiedades = () => {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Función para obtener la clase CSS del badge según la disponibilidad
+  const getDisponibilidadBadgeClass = (disponibilidad: string) => {
+    switch (disponibilidad.toLowerCase()) {
+      case 'disponible':
+        return 'badge-disponible';
+      case 'apartado':
+        return 'badge-apartado';
+      case 'vendido':
+        return 'badge-vendido';
+      case 'listo':
+        return 'badge-listo';
+      case 'en inventario':
+        return 'badge-inventario';
+      case 'rentado':
+        return 'badge-rentado';
+      case 'en escrituración':
+        return 'badge-escrituracion';
+      case 'entregado':
+        return 'badge-entregado';
+      default:
+        return 'badge-inventario'; // Por defecto gris
+    }
+  };
 
   // Función para descargar PDF de oferta
   const handleDownloadOffer = async (offer: any) => {
@@ -161,7 +186,7 @@ const Propiedades = () => {
           estatus_disponibilidad!inner(nombre),
           ofertas!ofertas_id_propiedad_fkey(
             id,
-            cuentas_cobranza(clabe_stp)
+            cuentas_cobranza!fk_cuentas_cobranza_oferta(clabe_stp, id)
           )
         `)
         .order('id', { ascending: false });
@@ -205,9 +230,9 @@ const Propiedades = () => {
       // Transform the data with counts
       const transformedData = data?.map((property: any) => {
         // Get clabe_stp from cuentas_cobranza if available, otherwise use clabe_stp_tmp_apartado
-        const cuentaCobranzaClabe = property.ofertas?.find((oferta: any) => 
+        const cuentaCobranzaData = property.ofertas?.find((oferta: any) => 
           oferta.cuentas_cobranza && oferta.cuentas_cobranza.length > 0
-        )?.cuentas_cobranza[0]?.clabe_stp;
+        )?.cuentas_cobranza[0];
         
         return {
           id: property.id,
@@ -216,7 +241,8 @@ const Propiedades = () => {
           m2_reales: property.m2_reales,
           precio_lista: property.precio_lista,
           clabe_stp_tmp_apartado: property.clabe_stp_tmp_apartado,
-          clabe_stp: cuentaCobranzaClabe || property.clabe_stp_tmp_apartado,
+          clabe_stp: cuentaCobranzaData?.clabe_stp || property.clabe_stp_tmp_apartado,
+          cuenta_cobranza_id: cuentaCobranzaData?.id || null,
           activo: property.activo,
           es_aprobado: property.es_aprobado,
           propietario: property.entidades_relacionadas?.personas?.nombre_legal || 'Sin propietario',
@@ -758,7 +784,7 @@ const Propiedades = () => {
               <TableHead>Bodegas</TableHead>
               <TableHead>Ofertas Comerciales</TableHead>
               <TableHead>Disponibilidad</TableHead>
-              <TableHead>Colección Vinculada</TableHead>
+              <TableHead>Cuenta de cobranza</TableHead>
               <TableHead>Cuenta Clabe</TableHead>
               <TableHead>Acciones</TableHead>
             </TableRow>
@@ -854,12 +880,16 @@ const Propiedades = () => {
                        </Badge>
                      </Button>
                    </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{property.disponibilidad}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">N/A</Badge>
-                  </TableCell>
+                    <TableCell>
+                      <span className={getDisponibilidadBadgeClass(property.disponibilidad)}>{property.disponibilidad}</span>
+                    </TableCell>
+                   <TableCell>
+                     {property.cuenta_cobranza_id ? (
+                       <Badge variant="outline">CC-{property.cuenta_cobranza_id}</Badge>
+                     ) : (
+                       <Badge variant="outline">N/A</Badge>
+                     )}
+                   </TableCell>
                   <TableCell className="font-mono text-sm">{property.clabe_stp || 'Sin CLABE'}</TableCell>
                   <TableCell>
                     {tabType === "eliminados" ? (

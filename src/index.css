@@ -67,6 +67,31 @@ All colors MUST be HSL.
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+    
+    /* Availability badge colors */
+    --disponible: 142 71% 45%;
+    --disponible-foreground: 0 0% 100%;
+    
+    --apartado: 43 96% 56%;
+    --apartado-foreground: 0 0% 100%;
+    
+    --vendido: 0 84% 60%;
+    --vendido-foreground: 0 0% 100%;
+    
+    --listo: 221 83% 53%;
+    --listo-foreground: 0 0% 100%;
+    
+    --inventario: 215 16% 47%;
+    --inventario-foreground: 0 0% 100%;
+    
+    --rentado: 271 81% 56%;
+    --rentado-foreground: 0 0% 100%;
+    
+    --escrituracion: 24 95% 53%;
+    --escrituracion-foreground: 0 0% 100%;
+    
+    --entregado: 158 64% 52%;
+    --entregado-foreground: 0 0% 100%;
   }
 
   .dark {
@@ -115,5 +140,64 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Custom badge variants for availability status */
+  .badge-disponible {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    background-color: hsl(var(--disponible));
+    color: hsl(var(--disponible-foreground));
+    border-color: hsl(var(--disponible));
+  }
+  
+  .badge-apartado {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    background-color: hsl(var(--apartado));
+    color: hsl(var(--apartado-foreground));
+    border-color: hsl(var(--apartado));
+  }
+  
+  .badge-vendido {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    background-color: hsl(var(--vendido));
+    color: hsl(var(--vendido-foreground));
+    border-color: hsl(var(--vendido));
+  }
+  
+  .badge-listo {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    background-color: hsl(var(--listo));
+    color: hsl(var(--listo-foreground));
+    border-color: hsl(var(--listo));
+  }
+  
+  .badge-inventario {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    background-color: hsl(var(--inventario));
+    color: hsl(var(--inventario-foreground));
+    border-color: hsl(var(--inventario));
+  }
+  
+  .badge-rentado {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    background-color: hsl(var(--rentado));
+    color: hsl(var(--rentado-foreground));
+    border-color: hsl(var(--rentado));
+  }
+  
+  .badge-escrituracion {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    background-color: hsl(var(--escrituracion));
+    color: hsl(var(--escrituracion-foreground));
+    border-color: hsl(var(--escrituracion));
+  }
+  
+  .badge-entregado {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    background-color: hsl(var(--entregado));
+    color: hsl(var(--entregado-foreground));
+    border-color: hsl(var(--entregado));
   }
 }
