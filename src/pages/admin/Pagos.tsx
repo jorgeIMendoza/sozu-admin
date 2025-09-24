@@ -228,8 +228,8 @@ export default function Pagos() {
   };
 
   // Navigation functions
-  const handlePropertyClick = (numeroPropiedad: string) => {
-    navigate(`/admin/propiedades?search=${encodeURIComponent(numeroPropiedad)}`);
+  const handlePropertyClick = (clabe: string) => {
+    navigate(`/admin/propiedades?search=${encodeURIComponent(clabe)}`);
   };
 
   const handleCompradorClick = (nombreComprador: string) => {
@@ -372,14 +372,14 @@ export default function Pagos() {
                          </TableCell>
                          <TableCell>{cuenta.proyecto}</TableCell>
                          <TableCell>{cuenta.edificio}</TableCell>
-                         <TableCell>
-                           <span 
-                             className="cursor-pointer hover:text-primary hover:underline font-medium" 
-                             onClick={() => handlePropertyClick(cuenta.numero_propiedad)}
-                           >
-                             {cuenta.numero_propiedad}
-                           </span>
-                         </TableCell>
+                          <TableCell>
+                            <span 
+                              className="cursor-pointer hover:text-primary hover:underline font-medium" 
+                              onClick={() => handlePropertyClick(cuenta.clabe_stp || cuenta.numero_propiedad)}
+                            >
+                              {cuenta.numero_propiedad}
+                            </span>
+                          </TableCell>
                         <TableCell>{cuenta.modelo}</TableCell>
                         <TableCell className="font-semibold">
                           {formatCurrency(Number(cuenta.precio_final))}
@@ -521,14 +521,14 @@ export default function Pagos() {
                          </TableCell>
                          <TableCell>{cuenta.proyecto}</TableCell>
                          <TableCell>{cuenta.edificio}</TableCell>
-                         <TableCell>
-                           <span 
-                             className="cursor-pointer hover:text-primary hover:underline font-medium" 
-                             onClick={() => handlePropertyClick(cuenta.numero_propiedad)}
-                           >
-                             {cuenta.numero_propiedad}
-                           </span>
-                         </TableCell>
+                          <TableCell>
+                            <span 
+                              className="cursor-pointer hover:text-primary hover:underline font-medium" 
+                              onClick={() => handlePropertyClick(cuenta.clabe_stp || cuenta.numero_propiedad)}
+                            >
+                              {cuenta.numero_propiedad}
+                            </span>
+                          </TableCell>
                         <TableCell>{cuenta.modelo}</TableCell>
                         <TableCell className="font-semibold">
                           {formatCurrency(Number(cuenta.precio_final))}

@@ -613,7 +613,9 @@ const Propiedades = () => {
       property.propietario.toLowerCase().includes(searchLower) ||
       property.proyecto.toLowerCase().includes(searchLower) ||
       property.edificio.toLowerCase().includes(searchLower) ||
-      property.modelo.toLowerCase().includes(searchLower);
+      property.modelo.toLowerCase().includes(searchLower) ||
+      (property.clabe_stp && property.clabe_stp.toLowerCase().includes(searchLower)) ||
+      (property.clabe_stp_tmp_apartado && property.clabe_stp_tmp_apartado.toLowerCase().includes(searchLower));
     
     const matchesProyecto = proyectoFilter === "" || property.proyecto.toLowerCase().includes(proyectoFilter.toLowerCase());
     const matchesModelo = modeloFilter === "" || property.modelo.toLowerCase().includes(modeloFilter.toLowerCase());
@@ -1207,7 +1209,7 @@ const Propiedades = () => {
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por número de propiedad, propietario, proyecto, edificio o modelo..."
+                placeholder="Buscar por número de propiedad, propietario, proyecto, edificio, modelo o CLABE..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8"
