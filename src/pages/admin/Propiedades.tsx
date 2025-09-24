@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1427,21 +1427,35 @@ const Propiedades = () => {
                                   <p>{isAccountActive ? 'Activa' : 'Cancelada'} - Click para ver detalle</p>
                                 </TooltipContent>
                               </Tooltip>
-                            ) : (
-                              <div className="flex flex-col gap-2">
-                                <span className="text-muted-foreground text-sm">Sin cuenta</span>
-                                {selectedPropertyForOffers?.disponibilidad === 'Apartado' && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleGenerateCollectionAccount(offer.id, selectedPropertyForOffers.id)}
-                                    className="text-xs"
-                                  >
-                                    Generar Cuenta
-                                  </Button>
-                                )}
-                              </div>
-                            )}
+                             ) : (
+                               <div className="flex flex-col gap-2">
+                                 <span className="text-muted-foreground text-sm">Sin cuenta</span>
+                                 {selectedPropertyForOffers?.disponibilidad === 'Apartado' && (
+                                   <Tooltip>
+                                     <TooltipTrigger asChild>
+                                       <Button
+                                         variant="outline"
+                                         size="sm"
+                                         onClick={() => handleGenerateCollectionAccount(offer.id, selectedPropertyForOffers.id)}
+                                         disabled={!offer.esquema_id}
+                                         className="text-xs gap-1 min-w-[120px]"
+                                       >
+                                         <CreditCard className="h-3 w-3" />
+                                         Generar Cuenta
+                                       </Button>
+                                     </TooltipTrigger>
+                                     <TooltipContent>
+                                       <p>
+                                         {!offer.esquema_id 
+                                           ? "Selecciona un esquema de pago para habilitar" 
+                                           : "Generar cuenta de cobranza para esta oferta"
+                                         }
+                                       </p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 )}
+                               </div>
+                             )}
                           </TableCell>
                           <TableCell>
                             <Button

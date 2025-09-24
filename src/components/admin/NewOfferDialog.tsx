@@ -53,7 +53,10 @@ const baseProspectSchema = z.object({
   tipo_persona: z.string().min(1, "El tipo de persona es requerido"),
   nombre_completo: z.string().min(1, "El nombre completo es requerido"),
   email: z.string().email("Email inválido"),
-  telefono: z.string().min(10, "El teléfono debe tener al menos 10 dígitos"),
+  telefono: z.string()
+    .min(10, "El teléfono debe tener exactamente 10 dígitos")
+    .max(10, "El teléfono debe tener exactamente 10 dígitos")
+    .regex(/^[0-9]{10}$/, "El teléfono debe contener solo números y tener exactamente 10 dígitos"),
   rfc: z.string()
     .min(1, "El RFC es requerido")
     .regex(/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/, "Formato de RFC inválido")
@@ -746,7 +749,16 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                     <FormItem>
                       <FormLabel>Teléfono *</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ingresa el teléfono (10 dígitos obligatorios)" {...field} />
+                        <Input 
+                          placeholder="Ingresa el teléfono (10 dígitos obligatorios)" 
+                          {...field}
+                          onChange={(e) => {
+                            // Solo permitir números y máximo 10 dígitos
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                            field.onChange(value);
+                          }}
+                          maxLength={10}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
