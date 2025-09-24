@@ -36,7 +36,7 @@ export default function Pagos() {
               numero_propiedad,
               entidades_relacionadas!id_entidad_relacionada_dueno(
                 personas!fk_entrel_persona(nombre_legal),
-                proyectos!id_proyecto(nombre)
+                proyectos!fk_entrel_proyecto(nombre)
               ),
               edificios_modelos!id_edificio_modelo(
                 edificios!id_edificio(nombre),
