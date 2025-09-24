@@ -507,7 +507,7 @@ const Propiedades = () => {
               id_oferta: offerId,
               id_propiedad: selectedPropertyId,
               id: currentOffer.cuenta_cobranza_id,
-              clabe_stp: selectedPropertyForOffers?.clabe_stp_tmp_apartado || '',
+              clabe_stp: currentOffer.cuenta_clabe_stp || '',
               rfc_curp_ordenante: currentOffer?.lead_rfc || ''
             }),
           });

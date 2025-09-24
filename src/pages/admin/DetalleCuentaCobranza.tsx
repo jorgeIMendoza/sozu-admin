@@ -268,7 +268,7 @@ export default function DetalleCuentaCobranza() {
             id_oferta: offerData.id,
             id_propiedad: offerData.id_propiedad,
             id: cuentaDetalle.id,
-            clabe_stp: offerData.clabe_stp_tmp_apartado || '',
+            clabe_stp: cuentaDetalle.clabe_stp || '',
             rfc_curp_ordenante: offerData.lead_rfc || ''
           }),
         });
