@@ -525,24 +525,28 @@ export default function DetalleCuentaCobranza() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-success">{formatCurrency(totalPagado)}</div>
-            <p className="text-xs text-muted-foreground">
-              {((totalPagado / (cuentaDetalle.precio_final || 1)) * 100).toFixed(1)}% del total
-            </p>
+            {cuentaDetalle.precio_final > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {((totalPagado / (cuentaDetalle.precio_final || 1)) * 100).toFixed(1)}% del total
+              </p>
+            )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo Pendiente</CardTitle>
-            <DollarSign className="h-4 w-4 text-warning" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-warning">{formatCurrency(totalPendiente)}</div>
-            <p className="text-xs text-muted-foreground">
-              {((totalPendiente / (cuentaDetalle.precio_final || 1)) * 100).toFixed(1)}% restante
-            </p>
-          </CardContent>
-        </Card>
+        {cuentaDetalle.precio_final > 0 && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Saldo Pendiente</CardTitle>
+              <DollarSign className="h-4 w-4 text-warning" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-warning">{formatCurrency(totalPendiente)}</div>
+              <p className="text-xs text-muted-foreground">
+                {((totalPendiente / (cuentaDetalle.precio_final || 1)) * 100).toFixed(1)}% restante
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -611,7 +615,7 @@ export default function DetalleCuentaCobranza() {
                         {comprador.porcentaje_copropiedad.toFixed(2)}%
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Copropiedad
+                        {cuentaDetalle.compradores.length === 1 ? 'Propiedad' : 'Copropiedad'}
                       </div>
                     </div>
                   </div>
@@ -619,7 +623,9 @@ export default function DetalleCuentaCobranza() {
                 
                 {/* Total verification */}
                 <div className="flex justify-between items-center pt-2 border-t">
-                  <span className="text-sm font-medium">Total Copropiedad:</span>
+                  <span className="text-sm font-medium">
+                    Total {cuentaDetalle.compradores.length === 1 ? 'Propiedad' : 'Copropiedad'}:
+                  </span>
                   <span className="font-bold">
                     {cuentaDetalle.compradores.reduce((sum, c) => sum + c.porcentaje_copropiedad, 0).toFixed(2)}%
                   </span>
@@ -638,7 +644,7 @@ export default function DetalleCuentaCobranza() {
             {/* Payment scheme selection when no scheme is selected */}
             {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Esquema de pago:</span>
+                <span className="text-sm text-muted-foreground">Plan de pagos:</span>
                 <Select onValueChange={(value) => handlePaymentSchemeSelection(parseInt(value))}>
                   <SelectTrigger className="w-48">
                     <SelectValue placeholder="Seleccionar esquema de pago" />
@@ -656,7 +662,7 @@ export default function DetalleCuentaCobranza() {
             {/* Show selected scheme when one is selected */}
             {offerData && offerData.id_esquema_pago_seleccionado && (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Esquema:</span>
+                <span className="text-sm text-muted-foreground">Plan de pagos:</span>
                 <Badge variant="default">{offerData.esquema_nombre}</Badge>
               </div>
             )}
