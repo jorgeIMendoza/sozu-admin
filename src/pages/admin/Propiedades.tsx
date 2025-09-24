@@ -1251,7 +1251,7 @@ const Propiedades = () => {
                         ) : offer.esquema_id ? (
                           <Select 
                             value={offer.esquema_id.toString()} 
-                            disabled={offer.cuenta_es_aprobado || false}
+                            disabled={!!offer.cuenta_clabe_stp}
                           >
                             <SelectTrigger className="w-48">
                               <SelectValue placeholder="Seleccionar esquema" />
@@ -1265,13 +1265,13 @@ const Propiedades = () => {
                         ) : (
                            <Select 
                              value=""
-                             disabled={offer.cuenta_es_aprobado || false}
+                             disabled={!!offer.cuenta_clabe_stp}
                              onValueChange={(value) => handleSchemeSelection(offer.id, parseInt(value))}
                            >
                              <SelectTrigger className="w-48">
                               <SelectValue placeholder={
-                                offer.cuenta_es_aprobado 
-                                  ? "Cuenta ya aprobada" 
+                                offer.cuenta_clabe_stp 
+                                  ? "Cuenta de cobranza existente" 
                                   : "Seleccionar esquema de pago"
                               } />
                             </SelectTrigger>
