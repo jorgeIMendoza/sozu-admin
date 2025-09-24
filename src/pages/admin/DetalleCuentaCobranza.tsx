@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, FileText, DollarSign, CalendarDays } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -49,6 +50,7 @@ interface CuentaDetalle {
 export default function DetalleCuentaCobranza() {
   const { id } = useParams<{ id: string }>();
   const cuentaId = parseInt(id || '0');
+  const [openAcuerdos, setOpenAcuerdos] = useState<{ [key: number]: boolean }>({});
 
   const { data: cuentaDetalle, isLoading: cuentaLoading } = useQuery({
     queryKey: ["cuenta_detalle", cuentaId],
@@ -244,6 +246,13 @@ export default function DetalleCuentaCobranza() {
     return format(new Date(dateString), 'dd/MM/yyyy', { locale: es });
   };
 
+  const toggleAcuerdo = (acuerdoId: number) => {
+    setOpenAcuerdos(prev => ({
+      ...prev,
+      [acuerdoId]: !prev[acuerdoId]
+    }));
+  };
+
   const totalPagado = acuerdosPago?.reduce((sum, acuerdo) => 
     sum + acuerdo.aplicaciones.reduce((appSum, app) => appSum + app.monto, 0), 0
   ) || 0;
@@ -293,16 +302,22 @@ export default function DetalleCuentaCobranza() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-success">{formatCurrency(totalPagado)}</div>
+            <p className="text-xs text-muted-foreground">
+              {((totalPagado / (cuentaDetalle.precio_final || 1)) * 100).toFixed(1)}% del total
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pendiente</CardTitle>
+            <CardTitle className="text-sm font-medium">Saldo Pendiente</CardTitle>
             <DollarSign className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-warning">{formatCurrency(totalPendiente)}</div>
+            <p className="text-xs text-muted-foreground">
+              {((totalPendiente / (cuentaDetalle.precio_final || 1)) * 100).toFixed(1)}% restante
+            </p>
           </CardContent>
         </Card>
 
@@ -372,62 +387,80 @@ export default function DetalleCuentaCobranza() {
         </CardHeader>
         <CardContent>
           {acuerdosPago && acuerdosPago.length > 0 ? (
-            <div className="space-y-6">
-              {acuerdosPago.map((acuerdo) => (
-                <div key={acuerdo.id} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h4 className="font-semibold">Acuerdo #{acuerdo.orden} - {acuerdo.concepto}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Monto: {formatCurrency(acuerdo.monto)} | 
-                        {acuerdo.fecha_pago && ` Fecha límite: ${formatDate(acuerdo.fecha_pago)}`}
-                      </p>
+            <div className="space-y-4">
+              {acuerdosPago.map((acuerdo) => {
+                const totalAplicado = acuerdo.aplicaciones.reduce((sum, app) => sum + app.monto, 0);
+                const isOpen = openAcuerdos[acuerdo.id];
+                
+                return (
+                  <Collapsible key={acuerdo.id} open={isOpen} onOpenChange={() => toggleAcuerdo(acuerdo.id)}>
+                    <div className="border rounded-lg">
+                      <CollapsibleTrigger asChild>
+                        <div className="w-full p-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-semibold">Acuerdo #{acuerdo.orden} - {acuerdo.concepto}</h4>
+                              <Badge variant={acuerdo.pago_completado ? "default" : "secondary"}>
+                                {acuerdo.pago_completado ? "Completado" : "Pendiente"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span>Monto: {formatCurrency(acuerdo.monto)}</span>
+                              <span>Pagado: {formatCurrency(totalAplicado)}</span>
+                              <span>Pendiente: {formatCurrency(acuerdo.monto - totalAplicado)}</span>
+                              {acuerdo.fecha_pago && <span>Fecha límite: {formatDate(acuerdo.fecha_pago)}</span>}
+                            </div>
+                          </div>
+                          <div className="ml-4">
+                            {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      
+                      <CollapsibleContent>
+                        <div className="px-4 pb-4">
+                          {acuerdo.aplicaciones.length > 0 ? (
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Fecha Pago</TableHead>
+                                  <TableHead>Método</TableHead>
+                                  <TableHead>Clave Rastreo</TableHead>
+                                  <TableHead>Monto Aplicado</TableHead>
+                                  <TableHead>Fecha Aplicación</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {acuerdo.aplicaciones.map((aplicacion) => (
+                                  <TableRow key={aplicacion.id}>
+                                    <TableCell>{formatDate(aplicacion.pago.fecha_pago)}</TableCell>
+                                    <TableCell>{aplicacion.pago.metodo_pago}</TableCell>
+                                    <TableCell>
+                                      {aplicacion.pago.clave_rastreo ? (
+                                        <Badge variant="outline">{aplicacion.pago.clave_rastreo}</Badge>
+                                      ) : (
+                                        <span className="text-muted-foreground">N/A</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                      {formatCurrency(aplicacion.monto)}
+                                    </TableCell>
+                                    <TableCell>{formatDate(aplicacion.fecha_creacion)}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          ) : (
+                            <div className="text-center py-4 text-muted-foreground">
+                              No hay pagos aplicados a este acuerdo
+                            </div>
+                          )}
+                        </div>
+                      </CollapsibleContent>
                     </div>
-                    <Badge variant={acuerdo.pago_completado ? "default" : "secondary"}>
-                      {acuerdo.pago_completado ? "Completado" : "Pendiente"}
-                    </Badge>
-                  </div>
-
-                  {acuerdo.aplicaciones.length > 0 ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID Pago</TableHead>
-                          <TableHead>Fecha Pago</TableHead>
-                          <TableHead>Método</TableHead>
-                          <TableHead>Clave Rastreo</TableHead>
-                          <TableHead>Monto Aplicado</TableHead>
-                          <TableHead>Fecha Aplicación</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {acuerdo.aplicaciones.map((aplicacion) => (
-                          <TableRow key={aplicacion.id}>
-                            <TableCell>{aplicacion.pago.id}</TableCell>
-                            <TableCell>{formatDate(aplicacion.pago.fecha_pago)}</TableCell>
-                            <TableCell>{aplicacion.pago.metodo_pago}</TableCell>
-                            <TableCell>
-                              {aplicacion.pago.clave_rastreo ? (
-                                <Badge variant="outline">{aplicacion.pago.clave_rastreo}</Badge>
-                              ) : (
-                                <span className="text-muted-foreground">N/A</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {formatCurrency(aplicacion.monto)}
-                            </TableCell>
-                            <TableCell>{formatDate(aplicacion.fecha_creacion)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <div className="text-center py-4 text-muted-foreground">
-                      No hay pagos aplicados a este acuerdo
-                    </div>
-                  )}
-                </div>
-              ))}
+                  </Collapsible>
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
