@@ -11,6 +11,7 @@ import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -51,10 +52,20 @@ interface CuentaDetalle {
   dueno: string;
 }
 
+interface AplicacionToDelete {
+  id: number;
+  monto: number;
+  conceptoNombre: string;
+}
+
 export default function DetalleCuentaCobranza() {
   const { id } = useParams<{ id: string }>();
   const cuentaId = parseInt(id || '0');
   const [openAcuerdos, setOpenAcuerdos] = useState<{ [key: number]: boolean }>({});
+  const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; aplicacion: AplicacionToDelete | null }>({
+    isOpen: false,
+    aplicacion: null
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -299,10 +310,15 @@ export default function DetalleCuentaCobranza() {
     },
   });
 
-  const handleDeletePayment = (aplicacionId: number) => {
-    if (confirm("¿Está seguro de que desea eliminar esta aplicación de pago?")) {
-      deletePaymentMutation.mutate(aplicacionId);
+  const handleDeletePayment = (aplicacion: AplicacionToDelete) => {
+    setDeleteDialog({ isOpen: true, aplicacion });
+  };
+
+  const confirmDeletePayment = () => {
+    if (deleteDialog.aplicacion) {
+      deletePaymentMutation.mutate(deleteDialog.aplicacion.id);
     }
+    setDeleteDialog({ isOpen: false, aplicacion: null });
   };
 
   const handleEditPayment = (aplicacionId: number) => {
@@ -544,7 +560,11 @@ export default function DetalleCuentaCobranza() {
                                                 <Button
                                                   variant="destructive"
                                                   size="icon"
-                                                  onClick={() => handleDeletePayment(aplicacion.id)}
+                                                  onClick={() => handleDeletePayment({
+                                                    id: aplicacion.id,
+                                                    monto: aplicacion.monto,
+                                                    conceptoNombre: conceptoDisplay
+                                                  })}
                                                   disabled={deletePaymentMutation.isPending}
                                                 >
                                                   <Trash2 className="h-4 w-4" />
@@ -581,6 +601,19 @@ export default function DetalleCuentaCobranza() {
           )}
         </CardContent>
       </Card>
+
+      <DeleteConfirmationDialog
+        open={deleteDialog.isOpen}
+        onOpenChange={(open) => setDeleteDialog({ isOpen: open, aplicacion: open ? deleteDialog.aplicacion : null })}
+        onConfirm={confirmDeletePayment}
+        title="Eliminar Aplicación de Pago"
+        description={
+          deleteDialog.aplicacion
+            ? `¿Está seguro de que desea eliminar la aplicación de pago de ${formatCurrency(deleteDialog.aplicacion.monto)} para el concepto "${deleteDialog.aplicacion.conceptoNombre}"? Esta acción no se puede deshacer.`
+            : ""
+        }
+        isLoading={deletePaymentMutation.isPending}
+      />
     </div>
   );
 }
