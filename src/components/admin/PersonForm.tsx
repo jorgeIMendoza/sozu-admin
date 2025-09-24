@@ -28,9 +28,10 @@ interface PersonFormProps {
   onCancel: () => void;
   entityType?: 'legal' | 'client' | 'representative' | 'user' | 'desarrollador' | 'inmobiliaria' | 'administradora' | 'banco' | 'buyer' | 'seller' | 'owner' | 'resident' | 'agent' | 'administrator' | 'vendedor' | 'comprador' | 'dueno' | 'residente' | 'agente' | 'administrador' | 'representante_legal';
   fixedEntityType?: boolean;
+  restrictToBasicTab?: boolean;
 }
 
-export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityType = 'user', fixedEntityType = false }: PersonFormProps) {
+export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityType = 'user', fixedEntityType = false, restrictToBasicTab = false }: PersonFormProps) {
   // Basic info
   const [nombre, setNombre] = useState(initialData?.nombre || initialData?.nombre_legal || '');
   const [nombreComercial, setNombreComercial] = useState(initialData?.nombre_comercial || '');
@@ -426,10 +427,20 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     e.preventDefault();
     
     // Basic validation
-    if (!nombre.trim() || !email.trim() || !telefono.trim() || !rfc.trim()) {
+    if (!nombre.trim() || !email.trim() || !telefono.trim()) {
       toast({
         title: "Error",
-        description: "Por favor completa todos los campos requeridos (nombre, email, teléfono y RFC).",
+        description: "Por favor completa todos los campos requeridos (nombre, email y teléfono).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // RFC validation - required for comprador when restrictToBasicTab is true
+    if (restrictToBasicTab && entityType === 'comprador' && !rfc.trim()) {
+      toast({
+        title: "Error",
+        description: "El RFC es obligatorio para compradores.",
         variant: "destructive",
       });
       return;
@@ -573,7 +584,11 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       <form onSubmit={handleSubmit} className="space-y-6">
         {!isUser ? (
           <Tabs defaultValue="basic" className="w-full">
-            {isSpecialEntityType ? (
+            {restrictToBasicTab ? (
+              <TabsList className="grid w-full mb-4 bg-muted grid-cols-1">
+                <TabsTrigger value="basic" className="text-foreground">Información Básica</TabsTrigger>
+              </TabsList>
+            ) : isSpecialEntityType ? (
               <TabsList className="grid w-full mb-4 bg-muted grid-cols-6">
                 <TabsTrigger value="basic" className="text-foreground">Información Básica</TabsTrigger>
                 <TabsTrigger value="address" className="text-foreground">Dirección</TabsTrigger>
@@ -669,9 +684,15 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         id="telefono"
                         type="tel"
                         value={telefono}
-                        onChange={(e) => setTelefono(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          if (value.length <= 10) {
+                            setTelefono(value);
+                          }
+                        }}
                         placeholder="Ingresa el teléfono (10 dígitos obligatorios)"
                         className="flex-1"
+                        maxLength={10}
                       />
                     </div>
                   </div>
@@ -808,7 +829,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 </div>
 
                 <div>
-                  <Label htmlFor="rfc">RFC *</Label>
+                  <Label htmlFor="rfc">RFC {restrictToBasicTab && entityType === 'comprador' ? '*' : ''}</Label>
                   <Input
                     id="rfc"
                     type="text"
@@ -917,7 +938,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
             {isSpecialEntityType && (
               <>
                 {/* Address Tab */}
-                <TabsContent value="address" className="space-y-4 mt-6">
+                {!restrictToBasicTab && (
+                  <TabsContent value="address" className="space-y-4 mt-6">
                   <div className="space-y-6">
                     <h3 className="text-lg font-medium">Dirección</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1019,13 +1041,14 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           placeholder="Ingresa la colonia o barrio"
                         />
                       </div>
-                    </div>
-
-                    </div>
-                 </TabsContent>
+                     </div>
+                   </div>
+                  </TabsContent>
+                )}
 
                 {/* Fiscal Information Tab */}
-                <TabsContent value="fiscal" className="space-y-4 mt-6">
+                {!restrictToBasicTab && (
+                  <TabsContent value="fiscal" className="space-y-4 mt-6">
                   <div className="space-y-6">
                     <h3 className="text-lg font-medium">Información Fiscal</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1312,11 +1335,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         </div>
                       </div>
                     </div>
-                  </div>
-                </TabsContent>
+                   </div>
+                 </TabsContent>
+                )}
 
-                {/* Documents Tab */}
-                <TabsContent value="documents" className="space-y-4 mt-6">
+                 {/* Documents Tab */}
+                 {!restrictToBasicTab && shouldShowDocumentsTab() && (
+                   <TabsContent value="documents" className="space-y-4 mt-6">
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Documentos</h3>
                     <DocumentsTab 
@@ -1332,11 +1357,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         });
                       }}
                     />
-                  </div>
-                </TabsContent>
+                   </div>
+                 </TabsContent>
+                 )}
 
-                {/* Bank Accounts Tab */}
-                <TabsContent value="bank-accounts" className="space-y-4 mt-6">
+                 {/* Bank Accounts Tab */}
+                 {!restrictToBasicTab && (
+                   <TabsContent value="bank-accounts" className="space-y-4 mt-6">
                   <div className="space-y-4">
                     {initialData?.id ? (
                       <BankAccountsSection 
@@ -1351,11 +1378,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         entityTypeId={getDefaultTipoEntidad(entityType || '')}
                       />
                     )}
-                  </div>
-                </TabsContent>
+                   </div>
+                 </TabsContent>
+                 )}
 
-                {/* Beneficiarios Tab */}
-                <TabsContent value="beneficiarios" className="space-y-4 mt-6">
+                 {/* Beneficiarios Tab */}
+                 {!restrictToBasicTab && shouldShowBeneficiariosTab() && (
+                   <TabsContent value="beneficiarios" className="space-y-4 mt-6">
                   <div className="space-y-4">
                     {initialData?.id ? (
                       <BeneficiariosForm 
@@ -1369,11 +1398,12 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         personaNombre={nombre || "Nueva Persona"}
                       />
                     )}
-                  </div>
-                </TabsContent>
-              </>
-            )}
-          </Tabs>
+                   </div>
+                 </TabsContent>
+                 )}
+               </>
+             )}
+           </Tabs>
         ) : (
           // User form (simplified)
           <div className="space-y-4">

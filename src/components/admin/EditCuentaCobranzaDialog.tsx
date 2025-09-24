@@ -13,11 +13,30 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Plus, Trash2, Search, ChevronUp, ChevronDown, Edit } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, Search, GripVertical, Edit } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { PersonForm } from "@/components/admin/PersonForm";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Comprador {
   nombre_legal: string;
@@ -72,6 +91,40 @@ interface EsquemaPago {
   numero_mensualidades: number;
 }
 
+interface SortableItemProps {
+  id: string;
+  children: React.ReactNode;
+}
+
+function SortableItem({ id, children }: SortableItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={isDragging ? "cursor-grabbing" : "cursor-grab"}
+    >
+      {children}
+    </tr>
+  );
+}
+
 export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuentaCobranzaDialogProps) {
   const [activeTab, setActiveTab] = useState("propiedad");
   const [searchTerm, setSearchTerm] = useState("");
@@ -84,6 +137,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [editingDate, setEditingDate] = useState<Date | undefined>(undefined);
   
   const { toast } = useToast();
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Get detailed account data
   const { data: cuentaDetalle } = useQuery({
@@ -449,24 +510,35 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     }
   });
 
-  const moveAcuerdo = (index: number, direction: 'up' | 'down') => {
-    if (
-      (direction === 'up' && index === 0) || 
-      (direction === 'down' && index === acuerdos.length - 1)
-    ) return;
-
-    const newAcuerdos = [...acuerdos];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    
-    [newAcuerdos[index], newAcuerdos[targetIndex]] = [newAcuerdos[targetIndex], newAcuerdos[index]];
-    
-    setAcuerdos(newAcuerdos);
-    updateOrderMutation.mutate(newAcuerdos);
-  };
 
   const handleDateUpdate = (acuerdoId: number, fecha: Date | undefined) => {
     if (fecha) {
       updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
+      
+      // After updating the date, reorder by fecha_pago
+      setTimeout(() => {
+        const updatedAcuerdos = [...acuerdos].sort((a, b) => {
+          const dateA = a.id === acuerdoId && fecha ? fecha : (a.fecha_pago ? new Date(a.fecha_pago) : new Date('9999-12-31'));
+          const dateB = b.fecha_pago ? new Date(b.fecha_pago) : new Date('9999-12-31');
+          return dateA.getTime() - dateB.getTime();
+        });
+        
+        setAcuerdos(updatedAcuerdos);
+        updateOrderMutation.mutate(updatedAcuerdos);
+      }, 500);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (active.id !== over?.id) {
+      const oldIndex = acuerdos.findIndex(item => item.id.toString() === active.id);
+      const newIndex = acuerdos.findIndex(item => item.id.toString() === over?.id);
+
+      const newAcuerdos = arrayMove(acuerdos, oldIndex, newIndex);
+      setAcuerdos(newAcuerdos);
+      updateOrderMutation.mutate(newAcuerdos);
     }
   };
 
@@ -621,7 +693,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       onClick={() => setShowPersonForm(true)}
                     >
                       <Plus className="h-4 w-4 mr-2" />
-                      Nuevo Lead
+                      Nuevo Comprador
                     </Button>
                   </div>
                   
@@ -694,111 +766,103 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               </CardHeader>
               <CardContent>
                 {acuerdos && acuerdos.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Orden</TableHead>
-                        <TableHead>Concepto</TableHead>
-                        <TableHead>Monto</TableHead>
-                        <TableHead>Porcentaje</TableHead>
-                        <TableHead>Fecha de Pago</TableHead>
-                        <TableHead>Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {acuerdos.map((acuerdo, index) => (
-                        <TableRow key={acuerdo.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {acuerdo.orden}
-                              <div className="flex flex-col">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => moveAcuerdo(index, 'up')}
-                                  disabled={index === 0 || updateOrderMutation.isPending}
-                                >
-                                  <ChevronUp className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => moveAcuerdo(index, 'down')}
-                                  disabled={index === acuerdos.length - 1 || updateOrderMutation.isPending}
-                                >
-                                  <ChevronDown className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{acuerdo.concepto_nombre}</TableCell>
-                          <TableCell>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}</TableCell>
-                          <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
-                          <TableCell>
-                            {editingAcuerdo === acuerdo.id ? (
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button variant="outline" className="h-8 text-xs">
-                                    <CalendarIcon className="mr-2 h-3 w-3" />
-                                    {editingDate ? format(editingDate, 'dd/MM/yyyy', { locale: es }) : 'Seleccionar'}
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                  <Calendar
-                                    mode="single"
-                                    selected={editingDate}
-                                    onSelect={(date) => {
-                                      setEditingDate(date);
-                                      if (date) {
-                                        handleDateUpdate(acuerdo.id, date);
-                                      }
-                                    }}
-                                    disabled={(date) => date < new Date('1900-01-01')}
-                                    initialFocus
-                                  />
-                                </PopoverContent>
-                              </Popover>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <span>
-                                  {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
-                                </span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => {
-                                    setEditingAcuerdo(acuerdo.id);
-                                    setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
-                                  }}
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {editingAcuerdo === acuerdo.id && (
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setEditingAcuerdo(null);
-                                    setEditingDate(undefined);
-                                  }}
-                                >
-                                  Cancelar
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Orden</TableHead>
+                          <TableHead>Concepto</TableHead>
+                          <TableHead>Monto</TableHead>
+                          <TableHead>Porcentaje</TableHead>
+                          <TableHead>Fecha de Pago</TableHead>
+                          <TableHead>Acciones</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        <SortableContext
+                          items={acuerdos.map(a => a.id.toString())}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          {acuerdos.map((acuerdo, index) => (
+                            <SortableItem key={acuerdo.id} id={acuerdo.id.toString()}>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  {acuerdo.orden}
+                                  <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                                </div>
+                              </TableCell>
+                              <TableCell>{acuerdo.concepto_nombre}</TableCell>
+                              <TableCell>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}</TableCell>
+                              <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
+                              <TableCell>
+                                {editingAcuerdo === acuerdo.id ? (
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button variant="outline" className="h-8 text-xs">
+                                        <CalendarIcon className="mr-2 h-3 w-3" />
+                                        {editingDate ? format(editingDate, 'dd/MM/yyyy', { locale: es }) : 'Seleccionar'}
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                      <Calendar
+                                        mode="single"
+                                        selected={editingDate}
+                                        onSelect={(date) => {
+                                          setEditingDate(date);
+                                          if (date) {
+                                            handleDateUpdate(acuerdo.id, date);
+                                          }
+                                        }}
+                                        disabled={(date) => date < new Date('1900-01-01')}
+                                        initialFocus
+                                      />
+                                    </PopoverContent>
+                                  </Popover>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <span>
+                                      {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
+                                    </span>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                      onClick={() => {
+                                        setEditingAcuerdo(acuerdo.id);
+                                        setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
+                                      }}
+                                    >
+                                      <Edit className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {editingAcuerdo === acuerdo.id && (
+                                  <div className="flex gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditingAcuerdo(null);
+                                        setEditingDate(undefined);
+                                      }}
+                                    >
+                                      Cancelar
+                                    </Button>
+                                  </div>
+                                )}
+                              </TableCell>
+                            </SortableItem>
+                          ))}
+                        </SortableContext>
+                      </TableBody>
+                    </Table>
+                  </DndContext>
                 ) : (
                   <div className="space-y-4">
                     <p className="text-muted-foreground">No hay acuerdo de pago configurado</p>
@@ -884,6 +948,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 }}
                 initialData={{ tipo_persona: 'pf' }}
                 entityType="comprador"
+                restrictToBasicTab={true}
               />
             </div>
           </div>
