@@ -1264,7 +1264,7 @@ const Propiedades = () => {
 
       {/* Dialog para mostrar ofertas */}
       <Dialog open={offersDialogOpen} onOpenChange={setOffersDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Ofertas Comerciales</DialogTitle>
           </DialogHeader>
@@ -1278,63 +1278,113 @@ const Propiedades = () => {
                     <TableHead>Lead</TableHead>
                     <TableHead>Fecha</TableHead>
                     <TableHead>Esquema de Pago</TableHead>
+                    <TableHead>Cuenta de Cobranza</TableHead>
                     <TableHead>Descarga</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {selectedPropertyOffers.map((offer: any, index: number) => (
-                    <TableRow key={offer.id}>
-                      <TableCell className="font-medium">
-                        {String(offer.id).padStart(6, '0')}
-                      </TableCell>
-                      <TableCell>
-                        {(offer.agent_name || 'AGENTE POR DEFINIR').toUpperCase()}
-                      </TableCell>
-                      <TableCell>
-                        {(offer.lead_name || 'N/A').toUpperCase()}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(offer.fecha_generacion).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        {offer.esquema_es_manual ? (
-                          <span className="text-sm">{offer.esquema_nombre}</span>
-                        ) : (
-                           <Select 
-                             value={offer.esquema_id ? offer.esquema_id.toString() : ""}
-                             disabled={!!offer.cuenta_clabe_stp}
-                             onValueChange={(value) => handleSchemeSelection(offer.id, parseInt(value))}
-                           >
-                             <SelectTrigger className="w-48">
-                              <SelectValue placeholder={
-                                offer.cuenta_clabe_stp 
-                                  ? "Cuenta de cobranza existente" 
-                                  : "Seleccionar esquema de pago"
-                              } />
-                            </SelectTrigger>
-                            <SelectContent className="bg-background border z-50">
-                              {availableSchemes.map((scheme) => (
-                                <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                                  {scheme.nombre}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownloadOffer(offer)}
-                          className="flex items-center gap-2"
+                  {(() => {
+                    // Check if there's an active account
+                    const hasActiveAccount = selectedPropertyOffers.some((offer: any) => 
+                      offer.cuenta_clabe_stp && offer.cuenta_es_aprobado
+                    );
+                    
+                    return selectedPropertyOffers.map((offer: any, index: number) => {
+                      const hasAccount = !!offer.cuenta_clabe_stp;
+                      const isAccountActive = hasAccount && offer.cuenta_es_aprobado;
+                      const isAccountCancelled = hasAccount && !offer.cuenta_es_aprobado;
+                      
+                      return (
+                        <TableRow 
+                          key={offer.id}
+                          className={
+                            isAccountActive 
+                              ? "border-l-4 border-l-green-500 bg-green-50/50 dark:bg-green-950/20" 
+                              : isAccountCancelled 
+                              ? "border-l-4 border-l-orange-500 bg-orange-50/50 dark:bg-orange-950/20" 
+                              : ""
+                          }
                         >
-                          <Download className="h-4 w-4" />
-                          PDF
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          <TableCell className="font-medium">
+                            {String(offer.id).padStart(6, '0')}
+                          </TableCell>
+                          <TableCell>
+                            {(offer.agent_name || 'AGENTE POR DEFINIR').toUpperCase()}
+                          </TableCell>
+                          <TableCell>
+                            {(offer.lead_name || 'N/A').toUpperCase()}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(offer.fecha_generacion).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            {offer.esquema_es_manual ? (
+                              <span className="text-sm">{offer.esquema_nombre}</span>
+                            ) : (
+                               <Select 
+                                 value={offer.esquema_id ? offer.esquema_id.toString() : ""}
+                                 disabled={hasActiveAccount || hasAccount}
+                                 onValueChange={(value) => handleSchemeSelection(offer.id, parseInt(value))}
+                               >
+                                 <SelectTrigger className="w-48">
+                                  <SelectValue placeholder={
+                                    hasAccount 
+                                      ? "Cuenta de cobranza existente" 
+                                      : hasActiveAccount
+                                      ? "Esquema deshabilitado - Cuenta activa"
+                                      : "Seleccionar esquema de pago"
+                                  } />
+                                </SelectTrigger>
+                                <SelectContent className="bg-background border z-50">
+                                  {availableSchemes.map((scheme) => (
+                                    <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                                      {scheme.nombre}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {hasAccount ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className={`font-mono text-xs ${
+                                      isAccountActive 
+                                        ? "text-green-700 bg-green-100 hover:bg-green-200 dark:text-green-300 dark:bg-green-900/50" 
+                                        : "text-orange-700 bg-orange-100 hover:bg-orange-200 dark:text-orange-300 dark:bg-orange-900/50"
+                                    }`}
+                                    onClick={() => navigate(`/admin/cuentas-cobranza/${offer.cuenta_precio_final ? 'id' : 'buscar'}${offer.cuenta_precio_final ? `/${offer.cuenta_precio_final}` : ''}/detalle`)}
+                                  >
+                                    CC-{String(offer.cuenta_precio_final || offer.id).padStart(6, '0')}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{isAccountActive ? 'Activa' : 'Cancelada'} - Click para ver detalle</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">Sin cuenta</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownloadOffer(offer)}
+                              className="flex items-center gap-2"
+                            >
+                              <Download className="h-4 w-4" />
+                              PDF
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    });
+                  })()}
                 </TableBody>
               </Table>
             ) : (
