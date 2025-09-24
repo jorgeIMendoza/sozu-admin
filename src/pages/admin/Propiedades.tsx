@@ -498,7 +498,8 @@ const Propiedades = () => {
           id_propiedad: propertyId,
           id_persona_lead: currentOffer?.id_persona_lead,
           monto_apartado_pagando: selectedPropertyForOffers?.monto_apartado_pagando || 0,
-          clabe_stp_tmp_apartado: selectedPropertyForOffers?.clabe_stp_tmp_apartado || ''
+          clabe_stp: selectedPropertyForOffers?.clabe_stp_tmp_apartado || '',
+          rfc_curp_ordenante: currentOffer?.lead_rfc || ''
         }),
       });
 
