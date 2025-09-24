@@ -29,6 +29,8 @@ interface Property {
   numero_piso: number;
   m2_reales: number;
   precio_lista: number;
+  monto_apartado: number | null;
+  monto_apartado_pagando: number | null;
   clabe_stp_tmp_apartado: string | null;
   clabe_stp: string | null; // Nueva propiedad para CLABE de cuentas_cobranza
   cuenta_cobranza_id: number | null; // Nueva propiedad para ID de cuenta de cobranza
@@ -167,6 +169,8 @@ const Propiedades = () => {
           numero_piso,
           m2_reales,
           precio_lista,
+          monto_apartado,
+          monto_apartado_pagando,
           clabe_stp_tmp_apartado,
           activo,
           es_aprobado,
@@ -243,6 +247,8 @@ const Propiedades = () => {
           numero_piso: property.numero_piso,
           m2_reales: property.m2_reales,
           precio_lista: property.precio_lista,
+          monto_apartado: property.monto_apartado,
+          monto_apartado_pagando: property.monto_apartado_pagando,
           clabe_stp_tmp_apartado: property.clabe_stp_tmp_apartado,
           clabe_stp: cuentaCobranzaData?.clabe_stp || property.clabe_stp_tmp_apartado,
           cuenta_cobranza_id: cuentaCobranzaData?.id || null,
@@ -486,7 +492,9 @@ const Propiedades = () => {
         body: JSON.stringify({
           siguiente_accion: 'genera_cuenta_cobranza_por_oferta',
           id_oferta: offerId,
-          id_propiedad: propertyId
+          id_propiedad: propertyId,
+          monto_apartado_pagando: selectedPropertyForOffers?.monto_apartado_pagando || 0,
+          clabe_stp_tmp_apartado: selectedPropertyForOffers?.clabe_stp_tmp_apartado || ''
         }),
       });
 
