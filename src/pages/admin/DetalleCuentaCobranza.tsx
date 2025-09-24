@@ -14,6 +14,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface AcuerdoPago {
   id: number;
@@ -50,6 +51,16 @@ interface CuentaDetalle {
   numero_propiedad: string;
   modelo: string;
   dueno: string;
+  proyecto_id: number;
+  oferta_id: number;
+}
+
+interface OfferData {
+  id: number;
+  id_esquema_pago_seleccionado: number | null;
+  id_propiedad: number;
+  esquema_nombre?: string;
+  es_manual?: boolean;
 }
 
 interface AplicacionToDelete {
@@ -94,7 +105,9 @@ export default function DetalleCuentaCobranza() {
         .from('ofertas')
         .select(`
           id,
+          id_esquema_pago_seleccionado,
           propiedades!ofertas_id_propiedad_fkey(
+            id,
             numero_propiedad,
             id_entidad_relacionada_dueno,
             id_edificio_modelo
@@ -117,6 +130,7 @@ export default function DetalleCuentaCobranza() {
         supabase
           .from('entidades_relacionadas')
           .select(`
+            id_proyecto,
             proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
           `)
           .eq('id', oferta?.propiedades?.id_entidad_relacionada_dueno)
@@ -149,13 +163,127 @@ export default function DetalleCuentaCobranza() {
         edificio: edificioModeloResult.data?.edificios?.nombre || 'Sin edificio',
         numero_propiedad: oferta?.propiedades?.numero_propiedad || 'Sin número',
         modelo: edificioModeloResult.data?.modelos?.nombre || 'Sin modelo',
-        dueno: duenoResult.data?.personas?.nombre_legal || 'Sin dueño'
+        dueno: duenoResult.data?.personas?.nombre_legal || 'Sin dueño',
+        proyecto_id: entidadResult.data?.id_proyecto || 0,
+        oferta_id: cuenta.id_oferta
       };
 
       return detalle;
     },
     enabled: !!cuentaId,
   });
+
+  // Fetch offer data with payment scheme info
+  const { data: offerData } = useQuery({
+    queryKey: ["offer_data", cuentaDetalle?.oferta_id],
+    queryFn: async () => {
+      if (!cuentaDetalle?.oferta_id) return null;
+
+      const { data: offer, error } = await supabase
+        .from('ofertas')
+        .select(`
+          id,
+          id_esquema_pago_seleccionado,
+          id_propiedad,
+          esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(
+            nombre,
+            es_manual
+          )
+        `)
+        .eq('id', cuentaDetalle.oferta_id)
+        .single();
+
+      if (error) throw error;
+
+      return {
+        id: offer.id,
+        id_esquema_pago_seleccionado: offer.id_esquema_pago_seleccionado,
+        id_propiedad: offer.id_propiedad,
+        esquema_nombre: offer.esquemas_pago?.nombre || null,
+        es_manual: offer.esquemas_pago?.es_manual || false
+      } as OfferData;
+    },
+    enabled: !!cuentaDetalle?.oferta_id,
+  });
+
+  // Fetch available payment schemes for the project
+  const { data: availableSchemes } = useQuery({
+    queryKey: ["payment_schemes", cuentaDetalle?.proyecto_id],
+    queryFn: async () => {
+      if (!cuentaDetalle?.proyecto_id) return [];
+
+      const { data: schemes, error } = await supabase
+        .from('esquemas_pago')
+        .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+        .eq('id_proyecto', cuentaDetalle.proyecto_id)
+        .eq('es_manual', false)
+        .eq('activo', true)
+        .order('nombre');
+
+      if (error) throw error;
+      return schemes || [];
+    },
+    enabled: !!cuentaDetalle?.proyecto_id,
+  });
+
+  // Handle payment scheme selection
+  const handlePaymentSchemeSelection = async (schemeId: number) => {
+    if (!cuentaDetalle || !offerData) return;
+
+    try {
+      // Update the offer with the selected payment scheme
+      const { error: updateError } = await supabase
+        .from('ofertas')
+        .update({ id_esquema_pago_seleccionado: schemeId })
+        .eq('id', offerData.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Éxito",
+        description: "Esquema de pago actualizado correctamente",
+      });
+
+      // Make webhook call to generate agreement
+      try {
+        const webhookResponse = await fetch('https://automatizacion-n8n.fbqqbe.easypanel.host/webhook-test/aplicaPago', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
+            id_oferta: offerData.id,
+            id_propiedad: offerData.id_propiedad,
+            id: cuentaDetalle.id
+          }),
+        });
+
+        if (webhookResponse.ok) {
+          toast({
+            title: "Acuerdo generado",
+            description: "Se ha generado el acuerdo de pago para la cuenta de cobranza",
+          });
+        } else {
+          console.error('Webhook response not ok:', webhookResponse.status);
+        }
+      } catch (webhookError) {
+        console.error('Error calling webhook:', webhookError);
+      }
+
+      // Refresh queries
+      queryClient.invalidateQueries({ queryKey: ["offer_data", cuentaDetalle.oferta_id] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+
+    } catch (error) {
+      console.error('Error updating payment scheme:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el esquema de pago",
+        variant: "destructive",
+      });
+    }
+  };
 
   const { data: acuerdosPago, isLoading: acuerdosLoading } = useQuery({
     queryKey: ["acuerdos_pago", cuentaId],
@@ -457,7 +585,34 @@ export default function DetalleCuentaCobranza() {
       {/* Acuerdos de pago */}
       <Card>
         <CardHeader>
-          <CardTitle>Acuerdos de Pago y Aplicaciones</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle>Acuerdos de Pago y Aplicaciones</CardTitle>
+            {/* Payment scheme selection when no scheme is selected */}
+            {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Esquema de pago:</span>
+                <Select onValueChange={(value) => handlePaymentSchemeSelection(parseInt(value))}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Seleccionar esquema de pago" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSchemes.map((scheme) => (
+                      <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                        {scheme.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {/* Show selected scheme when one is selected */}
+            {offerData && offerData.id_esquema_pago_seleccionado && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Esquema:</span>
+                <Badge variant="default">{offerData.esquema_nombre}</Badge>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {acuerdosPago && acuerdosPago.length > 0 ? (

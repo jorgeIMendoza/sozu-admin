@@ -493,6 +493,37 @@ const Propiedades = () => {
         setSelectedPropertyOffers(updatedOffers);
       }
 
+      // Check if this offer has a collection account and make webhook call
+      const currentOffer = selectedPropertyOffers?.find(offer => offer.id === offerId);
+      if (currentOffer?.cuenta_cobranza_id && currentOffer?.cuenta_es_aprobado) {
+        try {
+          const webhookResponse = await fetch('https://automatizacion-n8n.fbqqbe.easypanel.host/webhook-test/aplicaPago', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
+              id_oferta: offerId,
+              id_propiedad: selectedPropertyId,
+              id: currentOffer.cuenta_cobranza_id
+            }),
+          });
+
+          if (webhookResponse.ok) {
+            toast({
+              title: "Acuerdo generado",
+              description: "Se ha generado el acuerdo de pago para la cuenta de cobranza",
+            });
+          } else {
+            console.error('Webhook response not ok:', webhookResponse.status);
+          }
+        } catch (webhookError) {
+          console.error('Error calling webhook:', webhookError);
+          // Don't show error toast to user as the main operation was successful
+        }
+      }
+
     } catch (error) {
       console.error('Error updating payment scheme:', error);
       toast({
