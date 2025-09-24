@@ -412,7 +412,7 @@ export default function DetalleCuentaCobranza() {
                         <div className="w-full p-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer">
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-2">
-                              <h4 className="font-semibold">Pago #{acuerdo.orden} - {acuerdo.concepto}</h4>
+                              <h4 className="font-semibold">{acuerdo.concepto}</h4>
                               <Badge variant={acuerdo.pago_completado ? "default" : "secondary"}>
                                 {acuerdo.pago_completado ? "Completado" : "Pendiente"}
                               </Badge>
@@ -436,6 +436,7 @@ export default function DetalleCuentaCobranza() {
                             <Table>
                               <TableHeader>
                                 <TableRow>
+                                  <TableHead>Parcialidad</TableHead>
                                   <TableHead>Fecha Pago</TableHead>
                                   <TableHead>Método</TableHead>
                                   <TableHead>Clave Rastreo</TableHead>
@@ -444,8 +445,9 @@ export default function DetalleCuentaCobranza() {
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {acuerdo.aplicaciones.map((aplicacion) => (
+                                {acuerdo.aplicaciones.map((aplicacion, index) => (
                                   <TableRow key={aplicacion.id}>
+                                    <TableCell className="font-medium">Parcialidad #{index + 1}</TableCell>
                                     <TableCell>{formatDate(aplicacion.pago.fecha_pago)}</TableCell>
                                     <TableCell>{aplicacion.pago.metodo_pago}</TableCell>
                                     <TableCell>
