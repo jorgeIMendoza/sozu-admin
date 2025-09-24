@@ -320,7 +320,7 @@ export default function Pagos() {
                                 <div className="text-xs text-muted-foreground">
                                   {cuenta.compradores[0].rfc && `RFC: ${cuenta.compradores[0].rfc}`}
                                   <br />
-                                  {cuenta.compradores[0].porcentaje_copropiedad.toFixed(2)}% copropiedad
+                                  {cuenta.compradores[0].porcentaje_copropiedad.toFixed(2)}% propiedad
                                 </div>
                               </div>
                             )
@@ -434,11 +434,11 @@ export default function Pagos() {
                                  <Badge variant="secondary" className="block w-fit">
                                    {cuenta.compradores[0].nombre_legal}
                                  </Badge>
-                                 <div className="text-xs text-muted-foreground">
-                                   {cuenta.compradores[0].rfc && `RFC: ${cuenta.compradores[0].rfc}`}
-                                   <br />
-                                   {cuenta.compradores[0].porcentaje_copropiedad.toFixed(2)}% copropiedad
-                                 </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {cuenta.compradores[0].rfc && `RFC: ${cuenta.compradores[0].rfc}`}
+                                    <br />
+                                    {cuenta.compradores[0].porcentaje_copropiedad.toFixed(2)}% propiedad
+                                  </div>
                                </div>
                              )
                            ) : (
