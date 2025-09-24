@@ -39,13 +39,19 @@ interface AplicacionPago {
   };
 }
 
+interface Comprador {
+  nombre_legal: string;
+  rfc: string | null;
+  porcentaje_copropiedad: number;
+}
+
 interface CuentaDetalle {
   id: number;
   clabe_stp: string | null;
   precio_final: number;
   es_aprobado: boolean;
   fecha_compra: string;
-  compradores: string[];
+  compradores: Comprador[];
   proyecto: string;
   edificio: string;
   numero_propiedad: string;
@@ -122,7 +128,8 @@ export default function DetalleCuentaCobranza() {
       const { data: compradores } = await supabase
         .from('compradores')
         .select(`
-          personas!compradores_id_persona_fkey(nombre_legal)
+          porcentaje_copropiedad,
+          personas!compradores_id_persona_fkey(nombre_legal, rfc)
         `)
         .eq('id_cuenta_cobranza', cuentaId)
         .eq('activo', true);
@@ -160,7 +167,11 @@ export default function DetalleCuentaCobranza() {
         precio_final: cuenta.precio_final || 0,
         es_aprobado: cuenta.es_aprobado,
         fecha_compra: cuenta.fecha_compra,
-        compradores: compradores?.map(c => c.personas?.nombre_legal).filter(Boolean) || [],
+        compradores: compradores?.map(c => ({
+          nombre_legal: c.personas?.nombre_legal || '',
+          rfc: c.personas?.rfc || null,
+          porcentaje_copropiedad: c.porcentaje_copropiedad || 0
+        })).filter(c => c.nombre_legal) || [],
         proyecto: entidadResult.data?.proyectos?.nombre || 'Sin proyecto',
         edificio: edificioModeloResult.data?.edificios?.nombre || 'Sin edificio',
         numero_propiedad: oferta?.propiedades?.numero_propiedad || 'Sin número',
@@ -586,10 +597,33 @@ export default function DetalleCuentaCobranza() {
           {cuentaDetalle.compradores.length > 0 && (
             <div className="mt-4">
               <label className="text-sm font-medium">Compradores</label>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="mt-3 space-y-3">
                 {cuentaDetalle.compradores.map((comprador, index) => (
-                  <Badge key={index} variant="secondary">{comprador}</Badge>
+                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="space-y-1">
+                      <div className="font-medium">{comprador.nombre_legal}</div>
+                      {comprador.rfc && (
+                        <Badge variant="outline" className="text-xs">{comprador.rfc}</Badge>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold">
+                        {comprador.porcentaje_copropiedad.toFixed(2)}%
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Copropiedad
+                      </div>
+                    </div>
+                  </div>
                 ))}
+                
+                {/* Total verification */}
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <span className="text-sm font-medium">Total Copropiedad:</span>
+                  <span className="font-bold">
+                    {cuentaDetalle.compradores.reduce((sum, c) => sum + c.porcentaje_copropiedad, 0).toFixed(2)}%
+                  </span>
+                </div>
               </div>
             </div>
           )}

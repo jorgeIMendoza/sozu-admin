@@ -11,13 +11,20 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { CompradoresDetailDialog } from "@/components/admin/CompradoresDetailDialog";
 import { useToast } from "@/hooks/use-toast";
+
+interface Comprador {
+  nombre_legal: string;
+  rfc: string | null;
+  porcentaje_copropiedad: number;
+}
 
 interface CuentaCobranza {
   id: number;
   clabe_stp: string | null;
   precio_final: number;
-  compradores: string[];
+  compradores: Comprador[];
   dueno: string;
   proyecto: string;
   edificio: string;
@@ -87,7 +94,8 @@ export default function Pagos() {
         .from('compradores')
         .select(`
           id_cuenta_cobranza,
-          personas!compradores_id_persona_fkey(nombre_legal)
+          porcentaje_copropiedad,
+          personas!compradores_id_persona_fkey(nombre_legal, rfc)
         `)
         .in('id_cuenta_cobranza', cuentaIds);
 
@@ -126,7 +134,11 @@ export default function Pagos() {
           id: cuenta.id,
           clabe_stp: cuenta.clabe_stp,
           precio_final: cuenta.precio_final || 0,
-          compradores: cuentaCompradores.map(c => c.personas?.nombre_legal).filter(Boolean),
+          compradores: cuentaCompradores.map(c => ({
+            nombre_legal: c.personas?.nombre_legal || '',
+            rfc: c.personas?.rfc || null,
+            porcentaje_copropiedad: c.porcentaje_copropiedad || 0
+          })).filter(c => c.nombre_legal),
           dueno: entidad?.personas?.nombre_legal || 'Sin dueño',
           proyecto: entidad?.proyectos?.nombre || 'Sin proyecto',
           edificio: edificioModelo?.edificios?.nombre || 'Sin edificio',
@@ -148,7 +160,8 @@ export default function Pagos() {
   
   const filteredCuentas = currentCuentas.filter(cuenta =>
     cuenta.id.toString().includes(searchTerm) ||
-    cuenta.compradores.some(c => c.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    cuenta.compradores.some(c => c.nombre_legal.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      c.rfc?.toLowerCase().includes(searchTerm.toLowerCase())) ||
     cuenta.dueno.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cuenta.clabe_stp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cuenta.proyecto.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -297,13 +310,20 @@ export default function Pagos() {
                         <TableCell className="font-semibold">CC-{String(cuenta.id).padStart(6, '0')}</TableCell>
                         <TableCell>
                           {cuenta.compradores.length > 0 ? (
-                            <div className="space-y-1">
-                              {cuenta.compradores.map((comprador, index) => (
-                                <Badge key={index} variant="secondary" className="block w-fit">
-                                  {comprador}
+                            cuenta.compradores.length > 1 ? (
+                              <CompradoresDetailDialog compradores={cuenta.compradores} />
+                            ) : (
+                              <div className="space-y-1">
+                                <Badge variant="secondary" className="block w-fit">
+                                  {cuenta.compradores[0].nombre_legal}
                                 </Badge>
-                              ))}
-                            </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {cuenta.compradores[0].rfc && `RFC: ${cuenta.compradores[0].rfc}`}
+                                  <br />
+                                  {cuenta.compradores[0].porcentaje_copropiedad.toFixed(2)}% copropiedad
+                                </div>
+                              </div>
+                            )
                           ) : (
                             <span className="text-muted-foreground">Sin compradores</span>
                           )}
@@ -405,19 +425,26 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow key={cuenta.id}>
                         <TableCell className="font-semibold">CC-{String(cuenta.id).padStart(6, '0')}</TableCell>
-                        <TableCell>
-                          {cuenta.compradores.length > 0 ? (
-                            <div className="space-y-1">
-                              {cuenta.compradores.map((comprador, index) => (
-                                <Badge key={index} variant="secondary" className="block w-fit">
-                                  {comprador}
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">Sin compradores</span>
-                          )}
-                        </TableCell>
+                         <TableCell>
+                           {cuenta.compradores.length > 0 ? (
+                             cuenta.compradores.length > 1 ? (
+                               <CompradoresDetailDialog compradores={cuenta.compradores} />
+                             ) : (
+                               <div className="space-y-1">
+                                 <Badge variant="secondary" className="block w-fit">
+                                   {cuenta.compradores[0].nombre_legal}
+                                 </Badge>
+                                 <div className="text-xs text-muted-foreground">
+                                   {cuenta.compradores[0].rfc && `RFC: ${cuenta.compradores[0].rfc}`}
+                                   <br />
+                                   {cuenta.compradores[0].porcentaje_copropiedad.toFixed(2)}% copropiedad
+                                 </div>
+                               </div>
+                             )
+                           ) : (
+                             <span className="text-muted-foreground">Sin compradores</span>
+                           )}
+                         </TableCell>
                         <TableCell>{cuenta.dueno}</TableCell>
                         <TableCell>
                           {cuenta.clabe_stp ? (
