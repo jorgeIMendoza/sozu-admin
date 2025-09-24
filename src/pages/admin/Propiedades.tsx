@@ -29,6 +29,7 @@ interface Property {
   m2_reales: number;
   precio_lista: number;
   clabe_stp_tmp_apartado: string | null;
+  clabe_stp: string | null; // Nueva propiedad para CLABE de cuentas_cobranza
   activo: boolean;
   es_aprobado: boolean;
   // Relaciones
@@ -158,7 +159,10 @@ const Propiedades = () => {
           ),
           vistas(nombre),
           estatus_disponibilidad!inner(nombre),
-          ofertas!ofertas_id_propiedad_fkey(id)
+          ofertas!ofertas_id_propiedad_fkey(
+            id,
+            cuentas_cobranza(clabe_stp)
+          )
         `)
         .order('id', { ascending: false });
       
@@ -199,31 +203,39 @@ const Propiedades = () => {
       }, {});
       
       // Transform the data with counts
-      const transformedData = data?.map((property: any) => ({
-        id: property.id,
-        numero_propiedad: property.numero_propiedad,
-        numero_piso: property.numero_piso,
-        m2_reales: property.m2_reales,
-        precio_lista: property.precio_lista,
-        clabe_stp_tmp_apartado: property.clabe_stp_tmp_apartado,
-        activo: property.activo,
-        es_aprobado: property.es_aprobado,
-        propietario: property.entidades_relacionadas?.personas?.nombre_legal || 'Sin propietario',
-        proyecto: property.edificios_modelos?.edificios?.proyectos?.nombre || 'Sin proyecto',
-        proyecto_id: property.edificios_modelos?.edificios?.proyectos?.id || 0,
-        edificio: property.edificios_modelos?.edificios?.nombre || 'Sin edificio',
-        modelo: property.edificios_modelos?.modelos?.nombre || 'Sin modelo',
-        vista: property.vistas?.nombre || 'Sin vista',
-        disponibilidad: property.estatus_disponibilidad?.nombre || 'Sin estatus',
-        tieneOfertas: property.ofertas && property.ofertas.length > 0,
-        estacionamientos_count: estacionamientosCounts[property.id] || 0,
-        bodegas_count: bodegasCounts[property.id] || 0,
-        configuracion_modelo: {
-          numero_recamaras: property.edificios_modelos?.modelos?.numero_recamaras || 0,
-          numero_completo_banos: property.edificios_modelos?.modelos?.numero_completo_banos || 0,
-          numero_medio_bano: property.edificios_modelos?.modelos?.numero_medio_bano || 0,
-        }
-      })) || [];
+      const transformedData = data?.map((property: any) => {
+        // Get clabe_stp from cuentas_cobranza if available, otherwise use clabe_stp_tmp_apartado
+        const cuentaCobranzaClabe = property.ofertas?.find((oferta: any) => 
+          oferta.cuentas_cobranza && oferta.cuentas_cobranza.length > 0
+        )?.cuentas_cobranza[0]?.clabe_stp;
+        
+        return {
+          id: property.id,
+          numero_propiedad: property.numero_propiedad,
+          numero_piso: property.numero_piso,
+          m2_reales: property.m2_reales,
+          precio_lista: property.precio_lista,
+          clabe_stp_tmp_apartado: property.clabe_stp_tmp_apartado,
+          clabe_stp: cuentaCobranzaClabe || property.clabe_stp_tmp_apartado,
+          activo: property.activo,
+          es_aprobado: property.es_aprobado,
+          propietario: property.entidades_relacionadas?.personas?.nombre_legal || 'Sin propietario',
+          proyecto: property.edificios_modelos?.edificios?.proyectos?.nombre || 'Sin proyecto',
+          proyecto_id: property.edificios_modelos?.edificios?.proyectos?.id || 0,
+          edificio: property.edificios_modelos?.edificios?.nombre || 'Sin edificio',
+          modelo: property.edificios_modelos?.modelos?.nombre || 'Sin modelo',
+          vista: property.vistas?.nombre || 'Sin vista',
+          disponibilidad: property.estatus_disponibilidad?.nombre || 'Sin estatus',
+          tieneOfertas: property.ofertas && property.ofertas.length > 0,
+          estacionamientos_count: estacionamientosCounts[property.id] || 0,
+          bodegas_count: bodegasCounts[property.id] || 0,
+          configuracion_modelo: {
+            numero_recamaras: property.edificios_modelos?.modelos?.numero_recamaras || 0,
+            numero_completo_banos: property.edificios_modelos?.modelos?.numero_completo_banos || 0,
+            numero_medio_bano: property.edificios_modelos?.modelos?.numero_medio_bano || 0,
+          }
+        };
+      }) || [];
       
       return transformedData;
     },
@@ -848,7 +860,7 @@ const Propiedades = () => {
                   <TableCell>
                     <Badge variant="outline">N/A</Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{property.clabe_stp_tmp_apartado || 'Sin CLABE'}</TableCell>
+                  <TableCell className="font-mono text-sm">{property.clabe_stp || 'Sin CLABE'}</TableCell>
                   <TableCell>
                     {tabType === "eliminados" ? (
                       <Button
