@@ -39,13 +39,13 @@ export default function Pagos() {
                 proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
               ),
               edificios_modelos!id_edificio_modelo(
-                edificios!id_edificio(nombre),
-                modelos!id_modelo(nombre)
+                edificios!fk_edificios_modelos_edificio(nombre),
+                modelos!edificios_modelos_id_modelo_fkey(nombre)
               )
             )
           ),
           compradores!id_cuenta_cobranza(
-            personas!id_persona(nombre_legal)
+            personas!compradores_id_persona_fkey(nombre_legal)
           )
         `)
         .eq('activo', true);
