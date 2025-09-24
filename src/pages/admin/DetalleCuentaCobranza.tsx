@@ -61,6 +61,8 @@ interface OfferData {
   id_propiedad: number;
   esquema_nombre?: string;
   es_manual?: boolean;
+  clabe_stp_tmp_apartado?: string | null;
+  lead_rfc?: string | null;
 }
 
 interface AplicacionToDelete {
@@ -185,9 +187,17 @@ export default function DetalleCuentaCobranza() {
           id,
           id_esquema_pago_seleccionado,
           id_propiedad,
+          id_persona_lead,
           esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(
             nombre,
             es_manual
+          ),
+          propiedades!ofertas_id_propiedad_fkey(
+            clabe_stp_tmp_apartado
+          ),
+          personas!ofertas_id_persona_lead_fkey(
+            rfc,
+            curp
           )
         `)
         .eq('id', cuentaDetalle.oferta_id)
@@ -200,7 +210,9 @@ export default function DetalleCuentaCobranza() {
         id_esquema_pago_seleccionado: offer.id_esquema_pago_seleccionado,
         id_propiedad: offer.id_propiedad,
         esquema_nombre: offer.esquemas_pago?.nombre || null,
-        es_manual: offer.esquemas_pago?.es_manual || false
+        es_manual: offer.esquemas_pago?.es_manual || false,
+        clabe_stp_tmp_apartado: offer.propiedades?.clabe_stp_tmp_apartado || null,
+        lead_rfc: offer.personas?.rfc || offer.personas?.curp || null
       } as OfferData;
     },
     enabled: !!cuentaDetalle?.oferta_id,
@@ -255,7 +267,9 @@ export default function DetalleCuentaCobranza() {
             siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
             id_oferta: offerData.id,
             id_propiedad: offerData.id_propiedad,
-            id: cuentaDetalle.id
+            id: cuentaDetalle.id,
+            clabe_stp: offerData.clabe_stp_tmp_apartado || '',
+            rfc_curp_ordenante: offerData.lead_rfc || ''
           }),
         });
 

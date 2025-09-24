@@ -506,7 +506,9 @@ const Propiedades = () => {
               siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
               id_oferta: offerId,
               id_propiedad: selectedPropertyId,
-              id: currentOffer.cuenta_cobranza_id
+              id: currentOffer.cuenta_cobranza_id,
+              clabe_stp: selectedPropertyForOffers?.clabe_stp_tmp_apartado || '',
+              rfc_curp_ordenante: currentOffer?.lead_rfc || ''
             }),
           });
 
