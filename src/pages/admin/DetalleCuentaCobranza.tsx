@@ -252,14 +252,10 @@ export default function DetalleCuentaCobranza() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            json: {
-              body: {
-                siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
-                id_oferta: offerData.id,
-                id_propiedad: offerData.id_propiedad,
-                id: cuentaDetalle.id
-              }
-            }
+            siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
+            id_oferta: offerData.id,
+            id_propiedad: offerData.id_propiedad,
+            id: cuentaDetalle.id
           }),
         });
 
