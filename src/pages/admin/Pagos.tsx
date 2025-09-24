@@ -6,12 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, CreditCard, Eye, X } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { CompradoresDetailDialog } from "@/components/admin/CompradoresDetailDialog";
+import { EditCuentaCobranzaDialog } from "@/components/admin/EditCuentaCobranzaDialog";
 import { useToast } from "@/hooks/use-toast";
 
 interface Comprador {
@@ -40,9 +41,14 @@ export default function Pagos() {
     isOpen: false,
     cuenta: null
   });
+  const [editDialog, setEditDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
+    isOpen: false,
+    cuenta: null
+  });
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: cuentasCobranza, isLoading } = useQuery({
     queryKey: ["cuentas_cobranza"],
@@ -210,11 +216,28 @@ export default function Pagos() {
     setCancelDialog({ isOpen: true, cuenta });
   };
 
+  const handleEditCuenta = (cuenta: CuentaCobranza) => {
+    setEditDialog({ isOpen: true, cuenta });
+  };
+
   const confirmCancel = () => {
     if (cancelDialog.cuenta) {
       cancelCuentaMutation.mutate(cancelDialog.cuenta.id);
     }
     setCancelDialog({ isOpen: false, cuenta: null });
+  };
+
+  // Navigation functions
+  const handlePropertyClick = (numeroPropiedad: string) => {
+    navigate(`/admin/propiedades?search=${encodeURIComponent(numeroPropiedad)}`);
+  };
+
+  const handleCompradorClick = (nombreComprador: string) => {
+    navigate(`/admin/compradores?search=${encodeURIComponent(nombreComprador)}`);
+  };
+
+  const handleVendedorClick = (nombreVendedor: string) => {
+    navigate(`/admin/entidades-legales?search=${encodeURIComponent(nombreVendedor)}`);
   };
 
   return (
@@ -308,74 +331,106 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow key={cuenta.id}>
                         <TableCell className="font-semibold">CC-{String(cuenta.id).padStart(6, '0')}</TableCell>
-                        <TableCell>
-                          {cuenta.compradores.length > 0 ? (
-                            cuenta.compradores.length > 1 ? (
-                              <CompradoresDetailDialog compradores={cuenta.compradores} />
-                            ) : (
-                              <div className="space-y-1">
-                                <Badge variant="secondary" className="block w-fit">
-                                  {cuenta.compradores[0].nombre_legal}
-                                </Badge>
-                                <div className="text-xs text-muted-foreground">
-                                  {cuenta.compradores[0].rfc && `RFC: ${cuenta.compradores[0].rfc}`}
-                                  <br />
-                                  {cuenta.compradores[0].porcentaje_copropiedad.toFixed(2)}% propiedad
-                                </div>
-                              </div>
-                            )
-                          ) : (
-                            <span className="text-muted-foreground">Sin compradores</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{cuenta.dueno}</TableCell>
-                        <TableCell>
-                          {cuenta.clabe_stp ? (
-                            <Badge variant="outline">{cuenta.clabe_stp}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">Sin CLABE</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{cuenta.proyecto}</TableCell>
-                        <TableCell>{cuenta.edificio}</TableCell>
-                        <TableCell>{cuenta.numero_propiedad}</TableCell>
+                         <TableCell>
+                           {cuenta.compradores.length > 0 ? (
+                             cuenta.compradores.length > 1 ? (
+                               <CompradoresDetailDialog compradores={cuenta.compradores} />
+                             ) : (
+                               <div className="space-y-1">
+                                 <Badge 
+                                   variant="secondary" 
+                                   className="block w-fit cursor-pointer hover:bg-secondary/80" 
+                                   onClick={() => handleCompradorClick(cuenta.compradores[0].nombre_legal)}
+                                 >
+                                   {cuenta.compradores[0].nombre_legal}
+                                 </Badge>
+                                 <div className="text-xs text-muted-foreground">
+                                   {cuenta.compradores[0].rfc && `RFC: ${cuenta.compradores[0].rfc}`}
+                                   <br />
+                                   {cuenta.compradores[0].porcentaje_copropiedad.toFixed(2)}% propiedad
+                                 </div>
+                               </div>
+                             )
+                           ) : (
+                             <span className="text-muted-foreground">Sin compradores</span>
+                           )}
+                         </TableCell>
+                         <TableCell>
+                           <span 
+                             className="cursor-pointer hover:text-primary hover:underline" 
+                             onClick={() => handleVendedorClick(cuenta.dueno)}
+                           >
+                             {cuenta.dueno}
+                           </span>
+                         </TableCell>
+                         <TableCell>
+                           {cuenta.clabe_stp ? (
+                             <Badge variant="outline">{cuenta.clabe_stp}</Badge>
+                           ) : (
+                             <span className="text-muted-foreground">Sin CLABE</span>
+                           )}
+                         </TableCell>
+                         <TableCell>{cuenta.proyecto}</TableCell>
+                         <TableCell>{cuenta.edificio}</TableCell>
+                         <TableCell>
+                           <span 
+                             className="cursor-pointer hover:text-primary hover:underline font-medium" 
+                             onClick={() => handlePropertyClick(cuenta.numero_propiedad)}
+                           >
+                             {cuenta.numero_propiedad}
+                           </span>
+                         </TableCell>
                         <TableCell>{cuenta.modelo}</TableCell>
                         <TableCell className="font-semibold">
                           {formatCurrency(Number(cuenta.precio_final))}
                         </TableCell>
-                        <TableCell>
-                          <TooltipProvider>
-                            <div className="flex gap-2">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="outline" size="icon" asChild>
-                                    <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                      <Eye className="h-4 w-4" />
-                                    </Link>
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Ver Detalle</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button 
-                                    variant="destructive" 
-                                    size="icon"
-                                    onClick={() => handleCancelCuenta(cuenta)}
-                                    disabled={cancelCuentaMutation.isPending}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Cancelar Cuenta</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </TooltipProvider>
-                        </TableCell>
+                         <TableCell>
+                           <TooltipProvider>
+                             <div className="flex gap-2">
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <Button variant="outline" size="icon" asChild>
+                                     <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
+                                       <Eye className="h-4 w-4" />
+                                     </Link>
+                                   </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent>
+                                   <p>Ver Detalle</p>
+                                 </TooltipContent>
+                               </Tooltip>
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <Button 
+                                     variant="secondary" 
+                                     size="icon"
+                                     onClick={() => handleEditCuenta(cuenta)}
+                                   >
+                                     <Edit className="h-4 w-4" />
+                                   </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent>
+                                   <p>Editar Cuenta</p>
+                                 </TooltipContent>
+                               </Tooltip>
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <Button 
+                                     variant="destructive" 
+                                     size="icon"
+                                     onClick={() => handleCancelCuenta(cuenta)}
+                                     disabled={cancelCuentaMutation.isPending}
+                                   >
+                                     <X className="h-4 w-4" />
+                                   </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent>
+                                   <p>Cancelar Cuenta</p>
+                                 </TooltipContent>
+                               </Tooltip>
+                             </div>
+                           </TooltipProvider>
+                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -431,7 +486,11 @@ export default function Pagos() {
                                <CompradoresDetailDialog compradores={cuenta.compradores} />
                              ) : (
                                <div className="space-y-1">
-                                 <Badge variant="secondary" className="block w-fit">
+                                 <Badge 
+                                   variant="secondary" 
+                                   className="block w-fit cursor-pointer hover:bg-secondary/80"
+                                   onClick={() => handleCompradorClick(cuenta.compradores[0].nombre_legal)}
+                                 >
                                    {cuenta.compradores[0].nombre_legal}
                                  </Badge>
                                   <div className="text-xs text-muted-foreground">
@@ -445,17 +504,31 @@ export default function Pagos() {
                              <span className="text-muted-foreground">Sin compradores</span>
                            )}
                          </TableCell>
-                        <TableCell>{cuenta.dueno}</TableCell>
-                        <TableCell>
-                          {cuenta.clabe_stp ? (
-                            <Badge variant="outline">{cuenta.clabe_stp}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">Sin CLABE</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{cuenta.proyecto}</TableCell>
-                        <TableCell>{cuenta.edificio}</TableCell>
-                        <TableCell>{cuenta.numero_propiedad}</TableCell>
+                         <TableCell>
+                           <span 
+                             className="cursor-pointer hover:text-primary hover:underline" 
+                             onClick={() => handleVendedorClick(cuenta.dueno)}
+                           >
+                             {cuenta.dueno}
+                           </span>
+                         </TableCell>
+                         <TableCell>
+                           {cuenta.clabe_stp ? (
+                             <Badge variant="outline">{cuenta.clabe_stp}</Badge>
+                           ) : (
+                             <span className="text-muted-foreground">Sin CLABE</span>
+                           )}
+                         </TableCell>
+                         <TableCell>{cuenta.proyecto}</TableCell>
+                         <TableCell>{cuenta.edificio}</TableCell>
+                         <TableCell>
+                           <span 
+                             className="cursor-pointer hover:text-primary hover:underline font-medium" 
+                             onClick={() => handlePropertyClick(cuenta.numero_propiedad)}
+                           >
+                             {cuenta.numero_propiedad}
+                           </span>
+                         </TableCell>
                         <TableCell>{cuenta.modelo}</TableCell>
                         <TableCell className="font-semibold">
                           {formatCurrency(Number(cuenta.precio_final))}
@@ -495,6 +568,17 @@ export default function Pagos() {
         isLoading={cancelCuentaMutation.isPending}
         actionType="delete"
       />
+
+      {editDialog.isOpen && editDialog.cuenta && (
+        <EditCuentaCobranzaDialog
+          cuenta={editDialog.cuenta}
+          onClose={() => setEditDialog({ isOpen: false, cuenta: null })}
+          onUpdate={() => {
+            queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
+            setEditDialog({ isOpen: false, cuenta: null });
+          }}
+        />
+      )}
     </div>
   );
 }
