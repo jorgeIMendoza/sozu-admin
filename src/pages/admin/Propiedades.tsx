@@ -381,6 +381,38 @@ const Propiedades = () => {
     }
   };
 
+  const handleSchemeSelection = async (offerId: number, schemeId: number) => {
+    try {
+      const { error } = await supabase
+        .from('ofertas')
+        .update({ id_esquema_pago_seleccionado: schemeId })
+        .eq('id', offerId);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Éxito",
+        description: "Esquema de pago actualizado correctamente",
+      });
+
+      // Refresh the offers data
+      if (selectedPropertyId) {
+        const updatedOffers = await fetchPropertyOffers(selectedPropertyId);
+        setSelectedPropertyOffers(updatedOffers);
+      }
+
+    } catch (error) {
+      console.error('Error updating payment scheme:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el esquema de pago",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Filtrar propiedades por pestaña
   const getPropertiesByTab = (properties: Property[], tab: string) => {
     switch (tab) {
@@ -1228,7 +1260,10 @@ const Propiedades = () => {
                             </SelectContent>
                           </Select>
                         ) : (
-                           <Select defaultValue="">
+                           <Select 
+                             defaultValue=""
+                             onValueChange={(value) => handleSchemeSelection(offer.id, parseInt(value))}
+                           >
                              <SelectTrigger className="w-48">
                               <SelectValue placeholder="Seleccionar esquema de pago" />
                             </SelectTrigger>
