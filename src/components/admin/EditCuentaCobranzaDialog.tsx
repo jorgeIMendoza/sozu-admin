@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Plus, Trash2, Search } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, Search, ChevronUp, ChevronDown, Edit } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +48,7 @@ interface Persona {
   id: number;
   nombre_legal: string;
   rfc: string | null;
+  curp: string | null;
   email: string;
   telefono: string | null;
   tipo_persona: string;
@@ -79,6 +80,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [showPersonForm, setShowPersonForm] = useState(false);
   const [acuerdos, setAcuerdos] = useState<AcuerdoPago[]>([]);
   const [selectedEsquema, setSelectedEsquema] = useState<string>("");
+  const [editingAcuerdo, setEditingAcuerdo] = useState<number | null>(null);
+  const [editingDate, setEditingDate] = useState<Date | undefined>(undefined);
   
   const { toast } = useToast();
 
@@ -232,7 +235,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     enabled: !!propiedadDetalle
   });
 
-  // Search for persons (buyers/leads)
+  // Search for persons (buyers/leads) - search by name, RFC, CURP, email
   const { data: personasBusqueda } = useQuery({
     queryKey: ["personas_busqueda", searchTerm],
     queryFn: async () => {
@@ -240,8 +243,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       
       const { data } = await supabase
         .from('personas')
-        .select('id, nombre_legal, rfc, email, telefono, tipo_persona')
-        .ilike('nombre_legal', `%${searchTerm}%`)
+        .select('id, nombre_legal, rfc, curp, email, telefono, tipo_persona')
+        .or(`nombre_legal.ilike.%${searchTerm}%,rfc.ilike.%${searchTerm}%,curp.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
         .eq('activo', true)
         .limit(10);
 
@@ -258,6 +261,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
   const totalPorcentajes = compradoresExistentes?.reduce((sum, c) => sum + (c.porcentaje_copropiedad || 0), 0) || 0;
   const porcentajeDisponible = 100 - totalPorcentajes;
+  const isMultipleBuyers = compradoresExistentes && compradoresExistentes.length > 1;
 
   // Mutation to add new buyer
   const addCompradorMutation = useMutation({
@@ -366,10 +370,19 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     if (!selectedPersona || !porcentaje) return;
     
     const porcentajeNum = parseFloat(porcentaje);
-    if (porcentajeNum <= 0 || porcentajeNum > porcentajeDisponible) {
+    if (porcentajeNum <= 0 || porcentajeNum > 100) {
       toast({
         title: "Error",
-        description: `El porcentaje debe estar entre 1 y ${porcentajeDisponible}%`,
+        description: "El porcentaje debe estar entre 1 y 100%",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (totalPorcentajes + porcentajeNum > 100) {
+      toast({
+        title: "Error",
+        description: `El porcentaje total no puede exceder 100%. Total actual: ${(totalPorcentajes + porcentajeNum).toFixed(2)}%`,
         variant: "destructive",
       });
       return;
@@ -381,12 +394,84 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     });
     
     setSelectedPersona(null);
-    setPorcentaje("100");
+    setPorcentaje(porcentajeDisponible > 0 ? porcentajeDisponible.toString() : "");
   };
 
   const handleCreateAcuerdo = () => {
     if (!selectedEsquema) return;
     createAcuerdoMutation.mutate(parseInt(selectedEsquema));
+  };
+
+  // Mutation to update payment agreement date
+  const updateAcuerdoMutation = useMutation({
+    mutationFn: async ({ id, fecha_pago }: { id: number; fecha_pago: Date | null }) => {
+      const { error } = await supabase
+        .from('acuerdos_pago')
+        .update({ fecha_pago: fecha_pago?.toISOString() })
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Fecha actualizada",
+        description: "La fecha de pago ha sido actualizada exitosamente",
+      });
+      onUpdate();
+      setEditingAcuerdo(null);
+      setEditingDate(undefined);
+    }
+  });
+
+  // Mutation to update payment agreement order
+  const updateOrderMutation = useMutation({
+    mutationFn: async (updatedAcuerdos: AcuerdoPago[]) => {
+      const updates = updatedAcuerdos.map((acuerdo, index) => ({
+        id: acuerdo.id,
+        orden: index + 1
+      }));
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('acuerdos_pago')
+          .update({ orden: update.orden })
+          .eq('id', update.id);
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: "Orden actualizado",
+        description: "El orden de los pagos ha sido actualizado",
+      });
+      onUpdate();
+    }
+  });
+
+  const moveAcuerdo = (index: number, direction: 'up' | 'down') => {
+    if (
+      (direction === 'up' && index === 0) || 
+      (direction === 'down' && index === acuerdos.length - 1)
+    ) return;
+
+    const newAcuerdos = [...acuerdos];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    [newAcuerdos[index], newAcuerdos[targetIndex]] = [newAcuerdos[targetIndex], newAcuerdos[index]];
+    
+    setAcuerdos(newAcuerdos);
+    updateOrderMutation.mutate(newAcuerdos);
+  };
+
+  const handleDateUpdate = (acuerdoId: number, fecha: Date | undefined) => {
+    if (fecha) {
+      updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
+    }
+  };
+
+  const getPersonTypeLabel = (tipo: string) => {
+    return tipo === 'pf' ? 'Persona Física' : tipo === 'pm' ? 'Persona Moral' : tipo;
   };
 
   return (
@@ -467,7 +552,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     </div>
                     <div>
                       <Label>Tipo de Persona</Label>
-                      <Input value={vendedorDetalle.tipo_persona || ''} readOnly />
+                      <Input value={getPersonTypeLabel(vendedorDetalle.tipo_persona || '')} readOnly />
                     </div>
                   </div>
                 ) : (
@@ -492,17 +577,19 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           <p className="text-sm text-muted-foreground">
                             RFC: {comprador.personas?.rfc || 'N/A'} | 
                             Email: {comprador.personas?.email} | 
-                            {comprador.porcentaje_copropiedad}% de copropiedad
+                            {comprador.porcentaje_copropiedad}% de {isMultipleBuyers ? 'copropiedad' : 'propiedad'}
                           </p>
                         </div>
                       </div>
                     ))}
                     <div className="mt-4 p-4 bg-muted rounded">
                       <p className="text-sm">
-                        <strong>Porcentajes asignados:</strong> {totalPorcentajes.toFixed(2)}%
-                      </p>
-                      <p className="text-sm">
-                        <strong>Porcentaje disponible:</strong> {porcentajeDisponible.toFixed(2)}%
+                        <strong>Total asignado:</strong> {totalPorcentajes.toFixed(2)}%
+                        {totalPorcentajes < 100 && (
+                          <span className="text-orange-500 ml-2">
+                            (Disponible: {(100 - totalPorcentajes).toFixed(2)}%)
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -512,82 +599,92 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               </CardContent>
             </Card>
 
-            {porcentajeDisponible > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Agregar Nuevo Comprador</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>Buscar Persona</Label>
-                    <div className="flex gap-2">
-                      <div className="flex-1 relative">
-                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Buscar por nombre..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-8"
-                        />
-                      </div>
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowPersonForm(true)}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Nuevo Lead
-                      </Button>
+            <Card>
+              <CardHeader>
+                <CardTitle>Agregar Nuevo Comprador</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Buscar Persona</Label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar por nombre, RFC, CURP o email..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-8"
+                      />
                     </div>
-                    
-                    {personasBusqueda && personasBusqueda.length > 0 && (
-                      <div className="mt-2 border rounded max-h-48 overflow-y-auto">
-                        {personasBusqueda.map((persona) => (
-                          <div
-                            key={persona.id}
-                            className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"
-                            onClick={() => {
-                              setSelectedPersona(persona);
-                              setSearchTerm('');
-                            }}
-                          >
-                            <p className="font-medium">{persona.nombre_legal}</p>
-                            <p className="text-sm text-muted-foreground">
-                              RFC: {persona.rfc || 'N/A'} | Email: {persona.email}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowPersonForm(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Nuevo Lead
+                    </Button>
                   </div>
-
-                  {selectedPersona && (
-                    <div className="p-4 border rounded bg-muted">
-                      <p className="font-medium mb-2">Persona Seleccionada:</p>
-                      <p>{selectedPersona.nombre_legal}</p>
-                      <p className="text-sm text-muted-foreground">
-                        RFC: {selectedPersona.rfc || 'N/A'} | Email: {selectedPersona.email}
-                      </p>
-                      
-                      <div className="mt-4 flex items-end gap-2">
-                        <div className="flex-1">
-                          <Label>Porcentaje de Copropiedad (%)</Label>
-                          <Input
-                            type="number"
-                            value={porcentaje}
-                            onChange={(e) => setPorcentaje(e.target.value)}
-                            min="1"
-                            max={porcentajeDisponible}
-                          />
+                  
+                  {personasBusqueda && personasBusqueda.length > 0 && (
+                    <div className="mt-2 border rounded max-h-48 overflow-y-auto">
+                      {personasBusqueda.map((persona) => (
+                        <div
+                          key={persona.id}
+                          className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"
+                          onClick={() => {
+                            setSelectedPersona(persona);
+                            setSearchTerm('');
+                          }}
+                        >
+                          <p className="font-medium">{persona.nombre_legal}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {persona.rfc && `RFC: ${persona.rfc}`}
+                            {persona.curp && `${persona.rfc ? ' | ' : ''}CURP: ${persona.curp}`}
+                            {` | Email: ${persona.email}`}
+                          </p>
                         </div>
-                        <Button onClick={handleAddComprador} disabled={addCompradorMutation.isPending}>
-                          Agregar Comprador
-                        </Button>
-                      </div>
+                      ))}
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            )}
+                </div>
+
+                {selectedPersona && (
+                  <div className="p-4 border rounded bg-muted">
+                    <p className="font-medium mb-2">Persona Seleccionada:</p>
+                    <p>{selectedPersona.nombre_legal}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedPersona.rfc && `RFC: ${selectedPersona.rfc}`}
+                      {selectedPersona.curp && `${selectedPersona.rfc ? ' | ' : ''}CURP: ${selectedPersona.curp}`}
+                      {` | Email: ${selectedPersona.email}`}
+                    </p>
+                    
+                    <div className="mt-4 flex items-end gap-2">
+                      <div className="flex-1">
+                        <Label>
+                          Porcentaje de {isMultipleBuyers || totalPorcentajes > 0 ? 'Copropiedad' : 'Propiedad'} (%)
+                          {totalPorcentajes > 0 && (
+                            <span className="text-sm text-muted-foreground ml-1">
+                              (Disponible: {(100 - totalPorcentajes).toFixed(2)}%)
+                            </span>
+                          )}
+                        </Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={porcentaje}
+                          onChange={(e) => setPorcentaje(e.target.value)}
+                          min="0.01"
+                          max={100}
+                        />
+                      </div>
+                      <Button onClick={handleAddComprador} disabled={addCompradorMutation.isPending}>
+                        Agregar Comprador
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="acuerdo" className="space-y-4">
@@ -605,17 +702,98 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         <TableHead>Monto</TableHead>
                         <TableHead>Porcentaje</TableHead>
                         <TableHead>Fecha de Pago</TableHead>
+                        <TableHead>Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {acuerdos.map((acuerdo) => (
+                      {acuerdos.map((acuerdo, index) => (
                         <TableRow key={acuerdo.id}>
-                          <TableCell>{acuerdo.orden}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {acuerdo.orden}
+                              <div className="flex flex-col">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => moveAcuerdo(index, 'up')}
+                                  disabled={index === 0 || updateOrderMutation.isPending}
+                                >
+                                  <ChevronUp className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => moveAcuerdo(index, 'down')}
+                                  disabled={index === acuerdos.length - 1 || updateOrderMutation.isPending}
+                                >
+                                  <ChevronDown className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          </TableCell>
                           <TableCell>{acuerdo.concepto_nombre}</TableCell>
                           <TableCell>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}</TableCell>
                           <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
                           <TableCell>
-                            {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
+                            {editingAcuerdo === acuerdo.id ? (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button variant="outline" className="h-8 text-xs">
+                                    <CalendarIcon className="mr-2 h-3 w-3" />
+                                    {editingDate ? format(editingDate, 'dd/MM/yyyy', { locale: es }) : 'Seleccionar'}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={editingDate}
+                                    onSelect={(date) => {
+                                      setEditingDate(date);
+                                      if (date) {
+                                        handleDateUpdate(acuerdo.id, date);
+                                      }
+                                    }}
+                                    disabled={(date) => date < new Date('1900-01-01')}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span>
+                                  {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => {
+                                    setEditingAcuerdo(acuerdo.id);
+                                    setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
+                                  }}
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {editingAcuerdo === acuerdo.id && (
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingAcuerdo(null);
+                                    setEditingDate(undefined);
+                                  }}
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -697,6 +875,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     id: persona.id,
                     nombre_legal: persona.nombre_legal || persona.nombre,
                     rfc: persona.rfc,
+                    curp: persona.curp,
                     email: persona.email,
                     telefono: persona.telefono,
                     tipo_persona: persona.tipo_persona
