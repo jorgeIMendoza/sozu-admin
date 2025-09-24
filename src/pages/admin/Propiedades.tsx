@@ -61,6 +61,7 @@ const Propiedades = () => {
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [selectedPropertyOffers, setSelectedPropertyOffers] = useState<any[] | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<number | null>(null);
+  const [selectedPropertyForOffers, setSelectedPropertyForOffers] = useState<Property | null>(null);
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState<number[]>([]);
   const [availableSchemes, setAvailableSchemes] = useState<any[]>([]);
@@ -469,6 +470,44 @@ const Propiedades = () => {
       toast({
         title: "Error",
         description: "No se pudo actualizar el esquema de pago",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleGenerateCollectionAccount = async (offerId: number, propertyId: number) => {
+    try {
+      const response = await fetch('https://automatizacion-n8n.fbqqbe.easypanel.host/webhook-test/aplicaPago', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          siguiente_accion: 'genera_cuenta_cobranza_por_oferta',
+          id_oferta: offerId,
+          id_propiedad: propertyId
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al generar cuenta de cobranza');
+      }
+
+      toast({
+        title: "Éxito",
+        description: "Cuenta de cobranza generada correctamente",
+      });
+
+      // Refresh the offers data
+      if (selectedPropertyId) {
+        const updatedOffers = await fetchPropertyOffers(selectedPropertyId);
+        setSelectedPropertyOffers(updatedOffers);
+      }
+    } catch (error) {
+      console.error('Error generating collection account:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo generar la cuenta de cobranza",
         variant: "destructive",
       });
     }
@@ -1388,7 +1427,19 @@ const Propiedades = () => {
                                 </TooltipContent>
                               </Tooltip>
                             ) : (
-                              <span className="text-muted-foreground text-sm">Sin cuenta</span>
+                              <div className="flex flex-col gap-2">
+                                <span className="text-muted-foreground text-sm">Sin cuenta</span>
+                                {selectedPropertyForOffers?.disponibilidad === 'Apartado' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleGenerateCollectionAccount(offer.id, selectedPropertyForOffers.id)}
+                                    className="text-xs"
+                                  >
+                                    Generar Cuenta
+                                  </Button>
+                                )}
+                              </div>
                             )}
                           </TableCell>
                           <TableCell>
