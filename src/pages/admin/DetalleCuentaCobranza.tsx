@@ -45,6 +45,7 @@ interface CuentaDetalle {
   edificio: string;
   numero_propiedad: string;
   modelo: string;
+  dueno: string;
 }
 
 export default function DetalleCuentaCobranza() {
@@ -96,14 +97,14 @@ export default function DetalleCuentaCobranza() {
         .eq('activo', true);
 
       // Get project and building info
-      const [entidadResult, edificioModeloResult] = await Promise.all([
+      const [entidadResult, edificioModeloResult, duenoResult] = await Promise.all([
         supabase
           .from('entidades_relacionadas')
           .select(`
             proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
           `)
           .eq('id', oferta?.propiedades?.id_entidad_relacionada_dueno)
-          .single(),
+          .maybeSingle(),
         supabase
           .from('edificios_modelos')
           .select(`
@@ -111,7 +112,14 @@ export default function DetalleCuentaCobranza() {
             modelos!edificios_modelos_id_modelo_fkey(nombre)
           `)
           .eq('id', oferta?.propiedades?.id_edificio_modelo)
-          .single()
+          .maybeSingle(),
+        supabase
+          .from('entidades_relacionadas')
+          .select(`
+            personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
+          `)
+          .eq('id', oferta?.propiedades?.id_entidad_relacionada_dueno)
+          .maybeSingle()
       ]);
 
       const detalle: CuentaDetalle = {
@@ -124,7 +132,8 @@ export default function DetalleCuentaCobranza() {
         proyecto: entidadResult.data?.proyectos?.nombre || 'Sin proyecto',
         edificio: edificioModeloResult.data?.edificios?.nombre || 'Sin edificio',
         numero_propiedad: oferta?.propiedades?.numero_propiedad || 'Sin número',
-        modelo: edificioModeloResult.data?.modelos?.nombre || 'Sin modelo'
+        modelo: edificioModeloResult.data?.modelos?.nombre || 'Sin modelo',
+        dueno: duenoResult.data?.personas?.nombre_legal || 'Sin dueño'
       };
 
       return detalle;
@@ -341,6 +350,10 @@ export default function DetalleCuentaCobranza() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label className="text-sm font-medium">Dueño</label>
+              <p className="text-sm text-muted-foreground">{cuentaDetalle.dueno}</p>
+            </div>
             <div>
               <label className="text-sm font-medium">Proyecto</label>
               <p className="text-sm text-muted-foreground">{cuentaDetalle.proyecto}</p>
