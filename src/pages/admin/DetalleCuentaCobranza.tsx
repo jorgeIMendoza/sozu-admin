@@ -381,7 +381,7 @@ export default function DetalleCuentaCobranza() {
             es_multa
           `)
           .in('id_acuerdo_pago', acuerdoIds)
-          .eq('activo', true),
+          .eq('activo', true) as any,
         supabase
           .from('multas')
           .select(`
