@@ -377,7 +377,8 @@ export default function DetalleCuentaCobranza() {
             monto,
             fecha_creacion,
             id_acuerdo_pago,
-            id_pago
+            id_pago,
+            es_multa
           `)
           .in('id_acuerdo_pago', acuerdoIds)
           .eq('activo', true),
@@ -423,6 +424,22 @@ export default function DetalleCuentaCobranza() {
         const acuerdoAplicaciones = aplicaciones?.filter(a => a.id_acuerdo_pago === acuerdo.id) || [];
         const acuerdoMultas = multas?.filter(m => m.id_acuerdo_pago === acuerdo.id) || [];
         
+        // Calculate penalty payments and apply them to penalties
+        const pagosPenalidad = acuerdoAplicaciones.filter(a => a.es_multa);
+        const totalPagosPenalidad = pagosPenalidad.reduce((sum, app) => sum + app.monto, 0);
+        
+        // Adjust penalty amounts by subtracting penalty payments
+        const multasAjustadas = acuerdoMultas.map(m => {
+          let montoAjustado = m.monto;
+          if (totalPagosPenalidad > 0) {
+            // Apply penalty payments proportionally to penalties
+            const proporcion = m.monto / acuerdoMultas.reduce((sum, multa) => sum + multa.monto, 0);
+            const pagoAplicado = Math.min(totalPagosPenalidad * proporcion, m.monto);
+            montoAjustado = Math.max(0, m.monto - pagoAplicado);
+          }
+          return { ...m, montoAjustado };
+        });
+        
         // Use database value for payment completion status
         const totalAplicado = acuerdoAplicaciones.reduce((sum, app) => sum + app.monto, 0);
         
@@ -441,6 +458,7 @@ export default function DetalleCuentaCobranza() {
               id: a.id,
               monto: a.monto,
               fecha_creacion: a.fecha_creacion,
+              es_multa: a.es_multa,
               pago: {
                 id: pago?.id || 0,
                 fecha_pago: pago?.fecha_pago || '',
@@ -450,9 +468,10 @@ export default function DetalleCuentaCobranza() {
               }
             };
           }),
-          multas: acuerdoMultas.map(m => ({
+          multas: multasAjustadas.map(m => ({
             id: m.id,
-            monto: m.monto,
+            monto: m.montoAjustado,
+            montoOriginal: m.monto,
             descripcion: m.descripcion,
             fecha_creacion: m.fecha_creacion
           }))
