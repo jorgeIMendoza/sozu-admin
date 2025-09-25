@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Edit, Trash2, Plus, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -89,6 +90,13 @@ interface Multa {
   estaPagada?: boolean;
   descripcion: string;
   fecha_creacion: string;
+  detallesPagos?: {
+    id: number;
+    monto: number;
+    fecha_pago: string;
+    metodo_pago: string;
+    clave_rastreo: string | null;
+  }[];
 }
 
 export default function DetalleCuentaCobranza() {
@@ -113,6 +121,13 @@ export default function DetalleCuentaCobranza() {
   const [deleteMultaDialog, setDeleteMultaDialog] = useState<{ 
     isOpen: boolean; 
     multa: Multa | null 
+  }>({
+    isOpen: false,
+    multa: null
+  });
+  const [multaPaymentDetails, setMultaPaymentDetails] = useState<{
+    isOpen: boolean;
+    multa: Multa | null;
   }>({
     isOpen: false,
     multa: null
@@ -439,19 +454,50 @@ export default function DetalleCuentaCobranza() {
         
         // Apply payments sequentially to penalties
         let pagosRestantes = totalPagosPenalidad;
+        let pagosPenalidadRestantes = [...pagosPenalidad]; // Copy to track remaining payments
+        
         const multasConEstado = multasOrdenadas.map(multa => {
           let pagosAplicados = 0;
+          const detallesPagos: { id: number; monto: number; fecha_pago: string; metodo_pago: string; clave_rastreo: string | null; }[] = [];
+          let montoPendienteMulta = multa.monto;
           
-          if (pagosRestantes > 0) {
-            pagosAplicados = Math.min(pagosRestantes, multa.monto);
-            pagosRestantes -= pagosAplicados;
+          // Apply payments to this penalty
+          while (montoPendienteMulta > 0 && pagosPenalidadRestantes.length > 0) {
+            const aplicacionPago = pagosPenalidadRestantes[0];
+            const pago = pagos.find(p => p.id === aplicacionPago.id_pago);
+            const metodoPago = metodosPago.find(m => m.id === pago?.id_metodos_pago);
+            
+            const montoAAplicar = Math.min(montoPendienteMulta, aplicacionPago.monto);
+            
+            if (montoAAplicar > 0) {
+              pagosAplicados += montoAAplicar;
+              montoPendienteMulta -= montoAAplicar;
+              
+              // Add payment detail
+              detallesPagos.push({
+                id: pago?.id || 0,
+                monto: montoAAplicar,
+                fecha_pago: pago?.fecha_pago || '',
+                metodo_pago: metodoPago?.nombre || 'Sin método',
+                clave_rastreo: pago?.clave_rastreo || null
+              });
+              
+              // Reduce the remaining amount in the payment application
+              aplicacionPago.monto -= montoAAplicar;
+              
+              // If this payment application is fully used, remove it
+              if (aplicacionPago.monto <= 0) {
+                pagosPenalidadRestantes.shift();
+              }
+            }
           }
           
           return {
             ...multa,
             pagosAplicados,
             saldoPendiente: multa.monto - pagosAplicados,
-            estaPagada: pagosAplicados >= multa.monto
+            estaPagada: pagosAplicados >= multa.monto,
+            detallesPagos
           };
         });
         
@@ -491,7 +537,8 @@ export default function DetalleCuentaCobranza() {
             pagosAplicados: m.pagosAplicados,
             estaPagada: m.estaPagada,
             descripcion: m.descripcion,
-            fecha_creacion: m.fecha_creacion
+            fecha_creacion: m.fecha_creacion,
+            detallesPagos: m.detallesPagos
           }))
         };
       });
@@ -1041,9 +1088,43 @@ export default function DetalleCuentaCobranza() {
                                           {formatCurrency(multa.montoOriginal || multa.monto)}
                                         </span>
                                         {multa.pagosAplicados > 0 && (
-                                          <Badge variant="secondary" className="text-xs">
-                                            Pagado: {formatCurrency(multa.pagosAplicados)}
-                                          </Badge>
+                                          <Popover>
+                                            <PopoverTrigger asChild>
+                                              <Badge 
+                                                variant="secondary" 
+                                                className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
+                                              >
+                                                Pagado: {formatCurrency(multa.pagosAplicados)}
+                                              </Badge>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-80">
+                                              <div className="space-y-3">
+                                                <h4 className="font-medium text-sm">Detalle de Pagos Aplicados</h4>
+                                                <div className="space-y-2">
+                                                  {multa.detallesPagos?.map((detalle, index) => (
+                                                    <div key={`${detalle.id}-${index}`} className="flex justify-between items-start p-2 border rounded-sm bg-muted/30">
+                                                      <div className="space-y-1">
+                                                        <div className="text-sm font-medium">
+                                                          {formatCurrency(detalle.monto)}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                          {detalle.metodo_pago} | {formatDate(detalle.fecha_pago)}
+                                                        </div>
+                                                        {detalle.clave_rastreo && (
+                                                          <div className="text-xs text-muted-foreground font-mono">
+                                                            Clave: {detalle.clave_rastreo}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground border-t pt-2">
+                                                  Total aplicado: {formatCurrency(multa.pagosAplicados)}
+                                                </div>
+                                              </div>
+                                            </PopoverContent>
+                                          </Popover>
                                         )}
                                         {multa.estaPagada ? (
                                           <Badge variant="default" className="text-xs bg-green-500">
