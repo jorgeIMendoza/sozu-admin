@@ -923,15 +923,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       const currentAcuerdoIndex = acuerdos.findIndex(a => a.id === acuerdoId);
       const currentAcuerdo = acuerdos[currentAcuerdoIndex];
       
-      // Check if it's a Parcialidad and update subsequent Parcialidades
+      // Check if it's a Parcialidad and update subsequent Parcialidades and Entrega payments
       if (currentAcuerdo?.concepto_nombre?.toLowerCase().includes('parcialidad')) {
         // Update the current agreement date
         updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
         
-        // Update subsequent Parcialidades with incremental months
+        // Update subsequent Parcialidades and Entrega payments with incremental months
         for (let i = currentAcuerdoIndex + 1; i < acuerdos.length; i++) {
           const nextAcuerdo = acuerdos[i];
-          if (nextAcuerdo.concepto_nombre?.toLowerCase().includes('parcialidad')) {
+          if (nextAcuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') || nextAcuerdo.id_concepto === 3) {
             const monthsToAdd = i - currentAcuerdoIndex;
             
             // Get the target day from the original date
@@ -961,7 +961,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             // Create the new date correctly
             const nextDate = new Date(newYear, newMonth, finalDay);
             
-            console.log(`Updating subsequent Parcialidad ${nextAcuerdo.id} with date:`, nextDate, `(target day: ${targetDay}, final day: ${finalDay}, days in month: ${daysInTargetMonth})`);
+            const conceptType = nextAcuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') ? 'Parcialidad' : 'Entrega';
+            console.log(`Updating subsequent ${conceptType} ${nextAcuerdo.id} with date:`, nextDate, `(target day: ${targetDay}, final day: ${finalDay}, days in month: ${daysInTargetMonth})`);
             updateAcuerdoMutation.mutate({ id: nextAcuerdo.id, fecha_pago: nextDate });
           }
         }
