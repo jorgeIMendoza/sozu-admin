@@ -1200,11 +1200,7 @@ class HTMLToPDFService {
             React.createElement('h4', {
               key: 'name',
               className: `text-sm font-bold ${isSelected ? 'text-blue-700' : 'text-gray-900'}`
-            }, scheme.nombre),
-            isSelected && React.createElement('div', {
-              key: 'selected-badge',
-              className: 'absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-bold'
-            }, 'SELECCIONADO')
+            }, scheme.nombre)
           ]),
           
           React.createElement('div', {
