@@ -437,6 +437,46 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
 
       console.log("Created offer:", newOffer);
 
+      // Check if person exists in entidades_relacionadas for this project
+      const projectId = propertyDetails?.entidades_relacionadas?.proyectos?.id;
+      if (projectId && personId) {
+        console.log("Checking if person exists in entidades_relacionadas for project:", projectId);
+        
+        const { data: existingRelation } = await supabase
+          .from("entidades_relacionadas")
+          .select("id")
+          .eq("id_persona", personId)
+          .eq("id_proyecto", projectId)
+          .eq("id_tipo_entidad", 7)
+          .eq("activo", true)
+          .maybeSingle();
+
+        if (!existingRelation) {
+          console.log("Person not found in entidades_relacionadas, creating new relation...");
+          
+          const relationData = {
+            id_persona: personId,
+            id_proyecto: projectId,
+            id_tipo_entidad: 7, // Cliente/Lead
+            id_estatus_persona: 3, // Abierto
+            activo: true
+          };
+
+          const { error: relationError } = await supabase
+            .from("entidades_relacionadas")
+            .insert(relationData);
+
+          if (relationError) {
+            console.error("Error creating entidades_relacionadas:", relationError);
+            // Don't throw error to not interrupt the offer creation flow
+          } else {
+            console.log("Created new entidades_relacionadas record");
+          }
+        } else {
+          console.log("Person already exists in entidades_relacionadas");
+        }
+      }
+
       // Return data needed for PDF generation
       return {
         offerId: newOffer.id,
