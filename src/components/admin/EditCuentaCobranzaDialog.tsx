@@ -146,6 +146,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [editingDate, setEditingDate] = useState<Date | undefined>(undefined);
   const [editingAmount, setEditingAmount] = useState<number | null>(null);
   const [editingMonto, setEditingMonto] = useState<string>('');
+  const [datePopoverOpen, setDatePopoverOpen] = useState<{ [key: number]: boolean }>({});
   const [showPersonForm, setShowPersonForm] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [buyerToDelete, setBuyerToDelete] = useState<{ id: number; name: string } | null>(null);
@@ -779,15 +780,17 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       console.log('Amount update successful:', data);
       toast.success("Monto actualizado exitosamente");
       setEditingAmount(null);
       setEditingMonto('');
       // Invalidate and refetch the acuerdos_pago query
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+      // Also invalidate the main cuenta query to refresh all data
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
     },
-    onError: (error) => {
+    onError: (error, variables) => {
       console.error("Error updating amount:", error);
       toast.error("Error al actualizar el monto: " + (error as Error).message);
       setEditingAmount(null);
@@ -810,19 +813,21 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       console.log('Update successful:', data);
       toast.success("Fecha actualizada exitosamente");
       setEditingAcuerdo(null);
       setEditingDate(undefined);
+      setDatePopoverOpen(prev => ({ ...prev, [variables.id]: false }));
       // Invalidate and refetch the acuerdos_pago query
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
     },
-    onError: (error) => {
+    onError: (error, variables) => {
       console.error("Error updating date:", error);
       toast.error("Error al actualizar la fecha: " + (error as Error).message);
       setEditingAcuerdo(null);
       setEditingDate(undefined);
+      setDatePopoverOpen(prev => ({ ...prev, [variables.id]: false }));
     }
   });
 
@@ -1343,57 +1348,63 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                       <span>
                                         {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
                                       </span>
-                                       {!acuerdo.pago_completado && (
-                                         <Popover open={editingAcuerdo === acuerdo.id} onOpenChange={(open) => {
-                                           if (!open) {
-                                             setEditingAcuerdo(null);
-                                             setEditingDate(undefined);
-                                           }
-                                         }}>
-                                           <PopoverTrigger asChild>
-                                             <Button
-                                               variant="ghost"
-                                               size="sm"
-                                               className="h-6 w-6 p-0"
-                                               onClick={() => {
-                                                 console.log('Date edit button clicked for acuerdo:', acuerdo.id);
-                                                 setEditingAcuerdo(acuerdo.id);
-                                                 setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
-                                               }}
-                                             >
-                                               <Edit className="h-3 w-3" />
-                                             </Button>
-                                           </PopoverTrigger>
-                                           <PopoverContent className="w-auto p-0" align="start">
-                                             <Calendar
-                                               mode="single"
-                                               selected={editingDate}
-                                               onSelect={(date) => {
-                                                 console.log('Calendar date selected:', date);
-                                                 setEditingDate(date);
-                                                 if (date) {
-                                                   handleDateUpdate(acuerdo.id, date);
-                                                 }
-                                               }}
-                                               disabled={(date) => date < new Date('1900-01-01')}
-                                               initialFocus
-                                               className="p-3 pointer-events-auto"
-                                             />
-                                             <div className="p-3 border-t flex gap-2">
-                                               <Button
-                                                 size="sm"
-                                                 variant="outline"
-                                                 onClick={() => {
-                                                   setEditingAcuerdo(null);
-                                                   setEditingDate(undefined);
-                                                 }}
-                                               >
-                                                 Cancelar
-                                               </Button>
-                                             </div>
-                                           </PopoverContent>
-                                         </Popover>
-                                       )}
+                                        {!acuerdo.pago_completado && (
+                                          <Popover 
+                                            open={datePopoverOpen[acuerdo.id] || false} 
+                                            onOpenChange={(open) => {
+                                              setDatePopoverOpen(prev => ({ ...prev, [acuerdo.id]: open }));
+                                              if (!open) {
+                                                setEditingAcuerdo(null);
+                                                setEditingDate(undefined);
+                                              }
+                                            }}
+                                          >
+                                            <PopoverTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0"
+                                                onClick={() => {
+                                                  console.log('Date edit button clicked for acuerdo:', acuerdo.id);
+                                                  setEditingAcuerdo(acuerdo.id);
+                                                  setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
+                                                  setDatePopoverOpen(prev => ({ ...prev, [acuerdo.id]: true }));
+                                                }}
+                                              >
+                                                <Edit className="h-3 w-3" />
+                                              </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                              <Calendar
+                                                mode="single"
+                                                selected={editingAcuerdo === acuerdo.id ? editingDate : (acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined)}
+                                                onSelect={(date) => {
+                                                  console.log('Calendar date selected:', date);
+                                                  if (date && editingAcuerdo === acuerdo.id) {
+                                                    setEditingDate(date);
+                                                    handleDateUpdate(acuerdo.id, date);
+                                                  }
+                                                }}
+                                                disabled={(date) => date < new Date('1900-01-01')}
+                                                initialFocus
+                                                className="p-3 pointer-events-auto"
+                                              />
+                                              <div className="p-3 border-t flex gap-2">
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  onClick={() => {
+                                                    setEditingAcuerdo(null);
+                                                    setEditingDate(undefined);
+                                                    setDatePopoverOpen(prev => ({ ...prev, [acuerdo.id]: false }));
+                                                  }}
+                                                >
+                                                  Cancelar
+                                                </Button>
+                                              </div>
+                                            </PopoverContent>
+                                          </Popover>
+                                        )}
                                     </div>
                                   </TableCell>
                                 <TableCell>
