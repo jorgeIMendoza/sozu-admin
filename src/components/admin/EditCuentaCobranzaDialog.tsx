@@ -308,7 +308,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
   // Mutation to add new buyer
   const addCompradorMutation = useMutation({
-    mutationFn: async ({ personaId, porcentaje }: { personaId: number; porcentaje: number }) => {
+    mutationFn: async ({ personaId }: { personaId: number }) => {
       // Get the project ID from the entidad relacionada dueno
       if (propiedadDetalle?.id_entidad_relacionada_dueno) {
         const { data: entidadData } = await supabase
@@ -351,17 +351,38 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         }
       }
 
-      // Add the buyer to compradores table
-      const { error } = await supabase
+      // Calculate the new percentage for equal distribution
+      const currentBuyersCount = compradoresExistentes?.length || 0;
+      const newBuyersCount = currentBuyersCount + 1;
+      const newPercentage = 100 / newBuyersCount;
+
+      // First, add the new buyer
+      const { error: insertError } = await supabase
         .from('compradores')
         .insert({
           id_cuenta_cobranza: cuenta.id,
           id_persona: personaId,
-          porcentaje_copropiedad: porcentaje,
+          porcentaje_copropiedad: newPercentage,
           activo: true
         });
       
-      if (error) throw error;
+      if (insertError) throw insertError;
+
+      // Then update all existing buyers with the new percentage
+      if (compradoresExistentes && compradoresExistentes.length > 0) {
+        for (const comprador of compradoresExistentes) {
+          const { error: updateError } = await supabase
+            .from('compradores')
+            .update({ porcentaje_copropiedad: newPercentage })
+            .eq('id_cuenta_cobranza', cuenta.id)
+            .eq('id_persona', comprador.personas?.id)
+            .eq('activo', true);
+          
+          if (updateError) {
+            console.error("Error updating buyer percentage:", updateError);
+          }
+        }
+      }
     },
     onSuccess: () => {
       toast.success("Comprador agregado exitosamente");
@@ -446,26 +467,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   });
 
   const handleAddComprador = () => {
-    if (!selectedPersona || !porcentaje) return;
-    
-    const porcentajeNum = parseFloat(porcentaje);
-    if (porcentajeNum <= 0 || porcentajeNum > 100) {
-      toast.error("El porcentaje debe estar entre 1 y 100%");
-      return;
-    }
-
-    if (totalPorcentajes + porcentajeNum > 100) {
-      toast.error(`El porcentaje total no puede exceder 100%. Total actual: ${(totalPorcentajes + porcentajeNum).toFixed(2)}%`);
-      return;
-    }
+    if (!selectedPersona) return;
 
     addCompradorMutation.mutate({ 
-      personaId: selectedPersona.id, 
-      porcentaje: porcentajeNum 
+      personaId: selectedPersona.id
     });
     
     setSelectedPersona(null);
-    setPorcentaje(porcentajeDisponible > 0 ? porcentajeDisponible.toString() : "");
+    setPorcentaje("");
   };
 
   const handleCreateAcuerdo = () => {
@@ -759,27 +768,16 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         {` | Email: ${selectedPersona.email}`}
                       </p>
                       
-                      <div className="mt-4 flex items-end gap-2">
-                        <div className="flex-1">
-                          <Label>
-                            Porcentaje de {isMultipleBuyers || totalPorcentajes > 0 ? 'Copropiedad' : 'Propiedad'} (%)
-                            {totalPorcentajes > 0 && (
-                              <span className="text-sm text-muted-foreground ml-1">
-                                (Disponible: {(100 - totalPorcentajes).toFixed(2)}%)
-                              </span>
-                            )}
-                          </Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={porcentaje}
-                            onChange={(e) => setPorcentaje(e.target.value)}
-                            min="0.01"
-                            max={100}
-                          />
-                        </div>
-                        <Button onClick={handleAddComprador} disabled={addCompradorMutation.isPending}>
-                          Agregar
+                      <div className="mt-4 text-sm text-muted-foreground bg-muted/50 p-3 rounded">
+                        <p>
+                          Al agregar este comprador, el porcentaje de propiedad se distribuirá automáticamente 
+                          entre todos los compradores ({((compradoresExistentes?.length || 0) + 1)} compradores = {(100 / ((compradoresExistentes?.length || 0) + 1)).toFixed(2)}% cada uno).
+                        </p>
+                      </div>
+                      
+                      <div className="mt-4">
+                        <Button onClick={handleAddComprador} disabled={addCompradorMutation.isPending} className="w-full">
+                          Agregar Comprador
                         </Button>
                       </div>
                     </div>
