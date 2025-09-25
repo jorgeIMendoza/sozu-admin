@@ -1020,6 +1020,56 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     updateNotarioMutation.mutate(notarioId);
   };
 
+  // Update payment dates after reordering to maintain chronological order
+  const updatePaymentDatesAfterReorder = (reorderedAcuerdos: any[]) => {
+    // Find the first payment with a date
+    let baseDate: Date | null = null;
+    let baseDateIndex = -1;
+    
+    for (let i = 0; i < reorderedAcuerdos.length; i++) {
+      if (reorderedAcuerdos[i].fecha_pago) {
+        baseDate = new Date(reorderedAcuerdos[i].fecha_pago);
+        baseDateIndex = i;
+        break;
+      }
+    }
+    
+    // If no base date found, no need to update
+    if (!baseDate || baseDateIndex === -1) return;
+    
+    // Update subsequent payments with incremental months
+    for (let i = baseDateIndex + 1; i < reorderedAcuerdos.length; i++) {
+      const acuerdo = reorderedAcuerdos[i];
+      
+      // Only update if it's a Parcialidad or Entrega payment and has a date
+      if ((acuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') || acuerdo.id_concepto === 3) && acuerdo.fecha_pago) {
+        const monthsToAdd = i - baseDateIndex;
+        
+        // Get the target day from the base date
+        const targetDay = baseDate.getDate();
+        const newYear = baseDate.getFullYear();
+        const newMonth = baseDate.getMonth() + monthsToAdd;
+        
+        // Calculate the actual year and month
+        const actualDate = new Date(newYear, newMonth, 1);
+        const actualYear = actualDate.getFullYear();
+        const actualMonth = actualDate.getMonth();
+        
+        // Get the number of days in the target month
+        const daysInTargetMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
+        
+        // Use the minimum between target day and days available in target month
+        const finalDay = Math.min(targetDay, daysInTargetMonth);
+        
+        // Create the new date correctly
+        const nextDate = new Date(actualYear, actualMonth, finalDay);
+        
+        console.log(`Updating reordered payment ${acuerdo.id} with date:`, nextDate);
+        updateAcuerdoMutation.mutate({ id: acuerdo.id, fecha_pago: nextDate });
+      }
+    }
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -1045,6 +1095,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       const newAcuerdos = arrayMove(acuerdos, oldIndex, newIndex);
       setAcuerdos(newAcuerdos);
       updateOrderMutation.mutate(newAcuerdos);
+      
+      // Update payment dates after reordering to maintain chronological order
+      updatePaymentDatesAfterReorder(newAcuerdos);
     }
   };
 
