@@ -487,12 +487,30 @@ export default function DetalleCuentaCobranza() {
   // Mutation to delete payment application
   const deletePaymentMutation = useMutation({
     mutationFn: async (aplicacionId: number) => {
-      const { error } = await supabase
+      // First get the application to find its acuerdo_pago
+      const { data: aplicacion, error: getError } = await supabase
+        .from('aplicaciones_pago')
+        .select('id_acuerdo_pago')
+        .eq('id', aplicacionId)
+        .single();
+      
+      if (getError) throw getError;
+
+      // Delete the application
+      const { error: deleteError } = await supabase
         .from('aplicaciones_pago')
         .update({ activo: false })
         .eq('id', aplicacionId);
       
-      if (error) throw error;
+      if (deleteError) throw deleteError;
+
+      // Update the payment agreement to mark as not completed
+      const { error: updateError } = await supabase
+        .from('acuerdos_pago')
+        .update({ pago_completado: false } as any)
+        .eq('id', aplicacion.id_acuerdo_pago);
+      
+      if (updateError) throw updateError;
     },
     onSuccess: () => {
       toast({
