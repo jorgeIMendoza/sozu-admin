@@ -1021,7 +1021,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   };
 
   // Update payment dates after reordering to maintain chronological order
-  const updatePaymentDatesAfterReorder = (reorderedAcuerdos: any[]) => {
+  const updatePaymentDatesAfterReorder = async (reorderedAcuerdos: any[]) => {
     // Find the first payment with a date to use as base reference
     let baseDate: Date | null = null;
     let baseDateIndex = -1;
@@ -1039,34 +1039,25 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     
     console.log(`Base date found at index ${baseDateIndex}:`, baseDate);
     
-    // Group payments by concept to handle them separately
-    const conceptCounts: { [key: number]: number } = {};
+    // Calculate all new dates first to avoid constraint conflicts
+    const updates: { id: number; newDate: Date }[] = [];
+    let monthCounter = 0;
     
-    // Update ALL subsequent payments (whether they have dates or not) to maintain chronological order
     for (let i = baseDateIndex; i < reorderedAcuerdos.length; i++) {
       const acuerdo = reorderedAcuerdos[i];
       
       // Only update Parcialidad or Entrega payments
       if (acuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') || acuerdo.id_concepto === 3) {
-        // Initialize concept count if not exists
-        if (!conceptCounts[acuerdo.id_concepto]) {
-          conceptCounts[acuerdo.id_concepto] = 0;
-        }
-        
         // For the base date payment, don't change its date
         if (i === baseDateIndex) {
-          conceptCounts[acuerdo.id_concepto]++;
+          monthCounter++;
           continue;
         }
-        
-        // Calculate months to add based on the concept occurrence count
-        const monthsFromBase = conceptCounts[acuerdo.id_concepto];
-        conceptCounts[acuerdo.id_concepto]++;
         
         // Get the target day from the base date
         const targetDay = baseDate.getDate();
         const newYear = baseDate.getFullYear();
-        const newMonth = baseDate.getMonth() + monthsFromBase;
+        const newMonth = baseDate.getMonth() + monthCounter;
         
         // Calculate the actual year and month
         const actualDate = new Date(newYear, newMonth, 1);
@@ -1082,10 +1073,46 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         // Create the new date correctly
         const nextDate = new Date(actualYear, actualMonth, finalDay);
         
+        updates.push({ id: acuerdo.id, newDate: nextDate });
+        
         const conceptType = acuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') ? 'Parcialidad' : 'Entrega';
-        console.log(`Updating reordered ${conceptType} ${acuerdo.id} with date:`, nextDate, `(${monthsFromBase} months from base, concept count: ${conceptCounts[acuerdo.id_concepto]})`);
-        updateAcuerdoMutation.mutate({ id: acuerdo.id, fecha_pago: nextDate });
+        console.log(`Will update ${conceptType} ${acuerdo.id} with date:`, nextDate, `(${monthCounter} months from base)`);
+        
+        monthCounter++;
       }
+    }
+    
+    // First, set all dates to NULL to avoid constraint conflicts
+    for (const update of updates) {
+      try {
+        await supabase
+          .from('acuerdos_pago')
+          .update({ fecha_pago: null })
+          .eq('id', update.id);
+      } catch (error) {
+        console.error('Error clearing date:', error);
+      }
+    }
+    
+    // Wait a bit to ensure the updates are processed
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Then update with the correct dates
+    for (const update of updates) {
+      try {
+        await supabase
+          .from('acuerdos_pago')
+          .update({ fecha_pago: update.newDate.toISOString().split('T')[0] })
+          .eq('id', update.id);
+        console.log(`Successfully updated payment ${update.id} with date:`, update.newDate);
+      } catch (error) {
+        console.error('Error updating date:', error);
+      }
+    }
+    
+    // Refresh the data
+    if (cuenta) {
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
     }
   };
 
