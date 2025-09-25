@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, CreditCard, Eye, X, Edit } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -240,6 +240,60 @@ export default function Pagos() {
     navigate(`/admin/entidades-legales?search=${encodeURIComponent(nombreVendedor)}`);
   };
 
+  const handleAddManualPayment = (cuenta: CuentaCobranza) => {
+    // Navigate to the payment detail page where manual payments can be added
+    navigate(`/admin/cuentas-cobranza/${cuenta.id}/detalle?tab=acuerdo&action=add-payment`);
+  };
+
+  const handleDownloadOffer = async (cuenta: CuentaCobranza) => {
+    try {
+      // Get the offer and property data for this account
+      const { data: offerData } = await supabase
+        .from('cuentas_cobranza')
+        .select(`
+          id_oferta,
+          ofertas!fk_cuentas_cobranza_oferta(
+            id_propiedad
+          )
+        `)
+        .eq('id', cuenta.id)
+        .single();
+
+      if (!offerData?.id_oferta || !offerData.ofertas?.id_propiedad) {
+        toast({
+          title: "Error",
+          description: "No se encontró la oferta asociada a esta cuenta",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Generate and download the PDF
+      const { generateOfferPDF } = await import('@/services/pdfGenerationService');
+      await generateOfferPDF({
+        propertyId: offerData.ofertas.id_propiedad,
+        offerId: offerData.id_oferta,
+        propertyNumber: cuenta.numero_propiedad,
+        leadName: cuenta.compradores[0]?.nombre_legal || 'Sin comprador',
+        leadEmail: '', // We don't have email in this view
+        leadPhone: '', // We don't have phone in this view
+        creatorEmail: 'admin@system.com'
+      });
+
+      toast({
+        title: "PDF Generado",
+        description: "La oferta se ha descargado exitosamente",
+      });
+    } catch (error) {
+      console.error('Error downloading offer:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo descargar la oferta",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -384,53 +438,81 @@ export default function Pagos() {
                         <TableCell className="font-semibold">
                           {formatCurrency(Number(cuenta.precio_final))}
                         </TableCell>
-                         <TableCell>
-                           <TooltipProvider>
-                             <div className="flex gap-2">
-                               <Tooltip>
-                                 <TooltipTrigger asChild>
-                                   <Button variant="outline" size="icon" asChild>
-                                     <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                       <Eye className="h-4 w-4" />
-                                     </Link>
-                                   </Button>
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p>Ver Detalle</p>
-                                 </TooltipContent>
-                               </Tooltip>
-                               <Tooltip>
-                                 <TooltipTrigger asChild>
-                                   <Button 
-                                     variant="secondary" 
-                                     size="icon"
-                                     onClick={() => handleEditCuenta(cuenta)}
-                                   >
-                                     <Edit className="h-4 w-4" />
-                                   </Button>
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p>Editar Cuenta</p>
-                                 </TooltipContent>
-                               </Tooltip>
-                               <Tooltip>
-                                 <TooltipTrigger asChild>
-                                   <Button 
-                                     variant="destructive" 
-                                     size="icon"
-                                     onClick={() => handleCancelCuenta(cuenta)}
-                                     disabled={cancelCuentaMutation.isPending}
-                                   >
-                                     <X className="h-4 w-4" />
-                                   </Button>
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p>Cancelar Cuenta</p>
-                                 </TooltipContent>
-                               </Tooltip>
-                             </div>
-                           </TooltipProvider>
-                         </TableCell>
+                          <TableCell>
+                            <TooltipProvider>
+                              <div className="flex gap-2">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="outline" size="icon" asChild>
+                                      <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
+                                        <Eye className="h-4 w-4" />
+                                      </Link>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Ver Detalle</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      variant="secondary" 
+                                      size="icon"
+                                      onClick={() => handleEditCuenta(cuenta)}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Editar Cuenta</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      variant="outline" 
+                                      size="icon"
+                                      onClick={() => handleAddManualPayment(cuenta)}
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Agregar Pago Manual</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      variant="outline" 
+                                      size="icon"
+                                      onClick={() => handleDownloadOffer(cuenta)}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Descargar Oferta</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      variant="destructive" 
+                                      size="icon"
+                                      onClick={() => handleCancelCuenta(cuenta)}
+                                      disabled={cancelCuentaMutation.isPending}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Cancelar Cuenta</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </TooltipProvider>
+                          </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -533,22 +615,38 @@ export default function Pagos() {
                         <TableCell className="font-semibold">
                           {formatCurrency(Number(cuenta.precio_final))}
                         </TableCell>
-                        <TableCell>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="outline" size="icon" asChild>
-                                  <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                    <Eye className="h-4 w-4" />
-                                  </Link>
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Ver Detalle</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </TableCell>
+                         <TableCell>
+                           <TooltipProvider>
+                             <div className="flex gap-2">
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <Button variant="outline" size="icon" asChild>
+                                     <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
+                                       <Eye className="h-4 w-4" />
+                                     </Link>
+                                   </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent>
+                                   <p>Ver Detalle</p>
+                                 </TooltipContent>
+                               </Tooltip>
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <Button 
+                                     variant="outline" 
+                                     size="icon"
+                                     onClick={() => handleDownloadOffer(cuenta)}
+                                   >
+                                     <Download className="h-4 w-4" />
+                                   </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent>
+                                   <p>Descargar Oferta</p>
+                                 </TooltipContent>
+                               </Tooltip>
+                             </div>
+                           </TooltipProvider>
+                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
