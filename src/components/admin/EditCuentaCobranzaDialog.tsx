@@ -1501,22 +1501,27 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                          }}
                                          autoFocus
                                        />
-                                    ) : (
-                                      <div className="flex items-center gap-2">
-                                        <span>
-                                          {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
-                                        </span>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-6 w-6 p-0"
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            console.log('Date edit button clicked for acuerdo:', acuerdo.id, 'pago_completado:', acuerdo.pago_completado);
-                                            setEditingAcuerdo(acuerdo.id);
-                                            setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
-                                          }}
+                                     ) : (
+                                       <div className="flex items-center gap-2">
+                                         <span>
+                                           {acuerdo.fecha_pago ? (() => {
+                                             const dateStr = acuerdo.fecha_pago;
+                                             const [year, month, day] = dateStr.split('-');
+                                             return `${day}/${month}/${year}`;
+                                           })() : 'Sin fecha'}
+                                         </span>
+                                         <Button
+                                           variant="ghost"
+                                           size="sm"
+                                           className="h-6 w-6 p-0"
+                                           onClick={(e) => {
+                                             e.preventDefault();
+                                             e.stopPropagation();
+                                             console.log('Date edit button clicked for acuerdo:', acuerdo.id, 'pago_completado:', acuerdo.pago_completado);
+                                             setEditingAcuerdo(acuerdo.id);
+                                             // Create date from the stored date string to avoid timezone issues
+                                             setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago + 'T00:00:00') : undefined);
+                                           }}
                                           disabled={acuerdo.pago_completado}
                                         >
                                           <Edit className="h-3 w-3" />
