@@ -1341,17 +1341,19 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                >
                                 <TableCell>{acuerdo.concepto_nombre}</TableCell>
                                   <TableCell>
-                                    {!acuerdo.pago_completado && editingAcuerdo === acuerdo.id ? (
+                                    {editingAcuerdo === acuerdo.id ? (
                                       <div className="flex items-center gap-2">
                                         <Input
                                           type="date"
                                           value={editingDate ? editingDate.toISOString().split('T')[0] : (acuerdo.fecha_pago || '')}
                                           onChange={(e) => {
-                                            const selectedDate = e.target.value ? new Date(e.target.value) : null;
-                                            setEditingDate(selectedDate || undefined);
+                                            console.log('Date input changed:', e.target.value);
+                                            const selectedDate = e.target.value ? new Date(e.target.value) : undefined;
+                                            setEditingDate(selectedDate);
                                           }}
                                           className="w-40"
                                           onBlur={() => {
+                                            console.log('Date input blur, editingDate:', editingDate);
                                             if (editingDate) {
                                               handleDateUpdate(acuerdo.id, editingDate);
                                             } else {
@@ -1361,11 +1363,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                           }}
                                           onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
+                                              console.log('Enter pressed, editingDate:', editingDate);
                                               if (editingDate) {
                                                 handleDateUpdate(acuerdo.id, editingDate);
                                               }
                                             }
                                             if (e.key === 'Escape') {
+                                              console.log('Escape pressed');
                                               setEditingAcuerdo(null);
                                               setEditingDate(undefined);
                                             }
@@ -1376,6 +1380,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                           size="sm"
                                           variant="outline"
                                           onClick={() => {
+                                            console.log('Save button clicked, editingDate:', editingDate);
                                             if (editingDate) {
                                               handleDateUpdate(acuerdo.id, editingDate);
                                             }
@@ -1387,6 +1392,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                           size="sm"
                                           variant="ghost"
                                           onClick={() => {
+                                            console.log('Cancel button clicked');
                                             setEditingAcuerdo(null);
                                             setEditingDate(undefined);
                                           }}
@@ -1399,33 +1405,38 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                         <span>
                                           {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
                                         </span>
-                                        {!acuerdo.pago_completado && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-6 w-6 p-0"
-                                            onClick={() => {
-                                              console.log('Date edit button clicked for acuerdo:', acuerdo.id);
-                                              setEditingAcuerdo(acuerdo.id);
-                                              setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
-                                            }}
-                                          >
-                                            <Edit className="h-3 w-3" />
-                                          </Button>
-                                        )}
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 w-6 p-0"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            console.log('Date edit button clicked for acuerdo:', acuerdo.id, 'pago_completado:', acuerdo.pago_completado);
+                                            setEditingAcuerdo(acuerdo.id);
+                                            setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
+                                          }}
+                                          disabled={acuerdo.pago_completado}
+                                        >
+                                          <Edit className="h-3 w-3" />
+                                        </Button>
                                       </div>
                                     )}
                                   </TableCell>
                                 <TableCell>
-                                  {!acuerdo.pago_completado && editingAmount === acuerdo.id ? (
+                                  {editingAmount === acuerdo.id ? (
                                     <div className="flex items-center gap-2">
                                       <Input
                                         type="number"
                                         step="0.01"
                                         value={editingMonto}
-                                        onChange={(e) => setEditingMonto(e.target.value)}
+                                        onChange={(e) => {
+                                          console.log('Amount input changed:', e.target.value);
+                                          setEditingMonto(e.target.value);
+                                        }}
                                         className="w-32"
                                         onBlur={() => {
+                                          console.log('Amount input blur, editingMonto:', editingMonto);
                                           const monto = parseFloat(editingMonto);
                                           if (!isNaN(monto) && monto > 0) {
                                             handleAmountUpdate(acuerdo.id, monto);
@@ -1436,12 +1447,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                         }}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter') {
+                                            console.log('Enter pressed on amount, editingMonto:', editingMonto);
                                             const monto = parseFloat(editingMonto);
                                             if (!isNaN(monto) && monto > 0) {
                                               handleAmountUpdate(acuerdo.id, monto);
                                             }
                                           }
                                           if (e.key === 'Escape') {
+                                            console.log('Escape pressed on amount');
                                             setEditingAmount(null);
                                             setEditingMonto('');
                                           }
@@ -1452,6 +1465,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                         size="sm"
                                         variant="outline"
                                         onClick={() => {
+                                          console.log('Save amount button clicked, editingMonto:', editingMonto);
                                           const monto = parseFloat(editingMonto);
                                           if (!isNaN(monto) && monto > 0) {
                                             handleAmountUpdate(acuerdo.id, monto);
@@ -1464,6 +1478,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                         size="sm"
                                         variant="ghost"
                                         onClick={() => {
+                                          console.log('Cancel amount button clicked');
                                           setEditingAmount(null);
                                           setEditingMonto('');
                                         }}
@@ -1476,20 +1491,21 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                       <span>
                                         {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}
                                       </span>
-                                      {!acuerdo.pago_completado && (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-6 w-6 p-0"
-                                          onClick={() => {
-                                            console.log('Amount edit button clicked for acuerdo:', acuerdo.id);
-                                            setEditingAmount(acuerdo.id);
-                                            setEditingMonto(acuerdo.monto.toString());
-                                          }}
-                                        >
-                                          <Edit className="h-3 w-3" />
-                                        </Button>
-                                      )}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          console.log('Amount edit button clicked for acuerdo:', acuerdo.id, 'pago_completado:', acuerdo.pago_completado);
+                                          setEditingAmount(acuerdo.id);
+                                          setEditingMonto(acuerdo.monto.toString());
+                                        }}
+                                        disabled={acuerdo.pago_completado}
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
                                     </div>
                                   )}
                                 </TableCell>
