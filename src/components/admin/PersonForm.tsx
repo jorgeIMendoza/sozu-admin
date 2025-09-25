@@ -709,6 +709,31 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       />
                     </div>
                   </div>
+
+                  <div>
+                    <Label htmlFor="rfc">RFC *</Label>
+                    <Input
+                      id="rfc"
+                      type="text"
+                      value={rfc}
+                      onChange={(e) => setRfc(e.target.value.toUpperCase())}
+                      placeholder="Ingresa el RFC (Ej: ABC123456DEF)"
+                      required={restrictToBasicTab && entityType === 'comprador'}
+                    />
+                  </div>
+
+                  {tipoPersona === 'pf' && (
+                    <div>
+                      <Label htmlFor="curp">CURP</Label>
+                      <Input
+                        id="curp"
+                        type="text"
+                        value={curp}
+                        onChange={(e) => setCurp(e.target.value.toUpperCase())}
+                        placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFD01)"
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 // Original form structure for other entity types
