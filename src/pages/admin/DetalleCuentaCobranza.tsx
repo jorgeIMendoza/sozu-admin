@@ -984,12 +984,11 @@ export default function DetalleCuentaCobranza() {
                             <Table>
                               <TableHeader>
                                 <TableRow>
-                                  <TableHead className="text-xs">Fecha Pago</TableHead>
-                                  <TableHead className="text-xs">Método</TableHead>
-                                  <TableHead className="text-xs">Clave Rastreo</TableHead>
-                                  <TableHead className="text-xs">Monto Aplicado</TableHead>
-                                  <TableHead className="text-xs">Fecha Aplicación</TableHead>
-                                  <TableHead className="text-xs">Acciones</TableHead>
+                                   <TableHead className="text-xs">Fecha Pago</TableHead>
+                                   <TableHead className="text-xs">Método</TableHead>
+                                   <TableHead className="text-xs">Clave Rastreo</TableHead>
+                                   <TableHead className="text-xs">Monto Aplicado</TableHead>
+                                   <TableHead className="text-xs">Acciones</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -1007,11 +1006,10 @@ export default function DetalleCuentaCobranza() {
                                           <span className="text-muted-foreground">N/A</span>
                                         )}
                                       </TableCell>
-                                      <TableCell className="font-medium text-xs">
-                                        {formatCurrency(aplicacion.monto)}
-                                      </TableCell>
-                                      <TableCell className="text-xs">{formatDate(aplicacion.fecha_creacion)}</TableCell>
-                                      <TableCell>
+                                       <TableCell className="font-medium text-xs">
+                                         {formatCurrency(aplicacion.monto)}
+                                       </TableCell>
+                                       <TableCell>
                                         <TooltipProvider>
                                           <div className="flex gap-2">
                                             {!isStpPayment && (

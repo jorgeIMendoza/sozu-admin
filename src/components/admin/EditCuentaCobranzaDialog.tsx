@@ -915,7 +915,32 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const handleDateUpdate = (acuerdoId: number, fecha: Date | undefined) => {
     if (fecha) {
       console.log('Updating date for acuerdo:', acuerdoId, 'to:', fecha);
-      updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
+      
+      // Find the current agreement and its position
+      const currentAcuerdoIndex = acuerdos.findIndex(a => a.id === acuerdoId);
+      const currentAcuerdo = acuerdos[currentAcuerdoIndex];
+      
+      // Check if it's a Parcialidad and update subsequent Parcialidades
+      if (currentAcuerdo?.concepto_nombre?.toLowerCase().includes('parcialidad')) {
+        // Update the current agreement date
+        updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
+        
+        // Update subsequent Parcialidades with incremental months
+        for (let i = currentAcuerdoIndex + 1; i < acuerdos.length; i++) {
+          const nextAcuerdo = acuerdos[i];
+          if (nextAcuerdo.concepto_nombre?.toLowerCase().includes('parcialidad')) {
+            const monthsToAdd = i - currentAcuerdoIndex;
+            const nextDate = new Date(fecha);
+            nextDate.setMonth(nextDate.getMonth() + monthsToAdd);
+            
+            console.log(`Updating subsequent Parcialidad ${nextAcuerdo.id} with date:`, nextDate);
+            updateAcuerdoMutation.mutate({ id: nextAcuerdo.id, fecha_pago: nextDate });
+          }
+        }
+      } else {
+        // For non-Parcialidad agreements, just update the single date
+        updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
+      }
     }
   };
 
@@ -1419,64 +1444,39 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 <TableCell>{acuerdo.concepto_nombre}</TableCell>
                                   <TableCell>
                                     {editingAcuerdo === acuerdo.id ? (
-                                      <div className="flex items-center gap-2">
-                                        <Input
-                                          type="date"
-                                          value={editingDate ? editingDate.toISOString().split('T')[0] : (acuerdo.fecha_pago || '')}
-                                          onChange={(e) => {
-                                            console.log('Date input changed:', e.target.value);
-                                            const selectedDate = e.target.value ? new Date(e.target.value) : undefined;
-                                            setEditingDate(selectedDate);
-                                          }}
-                                          className="w-40"
-                                          onBlur={() => {
-                                            console.log('Date input blur, editingDate:', editingDate);
-                                            if (editingDate) {
-                                              handleDateUpdate(acuerdo.id, editingDate);
-                                            } else {
-                                              setEditingAcuerdo(null);
-                                              setEditingDate(undefined);
-                                            }
-                                          }}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                              console.log('Enter pressed, editingDate:', editingDate);
-                                              if (editingDate) {
-                                                handleDateUpdate(acuerdo.id, editingDate);
-                                              }
-                                            }
-                                            if (e.key === 'Escape') {
-                                              console.log('Escape pressed');
-                                              setEditingAcuerdo(null);
-                                              setEditingDate(undefined);
-                                            }
-                                          }}
-                                          autoFocus
-                                        />
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => {
-                                            console.log('Save button clicked, editingDate:', editingDate);
-                                            if (editingDate) {
-                                              handleDateUpdate(acuerdo.id, editingDate);
-                                            }
-                                          }}
-                                        >
-                                          Guardar
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => {
-                                            console.log('Cancel button clicked');
-                                            setEditingAcuerdo(null);
-                                            setEditingDate(undefined);
-                                          }}
-                                        >
-                                          Cancelar
-                                        </Button>
-                                      </div>
+                                       <Input
+                                         type="date"
+                                         value={editingDate ? editingDate.toISOString().split('T')[0] : (acuerdo.fecha_pago || '')}
+                                         onChange={(e) => {
+                                           console.log('Date input changed:', e.target.value);
+                                           const selectedDate = e.target.value ? new Date(e.target.value) : undefined;
+                                           setEditingDate(selectedDate);
+                                         }}
+                                         className="w-40"
+                                         onBlur={() => {
+                                           console.log('Date input blur, editingDate:', editingDate);
+                                           if (editingDate) {
+                                             handleDateUpdate(acuerdo.id, editingDate);
+                                           } else {
+                                             setEditingAcuerdo(null);
+                                             setEditingDate(undefined);
+                                           }
+                                         }}
+                                         onKeyDown={(e) => {
+                                           if (e.key === 'Enter') {
+                                             console.log('Enter pressed, editingDate:', editingDate);
+                                             if (editingDate) {
+                                               handleDateUpdate(acuerdo.id, editingDate);
+                                             }
+                                           }
+                                           if (e.key === 'Escape') {
+                                             console.log('Escape pressed');
+                                             setEditingAcuerdo(null);
+                                             setEditingDate(undefined);
+                                           }
+                                         }}
+                                         autoFocus
+                                       />
                                     ) : (
                                       <div className="flex items-center gap-2">
                                         <span>
@@ -1502,67 +1502,41 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                   </TableCell>
                                 <TableCell>
                                   {editingAmount === acuerdo.id ? (
-                                    <div className="flex items-center gap-2">
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={editingMonto}
-                                        onChange={(e) => {
-                                          console.log('Amount input changed:', e.target.value);
-                                          setEditingMonto(e.target.value);
-                                        }}
-                                        className="w-32"
-                                        onBlur={() => {
-                                          console.log('Amount input blur, editingMonto:', editingMonto);
-                                          const monto = parseFloat(editingMonto);
-                                          if (!isNaN(monto) && monto > 0) {
-                                            handleAmountUpdate(acuerdo.id, monto);
-                                          } else {
-                                            setEditingAmount(null);
-                                            setEditingMonto('');
-                                          }
-                                        }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            console.log('Enter pressed on amount, editingMonto:', editingMonto);
-                                            const monto = parseFloat(editingMonto);
-                                            if (!isNaN(monto) && monto > 0) {
-                                              handleAmountUpdate(acuerdo.id, monto);
-                                            }
-                                          }
-                                          if (e.key === 'Escape') {
-                                            console.log('Escape pressed on amount');
-                                            setEditingAmount(null);
-                                            setEditingMonto('');
-                                          }
-                                        }}
-                                        autoFocus
-                                      />
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                          console.log('Save amount button clicked, editingMonto:', editingMonto);
-                                          const monto = parseFloat(editingMonto);
-                                          if (!isNaN(monto) && monto > 0) {
-                                            handleAmountUpdate(acuerdo.id, monto);
-                                          }
-                                        }}
-                                      >
-                                        Guardar
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => {
-                                          console.log('Cancel amount button clicked');
-                                          setEditingAmount(null);
-                                          setEditingMonto('');
-                                        }}
-                                      >
-                                        Cancelar
-                                      </Button>
-                                    </div>
+                                     <Input
+                                       type="number"
+                                       step="0.01"
+                                       value={editingMonto}
+                                       onChange={(e) => {
+                                         console.log('Amount input changed:', e.target.value);
+                                         setEditingMonto(e.target.value);
+                                       }}
+                                       className="w-32"
+                                       onBlur={() => {
+                                         console.log('Amount input blur, editingMonto:', editingMonto);
+                                         const monto = parseFloat(editingMonto);
+                                         if (!isNaN(monto) && monto > 0) {
+                                           handleAmountUpdate(acuerdo.id, monto);
+                                         } else {
+                                           setEditingAmount(null);
+                                           setEditingMonto('');
+                                         }
+                                       }}
+                                       onKeyDown={(e) => {
+                                         if (e.key === 'Enter') {
+                                           console.log('Enter pressed on amount, editingMonto:', editingMonto);
+                                           const monto = parseFloat(editingMonto);
+                                           if (!isNaN(monto) && monto > 0) {
+                                             handleAmountUpdate(acuerdo.id, monto);
+                                           }
+                                         }
+                                         if (e.key === 'Escape') {
+                                           console.log('Escape pressed on amount');
+                                           setEditingAmount(null);
+                                           setEditingMonto('');
+                                         }
+                                       }}
+                                       autoFocus
+                                     />
                                   ) : (
                                     <div className="flex items-center gap-2">
                                       <span>
