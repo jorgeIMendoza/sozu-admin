@@ -75,6 +75,7 @@ interface AcuerdoPago {
   fecha_pago?: string;
   id_concepto: number;
   concepto_nombre?: string;
+  pago_completado: boolean;
 }
 
 interface EsquemaPago {
@@ -257,7 +258,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
         return data.map(acuerdo => ({
           ...acuerdo,
-          concepto_nombre: conceptos?.find(c => c.id === acuerdo.id_concepto)?.nombre || 'Sin concepto'
+          concepto_nombre: conceptos?.find(c => c.id === acuerdo.id_concepto)?.nombre || 'Sin concepto',
+          pago_completado: false // Default to false for now, will be updated when we add the column
         }));
       }
       
@@ -697,6 +699,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       const oldIndex = acuerdos.findIndex(item => item.id.toString() === active.id);
       const newIndex = acuerdos.findIndex(item => item.id.toString() === over?.id);
 
+      // Don't allow moving completed payments (for now always false until we implement the feature)
+      const activeItem = acuerdos[oldIndex];
+      const overItem = acuerdos[newIndex];
+      
+      if (activeItem?.pago_completado || overItem?.pago_completado) {
+        toast.error("No se pueden mover pagos completados");
+        return;
+      }
+
       const newAcuerdos = arrayMove(acuerdos, oldIndex, newIndex);
       setAcuerdos(newAcuerdos);
       updateOrderMutation.mutate(newAcuerdos);
@@ -947,6 +958,30 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 <CardTitle>Acuerdo de Pago</CardTitle>
               </CardHeader>
               <CardContent>
+                {/* UMA Value Section */}
+                <div className="mb-6 p-4 bg-muted/30 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-foreground">Valor de la UMA</h4>
+                      <p className="text-sm text-muted-foreground">Unidad de Medida y Actualización vigente</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-semibold">
+                        {cuentaDetalle?.valor_uma ? 
+                          new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.valor_uma) : 
+                          'No definido'
+                        }
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {cuentaDetalle?.fecha_compra ? 
+                          `Fecha: ${format(new Date(cuentaDetalle.fecha_compra), 'dd/MM/yyyy', { locale: es })}` : 
+                          ''
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {acuerdos && acuerdos.length > 0 ? (
                   <DndContext
                     sensors={sensors}
@@ -960,7 +995,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           <TableHead>Monto</TableHead>
                           <TableHead>Porcentaje</TableHead>
                           <TableHead>Fecha de Pago</TableHead>
-                          <TableHead>Acciones</TableHead>
+                          <TableHead>Pagado</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -974,7 +1009,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               <TableCell>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}</TableCell>
                               <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
                               <TableCell>
-                                {editingAcuerdo === acuerdo.id ? (
+                                {!acuerdo.pago_completado && editingAcuerdo === acuerdo.id ? (
                                   <Popover>
                                     <PopoverTrigger asChild>
                                       <Button variant="outline" className="h-8 text-xs">
@@ -1002,35 +1037,34 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                     <span>
                                       {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
                                     </span>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 w-6 p-0"
-                                      onClick={() => {
-                                        setEditingAcuerdo(acuerdo.id);
-                                        setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
-                                      }}
-                                    >
-                                      <Edit className="h-3 w-3" />
-                                    </Button>
+                                    {!acuerdo.pago_completado && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0"
+                                        onClick={() => {
+                                          setEditingAcuerdo(acuerdo.id);
+                                          setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
+                                        }}
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
+                                    )}
                                   </div>
                                 )}
                               </TableCell>
                               <TableCell>
-                                {editingAcuerdo === acuerdo.id && (
-                                  <div className="flex gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        setEditingAcuerdo(null);
-                                        setEditingDate(undefined);
-                                      }}
-                                    >
-                                      Cancelar
-                                    </Button>
-                                  </div>
-                                )}
+                                <div className="flex items-center justify-center">
+                                  {acuerdo.pago_completado ? (
+                                    <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-xs font-medium">
+                                      Pagado
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-xs font-medium">
+                                      Pendiente
+                                    </span>
+                                  )}
+                                </div>
                               </TableCell>
                             </SortableItem>
                           ))}
