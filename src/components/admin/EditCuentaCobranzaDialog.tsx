@@ -111,7 +111,6 @@ function SortableItem({ id, children, disabled = false }: SortableItemProps) {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: disabled ? 0.6 : 1,
-    cursor: disabled ? 'not-allowed' : 'grab',
   };
 
   return (
@@ -120,7 +119,7 @@ function SortableItem({ id, children, disabled = false }: SortableItemProps) {
       style={style} 
       {...attributes} 
       {...(disabled ? {} : listeners)}
-      className={disabled ? 'pointer-events-none' : ''}
+      className={disabled ? 'cursor-not-allowed' : 'cursor-grab'}
     >
       {children}
     </TableRow>
