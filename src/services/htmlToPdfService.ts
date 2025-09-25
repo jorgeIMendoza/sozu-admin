@@ -76,6 +76,7 @@ interface PaymentScheme {
   porcentaje_entrega: number;
   porcentaje_descuento_aumento: number;
   es_manual: boolean;
+  is_selected?: boolean;
 }
 
 interface ProjectAmenity {
@@ -514,21 +515,9 @@ class HTMLToPDFService {
       .eq('id', offerId)
       .maybeSingle();
 
-    // If there's a specific payment scheme selected (manual or pre-defined), return only that one
-    if (offerData?.id_esquema_pago_seleccionado) {
-      const { data: specificScheme, error: specificError } = await supabase
-        .from('esquemas_pago')
-        .select('*')
-        .eq('id', offerData.id_esquema_pago_seleccionado)
-        .eq('activo', true)
-        .maybeSingle();
+    const selectedSchemeId = offerData?.id_esquema_pago_seleccionado;
 
-      if (specificError) throw specificError;
-      console.log('Found specific payment scheme for offer:', specificScheme);
-      return specificScheme ? [specificScheme] : [];
-    }
-
-    // Fallback: If no specific scheme selected, get the project ID from the property
+    // Get the project ID from the property
     const { data: propertyData } = await supabase
       .from('propiedades')
       .select('id_edificio_modelo')
@@ -576,7 +565,14 @@ class HTMLToPDFService {
       return [];
     }
 
-    return schemes || [];
+    // Mark the selected scheme
+    const schemesWithSelection = (schemes || []).map(scheme => ({
+      ...scheme,
+      is_selected: scheme.id === selectedSchemeId
+    }));
+
+    console.log('Found payment schemes:', schemesWithSelection);
+    return schemesWithSelection;
   }
 
   private async fetchProjectAmenities(propertyId: number): Promise<ProjectAmenity[]> {
@@ -1139,11 +1135,8 @@ class HTMLToPDFService {
       };
     };
 
-    const selectedPaymentScheme = paymentSchemes[0];
-    const filteredPaymentSchemes = selectedPaymentScheme?.es_manual 
-      ? paymentSchemes.filter(scheme => scheme.es_manual)
-      : paymentSchemes.filter(scheme => !scheme.es_manual);
-
+    const selectedPaymentScheme = paymentSchemes.find(scheme => scheme.is_selected);
+    
     return React.createElement('div', {
       className: 'bg-white text-gray-900 font-sans text-base leading-relaxed min-h-screen p-10'
     }, [
@@ -1155,20 +1148,28 @@ class HTMLToPDFService {
       React.createElement('div', {
         key: 'schemes-grid',
         className: 'grid grid-cols-2 gap-4'
-      }, filteredPaymentSchemes.map((scheme) => {
+      }, paymentSchemes.map((scheme) => {
         const calculation = calculatePaymentAmounts(scheme);
+        const isSelected = scheme.is_selected;
+        
         return React.createElement('div', {
           key: scheme.id,
-          className: 'bg-white rounded-xl p-4 shadow-lg border border-border'
+          className: `rounded-xl p-4 shadow-lg border-2 ${isSelected 
+            ? 'bg-blue-50 border-blue-500' 
+            : 'bg-white border-border'}`
         }, [
           React.createElement('div', {
             key: 'scheme-title',
-            className: 'text-center mb-3'
+            className: 'text-center mb-3 relative'
           }, [
             React.createElement('h4', {
               key: 'name',
-              className: 'text-sm font-bold'
-            }, scheme.nombre)
+              className: `text-sm font-bold ${isSelected ? 'text-blue-700' : 'text-gray-900'}`
+            }, scheme.nombre),
+            isSelected && React.createElement('div', {
+              key: 'selected-badge',
+              className: 'absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-bold'
+            }, 'SELECCIONADO')
           ]),
           
           React.createElement('div', {

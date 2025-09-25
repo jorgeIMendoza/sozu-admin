@@ -934,299 +934,255 @@ export default function DetalleCuentaCobranza() {
         </CardHeader>
         <CardContent>
           {acuerdosPago && acuerdosPago.length > 0 ? (
-            <div className="space-y-4">
-              {/* Tabla principal de acuerdos de pago */}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Concepto</TableHead>
-                    <TableHead>Monto</TableHead>
-                    <TableHead>Porcentaje</TableHead>
-                    <TableHead>Fecha de Pago</TableHead>
-                    <TableHead>Estatus</TableHead>
-                    <TableHead>Pagado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {acuerdosPago.map((acuerdo, index) => {
-                    const totalAplicado = acuerdo.aplicaciones.reduce((sum, app) => sum + app.monto, 0);
-                    
-                    // Count how many "Parcialidad" concepts come before this one
-                    const parcialidadNumber = acuerdosPago
-                      .slice(0, index + 1)
-                      .filter(a => a.concepto.toLowerCase().includes('parcialidad')).length;
-                    
-                    // Format the concept name with parcialidad numbering
-                    const conceptoDisplay = acuerdo.concepto.toLowerCase().includes('parcialidad') 
-                      ? `Parcialidad #${parcialidadNumber}`
-                      : acuerdo.concepto;
+            <div className="space-y-2">
+              {acuerdosPago.map((acuerdo, index) => {
+                const totalAplicado = acuerdo.aplicaciones.reduce((sum, app) => sum + app.monto, 0);
+                const isOpen = openAcuerdos[acuerdo.id];
+                
+                const parcialidadNumber = acuerdosPago
+                  .slice(0, index + 1)
+                  .filter(a => a.concepto.toLowerCase().includes('parcialidad')).length;
+                
+                const conceptoDisplay = acuerdo.concepto.toLowerCase().includes('parcialidad') 
+                  ? `Parcialidad #${parcialidadNumber}`
+                  : acuerdo.concepto;
 
-                    // Calculate percentage based on total price
-                    const porcentaje = cuentaDetalle?.precio_final 
-                      ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2)
-                      : '0.00';
-                    
-                    return (
-                      <TableRow key={acuerdo.id}>
-                        <TableCell className="font-medium">{conceptoDisplay}</TableCell>
-                        <TableCell>{formatCurrency(acuerdo.monto)}</TableCell>
-                        <TableCell>{porcentaje}%</TableCell>
-                        <TableCell>
-                          {acuerdo.fecha_pago ? formatDate(acuerdo.fecha_pago) : 'Sin fecha'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={acuerdo.pago_completado ? "default" : "secondary"}>
-                            {acuerdo.pago_completado ? "Pagado" : "Pendiente"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{formatCurrency(totalAplicado)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-
-              {/* Sección expandible de detalles por acuerdo */}
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">Detalles de Aplicaciones</h4>
-                {acuerdosPago.map((acuerdo, index) => {
-                  const totalAplicado = acuerdo.aplicaciones.reduce((sum, app) => sum + app.monto, 0);
-                  const isOpen = openAcuerdos[acuerdo.id];
-                  
-                  const parcialidadNumber = acuerdosPago
-                    .slice(0, index + 1)
-                    .filter(a => a.concepto.toLowerCase().includes('parcialidad')).length;
-                  
-                  const conceptoDisplay = acuerdo.concepto.toLowerCase().includes('parcialidad') 
-                    ? `Parcialidad #${parcialidadNumber}`
-                    : acuerdo.concepto;
-                  
-                  return (
-                    <Collapsible key={acuerdo.id} open={isOpen} onOpenChange={() => toggleAcuerdo(acuerdo.id)}>
-                      <div className="border rounded-lg">
-                        <CollapsibleTrigger asChild>
-                          <div className="w-full p-3 flex items-center justify-between hover:bg-muted/50 cursor-pointer">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{conceptoDisplay}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {acuerdo.aplicaciones.length} aplicación(es)
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-muted-foreground">
-                                {formatCurrency(totalAplicado)} / {formatCurrency(acuerdo.monto)}
-                              </span>
-                              {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </div>
+                // Calculate percentage based on total price
+                const porcentaje = cuentaDetalle?.precio_final 
+                  ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2)
+                  : '0.00';
+                
+                return (
+                  <Collapsible key={acuerdo.id} open={isOpen} onOpenChange={() => toggleAcuerdo(acuerdo.id)}>
+                    <div className="border rounded-lg">
+                      <CollapsibleTrigger asChild>
+                        <div className="w-full p-3 flex items-center justify-between hover:bg-muted/50 cursor-pointer">
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm font-medium">{conceptoDisplay}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {acuerdo.aplicaciones.length} aplicación(es)
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {porcentaje}% - {acuerdo.fecha_pago ? formatDate(acuerdo.fecha_pago) : 'Sin fecha'}
+                            </span>
+                            <Badge variant={acuerdo.pago_completado ? "default" : "secondary"} className="text-xs">
+                              {acuerdo.pago_completado ? "Pagado" : "Pendiente"}
+                            </Badge>
                           </div>
-                        </CollapsibleTrigger>
-                        
-                        <CollapsibleContent>
-                          <div className="px-3 pb-3">
-                            {acuerdo.aplicaciones.length > 0 ? (
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead className="text-xs">Fecha Pago</TableHead>
-                                    <TableHead className="text-xs">Método</TableHead>
-                                    <TableHead className="text-xs">Clave Rastreo</TableHead>
-                                    <TableHead className="text-xs">Monto Aplicado</TableHead>
-                                    <TableHead className="text-xs">Fecha Aplicación</TableHead>
-                                    <TableHead className="text-xs">Acciones</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {acuerdo.aplicaciones.map((aplicacion, index) => {
-                                    const isStpPayment = aplicacion.pago.metodo_pago?.toLowerCase().includes('stp');
-                                    
-                                    return (
-                                      <TableRow key={aplicacion.id}>
-                                        <TableCell className="text-xs">{formatDate(aplicacion.pago.fecha_pago)}</TableCell>
-                                        <TableCell className="text-xs">{aplicacion.pago.metodo_pago}</TableCell>
-                                        <TableCell className="text-xs">
-                                          {aplicacion.pago.clave_rastreo ? (
-                                            <Badge variant="outline">{aplicacion.pago.clave_rastreo}</Badge>
-                                          ) : (
-                                            <span className="text-muted-foreground">N/A</span>
-                                          )}
-                                        </TableCell>
-                                        <TableCell className="font-medium text-xs">
-                                          {formatCurrency(aplicacion.monto)}
-                                        </TableCell>
-                                        <TableCell className="text-xs">{formatDate(aplicacion.fecha_creacion)}</TableCell>
-                                        <TableCell>
-                                          <TooltipProvider>
-                                            <div className="flex gap-2">
-                                              {!isStpPayment && (
-                                                <Tooltip>
-                                                  <TooltipTrigger asChild>
-                                                    <Button
-                                                      variant="outline"
-                                                      size="icon"
-                                                      className="h-6 w-6"
-                                                      onClick={() => handleEditPayment(aplicacion.id)}
-                                                    >
-                                                      <Edit className="h-3 w-3" />
-                                                    </Button>
-                                                  </TooltipTrigger>
-                                                  <TooltipContent>
-                                                    <p>Editar Pago</p>
-                                                  </TooltipContent>
-                                                </Tooltip>
-                                              )}
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">
+                              {formatCurrency(totalAplicado)} / {formatCurrency(acuerdo.monto)}
+                            </span>
+                            {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      
+                      <CollapsibleContent>
+                        <div className="px-3 pb-3">
+                          {acuerdo.aplicaciones.length > 0 ? (
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="text-xs">Fecha Pago</TableHead>
+                                  <TableHead className="text-xs">Método</TableHead>
+                                  <TableHead className="text-xs">Clave Rastreo</TableHead>
+                                  <TableHead className="text-xs">Monto Aplicado</TableHead>
+                                  <TableHead className="text-xs">Fecha Aplicación</TableHead>
+                                  <TableHead className="text-xs">Acciones</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {acuerdo.aplicaciones.map((aplicacion, index) => {
+                                  const isStpPayment = aplicacion.pago.metodo_pago?.toLowerCase().includes('stp');
+                                  
+                                  return (
+                                    <TableRow key={aplicacion.id}>
+                                      <TableCell className="text-xs">{formatDate(aplicacion.pago.fecha_pago)}</TableCell>
+                                      <TableCell className="text-xs">{aplicacion.pago.metodo_pago}</TableCell>
+                                      <TableCell className="text-xs">
+                                        {aplicacion.pago.clave_rastreo ? (
+                                          <Badge variant="outline">{aplicacion.pago.clave_rastreo}</Badge>
+                                        ) : (
+                                          <span className="text-muted-foreground">N/A</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="font-medium text-xs">
+                                        {formatCurrency(aplicacion.monto)}
+                                      </TableCell>
+                                      <TableCell className="text-xs">{formatDate(aplicacion.fecha_creacion)}</TableCell>
+                                      <TableCell>
+                                        <TooltipProvider>
+                                          <div className="flex gap-2">
+                                            {!isStpPayment && (
                                               <Tooltip>
                                                 <TooltipTrigger asChild>
                                                   <Button
-                                                    variant="destructive"
+                                                    variant="outline"
                                                     size="icon"
                                                     className="h-6 w-6"
-                                                    onClick={() => handleDeletePayment({
-                                                      id: aplicacion.id,
-                                                      monto: aplicacion.monto,
-                                                      conceptoNombre: conceptoDisplay
-                                                    })}
-                                                    disabled={deletePaymentMutation.isPending || isStpPayment}
+                                                    onClick={() => handleEditPayment(aplicacion.id)}
                                                   >
-                                                    <Trash2 className="h-3 w-3" />
+                                                    <Edit className="h-3 w-3" />
                                                   </Button>
                                                 </TooltipTrigger>
                                                 <TooltipContent>
-                                                  <p>{isStpPayment ? "No se pueden eliminar pagos STP" : "Eliminar Pago"}</p>
+                                                  <p>Editar Pago</p>
                                                 </TooltipContent>
                                               </Tooltip>
-                                            </div>
-                                          </TooltipProvider>
-                                        </TableCell>
-                                      </TableRow>
-                                    );
-                                  })}
-                                </TableBody>
-                              </Table>
-                            ) : (
-                              <div className="text-center py-4 text-muted-foreground">
-                                No hay pagos aplicados a este acuerdo
-                              </div>
-                            )}
-
-                            {/* Multas Section */}
-                            <div className="mt-6 pt-4 border-t">
-                              <div className="flex justify-between items-center mb-4">
-                                <h5 className="font-semibold flex items-center gap-2">
-                                  <AlertTriangle className="h-4 w-4 text-warning" />
-                                  Multas
-                                </h5>
-                                {!acuerdo.pago_completado && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleNewMulta(acuerdo.id)}
-                                  >
-                                    <Plus className="h-4 w-4 mr-1" />
-                                    Agregar Multa
-                                  </Button>
-                                )}
-                              </div>
-
-                              {acuerdo.multas && acuerdo.multas.length > 0 ? (
-                                <div className="space-y-2">
-                                  {acuerdo.multas.map((multa) => (
-                                    <div key={multa.id} className="flex items-center justify-between p-3 border border-warning/20 rounded-lg bg-warning/5">
-                                      <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="font-medium text-warning">
-                                            {formatCurrency(multa.montoOriginal || multa.monto)}
-                                          </span>
-                                          {multa.pagosAplicados > 0 && (
-                                            <Popover>
-                                              <PopoverTrigger asChild>
-                                                <Badge 
-                                                  variant="secondary" 
-                                                  className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
+                                            )}
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  variant="destructive"
+                                                  size="icon"
+                                                  className="h-6 w-6"
+                                                  onClick={() => handleDeletePayment({
+                                                    id: aplicacion.id,
+                                                    monto: aplicacion.monto,
+                                                    conceptoNombre: conceptoDisplay
+                                                  })}
+                                                  disabled={deletePaymentMutation.isPending || isStpPayment}
                                                 >
-                                                  Pagado: {formatCurrency(multa.pagosAplicados)}
-                                                </Badge>
-                                              </PopoverTrigger>
-                                              <PopoverContent className="w-80">
-                                                <div className="space-y-3">
-                                                  <h4 className="font-medium text-sm">Detalle de Pagos Aplicados</h4>
-                                                  <div className="space-y-2">
-                                                    {multa.detallesPagos?.map((detalle, index) => (
-                                                      <div key={`${detalle.id}-${index}`} className="flex justify-between items-start p-2 border rounded-sm bg-muted/30">
-                                                        <div className="space-y-1">
-                                                          <div className="text-sm font-medium">
-                                                            {formatCurrency(detalle.monto)}
-                                                          </div>
-                                                          <div className="text-xs text-muted-foreground">
-                                                            {detalle.metodo_pago} | {formatDate(detalle.fecha_pago)}
-                                                          </div>
-                                                          {detalle.clave_rastreo && (
-                                                            <div className="text-xs text-muted-foreground font-mono">
-                                                              Clave: {detalle.clave_rastreo}
-                                                            </div>
-                                                          )}
-                                                        </div>
-                                                      </div>
-                                                    ))}
-                                                  </div>
-                                                  <div className="text-xs text-muted-foreground border-t pt-2">
-                                                    Total aplicado: {formatCurrency(multa.pagosAplicados)}
-                                                  </div>
-                                                </div>
-                                              </PopoverContent>
-                                            </Popover>
-                                          )}
-                                          {multa.estaPagada ? (
-                                            <Badge variant="default" className="text-xs bg-green-500">
-                                              Pagada
-                                            </Badge>
-                                          ) : multa.monto > 0 ? (
-                                            <Badge variant="destructive" className="text-xs">
-                                              Pendiente: {formatCurrency(multa.monto)}
-                                            </Badge>
-                                          ) : null}
-                                          <Badge variant="outline" className="text-xs text-muted-foreground">
-                                            {formatDate(multa.fecha_creacion)}
-                                          </Badge>
-                                        </div>
-                                        <p className="text-sm text-muted-foreground">
-                                          {multa.descripcion}
-                                        </p>
-                                      </div>
-                                      <div className="flex gap-2 ml-4">
-                                        <TooltipProvider>
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <Button
-                                                variant="destructive"
-                                                size="icon"
-                                                onClick={() => setDeleteMultaDialog({ isOpen: true, multa })}
-                                                disabled={deleteMultaMutation.isPending || multa.estaPagada}
-                                              >
-                                                <Trash2 className="h-4 w-4" />
-                                              </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                              <p>{multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
-                                            </TooltipContent>
-                                          </Tooltip>
+                                                  <Trash2 className="h-3 w-3" />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>{isStpPayment ? "No se pueden eliminar pagos STP" : "Eliminar Pago"}</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </div>
                                         </TooltipProvider>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="text-center py-4 text-muted-foreground">
-                                  No hay multas aplicadas a este acuerdo
-                                </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          ) : (
+                            <div className="text-center py-4 text-muted-foreground">
+                              No hay pagos aplicados a este acuerdo
+                            </div>
+                          )}
+
+                          {/* Multas Section */}
+                          <div className="mt-6 pt-4 border-t">
+                            <div className="flex justify-between items-center mb-4">
+                              <h5 className="font-semibold flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-warning" />
+                                Multas
+                              </h5>
+                              {!acuerdo.pago_completado && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleNewMulta(acuerdo.id)}
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  Agregar Multa
+                                </Button>
                               )}
                             </div>
+
+                            {acuerdo.multas && acuerdo.multas.length > 0 ? (
+                              <div className="space-y-2">
+                                {acuerdo.multas.map((multa) => (
+                                  <div key={multa.id} className="flex items-center justify-between p-3 border border-warning/20 rounded-lg bg-warning/5">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-medium text-warning">
+                                          {formatCurrency(multa.montoOriginal || multa.monto)}
+                                        </span>
+                                        {multa.pagosAplicados > 0 && (
+                                          <Popover>
+                                            <PopoverTrigger asChild>
+                                              <Badge 
+                                                variant="secondary" 
+                                                className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
+                                              >
+                                                Pagado: {formatCurrency(multa.pagosAplicados)}
+                                              </Badge>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-80">
+                                              <div className="space-y-3">
+                                                <h4 className="font-medium text-sm">Detalle de Pagos Aplicados</h4>
+                                                <div className="space-y-2">
+                                                  {multa.detallesPagos?.map((detalle, index) => (
+                                                    <div key={`${detalle.id}-${index}`} className="flex justify-between items-start p-2 border rounded-sm bg-muted/30">
+                                                      <div className="space-y-1">
+                                                        <div className="text-sm font-medium">
+                                                          {formatCurrency(detalle.monto)}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                          {detalle.metodo_pago} | {formatDate(detalle.fecha_pago)}
+                                                        </div>
+                                                        {detalle.clave_rastreo && (
+                                                          <div className="text-xs text-muted-foreground font-mono">
+                                                            Clave: {detalle.clave_rastreo}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground border-t pt-2">
+                                                  Total aplicado: {formatCurrency(multa.pagosAplicados)}
+                                                </div>
+                                              </div>
+                                            </PopoverContent>
+                                          </Popover>
+                                        )}
+                                        {multa.estaPagada ? (
+                                          <Badge variant="default" className="text-xs bg-green-500">
+                                            Pagada
+                                          </Badge>
+                                        ) : multa.monto > 0 ? (
+                                          <Badge variant="destructive" className="text-xs">
+                                            Pendiente: {formatCurrency(multa.monto)}
+                                          </Badge>
+                                        ) : null}
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                                          {formatDate(multa.fecha_creacion)}
+                                        </Badge>
+                                      </div>
+                                      <p className="text-sm text-muted-foreground">
+                                        {multa.descripcion}
+                                      </p>
+                                    </div>
+                                    <div className="flex gap-2 ml-4">
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="destructive"
+                                              size="icon"
+                                              onClick={() => setDeleteMultaDialog({ isOpen: true, multa })}
+                                              disabled={deleteMultaMutation.isPending || multa.estaPagada}
+                                            >
+                                              <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>{multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-center py-4 text-muted-foreground">
+                                No hay multas aplicadas a este acuerdo
+                              </div>
+                            )}
                           </div>
-                        </CollapsibleContent>
-                      </div>
-                    </Collapsible>
-                  );
-                })}
-              </div>
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
