@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users } from "lucide-react";
+import { Users, ExternalLink } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface Comprador {
@@ -18,6 +19,12 @@ interface CompradoresDetailDialogProps {
 
 export function CompradoresDetailDialog({ compradores, trigger }: CompradoresDetailDialogProps) {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleNavigateToCompradores = () => {
+    navigate('/admin/compradores');
+    setOpen(false);
+  };
 
   const defaultTrigger = (
     <Button variant="outline" size="sm">
@@ -37,7 +44,18 @@ export function CompradoresDetailDialog({ compradores, trigger }: CompradoresDet
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Detalle de Compradores</DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>Detalle de Compradores</DialogTitle>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleNavigateToCompradores}
+              className="ml-4"
+            >
+              <ExternalLink className="h-4 w-4 mr-1" />
+              Ver Listado Completo
+            </Button>
+          </div>
         </DialogHeader>
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground">

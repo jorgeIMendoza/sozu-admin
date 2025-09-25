@@ -291,15 +291,19 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
   // Search for persons (buyers/leads) - search by name, RFC, CURP, email
   const { data: personasBusqueda } = useQuery({
-    queryKey: ["personas_busqueda", searchTerm],
+    queryKey: ["personas_busqueda", searchTerm, compradoresExistentes?.map(c => c.personas?.id)],
     queryFn: async () => {
       if (!searchTerm || searchTerm.length < 2) return [];
+      
+      // Get existing buyer IDs to exclude them
+      const existingBuyerIds = compradoresExistentes?.map(c => c.personas?.id).filter(Boolean) || [];
       
       const { data } = await supabase
         .from('personas')
         .select('id, nombre_legal, rfc, curp, email, telefono, tipo_persona')
         .or(`nombre_legal.ilike.%${searchTerm}%,rfc.ilike.%${searchTerm}%,curp.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
         .eq('activo', true)
+        .not('id', 'in', existingBuyerIds.length > 0 ? `(${existingBuyerIds.join(',')})` : '(0)')
         .limit(10);
 
       return data || [];
@@ -414,9 +418,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       refetchCompradores();
       onUpdate();
       setSelectedPersona(null);
-      // Reset the PersonForm but keep the modal open
-      setShowPersonForm(false);
-      setTimeout(() => setShowPersonForm(true), 100);
+      // Keep modal open and stay in "comprador" tab
+      setActiveTab('comprador');
     },
     onError: (error) => {
       console.error("Error adding buyer:", error);
@@ -722,20 +725,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                          {compradoresExistentes.map((comprador, index) => (
                            <TableRow key={index} className="hover:bg-muted/30 transition-colors">
                              <TableCell className="font-medium">
-                               <button
-                                 onClick={() => handleNavigateToCompradores(comprador.personas?.rfc)}
-                                 className="text-primary hover:underline cursor-pointer text-left"
-                               >
-                                 {comprador.personas?.nombre_legal}
-                               </button>
+                               {comprador.personas?.nombre_legal}
                              </TableCell>
                              <TableCell className="text-muted-foreground">
-                               <button
-                                 onClick={() => handleNavigateToCompradores(comprador.personas?.rfc)}
-                                 className="text-primary hover:underline cursor-pointer"
-                               >
-                                 {comprador.personas?.rfc || 'N/A'}
-                               </button>
+                               {comprador.personas?.rfc || 'N/A'}
                              </TableCell>
                             <TableCell className="text-muted-foreground">
                               {comprador.personas?.email || 'N/A'}
@@ -1012,9 +1005,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     return;
                   }
                   
-                   // Don't close the modal - just add the buyer and stay open
-                   // This allows the user to continue adding more buyers
+                   // Add the buyer and stay in the comprador tab
                    addCompradorMutation.mutate({ personaId: persona.id });
+                   // Keep modal open and stay in comprador tab
+                   setActiveTab('comprador');
                 }}
                 initialData={{ tipo_persona: 'pf' }}
                 entityType="comprador"
