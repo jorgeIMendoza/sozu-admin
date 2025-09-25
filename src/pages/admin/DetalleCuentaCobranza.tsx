@@ -99,10 +99,12 @@ export default function DetalleCuentaCobranza() {
     isOpen: boolean; 
     acuerdoId: number | null;
     acuerdoMonto: number;
+    existingMultas: Array<{ monto: number }>;
   }>({
     isOpen: false,
     acuerdoId: null,
-    acuerdoMonto: 0
+    acuerdoMonto: 0,
+    existingMultas: []
   });
   const [deleteMultaDialog, setDeleteMultaDialog] = useState<{ 
     isOpen: boolean; 
@@ -567,10 +569,12 @@ export default function DetalleCuentaCobranza() {
   // Multa functions
   const handleNewMulta = (acuerdoId: number) => {
     const acuerdo = acuerdosPago?.find(a => a.id === acuerdoId);
+    const existingMultas = acuerdo?.multas || [];
     setMultaDialog({
       isOpen: true,
       acuerdoId,
-      acuerdoMonto: acuerdo?.monto || 0
+      acuerdoMonto: acuerdo?.monto || 0,
+      existingMultas: existingMultas.map(m => ({ monto: m.monto }))
     });
   };
 
@@ -1037,11 +1041,13 @@ export default function DetalleCuentaCobranza() {
         onOpenChange={(open) => setMultaDialog({ 
           isOpen: open, 
           acuerdoId: open ? multaDialog.acuerdoId : null,
-          acuerdoMonto: open ? multaDialog.acuerdoMonto : 0
+          acuerdoMonto: open ? multaDialog.acuerdoMonto : 0,
+          existingMultas: open ? multaDialog.existingMultas : []
         })}
         acuerdoId={multaDialog.acuerdoId || 0}
         cuentaId={cuentaId}
         acuerdoMonto={multaDialog.acuerdoMonto}
+        existingMultas={multaDialog.existingMultas}
       />
     </div>
   );

@@ -14,9 +14,10 @@ interface NewMultaDialogProps {
   acuerdoId: number;
   cuentaId: number;
   acuerdoMonto: number;
+  existingMultas: Array<{ monto: number }>;
 }
 
-export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId, acuerdoMonto }: NewMultaDialogProps) {
+export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId, acuerdoMonto, existingMultas }: NewMultaDialogProps) {
   const [monto, setMonto] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const { toast } = useToast();
@@ -65,10 +66,14 @@ export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId, acuerd
       return;
     }
 
-    if (montoNumber > acuerdoMonto) {
+    // Calculate sum of existing penalties
+    const sumExistingMultas = existingMultas.reduce((sum, multa) => sum + multa.monto, 0);
+    const totalMultasWithNew = sumExistingMultas + montoNumber;
+
+    if (totalMultasWithNew > acuerdoMonto) {
       toast({
         title: "Error",
-        description: `El monto de la multa no puede ser mayor al monto del pago ($${acuerdoMonto.toLocaleString()})`,
+        description: `La suma total de multas ($${totalMultasWithNew.toLocaleString()}) no puede ser mayor al monto del pago ($${acuerdoMonto.toLocaleString()}). Multas existentes: $${sumExistingMultas.toLocaleString()}`,
         variant: "destructive",
       });
       return;
