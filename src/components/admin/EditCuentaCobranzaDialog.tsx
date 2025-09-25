@@ -355,7 +355,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             // Create new relation in entidades_relacionadas with id_tipo_entidad=2
             const relationData = {
               id_persona: personaId,
-              id_proyecto: projectId,
+              id_proyecto: null, // Set to null for buyers as requested
               id_tipo_entidad: 2,
               id_estatus_persona: 3,
               activo: true
@@ -418,7 +418,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       refetchCompradores();
       // Don't call onUpdate() to prevent modal from closing
       setSelectedPersona(null);
-      // Keep modal open and stay in "comprador" tab
+      // Ensure we stay in "comprador" tab after successful addition
       setActiveTab('comprador');
     },
     onError: (error) => {
@@ -1005,12 +1005,12 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     return;
                   }
                   
-                   // Close the person form
+                   // Close the person form first
                    setShowPersonForm(false);
-                   // Add the buyer and stay in the comprador tab
+                   // Add the buyer and ensure we stay in comprador tab
                    addCompradorMutation.mutate({ personaId: persona.id });
-                   // Keep modal open and stay in comprador tab
-                   setActiveTab('comprador');
+                   // Force tab to comprador with a slight delay to ensure it takes effect
+                   setTimeout(() => setActiveTab('comprador'), 50);
                 }}
                 initialData={{ tipo_persona: 'pf' }}
                 entityType="comprador"
