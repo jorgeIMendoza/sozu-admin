@@ -135,6 +135,56 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   
   const { toast } = useToast();
 
+  const handleCreatePerson = async () => {
+    try {
+      const formData: any = {
+        nombre_legal: nombre.trim(),
+        nombre_comercial: nombreComercial.trim() || null,
+        email: email.trim(),
+        telefono: telefono.trim() || null,
+        clave_pais_telefono: clavePaisTelefono || null,
+        tipo_persona: tipoPersona,
+        curp: curp.trim() || null,
+        rfc: rfc.trim() || null,
+        uso_cfdi: usoCfdi.trim() || null,
+        regimen: regimen ? parseInt(regimen) : null,
+        activo: true,
+      };
+
+      const { data: person, error } = await supabase
+        .from('personas')
+        .insert(formData)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Return the created person to the parent component
+      onSubmit({
+        id: person.id,
+        nombre_legal: person.nombre_legal,
+        nombre: person.nombre_legal, // For backwards compatibility
+        rfc: person.rfc,
+        curp: person.curp,
+        email: person.email,
+        telefono: person.telefono,
+        tipo_persona: person.tipo_persona
+      });
+
+      toast({
+        title: "Éxito",
+        description: "Persona creada exitosamente",
+      });
+    } catch (error) {
+      console.error('Error creating person:', error);
+      toast({
+        title: "Error",
+        description: "Error al crear la persona: " + (error as Error).message,
+        variant: "destructive",
+      });
+    }
+  };
+
   // Copy address functionality
   useEffect(() => {
     if (copiarDireccionFiscal) {
@@ -567,6 +617,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         curp: curp.trim(),
         url_documento_identificacion: documentImageUrl || undefined,
       });
+    } else if (entityType === 'comprador' && restrictToBasicTab) {
+      // For buyer creation in restricted mode, save to database first
+      handleCreatePerson();
     } else {
       // Add entity-specific data (only representativeId, parent components handle entityType)
       const extendedFormData = {
