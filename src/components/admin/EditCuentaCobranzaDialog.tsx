@@ -320,8 +320,51 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const totalPorcentajes = compradoresExistentes?.reduce((sum, c) => sum + (c.porcentaje_copropiedad || 0), 0) || 0;
   const porcentajeDisponible = 100 - totalPorcentajes;
   const isMultipleBuyers = compradoresExistentes && compradoresExistentes.length > 1;
+  const isValidTotal = Math.abs(totalPorcentajes - 100) < 0.01; // Allow for small floating point differences
 
-  // Mutation to add new buyer
+  // Mutation to update buyer percentage
+  const updateBuyerPercentageMutation = useMutation({
+    mutationFn: async ({ buyerId, newPercentage }: { buyerId: number; newPercentage: number }) => {
+      const { error } = await supabase
+        .from('compradores')
+        .update({ porcentaje_copropiedad: newPercentage })
+        .eq('id_cuenta_cobranza', cuenta.id)
+        .eq('id_persona', buyerId)
+        .eq('activo', true);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refetchCompradores();
+    },
+    onError: (error) => {
+      console.error("Error updating buyer percentage:", error);
+      toast.error("Error al actualizar el porcentaje: " + (error as Error).message);
+    }
+  });
+
+  const handlePercentageChange = (buyerId: number, newValue: string) => {
+    const newPercentage = parseFloat(newValue) || 0;
+    if (newPercentage >= 0 && newPercentage <= 100) {
+      updateBuyerPercentageMutation.mutate({ buyerId, newPercentage });
+    }
+  };
+
+  const handleTabChange = (newTab: string) => {
+    if (activeTab === 'compradores' && !isValidTotal) {
+      toast.error("Los porcentajes de copropiedad deben sumar exactamente 100% antes de cambiar de pestaña");
+      return;
+    }
+    setActiveTab(newTab);
+  };
+
+  const handleCloseModal = () => {
+    if (activeTab === 'compradores' && !isValidTotal) {
+      toast.error("Los porcentajes de copropiedad deben sumar exactamente 100% antes de cerrar");
+      return;
+    }
+    onClose();
+  };
   const addCompradorMutation = useMutation({
     mutationFn: async ({ personaId }: { personaId: number }) => {
       console.log('Adding buyer with personaId:', personaId, typeof personaId);
@@ -610,7 +653,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
           <DialogTitle>Editar Cuenta de Cobranza - CC-{String(cuenta.id).padStart(6, '0')}</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="propiedad">Datos de la Propiedad</TabsTrigger>
             <TabsTrigger value="vendedor">Datos del Vendedor</TabsTrigger>
@@ -699,9 +742,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     <CardTitle>Compradores</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
                       Total asignado: {totalPorcentajes.toFixed(2)}%
-                      {Math.abs(totalPorcentajes - 100) > 0.01 && (
-                        <span className={totalPorcentajes > 100 ? "text-destructive ml-2" : "text-warning ml-2"}>
-                          {totalPorcentajes > 100 ? "¡Excede el 100%!" : "¡Debe sumar 100%!"}
+                      {!isValidTotal && (
+                        <span className="text-destructive ml-2 font-medium">
+                          ¡Debe sumar exactamente 100%!
                         </span>
                       )}
                     </p>
@@ -741,17 +784,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                             <TableCell className="text-muted-foreground">
                               {getPersonTypeLabel(comprador.personas?.tipo_persona || '')}
                             </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.01"
-                                value={comprador.porcentaje_copropiedad}
-                                className="w-20 h-8 text-sm"
-                                readOnly
-                              />
-                            </TableCell>
+                             <TableCell>
+                               <Input
+                                 type="number"
+                                 min="0"
+                                 max="100"
+                                 step="0.01"
+                                 value={comprador.porcentaje_copropiedad.toFixed(2)}
+                                 onChange={(e) => handlePercentageChange(comprador.personas?.id || 0, e.target.value)}
+                                 className="w-20 h-8 text-sm"
+                                 disabled={updateBuyerPercentageMutation.isPending}
+                               />
+                             </TableCell>
                             <TableCell className="text-right">
                               <Button 
                                 variant="outline" 
@@ -1032,7 +1076,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         )}
 
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={handleCloseModal}>
             Cerrar
           </Button>
         </div>
