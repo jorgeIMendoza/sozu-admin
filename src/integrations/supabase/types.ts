@@ -43,34 +43,37 @@ export type Database = {
           activo: boolean
           fecha_actualizacion: string
           fecha_creacion: string
-          fecha_pago: string
+          fecha_pago: string | null
           id: number
           id_concepto: number
           id_cuenta_cobranza: number
           monto: number
           orden: number
+          pago_completado: boolean
         }
         Insert: {
           activo?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          fecha_pago: string
+          fecha_pago?: string | null
           id?: number
           id_concepto: number
           id_cuenta_cobranza: number
           monto: number
           orden: number
+          pago_completado?: boolean
         }
         Update: {
           activo?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          fecha_pago?: string
+          fecha_pago?: string | null
           id?: number
           id_concepto?: number
           id_cuenta_cobranza?: number
           monto?: number
           orden?: number
+          pago_completado?: boolean
         }
         Relationships: [
           {
@@ -181,6 +184,7 @@ export type Database = {
       aplicaciones_pago: {
         Row: {
           activo: boolean
+          es_multa: boolean
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
@@ -190,18 +194,20 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          es_multa?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          id?: number
           id_acuerdo_pago: number
           id_pago: number
           monto: number
         }
         Update: {
           activo?: boolean
+          es_multa?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          id?: number
           id_acuerdo_pago?: number
           id_pago?: number
           monto?: number
@@ -764,12 +770,13 @@ export type Database = {
         Row: {
           activo: boolean
           clabe_stp: string | null
+          clabe_stp_mantenimiento: string | null
           clave_rastreo_comision_venta: string | null
           es_aprobado: boolean
           es_comision_venta_efectivo: boolean
           es_pagada_comision_venta: boolean
           fecha_actualizacion: string
-          fecha_compra: string
+          fecha_compra: string | null
           fecha_creacion: string
           id: number
           id_notario: number | null
@@ -782,12 +789,13 @@ export type Database = {
         Insert: {
           activo?: boolean
           clabe_stp?: string | null
+          clabe_stp_mantenimiento?: string | null
           clave_rastreo_comision_venta?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_pagada_comision_venta?: boolean
           fecha_actualizacion?: string
-          fecha_compra?: string
+          fecha_compra?: string | null
           fecha_creacion?: string
           id?: number
           id_notario?: number | null
@@ -800,12 +808,13 @@ export type Database = {
         Update: {
           activo?: boolean
           clabe_stp?: string | null
+          clabe_stp_mantenimiento?: string | null
           clave_rastreo_comision_venta?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_pagada_comision_venta?: boolean
           fecha_actualizacion?: string
-          fecha_compra?: string
+          fecha_compra?: string | null
           fecha_creacion?: string
           id?: number
           id_notario?: number | null
@@ -1758,6 +1767,7 @@ export type Database = {
         Row: {
           activo: boolean
           descripcion: string
+          es_pagada: boolean
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
@@ -1767,18 +1777,20 @@ export type Database = {
         Insert: {
           activo?: boolean
           descripcion: string
+          es_pagada?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          id?: number
           id_acuerdo_pago: number
           monto: number
         }
         Update: {
           activo?: boolean
           descripcion?: string
+          es_pagada?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          id?: number
           id_acuerdo_pago?: number
           monto?: number
         }
@@ -2130,7 +2142,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_pago: string
-          id?: never
+          id?: number
           id_cuenta_cobranza: number
           id_metodos_pago: number
           monto: number
@@ -2143,7 +2155,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_pago?: string
-          id?: never
+          id?: number
           id_cuenta_cobranza?: number
           id_metodos_pago?: number
           monto?: number
@@ -2234,7 +2246,6 @@ export type Database = {
       }
       pagos_stp_raw: {
         Row: {
-          activo: boolean
           claverastreo: string
           concepto_pago: string | null
           cuenta_beneficiario: string
@@ -2265,7 +2276,6 @@ export type Database = {
           ts_liquidacion: string | null
         }
         Insert: {
-          activo?: boolean
           claverastreo: string
           concepto_pago?: string | null
           cuenta_beneficiario: string
@@ -2296,7 +2306,6 @@ export type Database = {
           ts_liquidacion?: string | null
         }
         Update: {
-          activo?: boolean
           claverastreo?: string
           concepto_pago?: string | null
           cuenta_beneficiario?: string
@@ -3358,44 +3367,66 @@ export type Database = {
       }
       tabla_datos_cep: {
         Row: {
-          activo: boolean
           cadena: string
-          clave_rastreo: string
-          fecha_actualizacion: string
+          claverastreo: string
           fecha_creacion: string
           fecha_operacion: string
-          id: number
-          url_cep: string
+          id_tipo_cep: number
         }
         Insert: {
-          activo?: boolean
           cadena: string
-          clave_rastreo: string
-          fecha_actualizacion?: string
+          claverastreo: string
           fecha_creacion?: string
           fecha_operacion: string
-          id?: never
-          url_cep: string
+          id_tipo_cep: number
         }
         Update: {
-          activo?: boolean
           cadena?: string
-          clave_rastreo?: string
-          fecha_actualizacion?: string
+          claverastreo?: string
           fecha_creacion?: string
           fecha_operacion?: string
-          id?: never
-          url_cep?: string
+          id_tipo_cep?: number
         }
         Relationships: [
           {
             foreignKeyName: "fk_cep_pago_raw"
-            columns: ["clave_rastreo"]
+            columns: ["claverastreo"]
             isOneToOne: true
             referencedRelation: "pagos_stp_raw"
             referencedColumns: ["claverastreo"]
           },
+          {
+            foreignKeyName: "tabla_datos_cep_id_tipo_cep_fkey"
+            columns: ["id_tipo_cep"]
+            isOneToOne: false
+            referencedRelation: "tipos_cep"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      tipos_cep: {
+        Row: {
+          activo: boolean | null
+          fecha_actualizacion: string | null
+          fecha_creacion: string | null
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean | null
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
+          id?: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean | null
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
+          id?: number
+          nombre?: string
+        }
+        Relationships: []
       }
       tipos_documento: {
         Row: {
@@ -3824,6 +3855,34 @@ export type Database = {
           transaccion: string
           vista: string
         }[]
+      }
+      insertar_pago_stp: {
+        Args: {
+          p_claverastreo: string
+          p_concepto_pago: string
+          p_cuenta_beneficiario: string
+          p_cuenta_beneficiario2?: string
+          p_cuenta_ordenante: string
+          p_empresa: string
+          p_fecha_operacion: string
+          p_folio_codi?: string
+          p_institucion_beneficiaria: string
+          p_institucion_ordenante: string
+          p_monto: number
+          p_nombre_beneficiario: string
+          p_nombre_beneficiario2?: string
+          p_nombre_ordenante: string
+          p_referencia_numerica: string
+          p_rfc_curp_beneficiario: string
+          p_rfc_curp_ordenante: string
+          p_stp_id: string
+          p_tipo_cuenta_beneficiario: string
+          p_tipo_cuenta_beneficiario2?: string
+          p_tipo_cuenta_ordenante: string
+          p_tipo_pago: string
+          p_ts_liquidacion: string
+        }
+        Returns: Json
       }
     }
     Enums: {
