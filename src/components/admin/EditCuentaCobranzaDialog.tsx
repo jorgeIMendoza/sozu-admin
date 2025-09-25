@@ -414,12 +414,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       }
     },
     onSuccess: () => {
+      console.log('Buyer added successfully, setting tab to comprador');
       toast.success("Comprador agregado exitosamente. Puedes agregar más compradores.");
       refetchCompradores();
       // Don't call onUpdate() to prevent modal from closing
       setSelectedPersona(null);
       // Ensure we stay in "comprador" tab after successful addition
+      console.log('Current activeTab before setting:', activeTab);
       setActiveTab('comprador');
+      console.log('Tab set to comprador');
     },
     onError: (error) => {
       console.error("Error adding buyer:", error);
@@ -514,9 +517,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     }
 
     console.log('handleAddComprador called with selectedPersona:', selectedPersona);
+    console.log('Current activeTab before mutation:', activeTab);
     addCompradorMutation.mutate({ 
       personaId: selectedPersona.id
     });
+    console.log('Mutation triggered from handleAddComprador');
   };
 
   const handleCreateAcuerdo = () => {
@@ -1007,10 +1012,16 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                   
                    // Close the person form first
                    setShowPersonForm(false);
+                   console.log('PersonForm closed, about to add buyer and set tab');
                    // Add the buyer and ensure we stay in comprador tab
                    addCompradorMutation.mutate({ personaId: persona.id });
-                   // Force tab to comprador with a slight delay to ensure it takes effect
-                   setTimeout(() => setActiveTab('comprador'), 50);
+                   console.log('Mutation called, setting tab to comprador');
+                   // Force tab to comprador immediately and with delay
+                   setActiveTab('comprador');
+                   setTimeout(() => {
+                     console.log('Timeout: setting tab to comprador again');
+                     setActiveTab('comprador');
+                   }, 100);
                 }}
                 initialData={{ tipo_persona: 'pf' }}
                 entityType="comprador"
