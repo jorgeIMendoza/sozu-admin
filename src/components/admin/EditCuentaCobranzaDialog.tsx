@@ -1022,7 +1022,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
   // Update payment dates after reordering to maintain chronological order
   const updatePaymentDatesAfterReorder = (reorderedAcuerdos: any[]) => {
-    // Find the first payment with a date
+    // Find the first payment with a date to use as base reference
     let baseDate: Date | null = null;
     let baseDateIndex = -1;
     
@@ -1037,18 +1037,26 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     // If no base date found, no need to update
     if (!baseDate || baseDateIndex === -1) return;
     
-    // Update subsequent payments with incremental months
-    for (let i = baseDateIndex + 1; i < reorderedAcuerdos.length; i++) {
+    console.log(`Base date found at index ${baseDateIndex}:`, baseDate);
+    
+    // Update ALL subsequent payments (whether they have dates or not) to maintain chronological order
+    let monthsFromBase = 0;
+    
+    for (let i = baseDateIndex; i < reorderedAcuerdos.length; i++) {
       const acuerdo = reorderedAcuerdos[i];
       
-      // Only update if it's a Parcialidad or Entrega payment and has a date
-      if ((acuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') || acuerdo.id_concepto === 3) && acuerdo.fecha_pago) {
-        const monthsToAdd = i - baseDateIndex;
+      // Only update Parcialidad or Entrega payments
+      if (acuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') || acuerdo.id_concepto === 3) {
+        // For the base date payment, don't change its date
+        if (i === baseDateIndex) {
+          monthsFromBase++;
+          continue;
+        }
         
         // Get the target day from the base date
         const targetDay = baseDate.getDate();
         const newYear = baseDate.getFullYear();
-        const newMonth = baseDate.getMonth() + monthsToAdd;
+        const newMonth = baseDate.getMonth() + monthsFromBase;
         
         // Calculate the actual year and month
         const actualDate = new Date(newYear, newMonth, 1);
@@ -1064,8 +1072,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         // Create the new date correctly
         const nextDate = new Date(actualYear, actualMonth, finalDay);
         
-        console.log(`Updating reordered payment ${acuerdo.id} with date:`, nextDate);
+        const conceptType = acuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') ? 'Parcialidad' : 'Entrega';
+        console.log(`Updating reordered ${conceptType} ${acuerdo.id} with date:`, nextDate, `(${monthsFromBase} months from base)`);
         updateAcuerdoMutation.mutate({ id: acuerdo.id, fecha_pago: nextDate });
+        
+        monthsFromBase++;
       }
     }
   };
