@@ -76,6 +76,7 @@ interface AcuerdoPago {
   id_concepto: number;
   concepto_nombre?: string;
   pago_completado: boolean;
+  monto_pagado: number;
 }
 
 interface EsquemaPago {
@@ -286,14 +287,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         const concepto = conceptos?.find(c => c.id === acuerdo.id_concepto);
         const acuerdoAplicaciones = aplicaciones?.filter(a => a.id_acuerdo_pago === acuerdo.id) || [];
         
-        // Calculate if payment is completed
+        // Calculate total paid amount and payment status
         const totalAplicado = acuerdoAplicaciones.reduce((sum, app) => sum + app.monto, 0);
         const pagoCompletado = totalAplicado >= acuerdo.monto;
         
         return {
           ...acuerdo,
           concepto_nombre: concepto?.nombre || 'Sin concepto',
-          pago_completado: pagoCompletado
+          pago_completado: pagoCompletado,
+          monto_pagado: totalAplicado
         };
       });
     }
@@ -1020,90 +1022,94 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
                   >
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Concepto</TableHead>
-                          <TableHead>Monto</TableHead>
-                          <TableHead>Porcentaje</TableHead>
-                          <TableHead>Fecha de Pago</TableHead>
-                          <TableHead>Pagado</TableHead>
-                        </TableRow>
-                      </TableHeader>
+                     <Table>
+                       <TableHeader>
+                         <TableRow>
+                           <TableHead>Concepto</TableHead>
+                           <TableHead>Monto</TableHead>
+                           <TableHead>Porcentaje</TableHead>
+                           <TableHead>Fecha de Pago</TableHead>
+                           <TableHead>Estatus</TableHead>
+                           <TableHead>Pagado</TableHead>
+                         </TableRow>
+                       </TableHeader>
                       <TableBody>
                         <SortableContext
                           items={acuerdos.map(a => a.id.toString())}
                           strategy={verticalListSortingStrategy}
                         >
-                          {acuerdos.map((acuerdo, index) => (
-                            <SortableItem 
-                              key={acuerdo.id} 
-                              id={acuerdo.id.toString()}
-                              disabled={acuerdo.pago_completado}
-                            >
-                              <TableCell>{acuerdo.concepto_nombre}</TableCell>
-                              <TableCell>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}</TableCell>
-                              <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
-                              <TableCell>
-                                {!acuerdo.pago_completado && editingAcuerdo === acuerdo.id ? (
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <Button variant="outline" className="h-8 text-xs">
-                                        <CalendarIcon className="mr-2 h-3 w-3" />
-                                        {editingDate ? format(editingDate, 'dd/MM/yyyy', { locale: es }) : 'Seleccionar'}
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                      <Calendar
-                                        mode="single"
-                                        selected={editingDate}
-                                        onSelect={(date) => {
-                                          setEditingDate(date);
-                                          if (date) {
-                                            handleDateUpdate(acuerdo.id, date);
-                                          }
-                                        }}
-                                        disabled={(date) => date < new Date('1900-01-01')}
-                                        initialFocus
-                                      />
-                                    </PopoverContent>
-                                  </Popover>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <span>
-                                      {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
-                                    </span>
-                                    {!acuerdo.pago_completado && (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0"
-                                        onClick={() => {
-                                          setEditingAcuerdo(acuerdo.id);
-                                          setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
-                                        }}
-                                      >
-                                        <Edit className="h-3 w-3" />
-                                      </Button>
-                                    )}
-                                  </div>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center justify-center">
-                                  {acuerdo.pago_completado ? (
-                                    <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-xs font-medium">
-                                      Pagado
-                                    </span>
-                                  ) : (
-                                    <span className="px-2 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-xs font-medium">
-                                      Pendiente
-                                    </span>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </SortableItem>
-                          ))}
+                           {acuerdos.map((acuerdo, index) => (
+                             <SortableItem 
+                               key={acuerdo.id} 
+                               id={acuerdo.id.toString()}
+                               disabled={acuerdo.pago_completado}
+                             >
+                               <TableCell>{acuerdo.concepto_nombre}</TableCell>
+                               <TableCell>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}</TableCell>
+                               <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
+                               <TableCell>
+                                 {!acuerdo.pago_completado && editingAcuerdo === acuerdo.id ? (
+                                   <Popover>
+                                     <PopoverTrigger asChild>
+                                       <Button variant="outline" className="h-8 text-xs">
+                                         <CalendarIcon className="mr-2 h-3 w-3" />
+                                         {editingDate ? format(editingDate, 'dd/MM/yyyy', { locale: es }) : 'Seleccionar'}
+                                       </Button>
+                                     </PopoverTrigger>
+                                     <PopoverContent className="w-auto p-0" align="start">
+                                       <Calendar
+                                         mode="single"
+                                         selected={editingDate}
+                                         onSelect={(date) => {
+                                           setEditingDate(date);
+                                           if (date) {
+                                             handleDateUpdate(acuerdo.id, date);
+                                           }
+                                         }}
+                                         disabled={(date) => date < new Date('1900-01-01')}
+                                         initialFocus
+                                       />
+                                     </PopoverContent>
+                                   </Popover>
+                                 ) : (
+                                   <div className="flex items-center gap-2">
+                                     <span>
+                                       {acuerdo.fecha_pago ? format(new Date(acuerdo.fecha_pago), 'dd/MM/yyyy', { locale: es }) : 'Sin fecha'}
+                                     </span>
+                                     {!acuerdo.pago_completado && (
+                                       <Button
+                                         variant="ghost"
+                                         size="sm"
+                                         className="h-6 w-6 p-0"
+                                         onClick={() => {
+                                           setEditingAcuerdo(acuerdo.id);
+                                           setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago) : undefined);
+                                         }}
+                                       >
+                                         <Edit className="h-3 w-3" />
+                                       </Button>
+                                     )}
+                                   </div>
+                                 )}
+                               </TableCell>
+                               <TableCell>
+                                 <div className="flex items-center justify-center">
+                                   {acuerdo.pago_completado ? (
+                                     <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-xs font-medium">
+                                       Pagado
+                                     </span>
+                                   ) : (
+                                     <span className="px-2 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-xs font-medium">
+                                       Pendiente
+                                     </span>
+                                   )}
+                                 </div>
+                               </TableCell>
+                               <TableCell>
+                                 {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto_pagado || 0)}
+                               </TableCell>
+                             </SortableItem>
+                           ))}
                         </SortableContext>
                       </TableBody>
                     </Table>
