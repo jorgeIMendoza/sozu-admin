@@ -13,9 +13,10 @@ interface NewMultaDialogProps {
   onOpenChange: (open: boolean) => void;
   acuerdoId: number;
   cuentaId: number;
+  acuerdoMonto: number;
 }
 
-export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId }: NewMultaDialogProps) {
+export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId, acuerdoMonto }: NewMultaDialogProps) {
   const [monto, setMonto] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const { toast } = useToast();
@@ -59,6 +60,15 @@ export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId }: NewM
       toast({
         title: "Error",
         description: "El monto debe ser un número válido mayor a 0",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (montoNumber > acuerdoMonto) {
+      toast({
+        title: "Error",
+        description: `El monto de la multa no puede ser mayor al monto del pago ($${acuerdoMonto.toLocaleString()})`,
         variant: "destructive",
       });
       return;
