@@ -1147,43 +1147,44 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         return;
       }
 
-      // Validate fixed payment order constraints
-      const lastIndex = acuerdos.length - 1;
+      // Validate payment order by concept type
+      // Order should be: Apartado (1) → Enganche (2) → Parcialidades (5) → Contra entrega (3)
+      const conceptOrder = [1, 2, 5, 3]; // Apartado, Enganche, Parcialidad, Contra entrega
       
-      // Check if trying to move Apartado (id_concepto = 1) from first position
-      if (activeItem?.id_concepto === 1 && oldIndex === 0) {
-        toast.error("El pago de apartado debe permanecer en la primera posición");
-        return;
-      }
+      // Get concept priorities for validation
+      const activeConceptPriority = conceptOrder.indexOf(activeItem?.id_concepto);
+      const overConceptPriority = conceptOrder.indexOf(overItem?.id_concepto);
       
-      // Check if trying to move something to first position that's not Apartado
-      if (newIndex === 0 && activeItem?.id_concepto !== 1) {
-        toast.error("Solo el pago de apartado puede estar en la primera posición");
-        return;
-      }
-      
-      // Check if trying to move Enganche (id_concepto = 2) from second position
-      if (activeItem?.id_concepto === 2 && oldIndex === 1) {
-        toast.error("El pago de enganche debe permanecer en la segunda posición");
-        return;
-      }
-      
-      // Check if trying to move something to second position that's not Enganche
-      if (newIndex === 1 && activeItem?.id_concepto !== 2) {
-        toast.error("Solo el pago de enganche puede estar en la segunda posición");
-        return;
-      }
-      
-      // Check if trying to move Contra entrega (id_concepto = 3) from last position
-      if (activeItem?.id_concepto === 3 && oldIndex === lastIndex) {
-        toast.error("El pago a contra entrega debe permanecer en la última posición");
-        return;
-      }
-      
-      // Check if trying to move something to last position that's not Contra entrega
-      if (newIndex === lastIndex && activeItem?.id_concepto !== 3) {
-        toast.error("Solo el pago a contra entrega puede estar en la última posición");
-        return;
+      // Check if the move would violate the concept order
+      if (activeConceptPriority !== -1 && overConceptPriority !== -1) {
+        // If moving to a position with a different concept type
+        if (activeItem?.id_concepto !== overItem?.id_concepto) {
+          // Check if the active concept can go before the over concept
+          if (activeConceptPriority > overConceptPriority && newIndex < oldIndex) {
+            // Moving a lower priority concept before a higher priority one
+            const conceptNames = {
+              1: 'Apartado',
+              2: 'Enganche', 
+              5: 'Parcialidad',
+              3: 'Contra entrega'
+            };
+            toast.error(`${conceptNames[activeItem.id_concepto]} no puede ir antes de ${conceptNames[overItem.id_concepto]}`);
+            return;
+          }
+          
+          // Check if the active concept can go after the over concept
+          if (activeConceptPriority < overConceptPriority && newIndex > oldIndex) {
+            // Moving a higher priority concept after a lower priority one
+            const conceptNames = {
+              1: 'Apartado',
+              2: 'Enganche',
+              5: 'Parcialidad', 
+              3: 'Contra entrega'
+            };
+            toast.error(`${conceptNames[activeItem.id_concepto]} no puede ir después de ${conceptNames[overItem.id_concepto]}`);
+            return;
+          }
+        }
       }
 
       const newAcuerdos = arrayMove(acuerdos, oldIndex, newIndex);
