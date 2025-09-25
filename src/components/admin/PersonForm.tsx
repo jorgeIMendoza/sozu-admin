@@ -446,6 +446,19 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       return;
     }
 
+    // Regular RFC validation for all cases when RFC is provided
+    if (rfc.trim()) {
+      const rfcRegex = /^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
+      if (!rfcRegex.test(rfc.trim().toUpperCase())) {
+        toast({
+          title: "Error",
+          description: "El RFC no tiene un formato válido.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     // Validate entity type for legal entities
     if (entityType === 'legal' && !idTipoEntidad) {
       toast({
@@ -829,13 +842,14 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 </div>
 
                 <div>
-                  <Label htmlFor="rfc">RFC {restrictToBasicTab && entityType === 'comprador' ? '*' : ''}</Label>
+                  <Label htmlFor="rfc">RFC *</Label>
                   <Input
                     id="rfc"
                     type="text"
                     value={rfc}
                     onChange={(e) => setRfc(e.target.value.toUpperCase())}
                     placeholder="Ingresa el RFC (Ej: ABC123456DEF)"
+                    required={restrictToBasicTab && entityType === 'comprador'}
                   />
                 </div>
 
