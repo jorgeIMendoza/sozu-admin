@@ -835,7 +835,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const updateAcuerdoMutation = useMutation({
     mutationFn: async ({ id, fecha_pago }: { id: number; fecha_pago: Date | null }) => {
       console.log('Date mutation called with:', { id, fecha_pago });
-      const dateString = fecha_pago?.toISOString().split('T')[0]; // Use date format YYYY-MM-DD
+      // Fix timezone issue by using proper date formatting
+      const dateString = fecha_pago ? 
+        `${fecha_pago.getFullYear()}-${String(fecha_pago.getMonth() + 1).padStart(2, '0')}-${String(fecha_pago.getDate()).padStart(2, '0')}` : 
+        null;
       console.log('Formatted date string:', dateString);
       
       const { data, error } = await supabase
@@ -931,7 +934,24 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
           if (nextAcuerdo.concepto_nombre?.toLowerCase().includes('parcialidad')) {
             const monthsToAdd = i - currentAcuerdoIndex;
             const nextDate = new Date(fecha);
+            
+            // Get the target day from the original date
+            const targetDay = fecha.getDate();
+            
+            // Add the months
             nextDate.setMonth(nextDate.getMonth() + monthsToAdd);
+            
+            // Handle cases where the target day doesn't exist in the new month
+            // (e.g., January 31 -> February 31 doesn't exist)
+            let finalDay = targetDay;
+            const daysInMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
+            
+            if (targetDay > daysInMonth) {
+              // If the target day doesn't exist, use the last day of the month
+              finalDay = daysInMonth;
+            }
+            
+            nextDate.setDate(finalDay);
             
             console.log(`Updating subsequent Parcialidad ${nextAcuerdo.id} with date:`, nextDate);
             updateAcuerdoMutation.mutate({ id: nextAcuerdo.id, fecha_pago: nextDate });
@@ -1444,14 +1464,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 <TableCell>{acuerdo.concepto_nombre}</TableCell>
                                   <TableCell>
                                     {editingAcuerdo === acuerdo.id ? (
-                                       <Input
-                                         type="date"
-                                         value={editingDate ? editingDate.toISOString().split('T')[0] : (acuerdo.fecha_pago || '')}
-                                         onChange={(e) => {
-                                           console.log('Date input changed:', e.target.value);
-                                           const selectedDate = e.target.value ? new Date(e.target.value) : undefined;
-                                           setEditingDate(selectedDate);
-                                         }}
+                                        <Input
+                                          type="date"
+                                          value={editingDate ? editingDate.toISOString().split('T')[0] : (acuerdo.fecha_pago || '')}
+                                          onChange={(e) => {
+                                            console.log('Date input changed:', e.target.value);
+                                            // Fix timezone issue by using local date parsing
+                                            const selectedDate = e.target.value ? new Date(e.target.value + 'T12:00:00') : undefined;
+                                            setEditingDate(selectedDate);
+                                          }}
                                          className="w-40"
                                          onBlur={() => {
                                            console.log('Date input blur, editingDate:', editingDate);
