@@ -327,6 +327,49 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   // Mutation to add new buyer
   const addCompradorMutation = useMutation({
     mutationFn: async ({ personaId, porcentaje }: { personaId: number; porcentaje: number }) => {
+      // Get the project ID from the entidad relacionada dueno
+      if (propiedadDetalle?.id_entidad_relacionada_dueno) {
+        const { data: entidadData } = await supabase
+          .from('entidades_relacionadas')
+          .select('id_proyecto')
+          .eq('id', propiedadDetalle.id_entidad_relacionada_dueno)
+          .single();
+          
+        const projectId = entidadData?.id_proyecto;
+        
+        if (projectId) {
+          // Check if person exists in entidades_relacionadas with id_tipo_entidad=7
+          const { data: existingRelation } = await supabase
+            .from("entidades_relacionadas")
+            .select("id")
+            .eq("id_persona", personaId)
+            .eq("id_tipo_entidad", 7)
+            .eq("activo", true)
+            .maybeSingle();
+
+          if (!existingRelation) {
+            // Create new relation in entidades_relacionadas with id_tipo_entidad=2
+            const relationData = {
+              id_persona: personaId,
+              id_proyecto: projectId,
+              id_tipo_entidad: 2,
+              id_estatus_persona: 3,
+              activo: true
+            };
+
+            const { error: relationError } = await supabase
+              .from("entidades_relacionadas")
+              .insert(relationData);
+
+            if (relationError) {
+              console.error("Error creating entidades_relacionadas:", relationError);
+              // Don't throw error to not interrupt the buyer addition flow
+            }
+          }
+        }
+      }
+
+      // Add the buyer to compradores table
       const { error } = await supabase
         .from('compradores')
         .insert({
