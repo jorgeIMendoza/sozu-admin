@@ -1145,21 +1145,21 @@ export default function DetalleCuentaCobranza() {
                                     </div>
                                      <div className="flex gap-2 ml-4">
                                        <TooltipProvider>
-                                         <Tooltip>
-                                           <TooltipTrigger asChild>
-                                             <Button
-                                               variant="destructive"
-                                               size="icon"
-                                               onClick={() => setDeleteMultaDialog({ isOpen: true, multa })}
-                                               disabled={deleteMultaMutation.isPending}
-                                             >
-                                               <Trash2 className="h-4 w-4" />
-                                             </Button>
-                                           </TooltipTrigger>
-                                           <TooltipContent>
-                                             <p>Eliminar Multa</p>
-                                           </TooltipContent>
-                                         </Tooltip>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant="destructive"
+                                                size="icon"
+                                                onClick={() => setDeleteMultaDialog({ isOpen: true, multa })}
+                                                disabled={deleteMultaMutation.isPending || multa.estaPagada}
+                                              >
+                                                <Trash2 className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>{multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
+                                            </TooltipContent>
+                                          </Tooltip>
                                        </TooltipProvider>
                                      </div>
                                   </div>
