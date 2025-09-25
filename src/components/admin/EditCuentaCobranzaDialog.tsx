@@ -965,8 +965,49 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             updateAcuerdoMutation.mutate({ id: nextAcuerdo.id, fecha_pago: nextDate });
           }
         }
+      } else if (currentAcuerdo?.id_concepto === 3) { // Entrega payments
+        // Update the current agreement date
+        updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
+        
+        // Update subsequent Entrega payments with incremental months
+        for (let i = currentAcuerdoIndex + 1; i < acuerdos.length; i++) {
+          const nextAcuerdo = acuerdos[i];
+          if (nextAcuerdo.id_concepto === 3) { // Also Entrega
+            const monthsToAdd = i - currentAcuerdoIndex;
+            
+            // Get the target day from the original date
+            const targetDay = fecha.getDate();
+            const originalMonth = fecha.getMonth();
+            const originalYear = fecha.getFullYear();
+            
+            // Calculate the new month and year
+            let newMonth = originalMonth + monthsToAdd;
+            let newYear = originalYear;
+            
+            // Handle year rollover
+            while (newMonth > 11) {
+              newMonth -= 12;
+              newYear++;
+            }
+            
+            // Get the maximum days in the target month
+            const daysInTargetMonth = new Date(newYear, newMonth + 1, 0).getDate();
+            
+            // Determine the final day (handle cases like Feb 30 -> Feb 28/29)
+            let finalDay = targetDay;
+            if (targetDay > daysInTargetMonth) {
+              finalDay = daysInTargetMonth;
+            }
+            
+            // Create the new date correctly
+            const nextDate = new Date(newYear, newMonth, finalDay);
+            
+            console.log(`Updating subsequent Entrega ${nextAcuerdo.id} with date:`, nextDate, `(target day: ${targetDay}, final day: ${finalDay}, days in month: ${daysInTargetMonth})`);
+            updateAcuerdoMutation.mutate({ id: nextAcuerdo.id, fecha_pago: nextDate });
+          }
+        }
       } else {
-        // For non-Parcialidad agreements, just update the single date
+        // For other agreement types, just update the single date
         updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
       }
     }
