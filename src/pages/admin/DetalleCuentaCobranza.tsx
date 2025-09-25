@@ -971,7 +971,7 @@ export default function DetalleCuentaCobranza() {
                           </div>
                            <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">
-                              Pago #{acuerdo.orden} - Pagado: {formatCurrency(totalAplicado)} / {formatCurrency(acuerdo.monto)}
+                              Pagado: {formatCurrency(totalAplicado)} de {formatCurrency(acuerdo.monto)}
                             </span>
                             {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           </div>
