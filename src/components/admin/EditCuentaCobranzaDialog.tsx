@@ -1000,30 +1000,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               <CardContent className="pt-6">
                 {/* Purchase and UMA Information Section */}
                 <div className="mb-6 p-4 bg-muted/30 rounded-lg">
-                  {/* UMA Value - Top Row */}
-                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-border/50">
-                    <div>
-                      <h4 className="font-medium text-foreground">Valor de la UMA</h4>
-                      <p className="text-sm text-muted-foreground">Unidad de Medida y Actualización vigente</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-semibold">
-                        {cuentaDetalle?.valor_uma ? 
-                          new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.valor_uma) : 
-                          'No definido'
-                        }
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {cuentaDetalle?.fecha_compra ? 
-                          `Fecha: ${format(new Date(cuentaDetalle.fecha_compra), 'dd/MM/yyyy', { locale: es })}` : 
-                          ''
-                        }
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Purchase Details - Bottom Row */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div>
                       <h4 className="font-medium text-foreground mb-1">Fecha de Compra</h4>
                       <p className="text-sm text-muted-foreground">
@@ -1061,6 +1038,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.precio_final) : 
                           'No definido'
                         }
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-foreground mb-1">Valor de la UMA</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {cuentaDetalle?.valor_uma ? 
+                          new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.valor_uma) : 
+                          'No definido'
+                        }
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Unidad de Medida y Actualización vigente
                       </p>
                     </div>
                   </div>
