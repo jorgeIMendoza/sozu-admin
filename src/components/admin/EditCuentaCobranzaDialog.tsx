@@ -676,14 +676,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   // Mutation to update payment agreement date
   const updateAcuerdoMutation = useMutation({
     mutationFn: async ({ id, fecha_pago }: { id: number; fecha_pago: Date | null }) => {
-      const { error } = await supabase
-        .from('acuerdos_pago')
-        .update({ fecha_pago: fecha_pago?.toISOString().split('T')[0] }) // Use date format YYYY-MM-DD
-        .eq('id', id);
+      console.log('Mutation called with:', { id, fecha_pago });
+      const dateString = fecha_pago?.toISOString().split('T')[0]; // Use date format YYYY-MM-DD
+      console.log('Formatted date string:', dateString);
       
+      const { data, error } = await supabase
+        .from('acuerdos_pago')
+        .update({ fecha_pago: dateString })
+        .eq('id', id)
+        .select();
+      
+      console.log('Update result:', { data, error });
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('Update successful:', data);
       toast.success("Fecha actualizada exitosamente");
       setEditingAcuerdo(null);
       setEditingDate(undefined);
@@ -722,6 +730,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
   const handleDateUpdate = (acuerdoId: number, fecha: Date | undefined) => {
     if (fecha) {
+      console.log('Updating date for acuerdo:', acuerdoId, 'to:', fecha);
       updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
     }
   };
@@ -988,10 +997,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
           <TabsContent value="acuerdo" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Acuerdo de Pago</CardTitle>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {/* UMA Value Section */}
                 <div className="mb-6 p-4 bg-muted/30 rounded-lg">
                   <div className="flex items-center justify-between">
@@ -1014,6 +1020,54 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Purchase Details Section */}
+                <div className="mb-6 p-4 bg-muted/30 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <h4 className="font-medium text-foreground mb-1">Fecha de Compra</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {cuentaDetalle?.fecha_compra ? 
+                          format(new Date(cuentaDetalle.fecha_compra), 'dd/MM/yyyy', { locale: es }) : 
+                          'No definida'
+                        }
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {propiedadDetalle?.precio_lista ? 
+                          new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(propiedadDetalle.precio_lista) : 
+                          'No definido'
+                        }
+                      </p>
+                      {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && (
+                        <p className="text-xs text-muted-foreground">
+                          {(() => {
+                            const difference = ((cuentaDetalle.precio_final - propiedadDetalle.precio_lista) / propiedadDetalle.precio_lista) * 100;
+                            return difference > 0 ? 
+                              `+${difference.toFixed(2)}% interés` : 
+                              `${difference.toFixed(2)}% descuento`;
+                          })()}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-foreground mb-1">Precio Final</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {cuentaDetalle?.precio_final ? 
+                          new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.precio_final) : 
+                          'No definido'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Acuerdo de Pago Title */}
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-foreground">Acuerdo de Pago</h3>
                 </div>
 
                 {acuerdos && acuerdos.length > 0 ? (
