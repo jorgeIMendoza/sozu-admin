@@ -33,6 +33,7 @@ interface AplicacionPago {
   id: number;
   monto: number;
   fecha_creacion: string;
+  es_multa?: boolean;
   pago: {
     id: number;
     fecha_pago: string;
@@ -83,6 +84,9 @@ interface AplicacionToDelete {
 interface Multa {
   id: number;
   monto: number;
+  montoOriginal?: number;
+  pagosAplicados?: number;
+  estaPagada?: boolean;
   descripcion: string;
   fecha_creacion: string;
 }
@@ -424,20 +428,31 @@ export default function DetalleCuentaCobranza() {
         const acuerdoAplicaciones = aplicaciones?.filter(a => a.id_acuerdo_pago === acuerdo.id) || [];
         const acuerdoMultas = multas?.filter(m => m.id_acuerdo_pago === acuerdo.id) || [];
         
-        // Calculate penalty payments and apply them to penalties
+        // Apply penalty payments sequentially - pay penalties one by one
         const pagosPenalidad = acuerdoAplicaciones.filter(a => a.es_multa);
         const totalPagosPenalidad = pagosPenalidad.reduce((sum, app) => sum + app.monto, 0);
         
-        // Adjust penalty amounts by subtracting penalty payments
-        const multasAjustadas = acuerdoMultas.map(m => {
-          let montoAjustado = m.monto;
-          if (totalPagosPenalidad > 0) {
-            // Apply penalty payments proportionally to penalties
-            const proporcion = m.monto / acuerdoMultas.reduce((sum, multa) => sum + multa.monto, 0);
-            const pagoAplicado = Math.min(totalPagosPenalidad * proporcion, m.monto);
-            montoAjustado = Math.max(0, m.monto - pagoAplicado);
+        // Sort penalties by creation date to determine payment order
+        const multasOrdenadas = [...acuerdoMultas].sort((a, b) => 
+          new Date(a.fecha_creacion).getTime() - new Date(b.fecha_creacion).getTime()
+        );
+        
+        // Apply payments sequentially to penalties
+        let pagosRestantes = totalPagosPenalidad;
+        const multasConEstado = multasOrdenadas.map(multa => {
+          let pagosAplicados = 0;
+          
+          if (pagosRestantes > 0) {
+            pagosAplicados = Math.min(pagosRestantes, multa.monto);
+            pagosRestantes -= pagosAplicados;
           }
-          return { ...m, montoAjustado };
+          
+          return {
+            ...multa,
+            pagosAplicados,
+            saldoPendiente: multa.monto - pagosAplicados,
+            estaPagada: pagosAplicados >= multa.monto
+          };
         });
         
         // Use database value for payment completion status
@@ -468,10 +483,12 @@ export default function DetalleCuentaCobranza() {
               }
             };
           }),
-          multas: multasAjustadas.map(m => ({
+          multas: multasConEstado.map(m => ({
             id: m.id,
-            monto: m.montoAjustado,
+            monto: m.saldoPendiente, // Show pending balance
             montoOriginal: m.monto,
+            pagosAplicados: m.pagosAplicados,
+            estaPagada: m.estaPagada,
             descripcion: m.descripcion,
             fecha_creacion: m.fecha_creacion
           }))
@@ -976,8 +993,22 @@ export default function DetalleCuentaCobranza() {
                                     <div className="flex-1">
                                       <div className="flex items-center gap-2 mb-1">
                                         <span className="font-medium text-warning">
-                                          {formatCurrency(multa.monto)}
+                                          {formatCurrency(multa.montoOriginal || multa.monto)}
                                         </span>
+                                        {multa.pagosAplicados && multa.pagosAplicados > 0 && (
+                                          <Badge variant="secondary" className="text-xs">
+                                            Pagado: {formatCurrency(multa.pagosAplicados)}
+                                          </Badge>
+                                        )}
+                                        {multa.estaPagada ? (
+                                          <Badge variant="default" className="text-xs bg-green-500">
+                                            Pagada
+                                          </Badge>
+                                        ) : multa.monto > 0 ? (
+                                          <Badge variant="destructive" className="text-xs">
+                                            Pendiente: {formatCurrency(multa.monto)}
+                                          </Badge>
+                                        ) : null}
                                         <Badge variant="outline" className="text-xs text-muted-foreground">
                                           {formatDate(multa.fecha_creacion)}
                                         </Badge>
