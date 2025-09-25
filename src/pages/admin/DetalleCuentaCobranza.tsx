@@ -7,11 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Edit, Trash2 } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Edit, Trash2, Plus, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { NewMultaDialog } from "@/components/admin/NewMultaDialog";
+import { EditMultaDialog } from "@/components/admin/EditMultaDialog";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,6 +26,7 @@ interface AcuerdoPago {
   pago_completado: boolean;
   concepto: string;
   aplicaciones: AplicacionPago[];
+  multas: Multa[];
 }
 
 interface AplicacionPago {
@@ -77,6 +80,13 @@ interface AplicacionToDelete {
   conceptoNombre: string;
 }
 
+interface Multa {
+  id: number;
+  monto: number;
+  descripcion: string;
+  fecha_creacion: string;
+}
+
 export default function DetalleCuentaCobranza() {
   const { id } = useParams<{ id: string }>();
   const cuentaId = parseInt(id || '0');
@@ -84,6 +94,24 @@ export default function DetalleCuentaCobranza() {
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; aplicacion: AplicacionToDelete | null }>({
     isOpen: false,
     aplicacion: null
+  });
+  const [multaDialog, setMultaDialog] = useState<{ 
+    isOpen: boolean; 
+    type: 'new' | 'edit'; 
+    acuerdoId: number | null; 
+    multa: Multa | null 
+  }>({
+    isOpen: false,
+    type: 'new',
+    acuerdoId: null,
+    multa: null
+  });
+  const [deleteMultaDialog, setDeleteMultaDialog] = useState<{ 
+    isOpen: boolean; 
+    multa: Multa | null 
+  }>({
+    isOpen: false,
+    multa: null
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -338,19 +366,35 @@ export default function DetalleCuentaCobranza() {
         .select('id, nombre')
         .in('id', conceptoIds);
 
-      // Get aplicaciones de pago for each acuerdo
+      // Get aplicaciones de pago and multas for each acuerdo
       const acuerdoIds = acuerdos.map(a => a.id);
-      const { data: aplicaciones } = await supabase
-        .from('aplicaciones_pago')
-        .select(`
-          id,
-          monto,
-          fecha_creacion,
-          id_acuerdo_pago,
-          id_pago
-        `)
-        .in('id_acuerdo_pago', acuerdoIds)
-        .eq('activo', true);
+      const [aplicacionesResult, multasResult] = await Promise.all([
+        supabase
+          .from('aplicaciones_pago')
+          .select(`
+            id,
+            monto,
+            fecha_creacion,
+            id_acuerdo_pago,
+            id_pago
+          `)
+          .in('id_acuerdo_pago', acuerdoIds)
+          .eq('activo', true),
+        supabase
+          .from('multas')
+          .select(`
+            id,
+            monto,
+            descripcion,
+            fecha_creacion,
+            id_acuerdo_pago
+          `)
+          .in('id_acuerdo_pago', acuerdoIds)
+          .eq('activo', true)
+      ]);
+
+      const aplicaciones = aplicacionesResult.data;
+      const multas = multasResult.data;
 
       // Get pagos information
       const pagoIds = aplicaciones?.map(a => a.id_pago).filter(Boolean) || [];
@@ -376,6 +420,7 @@ export default function DetalleCuentaCobranza() {
       const acuerdosConAplicaciones: AcuerdoPago[] = acuerdos.map(acuerdo => {
         const concepto = conceptos?.find(c => c.id === acuerdo.id_concepto);
         const acuerdoAplicaciones = aplicaciones?.filter(a => a.id_acuerdo_pago === acuerdo.id) || [];
+        const acuerdoMultas = multas?.filter(m => m.id_acuerdo_pago === acuerdo.id) || [];
         
         // Calculate if payment is completed
         const totalAplicado = acuerdoAplicaciones.reduce((sum, app) => sum + app.monto, 0);
@@ -404,7 +449,13 @@ export default function DetalleCuentaCobranza() {
                 clave_rastreo: pago?.clave_rastreo
               }
             };
-          })
+          }),
+          multas: acuerdoMultas.map(m => ({
+            id: m.id,
+            monto: m.monto,
+            descripcion: m.descripcion,
+            fecha_creacion: m.fecha_creacion
+          }))
         };
       });
 
@@ -480,6 +531,65 @@ export default function DetalleCuentaCobranza() {
       title: "Función pendiente",
       description: "La edición de pagos será implementada próximamente",
     });
+  };
+
+  // Multa functions
+  const handleNewMulta = (acuerdoId: number) => {
+    setMultaDialog({
+      isOpen: true,
+      type: 'new',
+      acuerdoId,
+      multa: null
+    });
+  };
+
+  const handleEditMulta = (multa: Multa) => {
+    setMultaDialog({
+      isOpen: true,
+      type: 'edit',
+      acuerdoId: null,
+      multa
+    });
+  };
+
+  const handleDeleteMulta = (multa: Multa) => {
+    setDeleteMultaDialog({
+      isOpen: true,
+      multa
+    });
+  };
+
+  // Mutation to delete multa
+  const deleteMultaMutation = useMutation({
+    mutationFn: async (multaId: number) => {
+      const { error } = await supabase
+        .from('multas')
+        .update({ activo: false })
+        .eq('id', multaId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Multa eliminada",
+        description: "La multa ha sido eliminada exitosamente",
+      });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar la multa",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const confirmDeleteMulta = () => {
+    if (deleteMultaDialog.multa) {
+      deleteMultaMutation.mutate(deleteMultaDialog.multa.id);
+    }
+    setDeleteMultaDialog({ isOpen: false, multa: null });
   };
 
   if (cuentaLoading || acuerdosLoading) {
@@ -794,6 +904,83 @@ export default function DetalleCuentaCobranza() {
                               No hay pagos aplicados a este acuerdo
                             </div>
                           )}
+
+                          {/* Multas Section */}
+                          <div className="mt-6 pt-4 border-t">
+                            <div className="flex justify-between items-center mb-4">
+                              <h5 className="font-semibold flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-warning" />
+                                Multas
+                              </h5>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleNewMulta(acuerdo.id)}
+                              >
+                                <Plus className="h-4 w-4 mr-1" />
+                                Agregar Multa
+                              </Button>
+                            </div>
+
+                            {acuerdo.multas && acuerdo.multas.length > 0 ? (
+                              <div className="space-y-2">
+                                {acuerdo.multas.map((multa) => (
+                                  <div key={multa.id} className="flex items-center justify-between p-3 border border-warning/20 rounded-lg bg-warning/5">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-medium text-warning">
+                                          {formatCurrency(multa.monto)}
+                                        </span>
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                                          {formatDate(multa.fecha_creacion)}
+                                        </Badge>
+                                      </div>
+                                      <p className="text-sm text-muted-foreground">
+                                        {multa.descripcion}
+                                      </p>
+                                    </div>
+                                    <div className="flex gap-2 ml-4">
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="outline"
+                                              size="icon"
+                                              onClick={() => handleEditMulta(multa)}
+                                            >
+                                              <Edit className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Editar Multa</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="destructive"
+                                              size="icon"
+                                              onClick={() => handleDeleteMulta(multa)}
+                                              disabled={deleteMultaMutation.isPending}
+                                            >
+                                              <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Eliminar Multa</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-center py-4 text-muted-foreground">
+                                No hay multas aplicadas a este acuerdo
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </CollapsibleContent>
                     </div>
@@ -820,6 +1007,33 @@ export default function DetalleCuentaCobranza() {
             : ""
         }
         isLoading={deletePaymentMutation.isPending}
+      />
+
+      <DeleteConfirmationDialog
+        open={deleteMultaDialog.isOpen}
+        onOpenChange={(open) => setDeleteMultaDialog({ isOpen: open, multa: open ? deleteMultaDialog.multa : null })}
+        onConfirm={confirmDeleteMulta}
+        title="Eliminar Multa"
+        description={
+          deleteMultaDialog.multa
+            ? `¿Está seguro de que desea eliminar la multa de ${formatCurrency(deleteMultaDialog.multa.monto)}? Esta acción no se puede deshacer.`
+            : ""
+        }
+        isLoading={deleteMultaMutation.isPending}
+      />
+
+      <NewMultaDialog
+        open={multaDialog.isOpen && multaDialog.type === 'new'}
+        onOpenChange={(open) => setMultaDialog(prev => ({ ...prev, isOpen: open }))}
+        acuerdoId={multaDialog.acuerdoId || 0}
+        cuentaId={cuentaId}
+      />
+
+      <EditMultaDialog
+        open={multaDialog.isOpen && multaDialog.type === 'edit'}
+        onOpenChange={(open) => setMultaDialog(prev => ({ ...prev, isOpen: open }))}
+        multa={multaDialog.multa}
+        cuentaId={cuentaId}
       />
     </div>
   );
