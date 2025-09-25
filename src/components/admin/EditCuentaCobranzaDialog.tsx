@@ -309,6 +309,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   // Mutation to add new buyer
   const addCompradorMutation = useMutation({
     mutationFn: async ({ personaId }: { personaId: number }) => {
+      console.log('Adding buyer with personaId:', personaId, typeof personaId);
+      
+      // Validate personaId
+      if (!personaId || typeof personaId !== 'number' || isNaN(personaId)) {
+        throw new Error('ID de persona inválido');
+      }
+
       // Get the project ID from the entidad relacionada dueno
       if (propiedadDetalle?.id_entidad_relacionada_dueno) {
         const { data: entidadData } = await supabase
@@ -339,13 +346,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               activo: true
             };
 
+            console.log('Creating entidades_relacionadas with data:', relationData);
             const { error: relationError } = await supabase
               .from("entidades_relacionadas")
               .insert(relationData);
 
             if (relationError) {
               console.error("Error creating entidades_relacionadas:", relationError);
-              // Don't throw error to not interrupt the buyer addition flow
+              throw relationError;
             }
           }
         }
@@ -357,16 +365,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       const newPercentage = 100 / newBuyersCount;
 
       // First, add the new buyer
+      const compradorData = {
+        id_cuenta_cobranza: cuenta.id,
+        id_persona: personaId,
+        porcentaje_copropiedad: newPercentage,
+        activo: true
+      };
+      
+      console.log('Creating comprador with data:', compradorData);
       const { error: insertError } = await supabase
         .from('compradores')
-        .insert({
-          id_cuenta_cobranza: cuenta.id,
-          id_persona: personaId,
-          porcentaje_copropiedad: newPercentage,
-          activo: true
-        });
+        .insert(compradorData);
       
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("Error creating comprador:", insertError);
+        throw insertError;
+      }
 
       // Then update all existing buyers with the new percentage
       if (compradoresExistentes && compradoresExistentes.length > 0) {
@@ -388,6 +402,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       toast.success("Comprador agregado exitosamente");
       refetchCompradores();
       onUpdate();
+      setSelectedPersona(null);
+    },
+    onError: (error) => {
+      console.error("Error adding buyer:", error);
+      toast.error("Error al agregar comprador: " + (error as Error).message);
     }
   });
 
@@ -467,14 +486,20 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   });
 
   const handleAddComprador = () => {
-    if (!selectedPersona) return;
+    if (!selectedPersona) {
+      toast.error("No se ha seleccionado ninguna persona");
+      return;
+    }
 
+    if (!selectedPersona.id || typeof selectedPersona.id !== 'number') {
+      toast.error("ID de persona inválido");
+      return;
+    }
+
+    console.log('handleAddComprador called with selectedPersona:', selectedPersona);
     addCompradorMutation.mutate({ 
       personaId: selectedPersona.id
     });
-    
-    setSelectedPersona(null);
-    setPorcentaje("");
   };
 
   const handleCreateAcuerdo = () => {
@@ -956,6 +981,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               <PersonForm
                 onCancel={() => setShowPersonForm(false)}
                 onSubmit={(persona) => {
+                  console.log('PersonForm onSubmit called with persona:', persona);
+                  
+                  if (!persona.id || typeof persona.id !== 'number') {
+                    toast.error("Error: No se pudo obtener el ID de la persona creada");
+                    return;
+                  }
+                  
                   setSelectedPersona({
                     id: persona.id,
                     nombre_legal: persona.nombre_legal || persona.nombre,
@@ -966,6 +998,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     tipo_persona: persona.tipo_persona
                   });
                   setShowPersonForm(false);
+                  
+                  // Automatically add the buyer after creating the person
+                  setTimeout(() => {
+                    if (persona.id && typeof persona.id === 'number') {
+                      addCompradorMutation.mutate({ personaId: persona.id });
+                    }
+                  }, 100);
                 }}
                 initialData={{ tipo_persona: 'pf' }}
                 entityType="comprador"
