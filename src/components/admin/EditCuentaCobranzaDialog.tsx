@@ -134,6 +134,7 @@ interface EditCuentaCobranzaDialogProps {
 
 export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuentaCobranzaDialogProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('propiedad');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
@@ -677,13 +678,21 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     mutationFn: async ({ id, fecha_pago }: { id: number; fecha_pago: Date | null }) => {
       const { error } = await supabase
         .from('acuerdos_pago')
-        .update({ fecha_pago: fecha_pago?.toISOString() })
+        .update({ fecha_pago: fecha_pago?.toISOString().split('T')[0] }) // Use date format YYYY-MM-DD
         .eq('id', id);
       
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Fecha actualizada exitosamente");
+      setEditingAcuerdo(null);
+      setEditingDate(undefined);
+      // Invalidate and refetch the acuerdos_pago query
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+    },
+    onError: (error) => {
+      console.error("Error updating date:", error);
+      toast.error("Error al actualizar la fecha: " + (error as Error).message);
       setEditingAcuerdo(null);
       setEditingDate(undefined);
     }
@@ -714,24 +723,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const handleDateUpdate = (acuerdoId: number, fecha: Date | undefined) => {
     if (fecha) {
       updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
-      
-      // Close the editing state immediately
-      setEditingAcuerdo(null);
-      setEditingDate(undefined);
-      
-      // After updating the date, reorder by fecha_pago
-      setTimeout(() => {
-        const updatedAcuerdos = [...acuerdos].sort((a, b) => {
-          const dateA = a.id === acuerdoId && fecha ? fecha : (a.fecha_pago ? new Date(a.fecha_pago) : new Date('9999-12-31'));
-          const dateB = b.fecha_pago ? new Date(b.fecha_pago) : new Date('9999-12-31');
-          return dateA.getTime() - dateB.getTime();
-        });
-        
-        setAcuerdos(updatedAcuerdos);
-        updateOrderMutation.mutate(updatedAcuerdos);
-      }, 500);
-      
-      toast.success("Fecha actualizada correctamente");
     }
   };
 
