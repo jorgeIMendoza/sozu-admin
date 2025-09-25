@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -128,6 +129,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [editingAcuerdo, setEditingAcuerdo] = useState<number | null>(null);
   const [editingDate, setEditingDate] = useState<Date | undefined>(undefined);
   const [showPersonForm, setShowPersonForm] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [buyerToDelete, setBuyerToDelete] = useState<{ id: number; name: string } | null>(null);
 
   const handleNavigateToCompradores = (rfc?: string) => {
     if (rfc) {
@@ -346,17 +349,43 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   // Mutation to delete buyer
   const deleteBuyerMutation = useMutation({
     mutationFn: async (personaId: number) => {
-      const { error } = await supabase
+      // First delete the buyer
+      const { error: deleteError } = await supabase
         .from('compradores')
         .delete()
         .eq('id_cuenta_cobranza', cuenta.id)
         .eq('id_persona', personaId);
       
-      if (error) throw error;
+      if (deleteError) throw deleteError;
+
+      // Get remaining buyers after deletion
+      const { data: remainingBuyers, error: fetchError } = await supabase
+        .from('compradores')
+        .select('id_persona')
+        .eq('id_cuenta_cobranza', cuenta.id)
+        .eq('activo', true);
+
+      if (fetchError) throw fetchError;
+
+      // If there are remaining buyers, redistribute percentages equally
+      if (remainingBuyers && remainingBuyers.length > 0) {
+        const newPercentage = 100 / remainingBuyers.length;
+        
+        // Update all remaining buyers with equal percentage
+        const { error: updateError } = await supabase
+          .from('compradores')
+          .update({ porcentaje_copropiedad: newPercentage })
+          .eq('id_cuenta_cobranza', cuenta.id)
+          .eq('activo', true);
+
+        if (updateError) throw updateError;
+      }
     },
     onSuccess: () => {
-      toast.success("Comprador eliminado exitosamente");
+      toast.success("Comprador eliminado y porcentajes redistribuidos exitosamente");
       refetchCompradores();
+      setDeleteDialogOpen(false);
+      setBuyerToDelete(null);
     },
     onError: (error) => {
       console.error("Error deleting buyer:", error);
@@ -365,8 +394,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   });
 
   const handleDeleteBuyer = (personaId: number, nombreComprador: string) => {
-    if (confirm(`¿Estás seguro de que deseas eliminar a "${nombreComprador}" de la lista de compradores?`)) {
-      deleteBuyerMutation.mutate(personaId);
+    setBuyerToDelete({ id: personaId, name: nombreComprador });
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteBuyer = () => {
+    if (buyerToDelete) {
+      deleteBuyerMutation.mutate(buyerToDelete.id);
     }
   };
 
@@ -1103,6 +1137,30 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             </div>
           </div>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar eliminación</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Estás seguro de que deseas eliminar a <strong>"{buyerToDelete?.name}"</strong> de la lista de compradores?
+                <br /><br />
+                Los porcentajes de copropiedad se redistribuirán automáticamente entre los compradores restantes.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={confirmDeleteBuyer}
+                disabled={deleteBuyerMutation.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleteBuyerMutation.isPending ? "Eliminando..." : "Eliminar"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="flex justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={handleCloseModal}>
