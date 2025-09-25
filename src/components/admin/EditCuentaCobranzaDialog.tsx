@@ -1005,6 +1005,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     return;
                   }
                   
+                   // Close the person form
+                   setShowPersonForm(false);
                    // Add the buyer and stay in the comprador tab
                    addCompradorMutation.mutate({ personaId: persona.id });
                    // Keep modal open and stay in comprador tab

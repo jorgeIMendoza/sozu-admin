@@ -21,8 +21,12 @@ export function CompradoresDetailDialog({ compradores, trigger }: CompradoresDet
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
-  const handleNavigateToCompradores = () => {
-    navigate('/admin/compradores');
+  const handleNavigateToCompradores = (rfc?: string) => {
+    if (rfc) {
+      navigate(`/admin/compradores?rfc=${encodeURIComponent(rfc)}`);
+    } else {
+      navigate('/admin/compradores');
+    }
     setOpen(false);
   };
 
@@ -44,18 +48,7 @@ export function CompradoresDetailDialog({ compradores, trigger }: CompradoresDet
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle>Detalle de Compradores</DialogTitle>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleNavigateToCompradores}
-              className="ml-4"
-            >
-              <ExternalLink className="h-4 w-4 mr-1" />
-              Ver Listado Completo
-            </Button>
-          </div>
+          <DialogTitle>Detalle de Compradores</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground">
@@ -72,11 +65,19 @@ export function CompradoresDetailDialog({ compradores, trigger }: CompradoresDet
             </TableHeader>
             <TableBody>
               {compradores.map((comprador, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">{comprador.nombre_legal}</TableCell>
-                  <TableCell>
+                <TableRow key={index} className="hover:bg-muted/50 cursor-pointer transition-colors">
+                  <TableCell 
+                    className="font-medium hover:text-primary cursor-pointer"
+                    onClick={() => handleNavigateToCompradores(comprador.rfc || undefined)}
+                  >
+                    {comprador.nombre_legal}
+                  </TableCell>
+                  <TableCell 
+                    className="cursor-pointer"
+                    onClick={() => handleNavigateToCompradores(comprador.rfc || undefined)}
+                  >
                     {comprador.rfc ? (
-                      <Badge variant="outline">{comprador.rfc}</Badge>
+                      <Badge variant="outline" className="hover:bg-primary/10">{comprador.rfc}</Badge>
                     ) : (
                       <span className="text-muted-foreground">Sin RFC</span>
                     )}

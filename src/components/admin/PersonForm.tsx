@@ -772,6 +772,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       onChange={(e) => setRfc(e.target.value.toUpperCase())}
                       placeholder="Ingresa el RFC (Ej: ABC123456DEF)"
                       required={restrictToBasicTab && entityType === 'comprador'}
+                      maxLength={13}
                     />
                   </div>
 
@@ -784,6 +785,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         value={curp}
                         onChange={(e) => setCurp(e.target.value.toUpperCase())}
                         placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFD01)"
+                        maxLength={18}
                       />
                     </div>
                   )}
@@ -928,6 +930,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     onChange={(e) => setRfc(e.target.value.toUpperCase())}
                     placeholder="Ingresa el RFC (Ej: ABC123456DEF)"
                     required={restrictToBasicTab && entityType === 'comprador'}
+                    maxLength={13}
                   />
                 </div>
 
@@ -940,6 +943,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       value={curp}
                       onChange={(e) => setCurp(e.target.value.toUpperCase())}
                       placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFD01)"
+                      maxLength={18}
                     />
                   </div>
                 )}
