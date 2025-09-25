@@ -517,18 +517,6 @@ class HTMLToPDFService {
 
     const selectedSchemeId = offerData?.id_esquema_pago_seleccionado;
 
-    if (!selectedSchemeId) {
-      console.log('No payment scheme selected for this offer');
-      return [];
-    }
-
-    // Get the selected scheme to check if it's manual
-    const { data: selectedScheme } = await supabase
-      .from('esquemas_pago')
-      .select('es_manual')
-      .eq('id', selectedSchemeId)
-      .single();
-
     // Get the project ID from the property
     const { data: propertyData } = await supabase
       .from('propiedades')
@@ -567,24 +555,49 @@ class HTMLToPDFService {
 
     let schemes: any[] = [];
 
-    if (selectedScheme?.es_manual) {
-      // If manual: show only the selected manual scheme
-      const { data: manualScheme, error } = await supabase
+    if (selectedSchemeId) {
+      // Get the selected scheme to check if it's manual
+      const { data: selectedScheme } = await supabase
         .from('esquemas_pago')
-        .select('*')
+        .select('es_manual')
         .eq('id', selectedSchemeId)
-        .eq('activo', true)
         .single();
 
-      if (error) {
-        console.error('Error fetching manual payment scheme:', error);
-        return [];
-      }
+      if (selectedScheme?.es_manual) {
+        // If manual: show only the selected manual scheme
+        const { data: manualScheme, error } = await supabase
+          .from('esquemas_pago')
+          .select('*')
+          .eq('id', selectedSchemeId)
+          .eq('activo', true)
+          .single();
 
-      schemes = manualScheme ? [manualScheme] : [];
+        if (error) {
+          console.error('Error fetching manual payment scheme:', error);
+          return [];
+        }
+
+        schemes = manualScheme ? [manualScheme] : [];
+      } else {
+        // If not manual: show all non-manual schemes from the project
+        const { data: nonManualSchemes, error } = await supabase
+          .from('esquemas_pago')
+          .select('*')
+          .eq('id_proyecto', projectId)
+          .eq('es_manual', false)
+          .eq('activo', true)
+          .order('id');
+
+        if (error) {
+          console.error('Error fetching non-manual payment schemes:', error);
+          return [];
+        }
+
+        schemes = nonManualSchemes || [];
+      }
     } else {
-      // If not manual: show all non-manual schemes from the project
-      const { data: nonManualSchemes, error } = await supabase
+      // If no scheme is selected, show all non-manual schemes from the project
+      const { data: allSchemes, error } = await supabase
         .from('esquemas_pago')
         .select('*')
         .eq('id_proyecto', projectId)
@@ -593,11 +606,11 @@ class HTMLToPDFService {
         .order('id');
 
       if (error) {
-        console.error('Error fetching non-manual payment schemes:', error);
+        console.error('Error fetching all payment schemes:', error);
         return [];
       }
 
-      schemes = nonManualSchemes || [];
+      schemes = allSchemes || [];
     }
 
     // Mark the selected scheme

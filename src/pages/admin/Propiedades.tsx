@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,7 @@ const Propiedades = () => {
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState<number[]>([]);
   const [availableSchemes, setAvailableSchemes] = useState<any[]>([]);
+  const [downloadingOfferId, setDownloadingOfferId] = useState<number | null>(null);
   
   // Estados para modales de detalle
   const [estacionamientosDialogOpen, setEstacionamientosDialogOpen] = useState(false);
@@ -130,6 +131,8 @@ const Propiedades = () => {
   // Función para descargar PDF de oferta
   const handleDownloadOffer = async (offer: any) => {
     try {
+      setDownloadingOfferId(offer.id);
+      
       toast({
         title: "Generando PDF",
         description: "Preparando la descarga del PDF de la oferta...",
@@ -163,6 +166,8 @@ const Propiedades = () => {
         description: "Hubo un problema al generar el PDF. Intente nuevamente.",
         variant: "destructive",
       });
+    } finally {
+      setDownloadingOfferId(null);
     }
   };
 
@@ -1553,17 +1558,20 @@ const Propiedades = () => {
                                </div>
                              )}
                           </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDownloadOffer(offer)}
-                              className="flex items-center gap-2"
-                            >
-                              <Download className="h-4 w-4" />
-                              PDF
-                            </Button>
-                          </TableCell>
+                           <TableCell>
+                             <Button
+                               variant="outline"
+                               size="icon"
+                               onClick={() => handleDownloadOffer(offer)}
+                               disabled={downloadingOfferId === offer.id}
+                             >
+                               {downloadingOfferId === offer.id ? (
+                                 <Loader2 className="h-4 w-4 animate-spin" />
+                               ) : (
+                                 <Download className="h-4 w-4" />
+                               )}
+                             </Button>
+                           </TableCell>
                         </TableRow>
                       );
                     });
