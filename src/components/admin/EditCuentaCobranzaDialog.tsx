@@ -896,7 +896,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       const oldIndex = acuerdos.findIndex(item => item.id.toString() === active.id);
       const newIndex = acuerdos.findIndex(item => item.id.toString() === over?.id);
 
-      // Don't allow moving completed payments or payments with partial payments
+      // Don't allow moving completed payments
       const activeItem = acuerdos[oldIndex];
       const overItem = acuerdos[newIndex];
       
@@ -1334,11 +1334,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           strategy={verticalListSortingStrategy}
                         >
                            {acuerdos.map((acuerdo, index) => (
-                              <SortableItem 
-                                key={acuerdo.id} 
-                                id={acuerdo.id.toString()}
-                                disabled={acuerdo.pago_completado || acuerdo.monto_pagado > 0}
-                              >
+                               <SortableItem 
+                                 key={acuerdo.id} 
+                                 id={acuerdo.id.toString()}
+                                 disabled={acuerdo.pago_completado}
+                               >
                                 <TableCell>{acuerdo.concepto_nombre}</TableCell>
                                   <TableCell>
                                     {!acuerdo.pago_completado && editingAcuerdo === acuerdo.id ? (
