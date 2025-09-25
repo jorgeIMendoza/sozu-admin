@@ -529,6 +529,21 @@ export default function DetalleCuentaCobranza() {
   });
 
   const handleDeletePayment = (aplicacion: AplicacionToDelete) => {
+    // Check if payment method is STP
+    const acuerdo = acuerdosPago?.find(a => 
+      a.aplicaciones.some(app => app.id === aplicacion.id)
+    );
+    const aplicacionData = acuerdo?.aplicaciones.find(app => app.id === aplicacion.id);
+    
+    if (aplicacionData?.pago.metodo_pago === 'STP') {
+      toast({
+        title: "No se puede eliminar",
+        description: "No se pueden eliminar pagos realizados por STP",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setDeleteDialog({ isOpen: true, aplicacion });
   };
 
@@ -875,25 +890,25 @@ export default function DetalleCuentaCobranza() {
                                                 </TooltipContent>
                                               </Tooltip>
                                             )}
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  variant="destructive"
-                                                  size="icon"
-                                                  onClick={() => handleDeletePayment({
-                                                    id: aplicacion.id,
-                                                    monto: aplicacion.monto,
-                                                    conceptoNombre: conceptoDisplay
-                                                  })}
-                                                  disabled={deletePaymentMutation.isPending}
-                                                >
-                                                  <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>Eliminar Pago</p>
-                                              </TooltipContent>
-                                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  onClick={() => handleDeletePayment({
+                                    id: aplicacion.id,
+                                    monto: aplicacion.monto,
+                                    conceptoNombre: conceptoDisplay
+                                  })}
+                                  disabled={deletePaymentMutation.isPending || isStpPayment}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{isStpPayment ? "No se pueden eliminar pagos STP" : "Eliminar Pago"}</p>
+                              </TooltipContent>
+                            </Tooltip>
                                           </div>
                                         </TooltipProvider>
                                       </TableCell>
