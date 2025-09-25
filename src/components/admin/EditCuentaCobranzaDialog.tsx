@@ -90,24 +90,36 @@ interface EsquemaPago {
 interface SortableItemProps {
   id: string;
   children: React.ReactNode;
+  disabled?: boolean;
 }
 
-function SortableItem({ id, children }: SortableItemProps) {
+function SortableItem({ id, children, disabled = false }: SortableItemProps) {
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
     transition,
-  } = useSortable({ id });
+  } = useSortable({ 
+    id,
+    disabled 
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    opacity: disabled ? 0.6 : 1,
+    cursor: disabled ? 'not-allowed' : 'grab',
   };
 
   return (
-    <TableRow ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <TableRow 
+      ref={setNodeRef} 
+      style={style} 
+      {...attributes} 
+      {...(disabled ? {} : listeners)}
+      className={disabled ? 'pointer-events-none' : ''}
+    >
       {children}
     </TableRow>
   );
@@ -719,7 +731,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       const oldIndex = acuerdos.findIndex(item => item.id.toString() === active.id);
       const newIndex = acuerdos.findIndex(item => item.id.toString() === over?.id);
 
-      // Don't allow moving completed payments (for now always false until we implement the feature)
+      // Don't allow moving completed payments
       const activeItem = acuerdos[oldIndex];
       const overItem = acuerdos[newIndex];
       
@@ -1024,7 +1036,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           strategy={verticalListSortingStrategy}
                         >
                           {acuerdos.map((acuerdo, index) => (
-                            <SortableItem key={acuerdo.id} id={acuerdo.id.toString()}>
+                            <SortableItem 
+                              key={acuerdo.id} 
+                              id={acuerdo.id.toString()}
+                              disabled={acuerdo.pago_completado}
+                            >
                               <TableCell>{acuerdo.concepto_nombre}</TableCell>
                               <TableCell>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}</TableCell>
                               <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
