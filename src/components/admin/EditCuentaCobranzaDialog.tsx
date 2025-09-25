@@ -144,6 +144,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [selectedEsquema, setSelectedEsquema] = useState('');
   const [editingAcuerdo, setEditingAcuerdo] = useState<number | null>(null);
   const [editingDate, setEditingDate] = useState<Date | undefined>(undefined);
+  const [editingAmount, setEditingAmount] = useState<number | null>(null);
+  const [editingMonto, setEditingMonto] = useState<string>('');
   const [showPersonForm, setShowPersonForm] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [buyerToDelete, setBuyerToDelete] = useState<{ id: number; name: string } | null>(null);
@@ -721,7 +723,36 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     createAcuerdoMutation.mutate(parseInt(selectedEsquema));
   };
 
-  // Mutation to update payment agreement date
+  // Mutation to update payment agreement amount
+  const updateAmountMutation = useMutation({
+    mutationFn: async ({ id, monto }: { id: number; monto: number }) => {
+      console.log('Amount mutation called with:', { id, monto });
+      
+      const { data, error } = await supabase
+        .from('acuerdos_pago')
+        .update({ monto })
+        .eq('id', id)
+        .select();
+      
+      console.log('Amount update result:', { data, error });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      console.log('Amount update successful:', data);
+      toast.success("Monto actualizado exitosamente");
+      setEditingAmount(null);
+      setEditingMonto('');
+      // Invalidate and refetch the acuerdos_pago query
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+    },
+    onError: (error) => {
+      console.error("Error updating amount:", error);
+      toast.error("Error al actualizar el monto: " + (error as Error).message);
+      setEditingAmount(null);
+      setEditingMonto('');
+    }
+  });
   const updateAcuerdoMutation = useMutation({
     mutationFn: async ({ id, fecha_pago }: { id: number; fecha_pago: Date | null }) => {
       console.log('Mutation called with:', { id, fecha_pago });
@@ -776,6 +807,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     }
   });
 
+  const handleAmountUpdate = (acuerdoId: number, monto: number) => {
+    console.log('Updating amount for acuerdo:', acuerdoId, 'to:', monto);
+    updateAmountMutation.mutate({ id: acuerdoId, monto });
+  };
+
   const handleDateUpdate = (acuerdoId: number, fecha: Date | undefined) => {
     if (fecha) {
       console.log('Updating date for acuerdo:', acuerdoId, 'to:', fecha);
@@ -790,12 +826,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       const oldIndex = acuerdos.findIndex(item => item.id.toString() === active.id);
       const newIndex = acuerdos.findIndex(item => item.id.toString() === over?.id);
 
-      // Don't allow moving completed payments
+      // Don't allow moving completed payments or payments with partial payments
       const activeItem = acuerdos[oldIndex];
       const overItem = acuerdos[newIndex];
       
       if (activeItem?.pago_completado || overItem?.pago_completado) {
         toast.error("No se pueden mover pagos completados");
+        return;
+      }
+
+      // Don't allow moving payments that have partial payments (monto_pagado > 0)
+      if (activeItem?.monto_pagado > 0 || overItem?.monto_pagado > 0) {
+        toast.error("No se pueden mover pagos que tienen montos aplicados");
         return;
       }
 
@@ -1189,11 +1231,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           strategy={verticalListSortingStrategy}
                         >
                            {acuerdos.map((acuerdo, index) => (
-                             <SortableItem 
-                               key={acuerdo.id} 
-                               id={acuerdo.id.toString()}
-                               disabled={acuerdo.pago_completado}
-                             >
+                              <SortableItem 
+                                key={acuerdo.id} 
+                                id={acuerdo.id.toString()}
+                                disabled={acuerdo.pago_completado || acuerdo.monto_pagado > 0}
+                              >
                                 <TableCell>{acuerdo.concepto_nombre}</TableCell>
                                 <TableCell>
                                   {!acuerdo.pago_completado && editingAcuerdo === acuerdo.id ? (
@@ -1241,7 +1283,72 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                     </div>
                                   )}
                                 </TableCell>
-                                <TableCell>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}</TableCell>
+                                <TableCell>
+                                  {!acuerdo.pago_completado && editingAmount === acuerdo.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={editingMonto}
+                                        onChange={(e) => setEditingMonto(e.target.value)}
+                                        className="w-32"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            const monto = parseFloat(editingMonto);
+                                            if (!isNaN(monto) && monto > 0) {
+                                              handleAmountUpdate(acuerdo.id, monto);
+                                            }
+                                          }
+                                          if (e.key === 'Escape') {
+                                            setEditingAmount(null);
+                                            setEditingMonto('');
+                                          }
+                                        }}
+                                      />
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          const monto = parseFloat(editingMonto);
+                                          if (!isNaN(monto) && monto > 0) {
+                                            handleAmountUpdate(acuerdo.id, monto);
+                                          }
+                                        }}
+                                      >
+                                        Guardar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          setEditingAmount(null);
+                                          setEditingMonto('');
+                                        }}
+                                      >
+                                        Cancelar
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <span>
+                                        {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}
+                                      </span>
+                                      {!acuerdo.pago_completado && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 w-6 p-0"
+                                          onClick={() => {
+                                            setEditingAmount(acuerdo.id);
+                                            setEditingMonto(acuerdo.monto.toString());
+                                          }}
+                                        >
+                                          <Edit className="h-3 w-3" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                                </TableCell>
                                 <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
                                 <TableCell>
                                   {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto_pagado || 0)}
