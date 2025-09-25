@@ -1,23 +1,21 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
-import { Calendar } from "@/components/ui/calendar";
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Plus, Trash2, Search, GripVertical, Edit } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { CalendarIcon, Edit, Trash2, Plus } from 'lucide-react';
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { useToast } from "@/hooks/use-toast";
-import { PersonForm } from "@/components/admin/PersonForm";
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import {
   DndContext,
   closestCenter,
@@ -37,39 +35,34 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { PersonForm } from './PersonForm';
 
 interface Comprador {
-  nombre_legal: string;
-  rfc: string | null;
   porcentaje_copropiedad: number;
+  personas?: {
+    id: number;
+    nombre_legal: string;
+    rfc?: string;
+    curp?: string;
+    email: string;
+    telefono?: string;
+    tipo_persona: string;
+  };
 }
 
 interface CuentaCobranza {
   id: number;
-  clabe_stp: string | null;
   precio_final: number;
-  compradores: Comprador[];
-  dueno: string;
-  proyecto: string;
-  edificio: string;
-  numero_propiedad: string;
-  modelo: string;
-  activo: boolean;
-}
-
-interface EditCuentaCobranzaDialogProps {
-  cuenta: CuentaCobranza;
-  onClose: () => void;
-  onUpdate: () => void;
+  porcentaje_comision_venta?: number;
 }
 
 interface Persona {
   id: number;
   nombre_legal: string;
-  rfc: string | null;
-  curp: string | null;
+  rfc?: string;
+  curp?: string;
   email: string;
-  telefono: string | null;
+  telefono?: string;
   tipo_persona: string;
 }
 
@@ -77,7 +70,7 @@ interface AcuerdoPago {
   id: number;
   orden: number;
   monto: number;
-  fecha_pago: string | null;
+  fecha_pago?: string;
   id_concepto: number;
   concepto_nombre?: string;
 }
@@ -103,42 +96,37 @@ function SortableItem({ id, children }: SortableItemProps) {
     setNodeRef,
     transform,
     transition,
-    isDragging,
   } = useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
   };
 
   return (
-    <tr
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={isDragging ? "cursor-grabbing" : "cursor-grab"}
-    >
+    <TableRow ref={setNodeRef} style={style} {...attributes} {...listeners}>
       {children}
-    </tr>
+    </TableRow>
   );
 }
 
+interface EditCuentaCobranzaDialogProps {
+  cuenta: CuentaCobranza;
+  onClose: () => void;
+  onUpdate: () => void;
+}
+
 export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuentaCobranzaDialogProps) {
-  const [activeTab, setActiveTab] = useState("propiedad");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState('propiedad');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
-  const [porcentaje, setPorcentaje] = useState("100");
-  const [showPersonForm, setShowPersonForm] = useState(false);
+  const [porcentaje, setPorcentaje] = useState('');
   const [acuerdos, setAcuerdos] = useState<AcuerdoPago[]>([]);
-  const [selectedEsquema, setSelectedEsquema] = useState<string>("");
+  const [selectedEsquema, setSelectedEsquema] = useState('');
   const [editingAcuerdo, setEditingAcuerdo] = useState<number | null>(null);
   const [editingDate, setEditingDate] = useState<Date | undefined>(undefined);
-  
-  const { toast } = useToast();
+  const [showPersonForm, setShowPersonForm] = useState(false);
 
-  // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -146,55 +134,49 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     })
   );
 
-  // Get detailed account data
+  // Get cuenta details
   const { data: cuentaDetalle } = useQuery({
     queryKey: ["cuenta_detalle", cuenta.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('cuentas_cobranza')
-        .select(`
-          id,
-          clabe_stp,
-          precio_final,
-          es_aprobado,
-          fecha_compra,
-          id_oferta,
-          porcentaje_comision_venta
-        `)
+        .select('*')
         .eq('id', cuenta.id)
         .single();
-      
-      if (error) throw error;
       return data;
     }
   });
 
   // Get property details
   const { data: propiedadDetalle } = useQuery({
-    queryKey: ["propiedad_detalle", cuenta.id],
+    queryKey: ["propiedad_detalle", cuentaDetalle?.id_oferta],
     queryFn: async () => {
       if (!cuentaDetalle?.id_oferta) return null;
       
-      const { data: oferta } = await supabase
+      const { data: ofertaData } = await supabase
         .from('ofertas')
-        .select(`
-          id,
-          id_propiedad,
-          propiedades!ofertas_id_propiedad_fkey(
-            id,
-            numero_propiedad,
-            numero_piso,
-            m2_reales,
-            precio_lista,
-            descripcion,
-            id_entidad_relacionada_dueno,
-            id_edificio_modelo
-          )
-        `)
+        .select('id_propiedad')
         .eq('id', cuentaDetalle.id_oferta)
         .single();
 
-      return oferta?.propiedades;
+      if (!ofertaData?.id_propiedad) return null;
+
+      const { data } = await supabase
+        .from('propiedades')
+        .select(`
+          id,
+          numero_propiedad,
+          numero_piso,
+          m2_reales,
+          precio_lista,
+          descripcion,
+          id_entidad_relacionada_dueno,
+          id_edificio_modelo
+        `)
+        .eq('id', ofertaData.id_propiedad)
+        .single();
+
+      return data;
     },
     enabled: !!cuentaDetalle?.id_oferta
   });
@@ -219,7 +201,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   });
 
   // Get existing buyers
-  const { data: compradoresExistentes } = useQuery({
+  const { data: compradoresExistentes, refetch: refetchCompradores } = useQuery({
     queryKey: ["compradores_existentes", cuenta.id],
     queryFn: async () => {
       const { data } = await supabase
@@ -382,10 +364,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({
-        title: "Comprador agregado",
-        description: "El comprador ha sido agregado exitosamente",
-      });
+      toast.success("Comprador agregado exitosamente");
+      refetchCompradores();
       onUpdate();
     }
   });
@@ -445,27 +425,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       }
       
       // Entrega
-      if (montoEntrega > 0) {
-        acuerdos.push({
-          id_cuenta_cobranza: cuenta.id,
-          orden: (montoEnganche > 0 ? 3 : 2) + esquema.numero_mensualidades,
-          monto: montoEntrega,
-          id_concepto: 3, // Pago a contra entrega
-          activo: true
-        });
-      }
-      
+      acuerdos.push({
+        id_cuenta_cobranza: cuenta.id,
+        orden: acuerdos.length + 1,
+        monto: montoEntrega,
+        id_concepto: 3, // Entrega
+        activo: true
+      });
+
       const { error } = await supabase
         .from('acuerdos_pago')
         .insert(acuerdos);
-        
+      
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({
-        title: "Acuerdo creado",
-        description: "El acuerdo de pago ha sido creado exitosamente",
-      });
+      toast.success("Acuerdo de pago creado exitosamente");
       onUpdate();
     }
   });
@@ -475,20 +450,12 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     
     const porcentajeNum = parseFloat(porcentaje);
     if (porcentajeNum <= 0 || porcentajeNum > 100) {
-      toast({
-        title: "Error",
-        description: "El porcentaje debe estar entre 1 y 100%",
-        variant: "destructive",
-      });
+      toast.error("El porcentaje debe estar entre 1 y 100%");
       return;
     }
 
     if (totalPorcentajes + porcentajeNum > 100) {
-      toast({
-        title: "Error",
-        description: `El porcentaje total no puede exceder 100%. Total actual: ${(totalPorcentajes + porcentajeNum).toFixed(2)}%`,
-        variant: "destructive",
-      });
+      toast.error(`El porcentaje total no puede exceder 100%. Total actual: ${(totalPorcentajes + porcentajeNum).toFixed(2)}%`);
       return;
     }
 
@@ -517,11 +484,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({
-        title: "Fecha actualizada",
-        description: "La fecha de pago ha sido actualizada exitosamente",
-      });
-      // Don't call onUpdate() to prevent modal from closing
+      toast.success("Fecha actualizada exitosamente");
       setEditingAcuerdo(null);
       setEditingDate(undefined);
     }
@@ -545,14 +508,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       }
     },
     onSuccess: () => {
-      toast({
-        title: "Orden actualizado",
-        description: "El orden de los pagos ha sido actualizado",
-      });
-      // Don't call onUpdate() to prevent modal from closing
+      toast.success("Orden actualizado");
     }
   });
-
 
   const handleDateUpdate = (acuerdoId: number, fecha: Date | undefined) => {
     if (fecha) {
@@ -680,66 +638,95 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
           <TabsContent value="compradores" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Compradores Actuales</CardTitle>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Compradores</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Total asignado: {totalPorcentajes.toFixed(2)}%
+                      {Math.abs(totalPorcentajes - 100) > 0.01 && (
+                        <span className={totalPorcentajes > 100 ? "text-destructive ml-2" : "text-warning ml-2"}>
+                          {totalPorcentajes > 100 ? "¡Excede el 100%!" : "¡Debe sumar 100%!"}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <Button onClick={() => setShowPersonForm(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nuevo Comprador
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {compradoresExistentes && compradoresExistentes.length > 0 ? (
-                  <div className="space-y-4">
-                    {compradoresExistentes.map((comprador, index) => (
-                      <div key={index} className="flex items-center justify-between p-4 border rounded">
-                        <div>
-                          <p className="font-medium">{comprador.personas?.nombre_legal}</p>
-                          <p className="text-sm text-muted-foreground">
-                            RFC: {comprador.personas?.rfc || 'N/A'} | 
-                            Email: {comprador.personas?.email} | 
-                            {comprador.porcentaje_copropiedad}% de {isMultipleBuyers ? 'copropiedad' : 'propiedad'}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="mt-4 p-4 bg-muted rounded">
-                      <p className="text-sm">
-                        <strong>Total asignado:</strong> {totalPorcentajes.toFixed(2)}%
-                        {totalPorcentajes < 100 && (
-                          <span className="text-orange-500 ml-2">
-                            (Disponible: {(100 - totalPorcentajes).toFixed(2)}%)
-                          </span>
-                        )}
-                      </p>
-                    </div>
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="font-semibold">Nombre</TableHead>
+                          <TableHead className="font-semibold">RFC</TableHead>
+                          <TableHead className="font-semibold">Email</TableHead>
+                          <TableHead className="font-semibold">Tipo</TableHead>
+                          <TableHead className="font-semibold">Porcentaje (%)</TableHead>
+                          <TableHead className="font-semibold text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {compradoresExistentes.map((comprador, index) => (
+                          <TableRow key={index} className="hover:bg-muted/30 transition-colors">
+                            <TableCell className="font-medium">
+                              {comprador.personas?.nombre_legal}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {comprador.personas?.rfc || 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {comprador.personas?.email || 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {getPersonTypeLabel(comprador.personas?.tipo_persona || '')}
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                value={comprador.porcentaje_copropiedad}
+                                className="w-20 h-8 text-sm"
+                                readOnly
+                              />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No hay compradores registrados</p>
+                  <div className="text-center py-8 text-muted-foreground">
+                    No hay compradores registrados
+                  </div>
                 )}
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Agregar Nuevo Comprador</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Buscar Persona</Label>
-                  <div className="flex gap-2">
-                    <div className="flex-1 relative">
-                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Buscar por nombre, RFC, CURP o email..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-8"
-                      />
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowPersonForm(true)}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Nuevo Comprador
-                    </Button>
+                <div className="mt-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label>Buscar Persona para Agregar como Comprador</Label>
                   </div>
                   
+                  <Input
+                    placeholder="Buscar por nombre, RFC, CURP o email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+
                   {personasBusqueda && personasBusqueda.length > 0 && (
                     <div className="mt-2 border rounded max-h-48 overflow-y-auto">
                       {personasBusqueda.map((persona) => (
@@ -761,43 +748,43 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       ))}
                     </div>
                   )}
-                </div>
 
-                {selectedPersona && (
-                  <div className="p-4 border rounded bg-muted">
-                    <p className="font-medium mb-2">Persona Seleccionada:</p>
-                    <p>{selectedPersona.nombre_legal}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedPersona.rfc && `RFC: ${selectedPersona.rfc}`}
-                      {selectedPersona.curp && `${selectedPersona.rfc ? ' | ' : ''}CURP: ${selectedPersona.curp}`}
-                      {` | Email: ${selectedPersona.email}`}
-                    </p>
-                    
-                    <div className="mt-4 flex items-end gap-2">
-                      <div className="flex-1">
-                        <Label>
-                          Porcentaje de {isMultipleBuyers || totalPorcentajes > 0 ? 'Copropiedad' : 'Propiedad'} (%)
-                          {totalPorcentajes > 0 && (
-                            <span className="text-sm text-muted-foreground ml-1">
-                              (Disponible: {(100 - totalPorcentajes).toFixed(2)}%)
-                            </span>
-                          )}
-                        </Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={porcentaje}
-                          onChange={(e) => setPorcentaje(e.target.value)}
-                          min="0.01"
-                          max={100}
-                        />
+                  {selectedPersona && (
+                    <div className="p-4 border rounded bg-muted">
+                      <p className="font-medium mb-2">Persona Seleccionada:</p>
+                      <p>{selectedPersona.nombre_legal}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedPersona.rfc && `RFC: ${selectedPersona.rfc}`}
+                        {selectedPersona.curp && `${selectedPersona.rfc ? ' | ' : ''}CURP: ${selectedPersona.curp}`}
+                        {` | Email: ${selectedPersona.email}`}
+                      </p>
+                      
+                      <div className="mt-4 flex items-end gap-2">
+                        <div className="flex-1">
+                          <Label>
+                            Porcentaje de {isMultipleBuyers || totalPorcentajes > 0 ? 'Copropiedad' : 'Propiedad'} (%)
+                            {totalPorcentajes > 0 && (
+                              <span className="text-sm text-muted-foreground ml-1">
+                                (Disponible: {(100 - totalPorcentajes).toFixed(2)}%)
+                              </span>
+                            )}
+                          </Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={porcentaje}
+                            onChange={(e) => setPorcentaje(e.target.value)}
+                            min="0.01"
+                            max={100}
+                          />
+                        </div>
+                        <Button onClick={handleAddComprador} disabled={addCompradorMutation.isPending}>
+                          Agregar
+                        </Button>
                       </div>
-                      <Button onClick={handleAddComprador} disabled={addCompradorMutation.isPending}>
-                        Agregar Comprador
-                      </Button>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
