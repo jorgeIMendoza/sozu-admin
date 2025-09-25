@@ -960,12 +960,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         <Label>Precio de Lista</Label>
                         <Input value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(propiedadDetalle.precio_lista || 0)} readOnly />
                       </div>
-                      <div className="col-span-2">
-                        <Label>Descripción</Label>
-                        <Textarea value={propiedadDetalle.descripcion || 'Sin descripción'} readOnly />
-                      </div>
                       <div>
-                        <Label>Notario</Label>
+                        <Label>Notario asignado</Label>
                         <Select value={selectedNotario} onValueChange={handleNotarioChange}>
                           <SelectTrigger>
                             <SelectValue placeholder="Seleccionar notario" />
@@ -978,6 +974,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                             ))}
                           </SelectContent>
                         </Select>
+                      </div>
+                      <div className="col-span-2">
+                        <Label>Descripción</Label>
+                        <Textarea value={propiedadDetalle.descripcion || 'Sin descripción'} readOnly />
                       </div>
                     </div>
 
