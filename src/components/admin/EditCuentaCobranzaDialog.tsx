@@ -478,7 +478,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         title: "Fecha actualizada",
         description: "La fecha de pago ha sido actualizada exitosamente",
       });
-      onUpdate();
+      // Don't call onUpdate() to prevent modal from closing
       setEditingAcuerdo(null);
       setEditingDate(undefined);
     }
@@ -506,7 +506,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         title: "Orden actualizado",
         description: "El orden de los pagos ha sido actualizado",
       });
-      onUpdate();
+      // Don't call onUpdate() to prevent modal from closing
     }
   });
 
