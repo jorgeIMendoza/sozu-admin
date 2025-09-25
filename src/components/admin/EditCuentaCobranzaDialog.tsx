@@ -236,7 +236,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const { data: acuerdosPago } = useQuery({
     queryKey: ["acuerdos_pago", cuenta.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data: acuerdos } = await supabase
         .from('acuerdos_pago')
         .select(`
           id,
@@ -249,21 +249,41 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         .eq('activo', true)
         .order('orden', { ascending: true });
 
-      if (data && data.length > 0) {
-        const conceptoIds = [...new Set(data.map(a => a.id_concepto))];
-        const { data: conceptos } = await supabase
-          .from('conceptos_pago')
-          .select('id, nombre')
-          .in('id', conceptoIds);
+      if (!acuerdos || acuerdos.length === 0) return [];
 
-        return data.map(acuerdo => ({
+      // Get conceptos de pago
+      const conceptoIds = [...new Set(acuerdos.map(a => a.id_concepto))];
+      const { data: conceptos } = await supabase
+        .from('conceptos_pago')
+        .select('id, nombre')
+        .in('id', conceptoIds);
+
+      // Get aplicaciones de pago for each acuerdo
+      const acuerdoIds = acuerdos.map(a => a.id);
+      const { data: aplicaciones } = await supabase
+        .from('aplicaciones_pago')
+        .select(`
+          id,
+          monto,
+          id_acuerdo_pago
+        `)
+        .in('id_acuerdo_pago', acuerdoIds)
+        .eq('activo', true);
+
+      return acuerdos.map(acuerdo => {
+        const concepto = conceptos?.find(c => c.id === acuerdo.id_concepto);
+        const acuerdoAplicaciones = aplicaciones?.filter(a => a.id_acuerdo_pago === acuerdo.id) || [];
+        
+        // Calculate if payment is completed
+        const totalAplicado = acuerdoAplicaciones.reduce((sum, app) => sum + app.monto, 0);
+        const pagoCompletado = totalAplicado >= acuerdo.monto;
+        
+        return {
           ...acuerdo,
-          concepto_nombre: conceptos?.find(c => c.id === acuerdo.id_concepto)?.nombre || 'Sin concepto',
-          pago_completado: false // Default to false for now, will be updated when we add the column
-        }));
-      }
-      
-      return [];
+          concepto_nombre: concepto?.nombre || 'Sin concepto',
+          pago_completado: pagoCompletado
+        };
+      });
     }
   });
 
