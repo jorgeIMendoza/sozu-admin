@@ -113,12 +113,24 @@ function SortableItem({ id, children, disabled = false }: SortableItemProps) {
     opacity: disabled ? 0.6 : 1,
   };
 
+  // Create modified listeners that prevent event propagation on edit elements
+  const modifiedListeners = !disabled ? {
+    ...listeners,
+    onPointerDown: (e: any) => {
+      // Don't start drag if clicking on buttons or inputs
+      if (e.target.closest('button') || e.target.closest('input')) {
+        return;
+      }
+      listeners?.onPointerDown?.(e);
+    }
+  } : {};
+
   return (
     <TableRow 
       ref={setNodeRef} 
       style={style} 
       {...attributes} 
-      {...(disabled ? {} : listeners)}
+      {...modifiedListeners}
       className={disabled ? 'cursor-not-allowed' : 'cursor-grab'}
     >
       {children}
@@ -313,6 +325,31 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
       return data || [];
     }
+  });
+
+  // Get selected payment scheme for this offer
+  const { data: selectedPaymentScheme } = useQuery({
+    queryKey: ["selected_payment_scheme", cuentaDetalle?.id_oferta],
+    queryFn: async () => {
+      if (!cuentaDetalle?.id_oferta) return null;
+      
+      const { data: offerData } = await supabase
+        .from('ofertas')
+        .select('id_esquema_pago_seleccionado')
+        .eq('id', cuentaDetalle.id_oferta)
+        .single();
+
+      if (!offerData?.id_esquema_pago_seleccionado) return null;
+
+      const { data: schemeData } = await supabase
+        .from('esquemas_pago')
+        .select('*')
+        .eq('id', offerData.id_esquema_pago_seleccionado)
+        .single();
+
+      return schemeData;
+    },
+    enabled: !!cuentaDetalle?.id_oferta
   });
 
   // Get payment agreements
@@ -1309,6 +1346,47 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 <div className="mb-4">
                   <h3 className="text-lg font-semibold text-foreground">Acuerdo de Pago</h3>
                 </div>
+
+                {/* Selected Payment Scheme Information */}
+                {selectedPaymentScheme && (
+                  <Card className="mb-6">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Plan de Pago Seleccionado</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
+                          <p className="text-sm text-muted-foreground">{selectedPaymentScheme.nombre}</p>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-foreground mb-1">Enganche</h4>
+                          <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_enganche}%</p>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {selectedPaymentScheme.numero_mensualidades} pagos de {selectedPaymentScheme.porcentaje_mensualidades}%
+                          </p>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-foreground mb-1">Entrega</h4>
+                          <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_entrega}%</p>
+                        </div>
+                        {selectedPaymentScheme.porcentaje_descuento_aumento !== 0 && (
+                          <div>
+                            <h4 className="font-medium text-foreground mb-1">
+                              {selectedPaymentScheme.porcentaje_descuento_aumento > 0 ? 'Incremento' : 'Descuento'}
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              {Math.abs(selectedPaymentScheme.porcentaje_descuento_aumento)}%
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {acuerdos && acuerdos.length > 0 ? (
                   <DndContext

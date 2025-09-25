@@ -444,8 +444,8 @@ export default function DetalleCuentaCobranza() {
         const acuerdoMultas = multas?.filter(m => m.id_acuerdo_pago === acuerdo.id) || [];
         
         // Apply penalty payments sequentially - pay penalties one by one
-        const pagosPenalidad = acuerdoAplicaciones.filter(a => a.es_multa);
-        const totalPagosPenalidad = pagosPenalidad.reduce((sum, app) => sum + app.monto, 0);
+        const pagosPenalidad = acuerdoAplicaciones.filter(a => a.es_multa) || [];
+        const totalPagosPenalidad = pagosPenalidad.reduce((sum, app) => sum + (app?.monto || 0), 0);
         
         // Sort penalties by creation date to determine payment order
         const multasOrdenadas = [...acuerdoMultas].sort((a, b) => 
@@ -502,8 +502,8 @@ export default function DetalleCuentaCobranza() {
         });
         
         // Calculate normal payments (exclude penalty payments)
-        const pagosNormales = acuerdoAplicaciones.filter(a => !a.es_multa);
-        const totalAplicado = pagosNormales.reduce((sum, app) => sum + app.monto, 0);
+        const pagosNormales = acuerdoAplicaciones.filter(a => !a.es_multa) || [];
+        const totalAplicado = pagosNormales.reduce((sum, app) => sum + (app?.monto || 0), 0);
         
         return {
           id: acuerdo.id,
@@ -585,7 +585,7 @@ export default function DetalleCuentaCobranza() {
   };
 
   const totalPagado = acuerdosPago?.reduce((sum, acuerdo) => 
-    sum + acuerdo.aplicaciones.reduce((appSum, app) => appSum + app.monto, 0), 0
+    sum + (acuerdo.aplicaciones || []).reduce((appSum, app) => appSum + (app?.monto || 0), 0), 0
   ) || 0;
 
   const totalPendiente = (cuentaDetalle?.precio_final || 0) - totalPagado;
