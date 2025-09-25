@@ -399,10 +399,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       }
     },
     onSuccess: () => {
-      toast.success("Comprador agregado exitosamente");
+      toast.success("Comprador agregado exitosamente. Puedes agregar más compradores.");
       refetchCompradores();
       onUpdate();
       setSelectedPersona(null);
+      // Don't close modal - keep it open for adding more buyers
     },
     onError: (error) => {
       console.error("Error adding buyer:", error);
@@ -988,18 +989,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     return;
                   }
                   
-                  setSelectedPersona({
-                    id: persona.id,
-                    nombre_legal: persona.nombre_legal || persona.nombre,
-                    rfc: persona.rfc,
-                    curp: persona.curp,
-                    email: persona.email,
-                    telefono: persona.telefono,
-                    tipo_persona: persona.tipo_persona
-                  });
-                  setShowPersonForm(false);
-                  
-                  // Automatically add the buyer after creating the person
+                  // Don't close the modal or set selected person - just add the buyer
+                  // This allows the user to continue adding more buyers
                   setTimeout(() => {
                     if (persona.id && typeof persona.id === 'number') {
                       addCompradorMutation.mutate({ personaId: persona.id });
