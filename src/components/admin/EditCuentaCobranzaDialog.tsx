@@ -161,6 +161,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [buyerToDelete, setBuyerToDelete] = useState<{ id: number; name: string } | null>(null);
   const [selectedNotario, setSelectedNotario] = useState<string>('');
+  const [deleteAcuerdoDialogOpen, setDeleteAcuerdoDialogOpen] = useState(false);
+  const [acuerdoToDelete, setAcuerdoToDelete] = useState<{ id: number; concepto: string } | null>(null);
 
   const handleNavigateToCompradores = (rfc?: string) => {
     if (rfc) {
@@ -910,6 +912,77 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     }
   });
 
+  // Mutation to delete payment agreement
+  const deleteAcuerdoMutation = useMutation({
+    mutationFn: async (acuerdoId: number) => {
+      // First, delete associated aplicaciones_pago
+      const { error: deleteAplicacionesError } = await supabase
+        .from('aplicaciones_pago')
+        .delete()
+        .eq('id_acuerdo_pago', acuerdoId);
+      
+      if (deleteAplicacionesError) throw deleteAplicacionesError;
+
+      // Then delete the acuerdo_pago
+      const { error: deleteAcuerdoError } = await supabase
+        .from('acuerdos_pago')
+        .delete()
+        .eq('id', acuerdoId);
+      
+      if (deleteAcuerdoError) throw deleteAcuerdoError;
+
+      // Get remaining acuerdos to reorder them
+      const { data: remainingAcuerdos, error: fetchError } = await supabase
+        .from('acuerdos_pago')
+        .select('*')
+        .eq('id_cuenta_cobranza', cuenta.id)
+        .eq('activo', true)
+        .order('orden', { ascending: true });
+      
+      if (fetchError) throw fetchError;
+
+      // Update order of remaining payments
+      if (remainingAcuerdos && remainingAcuerdos.length > 0) {
+        for (let i = 0; i < remainingAcuerdos.length; i++) {
+          const { error: updateOrderError } = await supabase
+            .from('acuerdos_pago')
+            .update({ orden: i + 1 })
+            .eq('id', remainingAcuerdos[i].id);
+          
+          if (updateOrderError) throw updateOrderError;
+        }
+      }
+      
+      return remainingAcuerdos;
+    },
+    onSuccess: (remainingAcuerdos) => {
+      toast.success("Pago eliminado exitosamente");
+      // Refresh acuerdos data
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+      
+      // Recalculate dates for remaining payments after a short delay
+      if (remainingAcuerdos && remainingAcuerdos.length > 0) {
+        setTimeout(async () => {
+          // Get fresh data and recalculate dates
+          const freshData = await queryClient.refetchQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+          
+          // Get the updated acuerdos from the query result
+          const updatedAcuerdos = freshData[0]?.data;
+          if (updatedAcuerdos && Array.isArray(updatedAcuerdos)) {
+            updatePaymentDatesAfterReorder(updatedAcuerdos);
+          }
+        }, 500);
+      }
+      
+      setDeleteAcuerdoDialogOpen(false);
+      setAcuerdoToDelete(null);
+    },
+    onError: (error) => {
+      console.error("Error deleting acuerdo:", error);
+      toast.error("Error al eliminar el pago: " + (error as Error).message);
+    }
+  });
+
   const handleAmountUpdate = (acuerdoId: number, monto: number) => {
     console.log('Updating amount for acuerdo:', acuerdoId, 'to:', monto);
     updateAmountMutation.mutate({ id: acuerdoId, monto });
@@ -1018,6 +1091,17 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     setSelectedNotario(value);
     const notarioId = parseInt(value);
     updateNotarioMutation.mutate(notarioId);
+  };
+
+  const handleDeleteAcuerdo = (acuerdoId: number, conceptoNombre: string) => {
+    setAcuerdoToDelete({ id: acuerdoId, concepto: conceptoNombre });
+    setDeleteAcuerdoDialogOpen(true);
+  };
+
+  const confirmDeleteAcuerdo = () => {
+    if (acuerdoToDelete) {
+      deleteAcuerdoMutation.mutate(acuerdoToDelete.id);
+    }
   };
 
   // Update payment dates after reordering to maintain chronological order
@@ -1639,14 +1723,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                   >
                      <Table>
                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Concepto</TableHead>
-                            <TableHead>Fecha de Pago</TableHead>
-                            <TableHead>Monto</TableHead>
-                            <TableHead>Porcentaje</TableHead>
-                            <TableHead>Pagado</TableHead>
-                            <TableHead>Estatus</TableHead>
-                          </TableRow>
+                           <TableRow>
+                             <TableHead>Concepto</TableHead>
+                             <TableHead>Fecha de Pago</TableHead>
+                             <TableHead>Monto</TableHead>
+                             <TableHead>Porcentaje</TableHead>
+                             <TableHead>Pagado</TableHead>
+                             <TableHead>Estatus</TableHead>
+                             <TableHead>Acciones</TableHead>
+                           </TableRow>
                         </TableHeader>
                       <TableBody>
                         <SortableContext
@@ -1791,19 +1876,36 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 <TableCell>
                                   {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto_pagado || 0)}
                                 </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center justify-center">
-                                    {acuerdo.pago_completado ? (
-                                      <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-xs font-medium">
-                                        Pagado
-                                      </span>
-                                    ) : (
-                                      <span className="px-2 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-xs font-medium">
-                                        Pendiente
-                                      </span>
-                                    )}
-                                  </div>
-                                </TableCell>
+                                 <TableCell>
+                                   <div className="flex items-center justify-center">
+                                     {acuerdo.pago_completado ? (
+                                       <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-xs font-medium">
+                                         Pagado
+                                       </span>
+                                     ) : (
+                                       <span className="px-2 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-xs font-medium">
+                                         Pendiente
+                                       </span>
+                                     )}
+                                   </div>
+                                 </TableCell>
+                                 <TableCell>
+                                   <div className="flex items-center justify-center">
+                                     <Button
+                                       variant="outline"
+                                       size="sm"
+                                       onClick={(e) => {
+                                         e.preventDefault();
+                                         e.stopPropagation();
+                                         handleDeleteAcuerdo(acuerdo.id, acuerdo.concepto_nombre);
+                                       }}
+                                       disabled={deleteAcuerdoMutation.isPending}
+                                       className="h-8 w-8 p-0 hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                                     >
+                                       <Trash2 className="w-4 h-4" />
+                                     </Button>
+                                   </div>
+                                 </TableCell>
                              </SortableItem>
                            ))}
                         </SortableContext>
@@ -1929,6 +2031,31 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 {deleteBuyerMutation.isPending ? "Eliminando..." : "Eliminar"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete Acuerdo Confirmation Dialog */}
+        <AlertDialog open={deleteAcuerdoDialogOpen} onOpenChange={setDeleteAcuerdoDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar eliminación de pago</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Estás seguro de que deseas eliminar el pago de <strong>"{acuerdoToDelete?.concepto}"</strong>?
+                <br /><br />
+                Esta acción no se puede deshacer. Si este pago tenía montos aplicados, también se eliminarán.
+                Las fechas de los pagos siguientes se recalcularán automáticamente.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={confirmDeleteAcuerdo}
+                disabled={deleteAcuerdoMutation.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleteAcuerdoMutation.isPending ? "Eliminando..." : "Eliminar pago"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
