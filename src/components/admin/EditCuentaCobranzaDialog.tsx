@@ -1784,6 +1784,56 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <CardTitle className="text-lg">Plan de pagos</CardTitle>
                     </CardHeader>
                     <CardContent>
+                      {/* Price Summary Section */}
+                      <div className="mb-6 p-4 bg-muted/20 rounded-lg">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
+                            <p className="text-sm text-muted-foreground">
+                              {propiedadDetalle?.precio_lista ? 
+                                new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(propiedadDetalle.precio_lista) : 
+                                'No definido'
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-foreground mb-1">Precio Final</h4>
+                            <p className="text-sm font-semibold text-foreground">
+                              {cuentaDetalle?.precio_final ? 
+                                new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.precio_final) : 
+                                'No definido'
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-foreground mb-1">Ahorro/Interés</h4>
+                            {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final ? (
+                              <p className={`text-sm font-semibold ${
+                                cuentaDetalle.precio_final < propiedadDetalle.precio_lista 
+                                  ? 'text-green-600' 
+                                  : cuentaDetalle.precio_final > propiedadDetalle.precio_lista 
+                                    ? 'text-red-600' 
+                                    : 'text-foreground'
+                              }`}>
+                                {(() => {
+                                  const difference = cuentaDetalle.precio_final - propiedadDetalle.precio_lista;
+                                  const percentage = (difference / propiedadDetalle.precio_lista) * 100;
+                                  if (difference > 0) {
+                                    return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
+                                  } else if (difference < 0) {
+                                    return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(2)}%)`;
+                                  } else {
+                                    return 'Sin diferencia';
+                                  }
+                                })()}
+                              </p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No disponible</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
                       {!isPaymentPlanModified ? (
                         // Original unchanged plan - show current database values
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1794,16 +1844,37 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           <div>
                             <h4 className="font-medium text-foreground mb-1">Enganche</h4>
                             <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_enganche}%</p>
+                            {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_enganche && (
+                              <p className="text-xs text-muted-foreground">
+                                {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                  (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_enganche) / 100
+                                )}
+                              </p>
+                            )}
                           </div>
                           <div>
                             <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
                             <p className="text-sm text-muted-foreground">
                               {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades}%
                             </p>
+                            {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_mensualidades && (
+                              <p className="text-xs text-muted-foreground">
+                                {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                  (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_mensualidades) / 100
+                                )}
+                              </p>
+                            )}
                           </div>
                           <div>
                             <h4 className="font-medium text-foreground mb-1">Entrega</h4>
                             <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_entrega}%</p>
+                            {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_entrega && (
+                              <p className="text-xs text-muted-foreground">
+                                {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                  (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_entrega) / 100
+                                )}
+                              </p>
+                            )}
                           </div>
                           {selectedPaymentScheme.porcentaje_descuento_aumento !== 0 && (
                             <div>
@@ -1830,16 +1901,37 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Enganche</h4>
                                 <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_enganche}%</p>
+                                {propiedadDetalle?.precio_lista && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                      (propiedadDetalle.precio_lista * selectedPaymentScheme.porcentaje_enganche) / 100
+                                    )}
+                                  </p>
+                                )}
                               </div>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
                                 <p className="text-sm text-muted-foreground">
                                   {selectedPaymentScheme.numero_mensualidades} pagos de {selectedPaymentScheme.porcentaje_mensualidades}%
                                 </p>
+                                {propiedadDetalle?.precio_lista && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                      (propiedadDetalle.precio_lista * selectedPaymentScheme.porcentaje_mensualidades) / 100
+                                    )}
+                                  </p>
+                                )}
                               </div>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Entrega</h4>
                                 <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_entrega}%</p>
+                                {propiedadDetalle?.precio_lista && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                      (propiedadDetalle.precio_lista * selectedPaymentScheme.porcentaje_entrega) / 100
+                                    )}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1855,16 +1947,37 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Enganche</h4>
                                 <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_enganche}%</p>
+                                {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_enganche && (
+                                  <p className="text-xs font-medium text-primary">
+                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                      (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_enganche) / 100
+                                    )}
+                                  </p>
+                                )}
                               </div>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
                                 <p className="text-sm font-semibold">
                                   {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades}%
                                 </p>
+                                {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_mensualidades && (
+                                  <p className="text-xs font-medium text-primary">
+                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                      (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_mensualidades) / 100
+                                    )}
+                                  </p>
+                                )}
                               </div>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Entrega</h4>
                                 <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_entrega}%</p>
+                                {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_entrega && (
+                                  <p className="text-xs font-medium text-primary">
+                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                      (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_entrega) / 100
+                                    )}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>
