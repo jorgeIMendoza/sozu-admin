@@ -192,14 +192,28 @@ export function AddManualPaymentDialog({
   });
 
   const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
+    try {
+      await createPaymentMutation.mutateAsync(data);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
     // Clear previous errors
     form.clearErrors();
+    
+    // Get form values
+    const formValues = form.getValues();
     
     // Manual validation for STP-Manual
     let hasErrors = false;
     
     if (isStpManual) {
-      if (!data.clave_rastreo || data.clave_rastreo.trim() === "") {
+      if (!formValues.clave_rastreo || formValues.clave_rastreo.trim() === "") {
         form.setError("clave_rastreo", {
           type: "required",
           message: "La clave de rastreo es requerida para pagos STP-Manual"
@@ -207,7 +221,7 @@ export function AddManualPaymentDialog({
         hasErrors = true;
       }
       
-      if (!data.archivo_cep) {
+      if (!formValues.archivo_cep) {
         form.setError("archivo_cep", {
           type: "required", 
           message: "El archivo CEP es requerido para pagos STP-Manual"
@@ -220,12 +234,8 @@ export function AddManualPaymentDialog({
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await createPaymentMutation.mutateAsync(data);
-    } finally {
-      setIsSubmitting(false);
-    }
+    // If no errors, proceed with normal form validation and submission
+    form.handleSubmit(onSubmit)(e);
   };
 
   const handleClose = () => {
@@ -244,7 +254,7 @@ export function AddManualPaymentDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={handleFormSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
