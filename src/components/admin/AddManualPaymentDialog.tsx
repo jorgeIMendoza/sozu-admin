@@ -18,11 +18,24 @@ import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
-  monto: z.string().min(1, "El monto es requerido").transform((val) => parseFloat(val)),
+  monto: z.string({
+    required_error: "El monto es requerido",
+    invalid_type_error: "El monto debe ser un número válido"
+  }).min(1, "El monto es requerido").transform((val) => {
+    const num = parseFloat(val);
+    if (isNaN(num)) {
+      throw new Error("El monto debe ser un número válido");
+    }
+    return num;
+  }),
   fecha_pago: z.date({
     required_error: "La fecha de pago es requerida",
+    invalid_type_error: "La fecha de pago debe ser una fecha válida"
   }),
-  id_metodos_pago: z.string().min(1, "El método de pago es requerido"),
+  id_metodos_pago: z.string({
+    required_error: "El método de pago es requerido",
+    invalid_type_error: "El método de pago debe ser válido"
+  }).min(1, "El método de pago es requerido"),
   clave_rastreo: z.string().optional(),
   evidencia_pago: z.any().refine((file) => file instanceof File, "La evidencia de pago es requerida"),
   archivo_cep: z.any().optional(),
