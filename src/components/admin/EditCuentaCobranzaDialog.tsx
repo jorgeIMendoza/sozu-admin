@@ -836,15 +836,76 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     mutationFn: async ({ id, monto }: { id: number; monto: number }) => {
       console.log('Amount mutation called with:', { id, monto });
       
-      const { data, error } = await supabase
+      // Get the current payment amount and applied amount
+      const { data: currentPayment, error: getCurrentError } = await supabase
+        .from('acuerdos_pago')
+        .select('monto, orden')
+        .eq('id', id)
+        .single();
+      
+      if (getCurrentError) throw getCurrentError;
+      if (!currentPayment) throw new Error('Payment not found');
+
+      // Get total applied amount for this payment
+      const { data: aplicaciones, error: getAplicacionesError } = await supabase
+        .from('aplicaciones_pago')
+        .select('monto')
+        .eq('id_acuerdo_pago', id)
+        .eq('activo', true);
+      
+      if (getAplicacionesError) throw getAplicacionesError;
+      
+      const totalAplicado = aplicaciones?.reduce((sum, app) => sum + app.monto, 0) || 0;
+      
+      // Validate that new amount is not less than applied amount
+      if (monto < totalAplicado) {
+        throw new Error(`El monto no puede ser menor a lo ya aplicado ($${totalAplicado.toLocaleString()})`);
+      }
+
+      // Calculate the difference (positive = increase, negative = decrease)
+      const diferencia = monto - currentPayment.monto;
+      
+      // Get all payments to find the last one
+      const { data: allPayments, error: getAllPaymentsError } = await supabase
+        .from('acuerdos_pago')
+        .select('*')
+        .eq('id_cuenta_cobranza', cuenta.id)
+        .eq('activo', true)
+        .order('orden', { ascending: true });
+      
+      if (getAllPaymentsError) throw getAllPaymentsError;
+
+      // Find the last payment (highest order)
+      const lastPayment = allPayments?.reduce((prev, current) => 
+        (current.orden > prev.orden) ? current : prev
+      );
+
+      // Update the current payment amount
+      const { error: updateCurrentError } = await supabase
         .from('acuerdos_pago')
         .update({ monto })
-        .eq('id', id)
-        .select();
+        .eq('id', id);
       
-      console.log('Amount update result:', { data, error });
-      if (error) throw error;
-      return data;
+      if (updateCurrentError) throw updateCurrentError;
+
+      // Adjust the last payment amount (if it's different from current payment)
+      if (lastPayment && lastPayment.id !== id && diferencia !== 0) {
+        const newLastPaymentAmount = lastPayment.monto - diferencia; // Inverse of the difference
+        
+        // Validate that the last payment amount doesn't go negative
+        if (newLastPaymentAmount < 0) {
+          throw new Error(`No se puede ajustar el último pago. El monto quedaría negativo.`);
+        }
+
+        const { error: updateLastPaymentError } = await supabase
+          .from('acuerdos_pago')
+          .update({ monto: newLastPaymentAmount })
+          .eq('id', lastPayment.id);
+        
+        if (updateLastPaymentError) throw updateLastPaymentError;
+      }
+
+      return { id, monto, diferencia, lastPaymentUpdated: lastPayment?.id !== id };
     },
     onSuccess: (data, variables) => {
       console.log('Amount update successful:', data);
