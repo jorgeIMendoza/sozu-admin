@@ -202,7 +202,7 @@ export function AddManualPaymentDialog({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ body: webhookBody }),
+          body: JSON.stringify(webhookBody),
         });
 
         if (!response.ok) {
