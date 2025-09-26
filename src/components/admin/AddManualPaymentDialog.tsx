@@ -206,7 +206,7 @@ export function AddManualPaymentDialog({
           success: true,
           siguiente_accion: "aplicar_pago_manual",
           message: "Pago manual aplicado",
-          claverastreo: result.clave_rastreo,
+          clave_rastreo: result.clave_rastreo,
           id_cuenta_cobranza: cuentaCobranzaId,
           monto_pagado: result.monto,
           id_pago: result.id_pago,
