@@ -192,22 +192,31 @@ export function AddManualPaymentDialog({
   });
 
   const onSubmit = async (data: FormData) => {
-    // Additional validation for STP-Manual
-    if (isStpManual && !data.archivo_cep) {
-      toast({
-        title: "Error",
-        description: "El archivo CEP es requerido para pagos STP-Manual",
-        variant: "destructive",
-      });
-      return;
+    // Clear previous errors
+    form.clearErrors();
+    
+    // Manual validation for STP-Manual
+    let hasErrors = false;
+    
+    if (isStpManual) {
+      if (!data.clave_rastreo || data.clave_rastreo.trim() === "") {
+        form.setError("clave_rastreo", {
+          type: "required",
+          message: "La clave de rastreo es requerida para pagos STP-Manual"
+        });
+        hasErrors = true;
+      }
+      
+      if (!data.archivo_cep) {
+        form.setError("archivo_cep", {
+          type: "required", 
+          message: "El archivo CEP es requerido para pagos STP-Manual"
+        });
+        hasErrors = true;
+      }
     }
-
-    if (isStpManual && !data.clave_rastreo) {
-      toast({
-        title: "Error", 
-        description: "La clave de rastreo es requerida para pagos STP-Manual",
-        variant: "destructive",
-      });
+    
+    if (hasErrors) {
       return;
     }
 
