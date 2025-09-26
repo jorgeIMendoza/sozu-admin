@@ -1811,12 +1811,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         <div>
                           {/* Price Summary Section */}
                           <div className="mb-6 p-4 bg-muted/20 rounded-lg">
-                            <div className={`grid grid-cols-1 gap-4 ${
-                              propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
-                              cuentaDetalle.precio_final !== propiedadDetalle.precio_lista 
-                                ? 'md:grid-cols-3' 
-                                : 'md:grid-cols-2'
-                            }`}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
                                 <p className="text-sm text-muted-foreground">
@@ -1835,29 +1830,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                   }
                                 </p>
                               </div>
-                              {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
-                               cuentaDetalle.precio_final !== propiedadDetalle.precio_lista && (
-                                <div>
-                                  <h4 className="font-medium text-foreground mb-1">
-                                    {cuentaDetalle.precio_final < propiedadDetalle.precio_lista ? 'Ahorro' : 'Interés'}
-                                  </h4>
-                                  <p className={`text-sm font-semibold ${
-                                    cuentaDetalle.precio_final < propiedadDetalle.precio_lista 
-                                      ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
-                                      : 'text-orange-600'
-                                  }`}>
-                                    {(() => {
-                                      const difference = cuentaDetalle.precio_final - propiedadDetalle.precio_lista;
-                                      const percentage = (difference / propiedadDetalle.precio_lista) * 100;
-                                      if (difference > 0) {
-                                        return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
-                                      } else if (difference < 0) {
-                                        return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(2)}%)`;
-                                      }
-                                    })()}
-                                  </p>
-                                </div>
-                              )}
                             </div>
                           </div>
 
@@ -1900,30 +1872,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 )}
                               </p>
                             )}
+                           </div>
                           </div>
-                          {selectedPaymentScheme.porcentaje_descuento_aumento !== 0 && (
-                            <div>
-                              <h4 className="font-medium text-foreground mb-1">
-                                {selectedPaymentScheme.porcentaje_descuento_aumento > 0 ? 'Incremento' : 'Descuento'}
-                              </h4>
-                              <p className="text-sm text-muted-foreground">
-                                {Math.abs(selectedPaymentScheme.porcentaje_descuento_aumento)}%
-                              </p>
-                            </div>
-                           )}
-                         </div>
                         </div>
                       ) : (
                         // Modified plan - show both original (disabled) and current
                         <div className="space-y-4">
                           {/* Price Summary Section */}
                           <div className="mb-4 p-4 bg-muted/20 rounded-lg">
-                            <div className={`grid grid-cols-1 gap-4 ${
-                              propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
-                              cuentaDetalle.precio_final !== propiedadDetalle.precio_lista 
-                                ? 'md:grid-cols-3' 
-                                : 'md:grid-cols-2'
-                            }`}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
                                 <p className="text-sm text-muted-foreground">
@@ -1942,29 +1899,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                   }
                                 </p>
                               </div>
-                              {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
-                               cuentaDetalle.precio_final !== propiedadDetalle.precio_lista && (
-                                <div>
-                                  <h4 className="font-medium text-foreground mb-1">
-                                    {cuentaDetalle.precio_final < propiedadDetalle.precio_lista ? 'Ahorro' : 'Interés'}
-                                  </h4>
-                                  <p className={`text-sm font-semibold ${
-                                    cuentaDetalle.precio_final < propiedadDetalle.precio_lista 
-                                      ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
-                                      : 'text-orange-600'
-                                  }`}>
-                                    {(() => {
-                                      const difference = cuentaDetalle.precio_final - propiedadDetalle.precio_lista;
-                                      const percentage = (difference / propiedadDetalle.precio_lista) * 100;
-                                      if (difference > 0) {
-                                        return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
-                                      } else if (difference < 0) {
-                                        return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(2)}%)`;
-                                      }
-                                    })()}
-                                  </p>
-                                </div>
-                              )}
                             </div>
                           </div>
 
