@@ -198,6 +198,7 @@ export function AddManualPaymentDialog({
           id_cuenta_cobranza: cuentaCobranzaId,
           monto_pagado: result.monto,
           id_pago: result.id_pago,
+          es_stp_manual: isStpManual,
           environment: ENVIRONMENT
         };
 
