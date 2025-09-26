@@ -844,9 +844,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         .single();
       
       if (getCurrentError) throw getCurrentError;
-      if (!currentPayment) throw new Error('Payment not found');
-
-      // Get total applied amount for this payment
+      if (!currentPayment) throw new Error('Pago no encontrado');
+      
+      // Check if payment has applied amounts 
       const { data: aplicaciones, error: getAplicacionesError } = await supabase
         .from('aplicaciones_pago')
         .select('monto')
@@ -865,7 +865,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       // Calculate the difference (positive = increase, negative = decrease)
       const diferencia = monto - currentPayment.monto;
       
-      // Get all payments to find the last one
+      // Get all payments to find the last one and second to last
       const { data: allPayments, error: getAllPaymentsError } = await supabase
         .from('acuerdos_pago')
         .select('*')
@@ -879,30 +879,81 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       const lastPayment = allPayments?.reduce((prev, current) => 
         (current.orden > prev.orden) ? current : prev
       );
-
-      // Update the current payment amount
-      const { error: updateCurrentError } = await supabase
-        .from('acuerdos_pago')
-        .update({ monto })
-        .eq('id', id);
       
-      if (updateCurrentError) throw updateCurrentError;
+      // Find the second to last payment
+      const secondToLastPayment = allPayments?.filter(p => p.id !== lastPayment?.id)
+        .reduce((prev, current) => (current.orden > prev.orden) ? current : prev, allPayments[0]);
 
-      // Adjust the last payment amount (if it's different from current payment)
-      if (lastPayment && lastPayment.id !== id && diferencia !== 0) {
-        const newLastPaymentAmount = lastPayment.monto - diferencia; // Inverse of the difference
-        
-        // Validate that the last payment amount doesn't go negative
-        if (newLastPaymentAmount < 0) {
-          throw new Error(`No se puede ajustar el último pago. El monto quedaría negativo.`);
+      // Check if we're editing the last payment
+      if (lastPayment && lastPayment.id === id) {
+        // Special logic for last payment
+        if (diferencia > 0) {
+          throw new Error('No se puede aumentar el monto del último pago');
         }
-
-        const { error: updateLastPaymentError } = await supabase
-          .from('acuerdos_pago')
-          .update({ monto: newLastPaymentAmount })
-          .eq('id', lastPayment.id);
         
-        if (updateLastPaymentError) throw updateLastPaymentError;
+        if (diferencia < 0 && secondToLastPayment) {
+          // Update the last payment with the new amount
+          const { error: updateLastError } = await supabase
+            .from('acuerdos_pago')
+            .update({ monto })
+            .eq('id', id);
+          
+          if (updateLastError) throw updateLastError;
+          
+          // Add the absolute difference to the second to last payment
+          const adjustmentAmount = Math.abs(diferencia);
+          const { error: updatePrecedingError } = await supabase
+            .from('acuerdos_pago')
+            .update({ monto: secondToLastPayment.monto + adjustmentAmount })
+            .eq('id', secondToLastPayment.id);
+          
+          if (updatePrecedingError) throw updatePrecedingError;
+          
+          return { 
+            id, 
+            monto, 
+            diferencia, 
+            lastPaymentUpdated: true, 
+            precedingPaymentUpdated: true,
+            precedingPaymentNewAmount: secondToLastPayment.monto + adjustmentAmount
+          };
+        } else {
+          // Just update the last payment (no change or no second to last payment)
+          const { error: updateLastError } = await supabase
+            .from('acuerdos_pago')
+            .update({ monto })
+            .eq('id', id);
+          
+          if (updateLastError) throw updateLastError;
+          
+          return { id, monto, diferencia, lastPaymentUpdated: true };
+        }
+      } else {
+        // Original logic for non-last payments
+        // Update the current payment amount
+        const { error: updateCurrentError } = await supabase
+          .from('acuerdos_pago')
+          .update({ monto })
+          .eq('id', id);
+        
+        if (updateCurrentError) throw updateCurrentError;
+
+        // Adjust the last payment amount (if it's different from current payment)
+        if (lastPayment && lastPayment.id !== id && diferencia !== 0) {
+          const newLastPaymentAmount = lastPayment.monto - diferencia; // Inverse of the difference
+          
+          // Validate that the last payment amount doesn't go negative
+          if (newLastPaymentAmount < 0) {
+            throw new Error(`No se puede ajustar el último pago. El monto quedaría negativo.`);
+          }
+
+          const { error: updateLastPaymentError } = await supabase
+            .from('acuerdos_pago')
+            .update({ monto: newLastPaymentAmount })
+            .eq('id', lastPayment.id);
+          
+          if (updateLastPaymentError) throw updateLastPaymentError;
+        }
       }
 
       return { id, monto, diferencia, lastPaymentUpdated: lastPayment?.id !== id };
