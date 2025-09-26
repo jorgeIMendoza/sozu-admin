@@ -427,9 +427,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     const totalContraentrega = contraentrega?.monto || 0;
 
     return {
-      porcentaje_enganche: Number(((totalEnganche / cuentaDetalle.precio_final) * 100).toFixed(1)),
-      porcentaje_mensualidades: Number(((totalParcialidades / cuentaDetalle.precio_final) * 100).toFixed(1)),
-      porcentaje_entrega: Number(((totalContraentrega / cuentaDetalle.precio_final) * 100).toFixed(1)),
+      porcentaje_enganche: Number(((totalEnganche / cuentaDetalle.precio_final) * 100).toFixed(2)),
+      porcentaje_mensualidades: Number(((totalParcialidades / cuentaDetalle.precio_final) * 100).toFixed(2)),
+      porcentaje_entrega: Number(((totalContraentrega / cuentaDetalle.precio_final) * 100).toFixed(2)),
       numero_mensualidades: parcialidades.length
     };
   })() : null;
