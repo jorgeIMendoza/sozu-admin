@@ -143,7 +143,13 @@ export function AddManualPaymentDialog({
           .upload(fileName, data.evidencia_pago);
         
         if (uploadError) throw uploadError;
-        evidenciaUrl = fileName;
+        
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(fileName);
+        
+        evidenciaUrl = urlData.publicUrl;
       }
 
       // Upload CEP file if STP-Manual
@@ -154,7 +160,13 @@ export function AddManualPaymentDialog({
           .upload(fileName, data.archivo_cep);
         
         if (uploadError) throw uploadError;
-        cepUrl = fileName;
+        
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(fileName);
+        
+        cepUrl = urlData.publicUrl;
       }
 
       // Only generate clave_rastreo for STP-Manual
