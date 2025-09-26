@@ -296,6 +296,24 @@ export default function DetalleCuentaCobranza() {
     enabled: !!cuentaDetalle?.proyecto_id,
   });
 
+  // Fetch original payment scheme details
+  const { data: originalScheme } = useQuery({
+    queryKey: ["original_scheme", offerData?.id_esquema_pago_seleccionado],
+    queryFn: async () => {
+      if (!offerData?.id_esquema_pago_seleccionado) return null;
+
+      const { data: scheme, error } = await supabase
+        .from('esquemas_pago')
+        .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+        .eq('id', offerData.id_esquema_pago_seleccionado)
+        .single();
+
+      if (error) throw error;
+      return scheme;
+    },
+    enabled: !!offerData?.id_esquema_pago_seleccionado,
+  });
+
   // Handle payment scheme selection
   const handlePaymentSchemeSelection = async (schemeId: number) => {
     if (!cuentaDetalle || !offerData) return;
@@ -566,6 +584,35 @@ export default function DetalleCuentaCobranza() {
     enabled: !!cuentaId,
   });
 
+  // Calculate current payment plan details from acuerdos
+  const currentPaymentPlan = acuerdosPago ? (() => {
+    const apartado = acuerdosPago.find(a => a.concepto.toLowerCase() === 'apartado');
+    const enganche = acuerdosPago.find(a => a.concepto.toLowerCase() === 'enganche');
+    const parcialidades = acuerdosPago.filter(a => a.concepto.toLowerCase() === 'parcialidad');
+    const contraentrega = acuerdosPago.find(a => a.concepto.toLowerCase() === 'pago a contra entrega');
+
+    if (!cuentaDetalle?.precio_final) return null;
+
+    const totalEnganche = (apartado?.monto || 0) + (enganche?.monto || 0);
+    const totalParcialidades = parcialidades.reduce((sum, p) => sum + p.monto, 0);
+    const totalContraentrega = contraentrega?.monto || 0;
+
+    return {
+      porcentaje_enganche: ((totalEnganche / cuentaDetalle.precio_final) * 100),
+      porcentaje_mensualidades: ((totalParcialidades / cuentaDetalle.precio_final) * 100),
+      porcentaje_entrega: ((totalContraentrega / cuentaDetalle.precio_final) * 100),
+      numero_mensualidades: parcialidades.length
+    };
+  })() : null;
+
+  // Check if payment plan has been modified
+  const isPaymentPlanModified = originalScheme && currentPaymentPlan ? (
+    Math.abs(originalScheme.porcentaje_enganche - currentPaymentPlan.porcentaje_enganche) > 0.01 ||
+    Math.abs(originalScheme.porcentaje_mensualidades - currentPaymentPlan.porcentaje_mensualidades) > 0.01 ||
+    Math.abs(originalScheme.porcentaje_entrega - currentPaymentPlan.porcentaje_entrega) > 0.01 ||
+    originalScheme.numero_mensualidades !== currentPaymentPlan.numero_mensualidades
+  ) : false;
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
@@ -593,14 +640,26 @@ export default function DetalleCuentaCobranza() {
   // Mutation to delete payment application
   const deletePaymentMutation = useMutation({
     mutationFn: async (aplicacionId: number) => {
-      // First get the application to find its acuerdo_pago
+      // First get the application to find its acuerdo_pago and amount
       const { data: aplicacion, error: getError } = await supabase
         .from('aplicaciones_pago')
-        .select('id_acuerdo_pago')
+        .select('id_acuerdo_pago, monto')
         .eq('id', aplicacionId)
         .single();
       
       if (getError) throw getError;
+
+      // Get the last payment agreement (highest orden)
+      const { data: lastAcuerdo, error: lastError } = await supabase
+        .from('acuerdos_pago')
+        .select('id, monto, orden')
+        .eq('id_cuenta_cobranza', cuentaId)
+        .eq('activo', true)
+        .order('orden', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (lastError) throw lastError;
 
       // Delete the application
       const { error: deleteError } = await supabase
@@ -617,6 +676,16 @@ export default function DetalleCuentaCobranza() {
         .eq('id', aplicacion.id_acuerdo_pago);
       
       if (updateError) throw updateError;
+
+      // Add the deleted amount to the last payment agreement
+      if (lastAcuerdo) {
+        const { error: updateLastError } = await supabase
+          .from('acuerdos_pago')
+          .update({ monto: lastAcuerdo.monto + aplicacion.monto } as any)
+          .eq('id', lastAcuerdo.id);
+        
+        if (updateLastError) throw updateLastError;
+      }
     },
     onSuccess: () => {
       toast({
@@ -933,6 +1002,98 @@ export default function DetalleCuentaCobranza() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Payment Plan Details Section */}
+          {originalScheme && (
+            <div className="mb-6">
+              <div className="border rounded-lg p-4 space-y-4">
+                <h3 className="text-lg font-semibold">
+                  {isPaymentPlanModified ? "Plan de Pagos" : "Plan de pagos"}
+                </h3>
+                
+                {!isPaymentPlanModified ? (
+                  // Original unchanged plan
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Nombre del Plan</label>
+                      <p className="text-sm font-semibold">{originalScheme.nombre}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Enganche</label>
+                      <p className="text-sm font-semibold">{originalScheme.porcentaje_enganche.toFixed(1)}%</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Mensualidades</label>
+                      <p className="text-sm font-semibold">
+                        {originalScheme.numero_mensualidades} pagos de {originalScheme.porcentaje_mensualidades.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Entrega</label>
+                      <p className="text-sm font-semibold">{originalScheme.porcentaje_entrega.toFixed(1)}%</p>
+                    </div>
+                  </div>
+                ) : (
+                  // Modified plan - show both original (disabled) and current
+                  <div className="space-y-4">
+                    {/* Original Plan - Disabled */}
+                    <div className="opacity-50 pointer-events-none border rounded p-3 bg-muted/20">
+                      <label className="text-xs text-muted-foreground mb-2 block">Plan Original (Deshabilitado)</label>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Nombre del Plan</label>
+                          <p className="text-sm">{originalScheme.nombre}</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Enganche</label>
+                          <p className="text-sm">{originalScheme.porcentaje_enganche.toFixed(1)}%</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Mensualidades</label>
+                          <p className="text-sm">
+                            {originalScheme.numero_mensualidades} pagos de {originalScheme.porcentaje_mensualidades.toFixed(1)}%
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Entrega</label>
+                          <p className="text-sm">{originalScheme.porcentaje_entrega.toFixed(1)}%</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Modified Plan - Active */}
+                    <div className="border-2 border-primary rounded p-3">
+                      <label className="text-xs text-primary font-semibold mb-2 block">Plan Modificado (Activo)</label>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Nombre del Plan</label>
+                          <p className="text-sm font-semibold">{originalScheme.nombre} modificado</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Enganche</label>
+                          <p className="text-sm font-semibold">
+                            {currentPaymentPlan?.porcentaje_enganche.toFixed(1)}%
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Mensualidades</label>
+                          <p className="text-sm font-semibold">
+                            {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades.toFixed(1)}%
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Entrega</label>
+                          <p className="text-sm font-semibold">
+                            {currentPaymentPlan?.porcentaje_entrega.toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {acuerdosPago && acuerdosPago.length > 0 ? (
             <div className="space-y-2">
               {acuerdosPago.map((acuerdo, index) => {
