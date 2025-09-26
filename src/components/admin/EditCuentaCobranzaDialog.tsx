@@ -413,6 +413,35 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     }
   });
 
+  // Calculate current payment plan details from acuerdos
+  const currentPaymentPlan = acuerdosPago && cuentaDetalle ? (() => {
+    const apartado = acuerdosPago.find((a: any) => a.concepto_nombre?.toLowerCase() === 'apartado');
+    const enganche = acuerdosPago.find((a: any) => a.concepto_nombre?.toLowerCase() === 'enganche');
+    const parcialidades = acuerdosPago.filter((a: any) => a.concepto_nombre?.toLowerCase() === 'parcialidad');
+    const contraentrega = acuerdosPago.find((a: any) => a.concepto_nombre?.toLowerCase() === 'pago a contra entrega');
+
+    if (!cuentaDetalle.precio_final) return null;
+
+    const totalEnganche = (apartado?.monto || 0) + (enganche?.monto || 0);
+    const totalParcialidades = parcialidades.reduce((sum: number, p: any) => sum + p.monto, 0);
+    const totalContraentrega = contraentrega?.monto || 0;
+
+    return {
+      porcentaje_enganche: Number(((totalEnganche / cuentaDetalle.precio_final) * 100).toFixed(1)),
+      porcentaje_mensualidades: Number(((totalParcialidades / cuentaDetalle.precio_final) * 100).toFixed(1)),
+      porcentaje_entrega: Number(((totalContraentrega / cuentaDetalle.precio_final) * 100).toFixed(1)),
+      numero_mensualidades: parcialidades.length
+    };
+  })() : null;
+
+  // Check if payment plan has been modified
+  const isPaymentPlanModified = selectedPaymentScheme && currentPaymentPlan ? (
+    Math.abs(selectedPaymentScheme.porcentaje_enganche - currentPaymentPlan.porcentaje_enganche) > 0.01 ||
+    Math.abs(selectedPaymentScheme.porcentaje_mensualidades - currentPaymentPlan.porcentaje_mensualidades) > 0.01 ||
+    Math.abs(selectedPaymentScheme.porcentaje_entrega - currentPaymentPlan.porcentaje_entrega) > 0.01 ||
+    selectedPaymentScheme.numero_mensualidades !== currentPaymentPlan.numero_mensualidades
+  ) : false;
+
   // Get payment schemes
   const { data: esquemasPago } = useQuery({
     queryKey: ["esquemas_pago"],
@@ -1654,39 +1683,95 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 {selectedPaymentScheme && (
                   <Card className="mb-6">
                     <CardHeader>
-                      <CardTitle className="text-lg">Plan de Pago Seleccionado</CardTitle>
+                      <CardTitle className="text-lg">Plan de pagos</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
-                          <p className="text-sm text-muted-foreground">{selectedPaymentScheme.nombre}</p>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-foreground mb-1">Enganche</h4>
-                          <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_enganche}%</p>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {selectedPaymentScheme.numero_mensualidades} pagos de {selectedPaymentScheme.porcentaje_mensualidades}%
-                          </p>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-foreground mb-1">Entrega</h4>
-                          <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_entrega}%</p>
-                        </div>
-                        {selectedPaymentScheme.porcentaje_descuento_aumento !== 0 && (
+                      {!isPaymentPlanModified ? (
+                        // Original unchanged plan - show current database values
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div>
-                            <h4 className="font-medium text-foreground mb-1">
-                              {selectedPaymentScheme.porcentaje_descuento_aumento > 0 ? 'Incremento' : 'Descuento'}
-                            </h4>
+                            <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
+                            <p className="text-sm text-muted-foreground">{selectedPaymentScheme.nombre}</p>
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-foreground mb-1">Enganche</h4>
+                            <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_enganche}%</p>
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
                             <p className="text-sm text-muted-foreground">
-                              {Math.abs(selectedPaymentScheme.porcentaje_descuento_aumento)}%
+                              {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades}%
                             </p>
                           </div>
-                        )}
-                      </div>
+                          <div>
+                            <h4 className="font-medium text-foreground mb-1">Entrega</h4>
+                            <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_entrega}%</p>
+                          </div>
+                          {selectedPaymentScheme.porcentaje_descuento_aumento !== 0 && (
+                            <div>
+                              <h4 className="font-medium text-foreground mb-1">
+                                {selectedPaymentScheme.porcentaje_descuento_aumento > 0 ? 'Incremento' : 'Descuento'}
+                              </h4>
+                              <p className="text-sm text-muted-foreground">
+                                {Math.abs(selectedPaymentScheme.porcentaje_descuento_aumento)}%
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        // Modified plan - show both original (disabled) and current
+                        <div className="space-y-4">
+                          {/* Original Plan - Disabled */}
+                          <div className="opacity-50 pointer-events-none border rounded p-3 bg-muted/20">
+                            <label className="text-xs text-muted-foreground mb-2 block">Plan Original (Deshabilitado)</label>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
+                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.nombre}</p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Enganche</h4>
+                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_enganche}%</p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
+                                <p className="text-sm text-muted-foreground">
+                                  {selectedPaymentScheme.numero_mensualidades} pagos de {selectedPaymentScheme.porcentaje_mensualidades}%
+                                </p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Entrega</h4>
+                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_entrega}%</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Modified Plan - Active */}
+                          <div className="border-2 border-primary rounded p-3">
+                            <label className="text-xs text-primary font-semibold mb-2 block">Plan Modificado (Activo)</label>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
+                                <p className="text-sm font-semibold">{selectedPaymentScheme.nombre} modificado</p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Enganche</h4>
+                                <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_enganche}%</p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
+                                <p className="text-sm font-semibold">
+                                  {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades}%
+                                </p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Entrega</h4>
+                                <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_entrega}%</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
