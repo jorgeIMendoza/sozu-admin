@@ -547,7 +547,9 @@ export default function DetalleCuentaCobranza() {
                 fecha_pago: pago?.fecha_pago || '',
                 monto: pago?.monto || 0,
                 metodo_pago: metodoPago?.nombre || 'Sin método',
-                clave_rastreo: pago?.clave_rastreo
+                clave_rastreo: pago?.clave_rastreo,
+                url_cep: pago?.url_cep || null,
+                url_recibo: pago?.url_recibo || null
               }
             };
           }),
