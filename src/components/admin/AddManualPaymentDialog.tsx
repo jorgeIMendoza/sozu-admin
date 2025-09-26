@@ -163,7 +163,7 @@ export function AddManualPaymentDialog({
         claveRastreo = data.clave_rastreo || "";
       }
 
-      const { error } = await supabase
+      const { data: insertedPayment, error } = await supabase
         .from("pagos")
         .insert({
           id_cuenta_cobranza: cuentaCobranzaId,
@@ -174,14 +174,17 @@ export function AddManualPaymentDialog({
           url_recibo: evidenciaUrl,
           url_cep: cepUrl,
           activo: true,
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
       // Return data needed for webhook
       return {
         monto: data.monto,
-        clave_rastreo: claveRastreo
+        clave_rastreo: claveRastreo,
+        id_pago: insertedPayment.id
       };
     },
     onSuccess: async (result) => {
@@ -194,6 +197,7 @@ export function AddManualPaymentDialog({
           claverastreo: result.clave_rastreo,
           id_cuenta_cobranza: cuentaCobranzaId,
           monto_pagado: result.monto,
+          id_pago: result.id_pago,
           environment: ENVIRONMENT
         };
 
