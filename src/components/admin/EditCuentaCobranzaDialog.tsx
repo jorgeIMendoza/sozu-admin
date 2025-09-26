@@ -1901,16 +1901,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               </p>
                             )}
                           </div>
-                          {selectedPaymentScheme.porcentaje_descuento_aumento !== 0 && (
-                            <div>
-                              <h4 className="font-medium text-foreground mb-1">
-                                {selectedPaymentScheme.porcentaje_descuento_aumento > 0 ? 'Incremento' : 'Descuento'}
-                              </h4>
-                              <p className="text-sm text-muted-foreground">
-                                {Math.abs(selectedPaymentScheme.porcentaje_descuento_aumento)}%
-                              </p>
-                            </div>
-                           )}
                          </div>
                         </div>
                       ) : (
