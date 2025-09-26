@@ -678,14 +678,20 @@ export default function DetalleCuentaCobranza() {
 
   const totalPendiente = (cuentaDetalle?.precio_final || 0) - totalPagado;
 
-  // Find last STP payment
+  // Find last payment and check if it's STP
   const pagosAplicados = acuerdosPago?.flatMap(acuerdo => 
     (acuerdo.aplicaciones || []).filter(app => !app.es_multa)
   ) || [];
   
-  const ultimoPagoSTP = pagosAplicados
-    .filter(app => app.pago.id_metodos_pago === 6) // STP method ID
+  // Get the most recent payment (regardless of method)
+  const ultimoPago = pagosAplicados
     .sort((a, b) => new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime())[0]?.pago || null;
+  
+  // Check if the last payment is STP (method ID = 6)
+  const ultimoPagoEsSTP = ultimoPago?.id_metodos_pago === 6;
+  
+  // Only set ultimoPagoSTP if the most recent payment is STP
+  const ultimoPagoSTP = ultimoPagoEsSTP ? ultimoPago : null;
 
   // Mutation to delete payment application
   const deletePaymentMutation = useMutation({
