@@ -115,18 +115,6 @@ export function AddManualPaymentDialog({
   const selectedPaymentMethod = form.watch("id_metodos_pago");
   const isStpManual = selectedPaymentMethod && metodosPago?.find(m => m.id.toString() === selectedPaymentMethod)?.nombre.toLowerCase().includes("stp-manual");
 
-  // Auto-generate clave_rastreo when fecha_pago changes (only for STP-Manual)
-  useEffect(() => {
-    const fechaPago = form.watch("fecha_pago");
-    if (fechaPago && isStpManual) {
-      generateClaveRastreo(fechaPago).then((claveRastreo) => {
-        form.setValue("clave_rastreo", claveRastreo);
-      }).catch((error) => {
-        console.error("Error generating clave_rastreo:", error);
-      });
-    }
-  }, [form.watch("fecha_pago"), isStpManual]);
-
   // Mutation to create payment with file uploads
   const createPaymentMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -196,6 +184,15 @@ export function AddManualPaymentDialog({
       toast({
         title: "Error",
         description: "El archivo CEP es requerido para pagos STP-Manual",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isStpManual && !data.clave_rastreo) {
+      toast({
+        title: "Error", 
+        description: "La clave de rastreo es requerida para pagos STP-Manual",
         variant: "destructive",
       });
       return;
@@ -320,12 +317,10 @@ export function AddManualPaymentDialog({
                 name="clave_rastreo"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Clave de Rastreo (Generada automáticamente)</FormLabel>
+                    <FormLabel>Clave de Rastreo *</FormLabel>
                     <FormControl>
                       <Input 
-                        placeholder="Se genera automáticamente" 
-                        readOnly 
-                        className="bg-muted"
+                        placeholder="Ingresa la clave de rastreo" 
                         {...field} 
                       />
                     </FormControl>
