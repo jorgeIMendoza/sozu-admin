@@ -23,9 +23,9 @@ const formSchema = z.object({
     required_error: "La fecha de pago es requerida",
   }),
   id_metodos_pago: z.string().min(1, "El método de pago es requerido"),
-  clave_rastreo: z.string().min(1, "La clave de rastreo es requerida"),
-  url_recibo: z.string().optional(),
-  url_cep: z.string().optional(),
+  clave_rastreo: z.string().optional(),
+  evidencia_pago: z.any().refine((file) => file instanceof File, "La evidencia de pago es requerida"),
+  archivo_cep: z.any().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -46,6 +46,22 @@ export function AddManualPaymentDialog({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch payment methods (exclude STP)
+  const { data: metodosPago } = useQuery({
+    queryKey: ["metodos_pago"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("metodos_pago")
+        .select("id, nombre")
+        .eq("activo", true)
+        .neq("nombre", "STP")
+        .order("nombre");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
 
   // Function to generate automatic clave_rastreo
   const generateClaveRastreo = async (fechaPago: Date): Promise<string> => {
@@ -93,41 +109,52 @@ export function AddManualPaymentDialog({
       fecha_pago: new Date(),
       id_metodos_pago: "",
       clave_rastreo: "",
-      url_recibo: "",
-      url_cep: "",
     },
   });
 
-  // Auto-generate clave_rastreo when fecha_pago changes
+  const selectedPaymentMethod = form.watch("id_metodos_pago");
+  const isStpManual = selectedPaymentMethod && metodosPago?.find(m => m.id.toString() === selectedPaymentMethod)?.nombre.toLowerCase().includes("stp-manual");
+
+  // Auto-generate clave_rastreo when fecha_pago changes (only for STP-Manual)
   useEffect(() => {
     const fechaPago = form.watch("fecha_pago");
-    if (fechaPago) {
+    if (fechaPago && isStpManual) {
       generateClaveRastreo(fechaPago).then((claveRastreo) => {
         form.setValue("clave_rastreo", claveRastreo);
       }).catch((error) => {
         console.error("Error generating clave_rastreo:", error);
       });
     }
-  }, [form.watch("fecha_pago")]);
+  }, [form.watch("fecha_pago"), isStpManual]);
 
-  // Fetch payment methods
-  const { data: metodosPago } = useQuery({
-    queryKey: ["metodos_pago"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("metodos_pago")
-        .select("id, nombre")
-        .eq("activo", true)
-        .order("nombre");
-      
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Mutation to create payment
+  // Mutation to create payment with file uploads
   const createPaymentMutation = useMutation({
     mutationFn: async (data: FormData) => {
+      let evidenciaUrl = null;
+      let cepUrl = null;
+
+      // Upload evidencia file
+      if (data.evidencia_pago) {
+        const fileName = `evidencia_${Date.now()}_${data.evidencia_pago.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(fileName, data.evidencia_pago);
+        
+        if (uploadError) throw uploadError;
+        evidenciaUrl = fileName;
+      }
+
+      // Upload CEP file if STP-Manual
+      if (data.archivo_cep && isStpManual) {
+        const fileName = `cep_${Date.now()}_${data.archivo_cep.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(fileName, data.archivo_cep);
+        
+        if (uploadError) throw uploadError;
+        cepUrl = fileName;
+      }
+
       const { error } = await supabase
         .from("pagos")
         .insert({
@@ -136,8 +163,8 @@ export function AddManualPaymentDialog({
           fecha_pago: data.fecha_pago.toISOString(),
           id_metodos_pago: parseInt(data.id_metodos_pago),
           clave_rastreo: data.clave_rastreo || null,
-          url_recibo: data.url_recibo || null,
-          url_cep: data.url_cep || null,
+          url_recibo: evidenciaUrl,
+          url_cep: cepUrl,
           activo: true,
         });
 
@@ -164,6 +191,16 @@ export function AddManualPaymentDialog({
   });
 
   const onSubmit = async (data: FormData) => {
+    // Additional validation for STP-Manual
+    if (isStpManual && !data.archivo_cep) {
+      toast({
+        title: "Error",
+        description: "El archivo CEP es requerido para pagos STP-Manual",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await createPaymentMutation.mutateAsync(data);
@@ -277,18 +314,42 @@ export function AddManualPaymentDialog({
               )}
             />
 
+            {isStpManual && (
+              <FormField
+                control={form.control}
+                name="clave_rastreo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Clave de Rastreo (Generada automáticamente)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Se genera automáticamente" 
+                        readOnly 
+                        className="bg-muted"
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
-              name="clave_rastreo"
-              render={({ field }) => (
+              name="evidencia_pago"
+              render={({ field: { onChange, value, ...field } }) => (
                 <FormItem>
-                  <FormLabel>Clave de Rastreo (Generada automáticamente)</FormLabel>
+                  <FormLabel>Evidencia *</FormLabel>
                   <FormControl>
-                    <Input 
-                      placeholder="Se genera automáticamente" 
-                      readOnly 
-                      className="bg-muted"
-                      {...field} 
+                    <Input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) onChange(file);
+                      }}
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -296,33 +357,29 @@ export function AddManualPaymentDialog({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="url_recibo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>URL del Recibo</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="url_cep"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>URL del CEP</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {isStpManual && (
+              <FormField
+                control={form.control}
+                name="archivo_cep"
+                render={({ field: { onChange, value, ...field } }) => (
+                  <FormItem>
+                    <FormLabel>Archivo CEP *</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) onChange(file);
+                        }}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <div className="flex justify-end space-x-2 pt-4">
               <Button type="button" variant="outline" onClick={handleClose}>
