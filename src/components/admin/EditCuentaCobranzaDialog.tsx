@@ -1573,7 +1573,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                   <div>
                     <CardTitle>Compradores</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Total asignado: {totalPorcentajes.toFixed(2)}%
+                      Total asignado: {totalPorcentajes.toFixed(3)}%
                       {!isValidTotal && (
                         <span className="text-destructive ml-2 font-medium">
                           ¡Debe sumar exactamente 100%!
@@ -1696,7 +1696,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <div className="mt-4 text-sm text-muted-foreground bg-muted/50 p-3 rounded">
                         <p>
                           Al agregar este comprador, el porcentaje de propiedad se distribuirá automáticamente 
-                          entre todos los compradores ({((compradoresExistentes?.length || 0) + 1)} compradores = {(100 / ((compradoresExistentes?.length || 0) + 1)).toFixed(2)}% cada uno).
+                          entre todos los compradores ({((compradoresExistentes?.length || 0) + 1)} compradores = {(100 / ((compradoresExistentes?.length || 0) + 1)).toFixed(3)}% cada uno).
                         </p>
                       </div>
                       
@@ -1797,9 +1797,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                       const difference = cuentaDetalle.precio_final - propiedadDetalle.precio_lista;
                                       const percentage = (difference / propiedadDetalle.precio_lista) * 100;
                                       if (difference > 0) {
-                                        return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
+                                        return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(3)}%)`;
                                       } else if (difference < 0) {
-                                        return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(2)}%)`;
+                                        return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(3)}%)`;
                                       } else {
                                         return 'Sin diferencia';
                                       }
@@ -1819,7 +1819,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           </div>
                           <div>
                             <h4 className="font-medium text-foreground mb-1">Enganche</h4>
-                            <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_enganche}%</p>
+                            <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_enganche?.toFixed(1)}%</p>
                             {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_enganche && (
                               <p className="text-xs text-muted-foreground">
                                 {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
@@ -1831,7 +1831,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           <div>
                             <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
                             <p className="text-sm text-muted-foreground">
-                              {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades}%
+                              {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades?.toFixed(1)}%
                             </p>
                             {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_mensualidades && (
                               <p className="text-xs text-muted-foreground">
@@ -1843,7 +1843,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           </div>
                           <div>
                             <h4 className="font-medium text-foreground mb-1">Entrega</h4>
-                            <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_entrega}%</p>
+                            <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_entrega?.toFixed(1)}%</p>
                             {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_entrega && (
                               <p className="text-xs text-muted-foreground">
                                 {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
@@ -1906,9 +1906,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                       const difference = cuentaDetalle.precio_final - propiedadDetalle.precio_lista;
                                       const percentage = (difference / propiedadDetalle.precio_lista) * 100;
                                       if (difference > 0) {
-                                        return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
+                                        return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(3)}%)`;
                                       } else if (difference < 0) {
-                                        return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(2)}%)`;
+                                        return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(3)}%)`;
                                       } else {
                                         return 'Sin diferencia';
                                       }
@@ -1931,7 +1931,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               </div>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Enganche</h4>
-                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_enganche}%</p>
+                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_enganche?.toFixed(1)}%</p>
                                 {propiedadDetalle?.precio_lista && (
                                   <p className="text-xs text-muted-foreground">
                                     {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
@@ -1943,7 +1943,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
                                 <p className="text-sm text-muted-foreground">
-                                  {selectedPaymentScheme.numero_mensualidades} pagos de {selectedPaymentScheme.porcentaje_mensualidades}%
+                                  {selectedPaymentScheme.numero_mensualidades} pagos de {selectedPaymentScheme.porcentaje_mensualidades?.toFixed(1)}%
                                 </p>
                                 {propiedadDetalle?.precio_lista && (
                                   <p className="text-xs text-muted-foreground">
@@ -1955,7 +1955,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               </div>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Entrega</h4>
-                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_entrega}%</p>
+                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_entrega?.toFixed(1)}%</p>
                                 {propiedadDetalle?.precio_lista && (
                                   <p className="text-xs text-muted-foreground">
                                     {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
@@ -1977,7 +1977,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               </div>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Enganche</h4>
-                                <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_enganche}%</p>
+                                <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_enganche?.toFixed(1)}%</p>
                                 {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_enganche && (
                                   <p className="text-xs font-medium text-primary">
                                     {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
@@ -1989,7 +1989,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
                                 <p className="text-sm font-semibold">
-                                  {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades}%
+                                  {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades?.toFixed(1)}%
                                 </p>
                                 {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_mensualidades && (
                                   <p className="text-xs font-medium text-primary">
@@ -2001,7 +2001,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               </div>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Entrega</h4>
-                                <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_entrega}%</p>
+                                <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_entrega?.toFixed(1)}%</p>
                                 {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_entrega && (
                                   <p className="text-xs font-medium text-primary">
                                     {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
@@ -2175,7 +2175,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                     </div>
                                   )}
                                 </TableCell>
-                                <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
+                                <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(3) : 0}%</TableCell>
                                 <TableCell>
                                   {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto_pagado || 0)}
                                 </TableCell>
@@ -2228,9 +2228,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         <SelectContent>
                           {esquemasPago?.map((esquema) => (
                             <SelectItem key={esquema.id} value={esquema.id.toString()}>
-                              {esquema.nombre} - Enganche: {esquema.porcentaje_enganche}% | 
-                              Mensualidades: {esquema.numero_mensualidades} pagos de {esquema.porcentaje_mensualidades}% | 
-                              Entrega: {esquema.porcentaje_entrega}%
+                              {esquema.nombre} - Enganche: {esquema.porcentaje_enganche?.toFixed(1)}% | 
+                              Mensualidades: {esquema.numero_mensualidades} pagos de {esquema.porcentaje_mensualidades?.toFixed(1)}% | 
+                              Entrega: {esquema.porcentaje_entrega?.toFixed(1)}%
                             </SelectItem>
                           ))}
                         </SelectContent>
