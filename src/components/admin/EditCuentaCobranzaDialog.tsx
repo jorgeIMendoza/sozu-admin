@@ -944,7 +944,32 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   // Mutation to delete payment agreement
   const deleteAcuerdoMutation = useMutation({
     mutationFn: async (acuerdoId: number) => {
-      // First, delete associated aplicaciones_pago
+      // First, get the amount of the payment being deleted
+      const { data: paymentToDelete, error: getPaymentError } = await supabase
+        .from('acuerdos_pago')
+        .select('monto, orden')
+        .eq('id', acuerdoId)
+        .single();
+      
+      if (getPaymentError) throw getPaymentError;
+      if (!paymentToDelete) throw new Error('Payment not found');
+
+      // Get all payments for this account to find the last one
+      const { data: allPayments, error: getAllPaymentsError } = await supabase
+        .from('acuerdos_pago')
+        .select('*')
+        .eq('id_cuenta_cobranza', cuenta.id)
+        .eq('activo', true)
+        .order('orden', { ascending: true });
+      
+      if (getAllPaymentsError) throw getAllPaymentsError;
+
+      // Find the last payment (highest order)
+      const lastPayment = allPayments?.reduce((prev, current) => 
+        (current.orden > prev.orden) ? current : prev
+      );
+
+      // Delete associated aplicaciones_pago first
       const { error: deleteAplicacionesError } = await supabase
         .from('aplicaciones_pago')
         .delete()
@@ -959,6 +984,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         .eq('id', acuerdoId);
       
       if (deleteAcuerdoError) throw deleteAcuerdoError;
+
+      // Add the deleted payment amount to the last payment (if it's not the same payment being deleted)
+      if (lastPayment && lastPayment.id !== acuerdoId) {
+        const { error: updateLastPaymentError } = await supabase
+          .from('acuerdos_pago')
+          .update({ 
+            monto: lastPayment.monto + paymentToDelete.monto 
+          })
+          .eq('id', lastPayment.id);
+        
+        if (updateLastPaymentError) throw updateLastPaymentError;
+      }
 
       // Get remaining acuerdos to reorder them
       const { data: remainingAcuerdos, error: fetchError } = await supabase
