@@ -1757,7 +1757,62 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
                       {!isPaymentPlanModified ? (
                         // Original unchanged plan - show current database values
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          {/* Price Summary Section */}
+                          <div className="mb-6 p-4 bg-muted/20 rounded-lg">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
+                                <p className="text-sm text-muted-foreground">
+                                  {propiedadDetalle?.precio_lista ? 
+                                    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(propiedadDetalle.precio_lista) : 
+                                    'No definido'
+                                  }
+                                </p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Precio Final</h4>
+                                <p className="text-sm font-semibold text-foreground">
+                                  {cuentaDetalle?.precio_final ? 
+                                    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.precio_final) : 
+                                    'No definido'
+                                  }
+                                </p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">
+                                  {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
+                                   cuentaDetalle.precio_final < propiedadDetalle.precio_lista ? 
+                                   'Descuento' : 'Ahorro/Interés'}
+                                </h4>
+                                {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final ? (
+                                  <p className={`text-sm font-semibold ${
+                                    cuentaDetalle.precio_final < propiedadDetalle.precio_lista 
+                                      ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
+                                      : cuentaDetalle.precio_final > propiedadDetalle.precio_lista 
+                                        ? 'text-orange-600' 
+                                        : 'text-foreground'
+                                  }`}>
+                                    {(() => {
+                                      const difference = cuentaDetalle.precio_final - propiedadDetalle.precio_lista;
+                                      const percentage = (difference / propiedadDetalle.precio_lista) * 100;
+                                      if (difference > 0) {
+                                        return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
+                                      } else if (difference < 0) {
+                                        return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(2)}%)`;
+                                      } else {
+                                        return 'Sin diferencia';
+                                      }
+                                    })()}
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">No disponible</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div>
                             <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
                             <p className="text-sm text-muted-foreground">{selectedPaymentScheme.nombre}</p>
@@ -1806,11 +1861,66 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 {Math.abs(selectedPaymentScheme.porcentaje_descuento_aumento)}%
                               </p>
                             </div>
-                          )}
+                           )}
+                         </div>
                         </div>
                       ) : (
                         // Modified plan - show both original (disabled) and current
                         <div className="space-y-4">
+                          {/* Price Summary Section */}
+                          <div className="mb-4 p-4 bg-muted/20 rounded-lg">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
+                                <p className="text-sm text-muted-foreground">
+                                  {propiedadDetalle?.precio_lista ? 
+                                    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(propiedadDetalle.precio_lista) : 
+                                    'No definido'
+                                  }
+                                </p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Precio Final</h4>
+                                <p className="text-sm font-semibold text-foreground">
+                                  {cuentaDetalle?.precio_final ? 
+                                    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.precio_final) : 
+                                    'No definido'
+                                  }
+                                </p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">
+                                  {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
+                                   cuentaDetalle.precio_final < propiedadDetalle.precio_lista ? 
+                                   'Descuento' : 'Ahorro/Interés'}
+                                </h4>
+                                {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final ? (
+                                  <p className={`text-sm font-semibold ${
+                                    cuentaDetalle.precio_final < propiedadDetalle.precio_lista 
+                                      ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
+                                      : cuentaDetalle.precio_final > propiedadDetalle.precio_lista 
+                                        ? 'text-orange-600' 
+                                        : 'text-foreground'
+                                  }`}>
+                                    {(() => {
+                                      const difference = cuentaDetalle.precio_final - propiedadDetalle.precio_lista;
+                                      const percentage = (difference / propiedadDetalle.precio_lista) * 100;
+                                      if (difference > 0) {
+                                        return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
+                                      } else if (difference < 0) {
+                                        return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(2)}%)`;
+                                      } else {
+                                        return 'Sin diferencia';
+                                      }
+                                    })()}
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">No disponible</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
                           {/* Original Plan - Disabled */}
                           <div className="opacity-50 pointer-events-none border rounded p-3 bg-muted/20">
                             <label className="text-xs text-muted-foreground mb-2 block">Plan Original</label>
