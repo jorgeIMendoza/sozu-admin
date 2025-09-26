@@ -605,7 +605,7 @@ export default function DetalleCuentaCobranza() {
     };
   })() : null;
 
-  // Check if payment plan has been modified
+  // Check if payment plan has been modified by comparing with actual database records
   const isPaymentPlanModified = originalScheme && currentPaymentPlan ? (
     Math.abs(originalScheme.porcentaje_enganche - currentPaymentPlan.porcentaje_enganche) > 0.01 ||
     Math.abs(originalScheme.porcentaje_mensualidades - currentPaymentPlan.porcentaje_mensualidades) > 0.01 ||
