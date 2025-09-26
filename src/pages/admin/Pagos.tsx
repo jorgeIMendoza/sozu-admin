@@ -13,6 +13,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { CompradoresDetailDialog } from "@/components/admin/CompradoresDetailDialog";
 import { EditCuentaCobranzaDialog } from "@/components/admin/EditCuentaCobranzaDialog";
+import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 import { useToast } from "@/hooks/use-toast";
 
 interface Comprador {
@@ -46,6 +47,10 @@ export default function Pagos() {
     cuenta: null
   });
   const [loadingDownload, setLoadingDownload] = useState<number | null>(null);
+  const [paymentDialog, setPaymentDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
+    isOpen: false,
+    cuenta: null
+  });
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -242,8 +247,7 @@ export default function Pagos() {
   };
 
   const handleAddManualPayment = (cuenta: CuentaCobranza) => {
-    // Navigate to the payment detail page where manual payments can be added
-    navigate(`/admin/cuentas-cobranza/${cuenta.id}/detalle?tab=acuerdo&action=add-payment`);
+    setPaymentDialog({ isOpen: true, cuenta });
   };
 
   const handleDownloadOffer = async (cuenta: CuentaCobranza) => {
@@ -690,6 +694,15 @@ export default function Pagos() {
             queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
             setEditDialog({ isOpen: false, cuenta: null });
           }}
+        />
+      )}
+
+      {paymentDialog.cuenta && (
+        <AddManualPaymentDialog
+          isOpen={paymentDialog.isOpen}
+          cuentaCobranzaId={paymentDialog.cuenta.id}
+          cuentaCobranzaLabel={`CC-${String(paymentDialog.cuenta.id).padStart(6, '0')}`}
+          onClose={() => setPaymentDialog({ isOpen: false, cuenta: null })}
         />
       )}
     </div>
