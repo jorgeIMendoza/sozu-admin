@@ -9,12 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { NewMultaDialog } from "@/components/admin/NewMultaDialog";
+import { AddCepDialog } from "@/components/admin/AddCepDialog";
+import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -136,6 +138,14 @@ export default function DetalleCuentaCobranza() {
     isOpen: false,
     multa: null
   });
+  const [cepDialog, setCepDialog] = useState<{
+    isOpen: boolean;
+    paymentId: number | null;
+  }>({
+    isOpen: false,
+    paymentId: null
+  });
+  const [manualPaymentDialog, setManualPaymentDialog] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -850,18 +860,22 @@ export default function DetalleCuentaCobranza() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to="/admin/cuentas-cobranza">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold">Detalle Cuenta de Cobranza CC-{String(cuentaDetalle.id).padStart(6, '0')}</h1>
-          <p className="text-muted-foreground">
-            Información detallada de pagos y acuerdos
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link to="/admin/cuentas-cobranza">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Detalle Cuenta de Cobranza CC-{String(cuentaDetalle.id).padStart(6, '0')}</h1>
+            <p className="text-muted-foreground">Información detallada de pagos y acuerdos</p>
+          </div>
         </div>
+        <Button onClick={() => setManualPaymentDialog(true)}>
+          <CreditCard className="h-4 w-4 mr-2" />
+          Agregar pago manual
+        </Button>
       </div>
 
       {/* Información general de la cuenta */}
@@ -1247,10 +1261,12 @@ export default function DetalleCuentaCobranza() {
                                                      variant="outline"
                                                      size="icon"
                                                      className="h-6 w-6"
-                                                     onClick={() => {
-                                                       // TODO: Implement CEP upload functionality
-                                                       console.log('Add CEP for payment:', aplicacion.pago.id);
-                                                     }}
+                                                      onClick={() => {
+                                                        setCepDialog({
+                                                          isOpen: true,
+                                                          paymentId: aplicacion.pago.id
+                                                        });
+                                                      }}
                                                    >
                                                      <FileText className="h-3 w-3" />
                                                    </Button>
@@ -1460,6 +1476,20 @@ export default function DetalleCuentaCobranza() {
         cuentaId={cuentaId}
         acuerdoMonto={multaDialog.acuerdoMonto}
         existingMultas={multaDialog.existingMultas}
+      />
+
+      <AddCepDialog
+        open={cepDialog.isOpen}
+        onClose={() => setCepDialog({ isOpen: false, paymentId: null })}
+        paymentId={cepDialog.paymentId || 0}
+        cuentaCobranzaId={cuentaId}
+      />
+
+      <AddManualPaymentDialog
+        isOpen={manualPaymentDialog}
+        onClose={() => setManualPaymentDialog(false)}
+        cuentaCobranzaId={cuentaId}
+        cuentaCobranzaLabel={`CC-${String(cuentaDetalle.id).padStart(6, '0')}`}
       />
     </div>
   );
