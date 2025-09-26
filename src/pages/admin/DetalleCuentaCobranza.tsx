@@ -41,6 +41,7 @@ interface AplicacionPago {
     fecha_pago: string;
     monto: number;
     metodo_pago: string;
+    id_metodos_pago: number;
     clave_rastreo: string | null;
     url_cep: string | null;
     url_recibo: string | null;
@@ -542,15 +543,16 @@ export default function DetalleCuentaCobranza() {
               monto: a.monto,
               fecha_creacion: a.fecha_creacion,
               es_multa: a.es_multa,
-              pago: {
-                id: pago?.id || 0,
-                fecha_pago: pago?.fecha_pago || '',
-                monto: pago?.monto || 0,
-                metodo_pago: metodoPago?.nombre || 'Sin método',
-                clave_rastreo: pago?.clave_rastreo,
-                url_cep: pago?.url_cep || null,
-                url_recibo: pago?.url_recibo || null
-              }
+               pago: {
+                 id: pago?.id || 0,
+                 fecha_pago: pago?.fecha_pago || '',
+                 monto: pago?.monto || 0,
+                 metodo_pago: metodoPago?.nombre || 'Sin método',
+                 id_metodos_pago: pago?.id_metodos_pago || 0,
+                 clave_rastreo: pago?.clave_rastreo,
+                 url_cep: pago?.url_cep || null,
+                 url_recibo: pago?.url_recibo || null
+               }
             };
           }),
           multas: multasConEstado.map(m => ({
@@ -1234,32 +1236,54 @@ export default function DetalleCuentaCobranza() {
                                            <span className="text-muted-foreground text-xs">N/A</span>
                                          )}
                                        </TableCell>
-                                       <TableCell>
-                                        <TooltipProvider>
-                                          <div className="flex gap-2">
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  variant="destructive"
-                                                  size="icon"
-                                                  className="h-6 w-6"
-                                                  onClick={() => handleDeletePayment({
-                                                    id: aplicacion.id,
-                                                    monto: aplicacion.monto,
-                                                    conceptoNombre: conceptoDisplay
-                                                  })}
-                                                  disabled={deletePaymentMutation.isPending || isStpPayment}
-                                                >
-                                                  <Trash2 className="h-3 w-3" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>{isStpPayment ? "No se pueden eliminar pagos STP" : "Eliminar Pago"}</p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                          </div>
-                                        </TooltipProvider>
-                                      </TableCell>
+                                        <TableCell>
+                                         <TooltipProvider>
+                                           <div className="flex gap-2">
+                                             {/* CEP Button - Only for STP and STP-manual payments */}
+                                             {(aplicacion.pago.id_metodos_pago === 6 || aplicacion.pago.id_metodos_pago === 7) && (
+                                               <Tooltip>
+                                                 <TooltipTrigger asChild>
+                                                   <Button
+                                                     variant="outline"
+                                                     size="icon"
+                                                     className="h-6 w-6"
+                                                     onClick={() => {
+                                                       // TODO: Implement CEP upload functionality
+                                                       console.log('Add CEP for payment:', aplicacion.pago.id);
+                                                     }}
+                                                   >
+                                                     <FileText className="h-3 w-3" />
+                                                   </Button>
+                                                 </TooltipTrigger>
+                                                 <TooltipContent>
+                                                   <p>Agregar CEP</p>
+                                                 </TooltipContent>
+                                               </Tooltip>
+                                             )}
+                                             
+                                             <Tooltip>
+                                               <TooltipTrigger asChild>
+                                                 <Button
+                                                   variant="destructive"
+                                                   size="icon"
+                                                   className="h-6 w-6"
+                                                   onClick={() => handleDeletePayment({
+                                                     id: aplicacion.id,
+                                                     monto: aplicacion.monto,
+                                                     conceptoNombre: conceptoDisplay
+                                                   })}
+                                                   disabled={deletePaymentMutation.isPending || isStpPayment}
+                                                 >
+                                                   <Trash2 className="h-3 w-3" />
+                                                 </Button>
+                                               </TooltipTrigger>
+                                               <TooltipContent>
+                                                 <p>{isStpPayment ? "No se pueden eliminar pagos STP" : "Eliminar Pago"}</p>
+                                               </TooltipContent>
+                                             </Tooltip>
+                                           </div>
+                                         </TooltipProvider>
+                                       </TableCell>
                                     </TableRow>
                                   );
                                 })}
