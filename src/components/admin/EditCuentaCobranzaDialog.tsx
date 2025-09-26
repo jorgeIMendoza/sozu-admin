@@ -1107,108 +1107,81 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     }
   };
 
-  // Update payment dates after reordering to maintain chronological order
+  // Update payment dates after deletion to fill the gap
   const updatePaymentDatesAfterReorder = async (reorderedAcuerdos: any[]) => {
-    // Find the first payment with a date to use as base reference
-    let baseDate: Date | null = null;
-    let baseDateIndex = -1;
+    console.log("Starting date recalculation after deletion...");
     
-    for (let i = 0; i < reorderedAcuerdos.length; i++) {
-      if (reorderedAcuerdos[i].fecha_pago && !reorderedAcuerdos[i].pago_completado) {
-        baseDate = new Date(reorderedAcuerdos[i].fecha_pago);
-        baseDateIndex = i;
-        break;
-      }
+    // Sort acuerdos by orden to ensure correct sequence
+    const sortedAcuerdos = [...reorderedAcuerdos].sort((a, b) => a.orden - b.orden);
+    
+    // Find all payments that have dates and are not completed
+    const paymentsWithDates = sortedAcuerdos.filter(acuerdo => 
+      acuerdo.fecha_pago && !acuerdo.pago_completado
+    );
+    
+    if (paymentsWithDates.length < 2) {
+      console.log("Not enough payments with dates to recalculate");
+      return;
     }
     
-    // If no base date found, no need to update
-    if (!baseDate || baseDateIndex === -1) return;
-    
-    console.log(`Base date found at index ${baseDateIndex}:`, baseDate);
-    
-    // Calculate all new dates first to avoid constraint conflicts
-    // Only for payments that are not completed
+    // Calculate new dates: each payment should be one month after the previous one
     const updates: { id: number; newDate: Date }[] = [];
-    let monthCounter = 0;
     
-    for (let i = baseDateIndex; i < reorderedAcuerdos.length; i++) {
-      const acuerdo = reorderedAcuerdos[i];
+    for (let i = 1; i < paymentsWithDates.length; i++) {
+      const currentPayment = paymentsWithDates[i];
+      const previousPayment = paymentsWithDates[i - 1];
       
-      // Skip completed payments - don't update their dates
-      if (acuerdo.pago_completado) {
-        continue;
+      // Skip if payment is completed
+      if (currentPayment.pago_completado) continue;
+      
+      // Calculate the new date: previous payment date + 1 month
+      const previousDate = new Date(previousPayment.fecha_pago);
+      const targetDay = previousDate.getDate();
+      const newMonth = previousDate.getMonth() + 1;
+      const newYear = previousDate.getFullYear() + Math.floor(newMonth / 12);
+      const actualMonth = newMonth % 12;
+      
+      // Handle month overflow (e.g., January 31 -> February 28/29)
+      const daysInTargetMonth = new Date(newYear, actualMonth + 1, 0).getDate();
+      const finalDay = Math.min(targetDay, daysInTargetMonth);
+      
+      const newDate = new Date(newYear, actualMonth, finalDay);
+      
+      // Only update if the date is different
+      const currentDate = new Date(currentPayment.fecha_pago);
+      if (currentDate.getTime() !== newDate.getTime()) {
+        updates.push({ id: currentPayment.id, newDate });
+        console.log(`Will update payment ${currentPayment.id} from ${currentDate.toLocaleDateString()} to ${newDate.toLocaleDateString()}`);
       }
+    }
+    
+    // Apply all updates
+    if (updates.length > 0) {
+      console.log(`Updating ${updates.length} payment dates...`);
       
-      // Only update Parcialidad or Entrega payments that are not completed
-      if (acuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') || acuerdo.id_concepto === 3) {
-        // For the base date payment, don't change its date
-        if (i === baseDateIndex) {
-          monthCounter++;
-          continue;
+      for (const update of updates) {
+        try {
+          const { error } = await supabase
+            .from('acuerdos_pago')
+            .update({ fecha_pago: update.newDate.toISOString().split('T')[0] })
+            .eq('id', update.id);
+          
+          if (error) {
+            console.error(`Error updating payment ${update.id}:`, error);
+          } else {
+            console.log(`Successfully updated payment ${update.id}`);
+          }
+        } catch (error) {
+          console.error(`Exception updating payment ${update.id}:`, error);
         }
-        
-        // Get the target day from the base date
-        const targetDay = baseDate.getDate();
-        const newYear = baseDate.getFullYear();
-        const newMonth = baseDate.getMonth() + monthCounter;
-        
-        // Calculate the actual year and month
-        const actualDate = new Date(newYear, newMonth, 1);
-        const actualYear = actualDate.getFullYear();
-        const actualMonth = actualDate.getMonth();
-        
-        // Get the number of days in the target month
-        const daysInTargetMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
-        
-        // Use the minimum between target day and days available in target month
-        const finalDay = Math.min(targetDay, daysInTargetMonth);
-        
-        // Create the new date correctly
-        const nextDate = new Date(actualYear, actualMonth, finalDay);
-        
-        updates.push({ id: acuerdo.id, newDate: nextDate });
-        
-        const conceptType = acuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') ? 'Parcialidad' : 'Entrega';
-        console.log(`Will update ${conceptType} ${acuerdo.id} with date:`, nextDate, `(${monthCounter} months from base)`);
-        
-        monthCounter++;
       }
-    }
-    
-    // Only update if there are payments to update
-    if (updates.length === 0) return;
-    
-    // First, set all dates to NULL to avoid constraint conflicts
-    for (const update of updates) {
-      try {
-        await supabase
-          .from('acuerdos_pago')
-          .update({ fecha_pago: null })
-          .eq('id', update.id);
-      } catch (error) {
-        console.error('Error clearing date:', error);
-      }
-    }
-    
-    // Wait a bit to ensure the updates are processed
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Then update with the correct dates
-    for (const update of updates) {
-      try {
-        await supabase
-          .from('acuerdos_pago')
-          .update({ fecha_pago: update.newDate.toISOString().split('T')[0] })
-          .eq('id', update.id);
-        console.log(`Successfully updated payment ${update.id} with date:`, update.newDate);
-      } catch (error) {
-        console.error('Error updating date:', error);
-      }
-    }
-    
-    // Refresh the data
-    if (cuenta) {
-      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+      
+      // Refresh the data after updates
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+      }, 200);
+    } else {
+      console.log("No date updates needed");
     }
   };
 
