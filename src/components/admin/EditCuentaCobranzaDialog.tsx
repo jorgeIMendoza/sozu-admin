@@ -1892,7 +1892,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         <div className="space-y-4">
                           {/* Original Plan - Disabled */}
                           <div className="opacity-50 pointer-events-none border rounded p-3 bg-muted/20">
-                            <label className="text-xs text-muted-foreground mb-2 block">Plan Original (Deshabilitado)</label>
+                            <label className="text-xs text-muted-foreground mb-2 block">Plan Original</label>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
@@ -1938,7 +1938,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
                           {/* Modified Plan - Active */}
                           <div className="border-2 border-primary rounded p-3">
-                            <label className="text-xs text-primary font-semibold mb-2 block">Plan Modificado (Activo)</label>
+                            <label className="text-xs text-primary font-semibold mb-2 block">Plan Modificado</label>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
