@@ -605,6 +605,35 @@ export default function DetalleCuentaCobranza() {
     };
   })() : null;
 
+  // Calculate actual paid amounts from aplicaciones
+  const actualPaidAmounts = acuerdosPago ? (() => {
+    const apartadoAplicaciones = acuerdosPago
+      .filter(a => a.concepto?.toLowerCase() === 'apartado')
+      .flatMap(a => a.aplicaciones || []);
+    const engancheAplicaciones = acuerdosPago
+      .filter(a => a.concepto?.toLowerCase() === 'enganche')
+      .flatMap(a => a.aplicaciones || []);
+    const parcialidadesAplicaciones = acuerdosPago
+      .filter(a => a.concepto?.toLowerCase() === 'parcialidad')
+      .flatMap(a => a.aplicaciones || []);
+    const contraentregaAplicaciones = acuerdosPago
+      .filter(a => a.concepto?.toLowerCase() === 'pago a contra entrega')
+      .flatMap(a => a.aplicaciones || []);
+
+    const totalEnganchePagado = [...apartadoAplicaciones, ...engancheAplicaciones]
+      .reduce((sum, app) => sum + app.monto, 0);
+    const totalParcialidadesPagado = parcialidadesAplicaciones
+      .reduce((sum, app) => sum + app.monto, 0);
+    const totalContraentregaPagado = contraentregaAplicaciones
+      .reduce((sum, app) => sum + app.monto, 0);
+
+    return {
+      enganche: totalEnganchePagado,
+      mensualidades: totalParcialidadesPagado,
+      entrega: totalContraentregaPagado
+    };
+  })() : null;
+
   // Check if payment plan has been modified by comparing with actual database records
   const isPaymentPlanModified = originalScheme && currentPaymentPlan ? (
     Math.abs(originalScheme.porcentaje_enganche - currentPaymentPlan.porcentaje_enganche) > 0.01 ||
@@ -1073,17 +1102,26 @@ export default function DetalleCuentaCobranza() {
                           <p className="text-sm font-semibold">
                             {currentPaymentPlan?.porcentaje_enganche.toFixed(1)}%
                           </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(actualPaidAmounts?.enganche || 0)}
+                          </p>
                         </div>
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">Mensualidades</label>
                           <p className="text-sm font-semibold">
                             {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades.toFixed(1)}%
                           </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(actualPaidAmounts?.mensualidades || 0)}
+                          </p>
                         </div>
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">Entrega</label>
                           <p className="text-sm font-semibold">
                             {currentPaymentPlan?.porcentaje_entrega.toFixed(1)}%
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(actualPaidAmounts?.entrega || 0)}
                           </p>
                         </div>
                       </div>
