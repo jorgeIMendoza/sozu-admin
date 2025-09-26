@@ -430,7 +430,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       porcentaje_enganche: Number(((totalEnganche / cuentaDetalle.precio_final) * 100).toFixed(2)),
       porcentaje_mensualidades: Number(((totalParcialidades / cuentaDetalle.precio_final) * 100).toFixed(2)),
       porcentaje_entrega: Number(((totalContraentrega / cuentaDetalle.precio_final) * 100).toFixed(2)),
-      numero_mensualidades: parcialidades.length
+      numero_mensualidades: parcialidades.length,
+      // Montos reales de los acuerdos
+      monto_enganche: totalEnganche,
+      monto_mensualidades: totalParcialidades,
+      monto_entrega: totalContraentrega
     };
   })() : null;
 
@@ -1869,10 +1873,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           <div>
                             <h4 className="font-medium text-foreground mb-1">Enganche</h4>
                             <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_enganche?.toFixed(2)}%</p>
-                            {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_enganche && (
+                            {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_enganche !== undefined && (
                               <p className="text-xs text-muted-foreground">
                                 {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                  (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_enganche) / 100
+                                  currentPaymentPlan.monto_enganche
                                 )}
                               </p>
                             )}
@@ -1882,10 +1886,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                             <p className="text-sm text-muted-foreground">
                               {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades?.toFixed(2)}%
                             </p>
-                            {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_mensualidades && (
+                            {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_mensualidades !== undefined && (
                               <p className="text-xs text-muted-foreground">
                                 {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                  (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_mensualidades) / 100
+                                  currentPaymentPlan.monto_mensualidades
                                 )}
                               </p>
                             )}
@@ -1893,10 +1897,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           <div>
                             <h4 className="font-medium text-foreground mb-1">Entrega</h4>
                             <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_entrega?.toFixed(2)}%</p>
-                            {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_entrega && (
+                            {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_entrega !== undefined && (
                               <p className="text-xs text-muted-foreground">
                                 {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                  (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_entrega) / 100
+                                  currentPaymentPlan.monto_entrega
                                 )}
                               </p>
                             )}
@@ -2015,10 +2019,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Enganche</h4>
                                 <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_enganche?.toFixed(2)}%</p>
-                                {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_enganche && (
+                                {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_enganche !== undefined && (
                                   <p className="text-xs font-medium text-primary">
                                     {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                      (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_enganche) / 100
+                                      currentPaymentPlan.monto_enganche
                                     )}
                                   </p>
                                 )}
@@ -2028,10 +2032,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 <p className="text-sm font-semibold">
                                   {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades?.toFixed(2)}%
                                 </p>
-                                {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_mensualidades && (
+                                {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_mensualidades !== undefined && (
                                   <p className="text-xs font-medium text-primary">
                                     {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                      (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_mensualidades) / 100
+                                      currentPaymentPlan.monto_mensualidades
                                     )}
                                   </p>
                                 )}
@@ -2039,10 +2043,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Entrega</h4>
                                 <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_entrega?.toFixed(2)}%</p>
-                                {cuentaDetalle?.precio_final && currentPaymentPlan?.porcentaje_entrega && (
+                                {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_entrega !== undefined && (
                                   <p className="text-xs font-medium text-primary">
                                     {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                      (cuentaDetalle.precio_final * currentPaymentPlan.porcentaje_entrega) / 100
+                                      currentPaymentPlan.monto_entrega
                                     )}
                                   </p>
                                 )}
