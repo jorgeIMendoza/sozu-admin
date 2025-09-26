@@ -255,11 +255,135 @@ export function TransferirEntreComisionesDialog({
       return;
     }
 
+    if (!ultimoPagoSTP?.id) {
+      toast({
+        title: "Error",
+        description: "No se encontró el ID del pago",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setLoading(true);
       
-      // Aquí implementarías la lógica de transferencia
-      // Por ahora solo mostramos un mensaje de éxito
+      const cuentaDestinoId = parseInt(cuentaDestinoSeleccionada);
+      const montoRestanteParaOrigen = (ultimoPagoSTP?.monto || 0) - montoTransferir;
+
+      // 1. Desactivar todas las aplicaciones de pago existentes para este pago
+      const { error: deactivateError } = await supabase
+        .from('aplicaciones_pago')
+        .update({ activo: false })
+        .eq('id_pago', ultimoPagoSTP.id);
+
+      if (deactivateError) {
+        throw new Error('Error al desactivar aplicaciones de pago existentes');
+      }
+
+      // 2. Obtener acuerdos de pago NO completados de la cuenta destino
+      const { data: acuerdosDestino, error: acuerdosDestinoError } = await supabase
+        .from('acuerdos_pago')
+        .select('id, monto, orden')
+        .eq('id_cuenta_cobranza', cuentaDestinoId)
+        .eq('pago_completado', false)
+        .eq('activo', true)
+        .order('orden');
+
+      if (acuerdosDestinoError) {
+        throw new Error('Error al obtener acuerdos de pago de cuenta destino');
+      }
+
+      // 3. Obtener acuerdos de pago NO completados de la cuenta origen
+      const { data: acuerdosOrigen, error: acuerdosOrigenError } = await supabase
+        .from('acuerdos_pago')
+        .select('id, monto, orden')
+        .eq('id_cuenta_cobranza', cuentaOrigenId)
+        .eq('pago_completado', false)
+        .eq('activo', true)
+        .order('orden');
+
+      if (acuerdosOrigenError) {
+        throw new Error('Error al obtener acuerdos de pago de cuenta origen');
+      }
+
+      const aplicacionesPago = [];
+      const acuerdosCompletados = [];
+
+      // 4. Aplicar monto de transferencia a cuenta destino
+      let montoRestanteDestino = montoTransferir;
+      for (const acuerdo of acuerdosDestino || []) {
+        if (montoRestanteDestino <= 0) break;
+
+        const montoAplicar = Math.min(montoRestanteDestino, acuerdo.monto);
+        
+        aplicacionesPago.push({
+          id_pago: ultimoPagoSTP.id,
+          id_acuerdo_pago: acuerdo.id,
+          monto: montoAplicar,
+          es_multa: false,
+          activo: true
+        });
+
+        // Si el acuerdo se completa totalmente, marcarlo como completado
+        if (montoAplicar >= acuerdo.monto) {
+          acuerdosCompletados.push({
+            id: acuerdo.id,
+            pago_completado: true
+          });
+        }
+
+        montoRestanteDestino -= montoAplicar;
+      }
+
+      // 5. Aplicar monto restante a cuenta origen
+      let montoRestanteOrigen = montoRestanteParaOrigen;
+      for (const acuerdo of acuerdosOrigen || []) {
+        if (montoRestanteOrigen <= 0) break;
+
+        const montoAplicar = Math.min(montoRestanteOrigen, acuerdo.monto);
+        
+        aplicacionesPago.push({
+          id_pago: ultimoPagoSTP.id,
+          id_acuerdo_pago: acuerdo.id,
+          monto: montoAplicar,
+          es_multa: false,
+          activo: true
+        });
+
+        // Si el acuerdo se completa totalmente, marcarlo como completado
+        if (montoAplicar >= acuerdo.monto) {
+          acuerdosCompletados.push({
+            id: acuerdo.id,
+            pago_completado: true
+          });
+        }
+
+        montoRestanteOrigen -= montoAplicar;
+      }
+
+      // 6. Insertar nuevas aplicaciones de pago
+      if (aplicacionesPago.length > 0) {
+        const { error: insertError } = await supabase
+          .from('aplicaciones_pago')
+          .insert(aplicacionesPago);
+
+        if (insertError) {
+          throw new Error('Error al crear nuevas aplicaciones de pago');
+        }
+      }
+
+      // 7. Actualizar acuerdos completados
+      for (const acuerdo of acuerdosCompletados) {
+        const { error: updateError } = await supabase
+          .from('acuerdos_pago')
+          .update({ pago_completado: acuerdo.pago_completado })
+          .eq('id', acuerdo.id);
+
+        if (updateError) {
+          console.error('Error al actualizar acuerdo completado:', updateError);
+        }
+      }
+
       toast({
         title: "Transferencia realizada",
         description: `Se transfirió $${montoTransferir.toLocaleString()} a la cuenta seleccionada`,
@@ -271,7 +395,7 @@ export function TransferirEntreComisionesDialog({
       console.error('Error in transfer:', error);
       toast({
         title: "Error",
-        description: "Error al realizar la transferencia",
+        description: error instanceof Error ? error.message : "Error al realizar la transferencia",
         variant: "destructive",
       });
     } finally {
