@@ -71,11 +71,21 @@ export function CancelCuentaDialog({
 
     const idsExcluir = compradoresActuales?.map(c => c.id_persona) || [];
 
-    // Obtener todos los compradores excepto los actuales
+    // Obtener todos los compradores (id_tipo_entidad = 2) excepto los actuales
     const { data, error } = await supabase
       .from('personas')
-      .select('id, nombre_legal, rfc')
+      .select(`
+        id, 
+        nombre_legal, 
+        rfc,
+        entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
+          id_tipo_entidad
+        )
+      `)
       .eq('activo', true)
+      .eq('entidades_relacionadas.activo', true)
+      .eq('entidades_relacionadas.id_tipo_entidad', 2)
+      .is('entidades_relacionadas.id_proyecto', null)
       .not('id', 'in', `(${idsExcluir.join(',')})`)
       .order('nombre_legal');
 
