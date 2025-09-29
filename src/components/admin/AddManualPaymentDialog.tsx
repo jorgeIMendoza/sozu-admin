@@ -208,7 +208,7 @@ export function AddManualPaymentDialog({
           message: "Pago manual aplicado",
           clave_rastreo: result.clave_rastreo,
           id_cuenta_cobranza: cuentaCobranzaId,
-          monto_pagado: result.monto,
+          pagos: [{ monto_pagado: result.monto }],
           id_pago: result.id_pago,
           es_stp_manual: isStpManual,
           environment: ENVIRONMENT
