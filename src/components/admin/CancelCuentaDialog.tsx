@@ -48,6 +48,7 @@ export function CancelCuentaDialog({
   const [nuevoCompradorId, setNuevoCompradorId] = useState<string>("");
   const [pagosNuevos, setPagosNuevos] = useState<PagoNuevo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMontoCobro, setErrorMontoCobro] = useState<string>("");
   const { toast } = useToast();
 
   const montoCobrolNumber = parseFloat(montoCobro) || 0;
@@ -131,20 +132,39 @@ export function CancelCuentaDialog({
     setPagosNuevos(nuevos);
   };
 
+  const validarMontoCobro = (valor: string) => {
+    const monto = parseFloat(valor) || 0;
+    
+    if (monto < 0) {
+      setErrorMontoCobro("El monto no puede ser negativo");
+      return;
+    }
+    
+    const maxCincoPerciento = precioFinal * 0.05;
+    if (monto > maxCincoPerciento) {
+      setErrorMontoCobro(`No puede ser mayor al 5% del precio final ($${maxCincoPerciento.toFixed(2)})`);
+      return;
+    }
+    
+    if (monto > totalPagado) {
+      setErrorMontoCobro(`No puede ser mayor al monto ya pagado ($${totalPagado.toFixed(2)})`);
+      return;
+    }
+    
+    setErrorMontoCobro("");
+  };
+
+  const handleMontoCobroChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const valor = e.target.value;
+    setMontoCobro(valor);
+    validarMontoCobro(valor);
+  };
+
   const validarFormulario = (): string | null => {
     if (!tipoCancelacion) return "Debe seleccionar un tipo de cancelación";
     if (montoCobro === "") return "El cobro por cancelación es obligatorio";
     
-    // Validar que no exceda el 5% del precio final
-    const maxCincoPerciento = precioFinal * 0.05;
-    if (montoCobrolNumber > maxCincoPerciento) {
-      return `El cobro por cancelación no puede ser mayor al 5% del precio final ($${maxCincoPerciento.toFixed(2)})`;
-    }
-    
-    // Validar que no exceda el monto ya pagado
-    if (montoCobrolNumber > totalPagado) {
-      return `El cobro por cancelación no puede ser mayor al monto ya pagado ($${totalPagado.toFixed(2)})`;
-    }
+    if (errorMontoCobro) return errorMontoCobro;
     
     if (tipoCancelacion === "2" && !evidenciaFile) {
       return "La evidencia es obligatoria para Rescisión de contrato";
@@ -295,9 +315,13 @@ export function CancelCuentaDialog({
               step="0.01"
               min="0"
               value={montoCobro}
-              onChange={(e) => setMontoCobro(e.target.value)}
+              onChange={handleMontoCobroChange}
               placeholder="0.00"
+              className={errorMontoCobro ? "border-destructive" : ""}
             />
+            {errorMontoCobro && (
+              <p className="text-sm text-destructive">{errorMontoCobro}</p>
+            )}
           </div>
 
           {/* Evidencia */}
