@@ -89,7 +89,12 @@ export function CancelCuentaDialog({
       return;
     }
 
-    setMetodosPago(data || []);
+    // Filtrar solo Cheque, Efectivo y Transferencia electrónica
+    const metodosFiltrados = (data || []).filter(metodo => 
+      ['cheque', 'efectivo', 'transferencia electrónica', 'transferencia electronica'].includes(metodo.nombre.toLowerCase())
+    );
+    
+    setMetodosPago(metodosFiltrados);
   };
 
   const fetchCompradores = async () => {
