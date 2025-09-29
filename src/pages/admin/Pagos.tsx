@@ -547,8 +547,14 @@ export default function Pagos() {
                             </span>
                           </TableCell>
                         <TableCell>{cuenta.modelo}</TableCell>
-                        <TableCell className="font-semibold">
+                        <TableCell className="font-semibold text-green-600">
                           {formatCurrency(Number(cuenta.precio_final))}
+                        </TableCell>
+                        <TableCell className="font-semibold text-blue-600">
+                          {formatCurrency(cuenta.pagado)}
+                        </TableCell>
+                        <TableCell className="font-semibold text-orange-600">
+                          {formatCurrency(cuenta.restante)}
                         </TableCell>
                           <TableCell>
                             <TooltipProvider>
