@@ -135,6 +135,17 @@ export function CancelCuentaDialog({
     if (!tipoCancelacion) return "Debe seleccionar un tipo de cancelación";
     if (montoCobro === "") return "El cobro por cancelación es obligatorio";
     
+    // Validar que no exceda el 5% del precio final
+    const maxCincoPerciento = precioFinal * 0.05;
+    if (montoCobrolNumber > maxCincoPerciento) {
+      return `El cobro por cancelación no puede ser mayor al 5% del precio final ($${maxCincoPerciento.toFixed(2)})`;
+    }
+    
+    // Validar que no exceda el monto ya pagado
+    if (montoCobrolNumber > totalPagado) {
+      return `El cobro por cancelación no puede ser mayor al monto ya pagado ($${totalPagado.toFixed(2)})`;
+    }
+    
     if (tipoCancelacion === "2" && !evidenciaFile) {
       return "La evidencia es obligatoria para Rescisión de contrato";
     }
