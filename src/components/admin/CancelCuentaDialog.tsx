@@ -310,6 +310,25 @@ export function CancelCuentaDialog({
           if (pagoError) throw pagoError;
         }
 
+        // Obtener id_er_dueno
+        const { data: ofertaData, error: ofertaError } = await supabase
+          .from('ofertas')
+          .select(`
+            id_propiedad,
+            propiedades!ofertas_id_propiedad_fkey(
+              id_entidad_relacionada_dueno
+            )
+          `)
+          .eq('id', idOferta)
+          .single();
+
+        if (ofertaError) throw ofertaError;
+
+        const idErDueno = ofertaData?.propiedades?.id_entidad_relacionada_dueno;
+        if (!idErDueno) {
+          throw new Error('No se pudo obtener id_er_dueno');
+        }
+
         // Llamar al webhook
         const webhookBaseUrl = import.meta.env.VITE_N8N_WEBHOOK_BASE_URL;
         if (!webhookBaseUrl) {
@@ -321,12 +340,12 @@ export function CancelCuentaDialog({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            siguiente_accion: "genera_cuenta_cobranza_completa",
+            siguiente_accion: "genera_cuenta_cobranza_completa_cesion",
             id_oferta: idOferta,
             es_cancelacion: true,
             precio_final: precioFinal,
             clabe_stp_tmp_apartado: clabeStpOriginal,
-            id_nuevo_comprador: parseInt(nuevoCompradorId)
+            id_er_dueno: idErDueno
           })
         });
 
