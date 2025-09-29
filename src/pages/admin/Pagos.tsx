@@ -86,11 +86,15 @@ export default function Pagos() {
 
       // Get all payment amounts for each account
       const cuentaIds = cuentas.map(c => c.id);
-      const { data: pagosSums } = await supabase
+      console.log('Cuenta IDs:', cuentaIds);
+      
+      const { data: pagosSums, error: pagosError } = await supabase
         .from('pagos')
         .select('id_cuenta_cobranza, monto')
         .in('id_cuenta_cobranza', cuentaIds)
         .eq('activo', true);
+
+      console.log('Pagos query result:', { pagosSums, pagosError });
 
       // Calculate total payments per account
       const pagadoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
@@ -98,8 +102,11 @@ export default function Pagos() {
           ?.filter(p => p.id_cuenta_cobranza === cuenta.id)
           ?.reduce((sum, p) => sum + (p.monto || 0), 0) || 0;
         acc[cuenta.id] = totalPagado;
+        console.log(`Cuenta ${cuenta.id}: pagado = ${totalPagado}`);
         return acc;
       }, {});
+      
+      console.log('Pagado por cuenta:', pagadoPorCuenta);
 
       // Get offer IDs to fetch related data
       const ofertaIds = cuentas.map(c => c.id_oferta);
