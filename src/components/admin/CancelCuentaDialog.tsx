@@ -307,8 +307,12 @@ export function CancelCuentaDialog({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            success: true,
             siguiente_accion: "genera_cuenta_cobranza_completa_cesion",
+            message: "Cancelación con cesión de derechos",
+            id_cuenta_cobranza: cuentaId,
             id_oferta: idOferta,
+            pagos: pagosNuevos.map(pago => ({ monto_pagado: pago.monto })),
             es_cancelacion: true,
             precio_final: precioFinal,
             clabe_stp_tmp_apartado: clabeStpOriginal,
