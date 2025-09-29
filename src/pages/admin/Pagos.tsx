@@ -27,6 +27,8 @@ interface CuentaCobranza {
   id: number;
   clabe_stp: string | null;
   precio_final: number;
+  pagado: number;
+  restante: number;
   compradores: Comprador[];
   dueno: string;
   proyecto: string;
@@ -64,7 +66,7 @@ export default function Pagos() {
   const { data: cuentasCobranza, isLoading } = useQuery({
     queryKey: ["cuentas_cobranza"],
     queryFn: async () => {
-      // Get basic cuenta cobranza data
+      // Get basic cuenta cobranza data with payment sums
       const { data: cuentas, error: cuentasError } = await supabase
         .from('cuentas_cobranza')
         .select(`
@@ -81,6 +83,23 @@ export default function Pagos() {
       }
 
       if (!cuentas || cuentas.length === 0) return [];
+
+      // Get all payment amounts for each account
+      const cuentaIds = cuentas.map(c => c.id);
+      const { data: pagosSums } = await supabase
+        .from('pagos')
+        .select('id_cuenta_cobranza, monto')
+        .in('id_cuenta_cobranza', cuentaIds)
+        .eq('activo', true);
+
+      // Calculate total payments per account
+      const pagadoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
+        const totalPagado = pagosSums
+          ?.filter(p => p.id_cuenta_cobranza === cuenta.id)
+          ?.reduce((sum, p) => sum + (p.monto || 0), 0) || 0;
+        acc[cuenta.id] = totalPagado;
+        return acc;
+      }, {});
 
       // Get offer IDs to fetch related data
       const ofertaIds = cuentas.map(c => c.id_oferta);
@@ -106,7 +125,6 @@ export default function Pagos() {
       }
 
       // Get compradores
-      const cuentaIds = cuentas.map(c => c.id);
       const { data: compradores } = await supabase
         .from('compradores')
         .select(`
@@ -114,7 +132,7 @@ export default function Pagos() {
           porcentaje_copropiedad,
           personas!compradores_id_persona_fkey(nombre_legal, rfc)
         `)
-        .in('id_cuenta_cobranza', cuentaIds);
+        .in('id_cuenta_cobranza', cuentas.map(c => c.id));
 
       // Get entidades relacionadas, proyectos, edificios, modelos
       const entidadIds = ofertas?.map(o => o.propiedades?.id_entidad_relacionada_dueno).filter(Boolean) || [];
@@ -147,10 +165,16 @@ export default function Pagos() {
         const edificioModelo = edificiosModelosResult.data?.find(em => em.id === propiedad?.id_edificio_modelo);
         const cuentaCompradores = compradores?.filter(c => c.id_cuenta_cobranza === cuenta.id) || [];
 
+        const pagado = pagadoPorCuenta[cuenta.id] || 0;
+        const precio_final = cuenta.precio_final || 0;
+        const restante = precio_final - pagado;
+
         return {
           id: cuenta.id,
           clabe_stp: cuenta.clabe_stp,
-          precio_final: cuenta.precio_final || 0,
+          precio_final,
+          pagado,
+          restante,
           compradores: cuentaCompradores.map(c => ({
             nombre_legal: c.personas?.nombre_legal || '',
             rfc: c.personas?.rfc || null,
@@ -457,6 +481,8 @@ export default function Pagos() {
                       <TableHead>No. Propiedad</TableHead>
                       <TableHead>Modelo</TableHead>
                       <TableHead>Precio Final</TableHead>
+                      <TableHead>Pagado</TableHead>
+                      <TableHead>Restante</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -639,6 +665,8 @@ export default function Pagos() {
                       <TableHead>No. Propiedad</TableHead>
                       <TableHead>Modelo</TableHead>
                       <TableHead>Precio Final</TableHead>
+                      <TableHead>Pagado</TableHead>
+                      <TableHead>Restante</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -696,8 +724,14 @@ export default function Pagos() {
                             </span>
                           </TableCell>
                         <TableCell>{cuenta.modelo}</TableCell>
-                        <TableCell className="font-semibold">
+                        <TableCell className="font-semibold text-green-600">
                           {formatCurrency(Number(cuenta.precio_final))}
+                        </TableCell>
+                        <TableCell className="font-semibold text-blue-600">
+                          {formatCurrency(cuenta.pagado)}
+                        </TableCell>
+                        <TableCell className="font-semibold text-orange-600">
+                          {formatCurrency(cuenta.restante)}
                         </TableCell>
                          <TableCell>
                            <TooltipProvider>
