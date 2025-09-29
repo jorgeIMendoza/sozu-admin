@@ -18,6 +18,13 @@ interface Comprador {
 interface PagoNuevo {
   monto: number;
   fecha_pago: string;
+  id_metodo_pago: string;
+  evidencia: File | null;
+}
+
+interface MetodoPago {
+  id: number;
+  nombre: string;
 }
 
 interface CancelCuentaDialogProps {
@@ -45,6 +52,7 @@ export function CancelCuentaDialog({
   const [montoCobro, setMontoCobro] = useState<string>("0");
   const [evidenciaFile, setEvidenciaFile] = useState<File | null>(null);
   const [compradores, setCompradores] = useState<Comprador[]>([]);
+  const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([]);
   const [nuevoCompradorId, setNuevoCompradorId] = useState<string>("");
   const [pagosNuevos, setPagosNuevos] = useState<PagoNuevo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -57,10 +65,32 @@ export function CancelCuentaDialog({
   const minimoRequerido = totalPagado - montoCobrolNumber;
 
   useEffect(() => {
-    if (isOpen && tipoCancelacion === "1") {
-      fetchCompradores();
+    if (isOpen) {
+      fetchMetodosPago();
+      if (tipoCancelacion === "1") {
+        fetchCompradores();
+      }
     }
   }, [isOpen, tipoCancelacion]);
+
+  const fetchMetodosPago = async () => {
+    const { data, error } = await supabase
+      .from('metodos_pago')
+      .select('id, nombre')
+      .eq('activo', true)
+      .order('nombre');
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los métodos de pago",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setMetodosPago(data || []);
+  };
 
   const fetchCompradores = async () => {
     // Obtener compradores actuales de esta cuenta
@@ -119,14 +149,19 @@ export function CancelCuentaDialog({
   };
 
   const agregarPago = () => {
-    setPagosNuevos([...pagosNuevos, { monto: 0, fecha_pago: new Date().toISOString().split('T')[0] }]);
+    setPagosNuevos([...pagosNuevos, { 
+      monto: 0, 
+      fecha_pago: new Date().toISOString().split('T')[0],
+      id_metodo_pago: "",
+      evidencia: null
+    }]);
   };
 
   const eliminarPago = (index: number) => {
     setPagosNuevos(pagosNuevos.filter((_, i) => i !== index));
   };
 
-  const actualizarPago = (index: number, field: keyof PagoNuevo, value: string | number) => {
+  const actualizarPago = (index: number, field: keyof PagoNuevo, value: string | number | File | null) => {
     const nuevos = [...pagosNuevos];
     nuevos[index] = { ...nuevos[index], [field]: value };
     setPagosNuevos(nuevos);
@@ -173,6 +208,11 @@ export function CancelCuentaDialog({
     if (tipoCancelacion === "1") {
       if (!nuevoCompradorId) return "Debe seleccionar un nuevo comprador";
       if (pagosNuevos.length === 0) return "Debe agregar al menos un pago";
+      
+      // Validar que todos los pagos tengan método de pago
+      const pagosSinMetodo = pagosNuevos.some(p => !p.id_metodo_pago);
+      if (pagosSinMetodo) return "Todos los pagos deben tener un método de pago";
+      
       if (totalPagosNuevos < minimoRequerido) {
         return `La suma de los pagos (${totalPagosNuevos.toFixed(2)}) debe ser mayor o igual a ${minimoRequerido.toFixed(2)}`;
       }
@@ -225,15 +265,33 @@ export function CancelCuentaDialog({
 
       // Si es Cesión de derechos
       if (tipoCancelacion === "1") {
-        // Agregar pagos con método "Cesión de derechos" (id 8)
+        // Agregar pagos con sus evidencias
         for (const pago of pagosNuevos) {
+          // Subir evidencia del pago si existe
+          let urlEvidenciaPago = null;
+          if (pago.evidencia) {
+            const fileNamePago = `evidencia_pago_${cuentaId}_${Date.now()}_${Math.random()}.${pago.evidencia.name.split('.').pop()}`;
+            const { error: uploadError } = await supabase.storage
+              .from('documentos')
+              .upload(fileNamePago, pago.evidencia);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+              .from('documentos')
+              .getPublicUrl(fileNamePago);
+
+            urlEvidenciaPago = publicUrl;
+          }
+
           const { error: pagoError } = await supabase
             .from('pagos')
             .insert({
               id_cuenta_cobranza: cuentaId,
-              id_metodos_pago: 8,
+              id_metodos_pago: parseInt(pago.id_metodo_pago),
               monto: pago.monto,
               fecha_pago: pago.fecha_pago,
+              url_recibo: urlEvidenciaPago,
               activo: true
             });
 
@@ -377,33 +435,92 @@ export function CancelCuentaDialog({
                   </div>
                   
                   {pagosNuevos.map((pago, index) => (
-                    <div key={index} className="flex gap-2 items-end">
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-xs">Monto</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={pago.monto}
-                          onChange={(e) => actualizarPago(index, 'monto', parseFloat(e.target.value) || 0)}
-                          placeholder="0.00"
-                        />
+                    <div key={index} className="border p-4 rounded-lg space-y-3">
+                      <div className="flex gap-2 items-end">
+                        <div className="flex-1 space-y-1">
+                          <Label className="text-xs">Monto *</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={pago.monto}
+                            onChange={(e) => actualizarPago(index, 'monto', parseFloat(e.target.value) || 0)}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <Label className="text-xs">Fecha *</Label>
+                          <Input
+                            type="date"
+                            value={pago.fecha_pago}
+                            onChange={(e) => actualizarPago(index, 'fecha_pago', e.target.value)}
+                          />
+                        </div>
+                        <Button 
+                          variant="destructive" 
+                          size="icon"
+                          onClick={() => eliminarPago(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-xs">Fecha</Label>
-                        <Input
-                          type="date"
-                          value={pago.fecha_pago}
-                          onChange={(e) => actualizarPago(index, 'fecha_pago', e.target.value)}
-                        />
+                      
+                      <div className="space-y-1">
+                        <Label className="text-xs">Método de Pago *</Label>
+                        <Select 
+                          value={pago.id_metodo_pago} 
+                          onValueChange={(value) => actualizarPago(index, 'id_metodo_pago', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar método" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {metodosPago.map((metodo) => (
+                              <SelectItem key={metodo.id} value={String(metodo.id)}>
+                                {metodo.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <Button 
-                        variant="destructive" 
-                        size="icon"
-                        onClick={() => eliminarPago(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs">Evidencia (opcional)</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+                                if (!validTypes.includes(file.type)) {
+                                  toast({
+                                    title: "Error",
+                                    description: "Solo se permiten archivos PDF o imágenes",
+                                    variant: "destructive"
+                                  });
+                                  return;
+                                }
+                                actualizarPago(index, 'evidencia', file);
+                              }
+                            }}
+                            className="flex-1"
+                          />
+                          {pago.evidencia && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => actualizarPago(index, 'evidencia', null)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        {pago.evidencia && (
+                          <p className="text-xs text-muted-foreground">{pago.evidencia.name}</p>
+                        )}
+                      </div>
                     </div>
                   ))}
 
