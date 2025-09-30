@@ -1167,7 +1167,7 @@ export default function DetalleCuentaCobranza() {
                 </h3>
                 
                 {!isPaymentPlanModified ? (
-                  // Original unchanged plan - show current database values
+                  // Original unchanged plan - show current database values with amounts
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">Nombre del Plan</label>
@@ -1183,16 +1183,25 @@ export default function DetalleCuentaCobranza() {
                           currentPaymentPlan?.porcentaje_enganche.toFixed(1)
                         }%
                       </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCurrency(currentPaymentPlan?.hayCesionDerechos ? (actualAmounts?.cesion || 0) : (actualAmounts?.enganche || 0))}
+                      </p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">Mensualidades</label>
                       <p className="text-sm font-semibold">
                         {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades.toFixed(1)}%
                       </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCurrency(actualAmounts?.mensualidades || 0)}
+                      </p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">Entrega</label>
                       <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_entrega.toFixed(1)}%</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCurrency(actualAmounts?.entrega || 0)}
+                      </p>
                     </div>
                   </div>
                 ) : (
