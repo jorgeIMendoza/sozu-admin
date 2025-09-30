@@ -249,12 +249,23 @@ const Propiedades = () => {
         return acc;
       }, {});
       
+      // Get active cuentas_cobranza separately
+      const { data: activeCuentas } = await supabase
+        .from('cuentas_cobranza')
+        .select('id, clabe_stp, id_oferta')
+        .eq('activo', true);
+
+      const activeCuentasMap = (activeCuentas || []).reduce((acc: any, cuenta: any) => {
+        acc[cuenta.id_oferta] = cuenta;
+        return acc;
+      }, {});
+
       // Transform the data with counts
       const transformedData = data?.map((property: any) => {
-        // Get clabe_stp from cuentas_cobranza if available, otherwise use clabe_stp_tmp_apartado
-        const cuentaCobranzaData = property.ofertas?.find((oferta: any) => 
-          oferta.cuentas_cobranza && oferta.cuentas_cobranza.length > 0
-        )?.cuentas_cobranza[0];
+        // Get clabe_stp from ACTIVE cuentas_cobranza if available
+        const cuentaCobranzaData = property.ofertas?.map((oferta: any) => 
+          activeCuentasMap[oferta.id]
+        ).find((cuenta: any) => cuenta !== undefined);
         
         return {
           id: property.id,
