@@ -335,7 +335,12 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
             <TabsTrigger value="general">Características Generales</TabsTrigger>
             <TabsTrigger value="descripcion">Descripción</TabsTrigger>
             <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
-            <TabsTrigger value="documentos">Documentos</TabsTrigger>
+            <TabsTrigger 
+              value="documentos" 
+              disabled={parseInt(formData.id_estatus_disponibilidad) <= 4}
+            >
+              Documentos
+            </TabsTrigger>
           </TabsList>
           
           <form onSubmit={handleSubmit} className="space-y-6">

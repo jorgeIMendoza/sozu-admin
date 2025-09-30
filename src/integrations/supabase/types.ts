@@ -936,6 +936,7 @@ export type Database = {
           es_verificado: boolean
           fecha_actualizacion: string
           fecha_creacion: string
+          id_cuenta_cobranza: number | null
           id_persona: number | null
           id_producto: number | null
           id_propiedad: number | null
@@ -948,6 +949,7 @@ export type Database = {
           es_verificado?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
+          id_cuenta_cobranza?: number | null
           id_persona?: number | null
           id_producto?: number | null
           id_propiedad?: number | null
@@ -960,6 +962,7 @@ export type Database = {
           es_verificado?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
+          id_cuenta_cobranza?: number | null
           id_persona?: number | null
           id_producto?: number | null
           id_propiedad?: number | null
@@ -1008,6 +1011,13 @@ export type Database = {
             columns: ["id_propiedad"]
             isOneToOne: false
             referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_documentos_cuenta_cobranza"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
             referencedColumns: ["id"]
           },
         ]

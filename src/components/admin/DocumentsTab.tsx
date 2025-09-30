@@ -214,6 +214,32 @@ export function DocumentsTab({
         ? existingDocs[0].numero + 1 
         : 1;
 
+      // Get cuenta_cobranza if entity is propiedad
+      let idCuentaCobranza = null;
+      if (entityType === 'propiedad') {
+        // First get the ofertas for this property
+        const { data: ofertasData } = await supabase
+          .from('ofertas')
+          .select('id')
+          .eq('id_propiedad', entityId)
+          .eq('activo', true);
+        
+        if (ofertasData && ofertasData.length > 0) {
+          const ofertaIds = ofertasData.map(o => o.id);
+          
+          // Then get the cuenta_cobranza
+          const { data: cuentaData } = await supabase
+            .from('cuentas_cobranza')
+            .select('id')
+            .eq('activo', true)
+            .in('id_oferta', ofertaIds)
+            .limit(1)
+            .maybeSingle();
+          
+          idCuentaCobranza = cuentaData?.id || null;
+        }
+      }
+
       // Save document record
       const documentData = {
         numero: nextNumero,
@@ -223,7 +249,7 @@ export function DocumentsTab({
         id_tipo_documento: parseInt(selectedTipoDocumento),
         ...(entityType === 'persona' 
           ? { id_persona: entityId } 
-          : { id_propiedad: entityId })
+          : { id_propiedad: entityId, id_cuenta_cobranza: idCuentaCobranza })
       };
 
       const { error: dbError } = await supabase
