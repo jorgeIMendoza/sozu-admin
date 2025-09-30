@@ -511,7 +511,7 @@ export function DocumentsTab({
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>{documento.es_verificado ? 'Documento verificado - Click para desmarcar' : 'Marcar como verificado'}</p>
+                                <p>{documento.es_verificado ? 'Verificado' : 'No verificado'}</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
