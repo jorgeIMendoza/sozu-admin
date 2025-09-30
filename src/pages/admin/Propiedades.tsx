@@ -100,6 +100,7 @@ const Propiedades = () => {
   const [disponibilidadFilter, setDisponibilidadFilter] = useState("");
   const [bodegasFilter, setBodegasFilter] = useState("");
   const [estacionamientosFilter, setEstacionamientosFilter] = useState("");
+  const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState("");
   
   // Paginación
   const [currentPageActive, setCurrentPageActive] = useState(1);
@@ -729,7 +730,11 @@ const Propiedades = () => {
       (estacionamientosFilter === "con_estacionamientos" && property.estacionamientos_count > 0) ||
       (estacionamientosFilter === "sin_estacionamientos" && property.estacionamientos_count === 0);
     
-    return matchesSearch && matchesProyecto && matchesModelo && matchesRecamaras && matchesBanos && matchesDisponibilidad && matchesBodegas && matchesEstacionamientos;
+    const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
+      (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
+      (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+    
+    return matchesSearch && matchesProyecto && matchesModelo && matchesRecamaras && matchesBanos && matchesDisponibilidad && matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
   }) || [];
 
   // Separar propiedades por pestaña
@@ -1031,7 +1036,7 @@ const Propiedades = () => {
           {propertiesToRender.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={tabType === "draft" ? 20 : 19} className="text-center py-6">
-                  {searchTerm || proyectoFilter || modeloFilter || recamarasFilter || banosFilter || disponibilidadFilter || bodegasFilter || estacionamientosFilter 
+                  {searchTerm || proyectoFilter || modeloFilter || recamarasFilter || banosFilter || disponibilidadFilter || bodegasFilter || estacionamientosFilter || cuentaCobranzaFilter
                     ? "No se encontraron resultados." 
                     : tabType === "eliminados"
                       ? "No hay propiedades eliminadas." 
@@ -1459,6 +1464,18 @@ const Propiedades = () => {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Cuenta de Cobranza</label>
+                <Select value={cuentaCobranzaFilter} onValueChange={setCuentaCobranzaFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filtrar por cuenta..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="si">Sí</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             
             {/* Botón para limpiar filtros */}
@@ -1474,6 +1491,7 @@ const Propiedades = () => {
                   setDisponibilidadFilter("");
                   setBodegasFilter("");
                   setEstacionamientosFilter("");
+                  setCuentaCobranzaFilter("");
                   setSelectedProperties([]);
                 }}
               >
