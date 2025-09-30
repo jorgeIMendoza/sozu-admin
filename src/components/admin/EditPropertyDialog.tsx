@@ -337,7 +337,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
             <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
             <TabsTrigger 
               value="documentos" 
-              disabled={parseInt(formData.id_estatus_disponibilidad) <= 4}
+              disabled={parseInt(formData.id_estatus_disponibilidad) < 4}
             >
               Documentos
             </TabsTrigger>
