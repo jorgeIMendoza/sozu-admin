@@ -31,7 +31,11 @@ import {
   Scale,
   Receipt,
   Banknote,
-  Landmark
+  Landmark,
+  Shield,
+  Wrench,
+  KeyRound,
+  ScrollText
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -62,12 +66,12 @@ const navigationItems = [
     title: "Entidades",
     icon: Users,
     children: [
-      { title: "Entidades Legales", href: "/admin/entidades-legales", icon: Building2 },
+      { title: "Entidades Legales", href: "/admin/entidades-legales", icon: Shield },
       { title: "Desarrolladores", href: "/admin/desarrolladores", icon: Building2 },
-      { title: "Inmobiliarias", href: "/admin/inmobiliarias", icon: Building },
-      { title: "Administradoras", href: "/admin/administradoras", icon: Building },
-      { title: "Notarías", href: "/admin/notarias", icon: FileText },
-      { title: "Bancos", href: "/admin/bancos", icon: CreditCard },
+      { title: "Inmobiliarias", href: "/admin/inmobiliarias", icon: KeyRound },
+      { title: "Administradoras", href: "/admin/administradoras", icon: Wrench },
+      { title: "Notarías", href: "/admin/notarias", icon: ScrollText },
+      { title: "Bancos", href: "/admin/bancos", icon: Landmark },
     ]
   },
   {
