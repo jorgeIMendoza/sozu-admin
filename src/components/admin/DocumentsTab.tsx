@@ -504,14 +504,14 @@ export function DocumentsTab({
                                   onClick={() => handleToggleVerification(documento)}
                                 >
                                   {documento.es_verificado ? (
-                                    <X className="h-4 w-4" />
+                                    <Check className="h-4 w-4 text-green-600" />
                                   ) : (
-                                    <Check className="h-4 w-4" />
+                                    <X className="h-4 w-4 text-muted-foreground" />
                                   )}
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>{documento.es_verificado ? 'Marcar como no verificado' : 'Marcar como verificado'}</p>
+                                <p>{documento.es_verificado ? 'Documento verificado - Click para desmarcar' : 'Marcar como verificado'}</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
