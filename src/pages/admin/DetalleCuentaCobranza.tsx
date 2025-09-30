@@ -63,6 +63,7 @@ interface CuentaDetalle {
   precio_final: number;
   es_aprobado: boolean;
   fecha_compra: string;
+  activo: boolean;
   compradores: Comprador[];
   proyecto: string;
   edificio: string;
@@ -235,6 +236,7 @@ export default function DetalleCuentaCobranza() {
         precio_final: cuenta.precio_final || 0,
         es_aprobado: cuenta.es_aprobado,
         fecha_compra: cuenta.fecha_compra,
+        activo: cuenta.activo, // Add activo field to track if account is cancelled
         compradores: compradores?.map(c => ({
           nombre_legal: c.personas?.nombre_legal || '',
           rfc: c.personas?.rfc || null,
@@ -898,8 +900,26 @@ export default function DetalleCuentaCobranza() {
     return <div className="text-center py-8 text-muted-foreground">Cuenta no encontrada</div>;
   }
 
+  const esCuentaCancelada = !cuentaDetalle?.activo;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Diagonal "CANCELADA" stamp for cancelled accounts */}
+      {esCuentaCancelada && (
+        <>
+          <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center">
+            <div className="absolute transform rotate-45 bg-red-600 text-white px-12 py-3 text-5xl font-bold opacity-20 select-none shadow-lg">
+              CANCELADA
+            </div>
+          </div>
+          <div className="fixed top-4 right-4 z-50 pointer-events-none">
+            <div className="transform rotate-12 bg-red-600 text-white px-4 py-2 text-lg font-bold opacity-90 select-none shadow-lg rounded">
+              CANCELADA
+            </div>
+          </div>
+        </>
+      )}
+      
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
@@ -908,20 +928,30 @@ export default function DetalleCuentaCobranza() {
             </Link>
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Detalle Cuenta de Cobranza CC-{String(cuentaDetalle.id).padStart(6, '0')}</h1>
+            <h1 className="text-3xl font-bold">
+              Detalle Cuenta de Cobranza CC-{String(cuentaDetalle.id).padStart(6, '0')}
+              {esCuentaCancelada && (
+                <Badge variant="destructive" className="ml-3">
+                  CANCELADA
+                </Badge>
+              )}
+            </h1>
             <p className="text-muted-foreground">Información detallada de pagos y acuerdos</p>
           </div>
         </div>
         <div className="flex gap-2">
           <Button 
             onClick={() => setTransferDialog({ isOpen: true })}
-            disabled={!ultimoPagoSTP}
+            disabled={!ultimoPagoSTP || esCuentaCancelada}
             variant="outline"
           >
             <ArrowRight className="h-4 w-4 mr-2" />
             Transferir entre cuentas
           </Button>
-          <Button onClick={() => setManualPaymentDialog(true)}>
+          <Button 
+            onClick={() => setManualPaymentDialog(true)}
+            disabled={esCuentaCancelada}
+          >
             <CreditCard className="h-4 w-4 mr-2" />
             Agregar pago manual
           </Button>
@@ -929,7 +959,7 @@ export default function DetalleCuentaCobranza() {
       </div>
 
       {/* Información general de la cuenta */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className={`grid gap-4 md:grid-cols-2 lg:grid-cols-4 ${esCuentaCancelada ? 'opacity-60' : ''}`}>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Precio Final</CardTitle>
@@ -984,7 +1014,7 @@ export default function DetalleCuentaCobranza() {
       </div>
 
       {/* Información de la propiedad */}
-      <Card>
+      <Card className={esCuentaCancelada ? 'opacity-60' : ''}>
         <CardHeader>
           <CardTitle>Información de la Propiedad</CardTitle>
         </CardHeader>
@@ -1059,12 +1089,12 @@ export default function DetalleCuentaCobranza() {
       </Card>
 
       {/* Acuerdos de pago */}
-      <Card>
+      <Card className={esCuentaCancelada ? 'opacity-60' : ''}>
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle>Acuerdos de Pago y Aplicaciones</CardTitle>
             {/* Payment scheme selection when no scheme is selected */}
-            {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && (
+            {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && !esCuentaCancelada && (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Plan de pagos:</span>
                 <Select onValueChange={(value) => handlePaymentSchemeSelection(parseInt(value))}>
@@ -1366,7 +1396,7 @@ export default function DetalleCuentaCobranza() {
                                                      monto: aplicacion.monto,
                                                      conceptoNombre: conceptoDisplay
                                                    })}
-                                                   disabled={deletePaymentMutation.isPending || isStpPayment}
+                                                   disabled={deletePaymentMutation.isPending || isStpPayment || esCuentaCancelada}
                                                  >
                                                    <Trash2 className="h-3 w-3" />
                                                  </Button>
@@ -1396,7 +1426,7 @@ export default function DetalleCuentaCobranza() {
                                 <AlertTriangle className="h-4 w-4 text-warning" />
                                 Multas
                               </h5>
-                              {!acuerdo.pago_completado && (
+                              {!acuerdo.pago_completado && !esCuentaCancelada && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1481,14 +1511,14 @@ export default function DetalleCuentaCobranza() {
                                               variant="destructive"
                                               size="icon"
                                               onClick={() => setDeleteMultaDialog({ isOpen: true, multa })}
-                                              disabled={deleteMultaMutation.isPending || multa.estaPagada}
+                                              disabled={deleteMultaMutation.isPending || multa.estaPagada || esCuentaCancelada}
                                             >
                                               <Trash2 className="h-4 w-4" />
                                             </Button>
                                           </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p>{multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
-                                          </TooltipContent>
+                                           <TooltipContent>
+                                             <p>{esCuentaCancelada ? "Cuenta cancelada - no se pueden eliminar multas" : multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
+                                           </TooltipContent>
                                         </Tooltip>
                                       </TooltipProvider>
                                     </div>
