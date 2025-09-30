@@ -369,7 +369,7 @@ export default function Servicios() {
               <TableHead className="font-semibold">Categoría</TableHead>
               <TableHead className="font-semibold">SAT ID</TableHead>
               <TableHead className="font-semibold">Unidad SAT</TableHead>
-              <TableHead className="font-semibold">Persona</TableHead>
+              <TableHead className="font-semibold">Dueño</TableHead>
               <TableHead className="text-right font-semibold">Acciones</TableHead>
             </TableRow>
           </TableHeader>
