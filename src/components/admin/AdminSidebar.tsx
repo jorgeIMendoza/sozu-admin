@@ -98,14 +98,6 @@ const navigationItems = [
     ]
   },
   {
-    title: "Configuración",
-    icon: Settings,
-    children: [
-      { title: "Amenidades", href: "/admin/amenidades", icon: Calendar },
-      { title: "Características", href: "/admin/caracteristicas", icon: Settings },
-    ]
-  },
-  {
     title: "Finanzas",
     icon: CreditCard,
     children: [
