@@ -495,7 +495,12 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         )}
 
         {/* Contact Info */}
-        <div style={{ marginBottom: '80px' }}>
+        <div style={{ 
+          position: 'absolute',
+          bottom: '1000px',
+          left: '80px',
+          right: '80px'
+        }}>
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: '1fr 1fr', 
@@ -558,7 +563,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Banking Data Divider Line */}
         <div style={{ 
           position: 'absolute',
-          bottom: '800px',
+          bottom: '680px',
           left: '0',
           right: '0',
           height: '2px',
@@ -568,10 +573,19 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Banking Data Section */}
         <div style={{ 
           position: 'absolute',
-          bottom: '420px',
+          bottom: '350px',
           left: '80px',
           right: '80px'
         }}>
+          <h2 style={{ 
+            fontSize: '40px', 
+            fontWeight: 'bold', 
+            color: '#1a1a1a', 
+            marginBottom: '32px',
+            fontFamily: 'Arial, sans-serif'
+          }}>
+            Datos Bancarios
+          </h2>
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta ? '1fr 1fr' : '1fr', 
@@ -590,24 +604,21 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 marginBottom: '24px',
                 fontFamily: 'Arial, sans-serif'
               }}>
-                Datos Bancarios Transferencia:
+                Pago por transferencia
               </h3>
-              <div style={{ fontSize: '24px', lineHeight: '1.6', fontFamily: 'Arial, sans-serif' }}>
+              <div style={{ fontSize: '24px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
                 <p style={{ color: '#000000', marginBottom: '12px' }}>
-                  <span style={{ fontWeight: '400' }}>Banco:</span>
-                  <br />
+                  <span style={{ fontWeight: '400' }}>Banco: </span>
                   <span style={{ fontWeight: '400' }}>Sistema de Transacciones y Pagos</span>
                 </p>
                 <p style={{ color: '#000000', marginBottom: '12px' }}>
-                  <span style={{ fontWeight: '400' }}>Titular:</span>
-                  <br />
+                  <span style={{ fontWeight: '400' }}>Titular: </span>
                   <span style={{ fontWeight: '400' }}>
                     {propertyDetails.ownerData?.nombre_legal || 'Vive DAIKU'}
                   </span>
                 </p>
                 <p style={{ color: '#000000' }}>
-                  <span style={{ fontWeight: '400' }}>Cuenta CLABE:</span>
-                  <br />
+                  <span style={{ fontWeight: '400' }}>Cuenta CLABE: </span>
                   <span style={{ fontWeight: '400' }}>
                     {propertyDetails.clabe_stp_tmp_apartado || 'N/A'}
                   </span>
@@ -629,33 +640,29 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                   marginBottom: '24px',
                   fontFamily: 'Arial, sans-serif'
                 }}>
-                  Datos Bancarios Efectivo:
+                  Pago en efectivo
                 </h3>
-                <div style={{ fontSize: '24px', lineHeight: '1.6', fontFamily: 'Arial, sans-serif' }}>
+                <div style={{ fontSize: '24px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
                   <p style={{ color: '#000000', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: '400' }}>Banco:</span>
-                    <br />
+                    <span style={{ fontWeight: '400' }}>Banco: </span>
                     <span style={{ fontWeight: '400' }}>
                       {propertyDetails.ownerStpBankAccount.banco_nombre}
                     </span>
                   </p>
                   <p style={{ color: '#000000', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: '400' }}>Titular:</span>
-                    <br />
+                    <span style={{ fontWeight: '400' }}>Titular: </span>
                     <span style={{ fontWeight: '400' }}>
                       {propertyDetails.ownerData?.nombre_legal || 'Vive DAIKU'}
                     </span>
                   </p>
                   <p style={{ color: '#000000', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: '400' }}>Número de Cuenta:</span>
-                    <br />
+                    <span style={{ fontWeight: '400' }}>Número de Cuenta: </span>
                     <span style={{ fontWeight: '400' }}>
                       {propertyDetails.ownerStpBankAccount.numero_cuenta}
                     </span>
                   </p>
                   <p style={{ color: '#000000' }}>
-                    <span style={{ fontWeight: '400' }}>Cuenta CLABE:</span>
-                    <br />
+                    <span style={{ fontWeight: '400' }}>Cuenta CLABE: </span>
                     <span style={{ fontWeight: '400' }}>
                       {propertyDetails.ownerStpBankAccount.cuenta_clabe}
                     </span>
