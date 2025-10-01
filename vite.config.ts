@@ -20,9 +20,8 @@ export default defineConfig(({ mode }) => ({
         enabled: false
       },
       workbox: {
-        globPatterns: ['**/*.{css,html,ico,png,svg,woff2}'],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB limit
-        globIgnores: ['**/assets/index-*.js'], // Exclude large JS bundles from precaching
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
@@ -32,16 +31,31 @@ export default defineConfig(({ mode }) => ({
               expiration: {
                 maxEntries: 10,
                 maxAgeSeconds: 60 * 60 * 24 * 7 // 7 days
+              },
+              networkTimeoutSeconds: 10
+            }
+          },
+          {
+            urlPattern: /\.(?:js|css)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'static-resources',
+              expiration: {
+                maxEntries: 60,
+                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
               }
             }
           },
           {
-            urlPattern: /\.(?:js)$/,
-            handler: 'StaleWhileRevalidate',
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
+            handler: 'CacheFirst',
             options: {
-              cacheName: 'js-cache',
+              cacheName: 'image-cache',
               expiration: {
-                maxEntries: 10,
+                maxEntries: 60,
                 maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
               }
             }
