@@ -33,6 +33,7 @@ interface PropertyDetails {
   vista?: {
     id: number;
     nombre: string;
+    url?: string;
   };
   projectData?: {
     id: number;
@@ -60,6 +61,10 @@ interface PropertyDetails {
     cuenta_swift: string;
     banco_nombre: string;
   };
+  modelImages?: Array<{
+    url: string;
+    ver_como_ubicacion_en_oferta: boolean;
+  }>;
 }
 
 interface PaymentScheme {
@@ -215,90 +220,144 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Property Details Section */}
         <div style={{ marginBottom: '80px' }}>
           <h2 style={{ 
-            fontSize: '56px', 
+            fontSize: '24px', 
             fontWeight: 'bold', 
-            color: '#1a1a1a',
-            marginBottom: '48px',
-            borderBottom: '4px solid #1a1a1a',
-            paddingBottom: '20px'
+            color: '#000',
+            marginBottom: '32px'
           }}>
-            Datos del Inmueble
+            Datos de la Propiedad:
           </h2>
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: '1fr 1fr', 
-            gap: '40px',
-            fontSize: '32px'
+            gridTemplateColumns: '300px 200px 1fr', 
+            gap: '40px'
           }}>
-            <div style={{ 
-              padding: '32px', 
-              backgroundColor: '#f8f8f8',
-              borderRadius: '8px'
-            }}>
-              <div style={{ color: '#585858', marginBottom: '12px' }}>Departamento:</div>
-              <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
-                {propertyDetails.numero_propiedad}
+            {/* Left Column: Property Data List */}
+            <div style={{ fontSize: '14px', lineHeight: '1.8' }}>
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ fontWeight: 'normal' }}>No° de propiedad: </span>
+                <span style={{ fontWeight: 'bold' }}>{propertyDetails.numero_propiedad}</span>
+              </div>
+              {propertyDetails.model && (
+                <div style={{ marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 'normal' }}>Modelo: </span>
+                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.model.nombre}</span>
+                </div>
+              )}
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ fontWeight: 'normal' }}>Área: </span>
+                <span style={{ fontWeight: 'bold' }}>$ {propertyDetails.m2_reales?.toFixed(2) || 'N/A'}</span>
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ fontWeight: 'normal' }}>Precio de lista: </span>
+                <span style={{ fontWeight: 'bold' }}>{formatCurrency(propertyDetails.precio_lista)}</span>
+              </div>
+              {propertyDetails.projectData?.precio_m2 && (
+                <div style={{ marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 'normal' }}>Precio m2: </span>
+                  <span style={{ fontWeight: 'bold' }}>{formatCurrency(propertyDetails.projectData.precio_m2)}</span>
+                </div>
+              )}
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ fontWeight: 'normal' }}>Piso: </span>
+                <span style={{ fontWeight: 'bold' }}>{propertyDetails.numero_piso || 'N/A'}</span>
+              </div>
+              {propertyDetails.building && (
+                <div style={{ marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 'normal' }}>Torre: </span>
+                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.building.nombre}</span>
+                </div>
+              )}
+              {propertyDetails.vista && (
+                <div style={{ marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 'normal' }}>Vista: </span>
+                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.vista.nombre}</span>
+                </div>
+              )}
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ fontWeight: 'normal' }}>Precio bodega: </span>
+                <span style={{ fontWeight: 'bold' }}>N/A</span>
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ fontWeight: 'normal' }}>Bodega m2: </span>
+                <span style={{ fontWeight: 'bold' }}>N/A</span>
               </div>
             </div>
-            
-            {propertyDetails.model && (
-              <div style={{ 
-                padding: '32px', 
-                backgroundColor: '#f8f8f8',
-                borderRadius: '8px'
-              }}>
-                <div style={{ color: '#585858', marginBottom: '12px' }}>Modelo:</div>
-                <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
-                  {propertyDetails.model.nombre}
+
+            {/* Center Column: Icons with Numbers */}
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              gap: '24px',
+              alignItems: 'center',
+              justifyContent: 'flex-start'
+            }}>
+              {/* Recámaras */}
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ 
+                  width: '48px', 
+                  height: '48px', 
+                  margin: '0 auto 8px',
+                  fontSize: '32px'
+                }}>🛏️</div>
+                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                  {propertyDetails.model?.numero_recamaras || 'N/A'}
                 </div>
               </div>
+              
+              {/* Baños */}
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ 
+                  width: '48px', 
+                  height: '48px', 
+                  margin: '0 auto 8px',
+                  fontSize: '32px'
+                }}>🚿</div>
+                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                  {propertyDetails.model?.numero_completo_banos || 0}
+                </div>
+              </div>
+              
+              {/* Estacionamientos */}
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ 
+                  width: '48px', 
+                  height: '48px', 
+                  margin: '0 auto 8px',
+                  fontSize: '32px'
+                }}>🚗</div>
+                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>1 Normal</div>
+              </div>
+              
+              {/* Bodegas (if exists) */}
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ 
+                  width: '48px', 
+                  height: '48px', 
+                  margin: '0 auto 8px',
+                  fontSize: '32px'
+                }}>📦</div>
+                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>N/A</div>
+              </div>
+            </div>
+
+            {/* Right Column: Location Image */}
+            {propertyDetails.modelImages && propertyDetails.modelImages.length > 0 && (
+              <div style={{ 
+                width: '100%',
+                height: '400px',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                border: '1px solid #e0e0e0'
+              }}>
+                <img
+                  src={propertyDetails.modelImages.find(img => img.ver_como_ubicacion_en_oferta)?.url || propertyDetails.modelImages[0]?.url}
+                  alt="Ubicación"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
             )}
-            
-            <div style={{ 
-              padding: '32px', 
-              backgroundColor: '#f8f8f8',
-              borderRadius: '8px'
-            }}>
-              <div style={{ color: '#585858', marginBottom: '12px' }}>Recámaras:</div>
-              <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
-                {propertyDetails.model?.numero_recamaras || 'N/A'}
-              </div>
-            </div>
-            
-            <div style={{ 
-              padding: '32px', 
-              backgroundColor: '#f8f8f8',
-              borderRadius: '8px'
-            }}>
-              <div style={{ color: '#585858', marginBottom: '12px' }}>Baños:</div>
-              <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
-                {propertyDetails.model?.numero_completo_banos || 0} + {propertyDetails.model?.numero_medio_bano || 0}
-              </div>
-            </div>
-            
-            <div style={{ 
-              padding: '32px', 
-              backgroundColor: '#f8f8f8',
-              borderRadius: '8px'
-            }}>
-              <div style={{ color: '#585858', marginBottom: '12px' }}>M² Construidos:</div>
-              <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
-                {propertyDetails.m2_reales?.toFixed(2) || 'N/A'}
-              </div>
-            </div>
-            
-            <div style={{ 
-              padding: '32px', 
-              backgroundColor: '#1a1a1a',
-              borderRadius: '8px',
-              gridColumn: '1 / -1'
-            }}>
-              <div style={{ color: '#fff', marginBottom: '12px', fontSize: '36px' }}>Precio de Lista:</div>
-              <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '64px' }}>
-                {formatCurrency(propertyDetails.precio_lista)}
-              </div>
-            </div>
           </div>
         </div>
 

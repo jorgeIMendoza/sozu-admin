@@ -40,6 +40,7 @@ interface PropertyDetails {
   vista?: {
     id: number;
     nombre: string;
+    url?: string;
   };
   projectData?: {
     id: number;
@@ -66,6 +67,10 @@ interface PropertyDetails {
     email: string;
     telefono: string | null;
   };
+  modelImages?: Array<{
+    url: string;
+    ver_como_ubicacion_en_oferta: boolean;
+  }>;
 }
 
 interface PaymentScheme {
@@ -506,12 +511,27 @@ class HTMLToPDFService {
       }
     }
 
-    // Get vista data
+    // Get model images
+    let modelImages = null;
+    if (model?.id) {
+      const { data: imagesData } = await supabase
+        .from('multimedias_modelo')
+        .select('url, ver_como_ubicacion_en_oferta')
+        .eq('id_modelo', model.id)
+        .eq('activo', true)
+        .order('ver_como_ubicacion_en_oferta', { ascending: false });
+
+      if (imagesData && imagesData.length > 0) {
+        modelImages = imagesData;
+      }
+    }
+
+    // Get vista data with image
     let vista = null;
     if (propiedad.id_vista) {
       const { data: vistaData } = await supabase
         .from('vistas')
-        .select('id, nombre')
+        .select('id, nombre, url')
         .eq('id', propiedad.id_vista)
         .single();
 
@@ -561,6 +581,7 @@ class HTMLToPDFService {
       vista,
       projectData,
       ownerStpBankAccount,
+      modelImages,
     };
   }
 
