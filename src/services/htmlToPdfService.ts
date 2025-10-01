@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { OfferPDFTemplate } from '@/components/admin/OfferPDFTemplate';
+import { OfferPDFTemplateSozu } from '@/components/admin/OfferPDFTemplateSozu';
 
 interface OfferData {
   propertyId: number;
@@ -152,33 +153,126 @@ class HTMLToPDFService {
     estacionamientos: any[],
     bodegas: any[]
   ): Promise<void> {
-    const pdf = new jsPDF('p', 'in', 'letter');
-    
-    // Generate each section as a separate page
-    await this.generateCoverPage(pdf, offerData, propertyDetails, amenities, creatorInfo, leadInfo, estacionamientos, bodegas);
-    
-    // Add payment options page
-    pdf.addPage();
-    await this.generatePaymentOptionsPage(pdf, offerData, propertyDetails, paymentSchemes);
-    
-    // Add banking data page (this ensures it starts on a new page)
-    pdf.addPage();
-    await this.generateBankingDataPage(pdf, offerData, propertyDetails, legalNotices);
+    // Check if this is a Dotar Expedición / Sozu project
+    const projectName = propertyDetails.projectData?.nombre || '';
+    const useSozuTemplate = projectName.toLowerCase().includes('dotar') || 
+                           projectName.toLowerCase().includes('expedición') ||
+                           projectName.toLowerCase().includes('sozu');
 
-    // Generate filename
-    const projectName = propertyDetails.projectData?.nombre || 'Proyecto';
-    const propertyNumber = propertyDetails.numero_propiedad || 'N/A';
-    const offerNumber = offerData.id.toString().padStart(6, '0') || '000000';
-    
-    const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
-    const cleanPropertyNumber = propertyNumber.replace(/[^a-zA-Z0-9]/g, '_');
-    
-    const filename = `Oferta_${cleanPropertyNumber}_${cleanProjectName}_${offerNumber}.pdf`;
+    if (useSozuTemplate) {
+      // Use Sozu template for A4 sized single-page PDF
+      await this.generateSozuPDF(offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas);
+    } else {
+      // Use default template with multiple pages
+      const pdf = new jsPDF('p', 'in', 'letter');
+      
+      // Generate each section as a separate page
+      await this.generateCoverPage(pdf, offerData, propertyDetails, amenities, creatorInfo, leadInfo, estacionamientos, bodegas);
+      
+      // Add payment options page
+      pdf.addPage();
+      await this.generatePaymentOptionsPage(pdf, offerData, propertyDetails, paymentSchemes);
+      
+      // Add banking data page (this ensures it starts on a new page)
+      pdf.addPage();
+      await this.generateBankingDataPage(pdf, offerData, propertyDetails, legalNotices);
 
-    // Download the PDF
-    pdf.save(filename);
+      // Generate filename
+      const propertyNumber = propertyDetails.numero_propiedad || 'N/A';
+      const offerNumber = offerData.id.toString().padStart(6, '0') || '000000';
+      
+      const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
+      const cleanPropertyNumber = propertyNumber.replace(/[^a-zA-Z0-9]/g, '_');
+      
+      const filename = `Oferta_${cleanPropertyNumber}_${cleanProjectName}_${offerNumber}.pdf`;
 
-    console.log('PDF generated successfully:', filename);
+      // Download the PDF
+      pdf.save(filename);
+      
+      console.log('PDF generated successfully:', filename);
+    }
+  }
+
+  private async generateSozuPDF(
+    offerData: {
+      id: number;
+      fecha_generacion: string;
+      propertyNumber: string;
+      leadName: string;
+      leadEmail: string;
+    },
+    propertyDetails: PropertyDetails,
+    paymentSchemes: PaymentScheme[],
+    amenities: ProjectAmenity[],
+    creatorInfo: any,
+    leadInfo: any,
+    legalNotices: string[],
+    estacionamientos: any[],
+    bodegas: any[]
+  ): Promise<void> {
+    const container = this.createContainer();
+    // Make container match A4 proportions (2550x3300px)
+    container.style.width = '2550px';
+    container.style.minHeight = '3300px';
+    
+    try {
+      // Create Sozu template element
+      const templateElement = React.createElement(OfferPDFTemplateSozu, {
+        offerData,
+        propertyDetails,
+        paymentSchemes,
+        amenities,
+        creatorInfo,
+        leadInfo,
+        legalNotices,
+        estacionamientos,
+        bodegas
+      });
+      
+      const root = createRoot(container);
+      root.render(templateElement);
+      
+      // Wait for rendering
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Capture as canvas
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        width: 2550,
+        height: 3300
+      });
+      
+      // Create PDF with A4 dimensions
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [2550, 3300]
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      pdf.addImage(imgData, 'JPEG', 0, 0, 2550, 3300);
+      
+      // Generate filename
+      const projectName = propertyDetails.projectData?.nombre || 'Proyecto';
+      const propertyNumber = propertyDetails.numero_propiedad || 'N/A';
+      const offerNumber = offerData.id.toString().padStart(6, '0') || '000000';
+      
+      const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
+      const cleanPropertyNumber = propertyNumber.replace(/[^a-zA-Z0-9]/g, '_');
+      
+      const filename = `OC_${cleanPropertyNumber}_${cleanProjectName}_${offerNumber}.pdf`;
+
+      // Download the PDF
+      pdf.save(filename);
+      
+      console.log('Sozu PDF generated successfully:', filename);
+      
+    } finally {
+      document.body.removeChild(container);
+    }
   }
 
   private async generateCoverPage(
