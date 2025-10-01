@@ -1272,9 +1272,11 @@ const Propiedades = () => {
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
                                   : (property.payment_status?.apartado?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
-                                  : 'bg-muted opacity-40'
+                                  : 'border-2 border-muted'
                               }`}>
-                                <FileText className="h-3 w-3 text-white" />
+                                <FileText className={`h-3 w-3 ${
+                                  (property.payment_status?.apartado?.monto || 0) > 0 ? 'text-white' : 'text-muted-foreground'
+                                }`} />
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -1302,9 +1304,11 @@ const Propiedades = () => {
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
                                   : (property.payment_status?.enganche?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
-                                  : 'bg-muted opacity-40'
+                                  : 'border-2 border-muted'
                               }`}>
-                                <DollarSign className="h-3 w-3 text-white" />
+                                <DollarSign className={`h-3 w-3 ${
+                                  (property.payment_status?.enganche?.monto || 0) > 0 ? 'text-white' : 'text-muted-foreground'
+                                }`} />
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -1332,9 +1336,11 @@ const Propiedades = () => {
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
                                   : (property.payment_status?.mensualidades?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
-                                  : 'bg-muted opacity-40'
+                                  : 'border-2 border-muted'
                               }`}>
-                                <Calendar className="h-3 w-3 text-white" />
+                                <Calendar className={`h-3 w-3 ${
+                                  (property.payment_status?.mensualidades?.monto || 0) > 0 ? 'text-white' : 'text-muted-foreground'
+                                }`} />
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -1362,9 +1368,11 @@ const Propiedades = () => {
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
                                   : (property.payment_status?.entrega?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
-                                  : 'bg-muted opacity-40'
+                                  : 'border-2 border-muted'
                               }`}>
-                                <Home className="h-3 w-3 text-white" />
+                                <Home className={`h-3 w-3 ${
+                                  (property.payment_status?.entrega?.monto || 0) > 0 ? 'text-white' : 'text-muted-foreground'
+                                }`} />
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -1392,9 +1400,11 @@ const Propiedades = () => {
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
                                   : (property.payment_status?.especial?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
-                                  : 'bg-muted opacity-40'
+                                  : 'border-2 border-muted'
                               }`}>
-                                <Zap className="h-3 w-3 text-white" />
+                                <Zap className={`h-3 w-3 ${
+                                  (property.payment_status?.especial?.monto || 0) > 0 ? 'text-white' : 'text-muted-foreground'
+                                }`} />
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -1422,9 +1432,11 @@ const Propiedades = () => {
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
                                   : (property.payment_status?.cesion_derechos?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
-                                  : 'bg-muted opacity-40'
+                                  : 'border-2 border-muted'
                               }`}>
-                                <ArrowRightLeft className="h-3 w-3 text-white" />
+                                <ArrowRightLeft className={`h-3 w-3 ${
+                                  (property.payment_status?.cesion_derechos?.monto || 0) > 0 ? 'text-white' : 'text-muted-foreground'
+                                }`} />
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
