@@ -17,11 +17,11 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 210 11% 15%;
 
-    --primary: 158 64% 52%;
+    --primary: 158 64% 38%;
     --primary-foreground: 0 0% 100%;
     
-    --primary-soft: 158 64% 52% / 0.1;
-    --primary-hover: 158 64% 45%;
+    --primary-soft: 158 64% 38% / 0.1;
+    --primary-hover: 158 64% 32%;
 
     --secondary: 210 20% 96%;
     --secondary-foreground: 210 11% 15%;
@@ -32,12 +32,12 @@ All colors MUST be HSL.
     --accent: 210 20% 96%;
     --accent-foreground: 210 11% 15%;
     
-    --success: 142 76% 36%;
+    --success: 142 71% 32%;
     --success-foreground: 0 0% 100%;
     
     --admin-sidebar: 210 11% 15%;
     --admin-sidebar-foreground: 210 20% 95%;
-    --admin-sidebar-accent: 158 64% 52%;
+    --admin-sidebar-accent: 158 64% 38%;
     
     --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-hover)));
     --shadow-soft: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
@@ -69,7 +69,7 @@ All colors MUST be HSL.
     --sidebar-ring: 217.2 91.2% 59.8%;
     
     /* Availability badge colors */
-    --disponible: 142 71% 45%;
+    --disponible: 142 71% 35%;
     --disponible-foreground: 0 0% 100%;
     
     --apartado: 43 96% 56%;
@@ -90,12 +90,12 @@ All colors MUST be HSL.
     --escrituracion: 24 95% 53%;
     --escrituracion-foreground: 0 0% 100%;
     
-    --entregado: 158 64% 52%;
+    --entregado: 158 64% 38%;
     --entregado-foreground: 0 0% 100%;
     
     /* Payment status colors */
     --pago-no-pagado: 0 84% 60%;
-    --pago-pagado: 142 71% 45%;
+    --pago-pagado: 142 71% 35%;
     --pago-en-proceso: 221 83% 53%;
   }
 
