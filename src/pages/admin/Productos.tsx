@@ -100,17 +100,38 @@ export default function Productos() {
     },
   });
 
-  // Fetch personas
+  // Fetch personas - solo entidades legales de tipo Contratista (13), Dueño Vendedor (4), Proveedor (8)
   const { data: personas = [] } = useQuery({
     queryKey: ['personas-productos'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('personas')
-        .select('id, nombre_legal')
+        .from('entidades_relacionadas')
+        .select(`
+          id_persona,
+          personas!inner (
+            id,
+            nombre_legal
+          )
+        `)
+        .in('id_tipo_entidad', [4, 8, 13])
         .eq('activo', true)
-        .order('nombre_legal');
+        .order('personas(nombre_legal)');
       if (error) throw error;
-      return data || [];
+      
+      // Extraer personas únicas y mapear al formato esperado
+      const uniquePersonas = new Map();
+      (data || []).forEach((item: any) => {
+        if (item.personas && !uniquePersonas.has(item.personas.id)) {
+          uniquePersonas.set(item.personas.id, {
+            id: item.personas.id,
+            nombre_legal: item.personas.nombre_legal
+          });
+        }
+      });
+      
+      return Array.from(uniquePersonas.values()).sort((a, b) => 
+        a.nombre_legal.localeCompare(b.nombre_legal)
+      );
     },
   });
 
