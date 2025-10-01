@@ -196,7 +196,7 @@ export default function Servicios() {
           ...data,
           es_producto: false,
           stock: 0,
-          id_categoria: parseInt(data.id_categoria),
+          id_categoria: data.id_categoria === "" ? null : parseInt(data.id_categoria),
           id_persona: parseInt(data.id_persona),
           id_unidad_sat: data.id_unidad_sat === "" ? null : data.id_unidad_sat,
           sat_id: data.sat_id === "" ? null : data.sat_id,
@@ -228,7 +228,7 @@ export default function Servicios() {
         .from('productos_servicios')
         .update({
           ...data,
-          id_categoria: parseInt(data.id_categoria),
+          id_categoria: data.id_categoria === "" ? null : parseInt(data.id_categoria),
           id_persona: parseInt(data.id_persona),
           id_unidad_sat: data.id_unidad_sat === "" ? null : data.id_unidad_sat,
           sat_id: data.sat_id === "" ? null : data.sat_id,
@@ -390,7 +390,6 @@ export default function Servicios() {
             <TableRow className="bg-muted/50 hover:bg-muted/50">
               <TableHead className="font-semibold">Nombre</TableHead>
               <TableHead className="font-semibold">Descripción</TableHead>
-              <TableHead className="font-semibold">Categoría</TableHead>
               <TableHead className="font-semibold">SAT ID</TableHead>
               <TableHead className="font-semibold">Unidad SAT</TableHead>
               <TableHead className="font-semibold">Dueño</TableHead>
@@ -405,7 +404,6 @@ export default function Servicios() {
               >
                 <TableCell className="font-medium">{servicio.nombre}</TableCell>
                 <TableCell className="max-w-xs truncate">{servicio.descripcion || '-'}</TableCell>
-                <TableCell>{servicio.categoria_nombre || '-'}</TableCell>
                 <TableCell className="font-mono text-sm">{servicio.sat_id || '-'}</TableCell>
                 <TableCell>{servicio.unidad_sat_descripcion || '-'}</TableCell>
                 <TableCell>{servicio.persona_nombre || '-'}</TableCell>
@@ -588,14 +586,13 @@ export default function Servicios() {
 
             {/* Categoría */}
             <div className="space-y-2">
-              <Label htmlFor="id_categoria">Categoría *</Label>
+              <Label htmlFor="id_categoria">Categoría</Label>
               <Select
                 value={formData.id_categoria}
                 onValueChange={(value) => setFormData({ ...formData, id_categoria: value })}
-                required
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona una categoría" />
+                  <SelectValue placeholder="Selecciona una categoría (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
                   {categorias.map((cat: any) => (
