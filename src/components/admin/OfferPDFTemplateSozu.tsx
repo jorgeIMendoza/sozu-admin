@@ -399,7 +399,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               fontWeight: 'bold', 
               color: '#000000',
               marginBottom: '40px',
-              borderBottom: '3px solid #00A9E0',
+              borderBottom: '2px solid #e0e0e0',
               paddingBottom: '12px'
             }}>
               Esquemas de pago:
@@ -414,14 +414,16 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               {filteredPaymentSchemes.map((scheme, index) => {
                 const amounts = calculatePaymentAmounts(scheme);
                 const isSelected = offerData.id_esquema_pago_seleccionado === scheme.id;
+                const savingsPercentage = scheme.porcentaje_descuento_aumento;
+                const hasSavings = amounts.discount > 0;
                 
                 return (
                   <div 
                     key={scheme.id} 
                     style={{ 
-                      backgroundColor: isSelected ? '#E8F7FC' : '#FFFFFF',
+                      backgroundColor: isSelected ? '#E8F4E8' : '#FFFFFF',
                       padding: '32px',
-                      border: isSelected ? '4px solid #00A9E0' : '2px solid #D0D0D0',
+                      border: isSelected ? '4px solid #22C55E' : '2px solid #D0D0D0',
                       borderRadius: '8px'
                     }}
                   >
@@ -448,12 +450,14 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                         </span>
                       </div>
                       
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#000000' }}>Ahorro:</span>
-                        <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                          {formatCurrency(amounts.discount)}
-                        </span>
-                      </div>
+                      {hasSavings && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#000000' }}>Ahorro:</span>
+                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                            {savingsPercentage}% {formatCurrency(amounts.discount)}
+                          </span>
+                        </div>
+                      )}
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#000000' }}>Enganche:</span>
