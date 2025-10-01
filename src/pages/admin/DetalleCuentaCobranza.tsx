@@ -1167,40 +1167,35 @@ export default function DetalleCuentaCobranza() {
                 </h3>
                 
                 {!isPaymentPlanModified ? (
-                  // Original unchanged plan - show current database values with amounts
+                  // Original unchanged plan - show percentages AND amounts
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">Nombre del Plan</label>
                       <p className="text-sm font-semibold">{originalScheme.nombre}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">
-                        {currentPaymentPlan?.hayCesionDerechos ? 'Cesión de derechos' : 'Enganche'}
-                      </label>
+                      <label className="text-sm font-medium text-muted-foreground">Enganche</label>
                       <p className="text-sm font-semibold">
-                        {currentPaymentPlan?.hayCesionDerechos ? 
-                          ((actualAmounts?.cesion || 0) / (cuentaDetalle?.precio_final || 1) * 100).toFixed(1) :
-                          currentPaymentPlan?.porcentaje_enganche.toFixed(1)
-                        }%
+                        {originalScheme.porcentaje_enganche.toFixed(1)}%
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {formatCurrency(currentPaymentPlan?.hayCesionDerechos ? (actualAmounts?.cesion || 0) : (actualAmounts?.enganche || 0))}
+                        {formatCurrency((cuentaDetalle?.precio_final || 0) * (originalScheme.porcentaje_enganche / 100))}
                       </p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">Mensualidades</label>
                       <p className="text-sm font-semibold">
-                        {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades.toFixed(1)}%
+                        {originalScheme.numero_mensualidades} pagos de {originalScheme.porcentaje_mensualidades.toFixed(1)}%
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {formatCurrency(actualAmounts?.mensualidades || 0)}
+                        {formatCurrency((cuentaDetalle?.precio_final || 0) * (originalScheme.porcentaje_mensualidades / 100))}
                       </p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">Entrega</label>
-                      <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_entrega.toFixed(1)}%</p>
+                      <p className="text-sm font-semibold">{originalScheme.porcentaje_entrega.toFixed(1)}%</p>
                       <p className="text-xs text-muted-foreground">
-                        {formatCurrency(actualAmounts?.entrega || 0)}
+                        {formatCurrency((cuentaDetalle?.precio_final || 0) * (originalScheme.porcentaje_entrega / 100))}
                       </p>
                     </div>
                   </div>
