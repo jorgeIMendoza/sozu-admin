@@ -561,26 +561,60 @@ export default function Productos() {
             <DialogTitle>{editingEntity ? 'Editar Producto' : 'Nuevo Producto'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre *</Label>
-                <Input
-                  id="nombre"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sat_id">SAT ID</Label>
-                <Input
-                  id="sat_id"
-                  value={formData.sat_id}
-                  onChange={(e) => setFormData({ ...formData, sat_id: e.target.value })}
-                />
-              </div>
+            {/* Nombre */}
+            <div className="space-y-2">
+              <Label htmlFor="nombre">Nombre *</Label>
+              <Input
+                id="nombre"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                required
+              />
             </div>
 
+            {/* Categoría */}
+            <div className="space-y-2">
+              <Label htmlFor="id_categoria">Categoría *</Label>
+              <Select
+                value={formData.id_categoria}
+                onValueChange={(value) => setFormData({ ...formData, id_categoria: value })}
+                required
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categorias.map((cat: any) => (
+                    <SelectItem key={cat.id} value={cat.id.toString()}>
+                      {cat.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Dueño */}
+            <div className="space-y-2">
+              <Label htmlFor="id_persona">Dueño *</Label>
+              <Select
+                value={formData.id_persona}
+                onValueChange={(value) => setFormData({ ...formData, id_persona: value })}
+                required
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un dueño" />
+                </SelectTrigger>
+                <SelectContent>
+                  {personas.map((persona: any) => (
+                    <SelectItem key={persona.id} value={persona.id.toString()}>
+                      {persona.nombre_legal}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Descripción */}
             <div className="space-y-2">
               <Label htmlFor="descripcion">Descripción</Label>
               <Textarea
@@ -591,78 +625,46 @@ export default function Productos() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="id_categoria">Categoría *</Label>
-                <Select
-                  value={formData.id_categoria}
-                  onValueChange={(value) => setFormData({ ...formData, id_categoria: value })}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona una categoría" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categorias.map((cat: any) => (
-                      <SelectItem key={cat.id} value={cat.id.toString()}>
-                        {cat.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="id_unidad_sat">Unidad SAT</Label>
-                <Select
-                  value={formData.id_unidad_sat}
-                  onValueChange={(value) => setFormData({ ...formData, id_unidad_sat: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona unidad SAT" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unidadesSat.map((unidad: any) => (
-                      <SelectItem key={unidad.clave} value={unidad.clave}>
-                        {unidad.descripcion} ({unidad.clave})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            {/* SAT ID */}
+            <div className="space-y-2">
+              <Label htmlFor="sat_id">SAT ID</Label>
+              <Input
+                id="sat_id"
+                value={formData.sat_id}
+                onChange={(e) => setFormData({ ...formData, sat_id: e.target.value })}
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="id_persona">Persona *</Label>
-                <Select
-                  value={formData.id_persona}
-                  onValueChange={(value) => setFormData({ ...formData, id_persona: value })}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona una persona" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {personas.map((persona: any) => (
-                      <SelectItem key={persona.id} value={persona.id.toString()}>
-                        {persona.nombre_legal}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            {/* Unidad SAT */}
+            <div className="space-y-2">
+              <Label htmlFor="id_unidad_sat">Unidad SAT</Label>
+              <Select
+                value={formData.id_unidad_sat}
+                onValueChange={(value) => setFormData({ ...formData, id_unidad_sat: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona unidad SAT" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unidadesSat.map((unidad: any) => (
+                    <SelectItem key={unidad.clave} value={unidad.clave}>
+                      {unidad.descripcion} ({unidad.clave})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="stock">Stock</Label>
-                <Input
-                  id="stock"
-                  type="number"
-                  min="0"
-                  value={formData.stock}
-                  onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) || 0 })}
-                />
-              </div>
+            {/* Stock */}
+            <div className="space-y-2">
+              <Label htmlFor="stock">Stock</Label>
+              <Input
+                id="stock"
+                type="number"
+                min="0"
+                value={formData.stock}
+                onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) || 0 })}
+              />
             </div>
 
             <DialogFooter>
