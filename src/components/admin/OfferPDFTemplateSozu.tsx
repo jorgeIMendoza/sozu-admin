@@ -499,15 +499,6 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           </div>
         )}
 
-        {/* Divider Line before Banking Data */}
-        <div style={{ 
-          position: 'absolute',
-          bottom: '980px',
-          left: '0',
-          right: '0',
-          height: '2px',
-          backgroundColor: '#585858'
-        }} />
 
         {/* Banking Data Section */}
         <div style={{ 
@@ -618,15 +609,6 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           </div>
         </div>
 
-        {/* Divider Line before Contact Info */}
-        <div style={{ 
-          position: 'absolute',
-          bottom: '330px',
-          left: '0',
-          right: '0',
-          height: '2px',
-          backgroundColor: '#585858'
-        }} />
 
         {/* Contact Info (Datos de Contacto) */}
         <div style={{ 
