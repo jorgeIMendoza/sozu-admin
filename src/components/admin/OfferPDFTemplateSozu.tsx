@@ -214,8 +214,8 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: '1.2fr 120px 1fr', 
-            gap: '40px',
+            gridTemplateColumns: '1fr 140px 1fr', 
+            gap: '50px',
             alignItems: 'start'
           }}>
             {/* Left Column: Property Data */}
@@ -272,69 +272,86 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               </div>
             </div>
 
-            {/* Middle Column: Vertical Icons (Icon Only) */}
+            {/* Middle Column: Vertical Icons with Labels */}
             <div style={{ 
               display: 'flex',
               flexDirection: 'column',
-              gap: '52px',
+              gap: '48px',
               paddingTop: '20px',
-              justifyContent: 'flex-start'
+              alignItems: 'center'
             }}>
-              {/* Recámara Icon */}
-              <div style={{ textAlign: 'center' }}>
-                <svg width="70" height="70" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="2.5" y="10.5" width="19" height="9.5" rx="1.2" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <path d="M6.5 10.5V8.5C6.5 7.11929 7.61929 6 9 6H15C16.3807 6 17.5 7.11929 17.5 8.5V10.5" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <line x1="2.5" y1="16" x2="21.5" y2="16" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <rect x="6.5" y="13.5" width="3.5" height="2.5" rx="0.3" fill="#2d2d2d"/>
-                  <rect x="14" y="13.5" width="3.5" height="2.5" rx="0.3" fill="#2d2d2d"/>
+              {/* Recámara */}
+              <div style={{ textAlign: 'center', width: '100%' }}>
+                <svg width="80" height="80" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 12px', display: 'block' }}>
+                  <rect x="6" y="22" width="36" height="16" rx="2" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M12 22V18C12 15.7909 13.7909 14 16 14H32C34.2091 14 36 15.7909 36 18V22" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <line x1="6" y1="32" x2="42" y2="32" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                  <rect x="12" y="28" width="6" height="4" rx="1" fill="#1a1a1a"/>
+                  <rect x="30" y="28" width="6" height="4" rx="1" fill="#1a1a1a"/>
+                  <line x1="6" y1="38" x2="6" y2="42" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                  <line x1="42" y1="38" x2="42" y2="42" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
                 </svg>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                  Una
+                </div>
               </div>
               
-              {/* Baño Completo Icon */}
-              <div style={{ textAlign: 'center' }}>
-                <svg width="70" height="70" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M4 12.5H20V16C20 18.2091 18.2091 20 16 20H8C5.79086 20 4 18.2091 4 16V12.5Z" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <path d="M9 12.5V10.5C9 8.84315 10.3431 7.5 12 7.5C13.6569 7.5 15 8.84315 15 10.5V12.5" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <circle cx="12" cy="4.5" r="1.8" fill="#2d2d2d"/>
-                  <line x1="8" y1="15.5" x2="8" y2="18" stroke="#fff" strokeWidth="1.3"/>
-                  <line x1="12" y1="15.5" x2="12" y2="18" stroke="#fff" strokeWidth="1.3"/>
-                  <line x1="16" y1="15.5" x2="16" y2="18" stroke="#fff" strokeWidth="1.3"/>
+              {/* Baño Completo */}
+              <div style={{ textAlign: 'center', width: '100%' }}>
+                <svg width="80" height="80" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 12px', display: 'block' }}>
+                  <path d="M8 26H40V32C40 36.4183 36.4183 40 32 40H16C11.5817 40 8 36.4183 8 32V26Z" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M18 26V22C18 18.6863 20.6863 16 24 16C27.3137 16 30 18.6863 30 22V26" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="24" cy="10" r="3" fill="#1a1a1a"/>
+                  <line x1="16" y1="32" x2="16" y2="36" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"/>
+                  <line x1="24" y1="32" x2="24" y2="36" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"/>
+                  <line x1="32" y1="32" x2="32" y2="36" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"/>
                 </svg>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                  Uno
+                </div>
               </div>
               
-              {/* Medio Baño Icon */}
-              <div style={{ textAlign: 'center' }}>
-                <svg width="70" height="70" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <ellipse cx="12" cy="9" rx="5" ry="3.5" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <path d="M7 9V15C7 16.6569 9.23858 18 12 18C14.7614 18 17 16.6569 17 15V9" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <path d="M12 5V9" stroke="#2d2d2d" strokeWidth="1.6" strokeLinecap="round"/>
-                  <circle cx="12" cy="4" r="1" fill="#2d2d2d"/>
+              {/* Medio Baño */}
+              <div style={{ textAlign: 'center', width: '100%' }}>
+                <svg width="80" height="80" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 12px', display: 'block' }}>
+                  <ellipse cx="24" cy="18" rx="10" ry="7" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M14 18V30C14 33.3137 18.4772 36 24 36C29.5228 36 34 33.3137 34 30V18" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <line x1="24" y1="8" x2="24" y2="18" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                  <circle cx="24" cy="6" r="2" fill="#1a1a1a"/>
                 </svg>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                  Uno
+                </div>
               </div>
               
-              {/* Estacionamiento Icon */}
-              <div style={{ textAlign: 'center' }}>
-                <svg width="70" height="70" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 11.5V16C3 16.5523 3.44772 17 4 17H5" stroke="#2d2d2d" strokeWidth="1.6" strokeLinecap="round"/>
-                  <path d="M21 11.5V16C21 16.5523 20.5523 17 20 17H19" stroke="#2d2d2d" strokeWidth="1.6" strokeLinecap="round"/>
-                  <circle cx="7" cy="17" r="1.8" fill="#2d2d2d"/>
-                  <circle cx="17" cy="17" r="1.8" fill="#2d2d2d"/>
-                  <path d="M5 17C5 15.067 6.567 13.5 8.5 13.5H15.5C17.433 13.5 19 15.067 19 17" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <path d="M5 11.5L7.2 6.8C7.6 5.9 8.5 5.2 9.5 5.2H14.5C15.5 5.2 16.4 5.9 16.8 6.8L19 11.5" stroke="#2d2d2d" strokeWidth="1.6" strokeLinecap="round"/>
-                  <rect x="7" y="8.5" width="10" height="2.5" rx="0.5" fill="#2d2d2d"/>
+              {/* Estacionamiento */}
+              <div style={{ textAlign: 'center', width: '100%' }}>
+                <svg width="80" height="80" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 12px', display: 'block' }}>
+                  <path d="M6 24V32C6 33.1046 6.89543 34 8 34H10" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                  <path d="M42 24V32C42 33.1046 41.1046 34 40 34H38" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                  <circle cx="14" cy="34" r="3.5" fill="#1a1a1a"/>
+                  <circle cx="34" cy="34" r="3.5" fill="#1a1a1a"/>
+                  <path d="M10 34C10 30.134 13.134 27 17 27H31C34.866 27 38 30.134 38 34" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                  <path d="M10 24L14.4 13.6C15.2 11.8 17 10.4 19 10.4H29C31 10.4 32.8 11.8 33.6 13.6L38 24" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                  <rect x="14" y="17" width="20" height="5" rx="1" fill="#1a1a1a"/>
                 </svg>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                  1 Normal
+                </div>
               </div>
               
-              {/* Bodega Icon */}
-              <div style={{ textAlign: 'center' }}>
-                <svg width="70" height="70" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="4.5" y="9.5" width="15" height="11" rx="1.2" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <path d="M8 9.5V6.5C8 5.11929 9.11929 4 10.5 4H13.5C14.8807 4 16 5.11929 16 6.5V9.5" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <line x1="4.5" y1="13.5" x2="19.5" y2="13.5" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <line x1="4.5" y1="17" x2="19.5" y2="17" stroke="#2d2d2d" strokeWidth="1.6"/>
-                  <circle cx="15.5" cy="13.5" r="1" fill="#2d2d2d"/>
+              {/* Bodega */}
+              <div style={{ textAlign: 'center', width: '100%' }}>
+                <svg width="80" height="80" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 12px', display: 'block' }}>
+                  <rect x="9" y="19" width="30" height="22" rx="2" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M16 19V13C16 10.2386 18.2386 8 21 8H27C29.7614 8 32 10.2386 32 13V19" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <line x1="9" y1="27" x2="39" y2="27" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                  <line x1="9" y1="34" x2="39" y2="34" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                  <circle cx="31" cy="27" r="1.8" fill="#1a1a1a"/>
                 </svg>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                  N/A
+                </div>
               </div>
             </div>
 
