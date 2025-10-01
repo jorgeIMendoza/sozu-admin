@@ -584,6 +584,27 @@ class HTMLToPDFService {
       }
     }
 
+    // Get CLABE: first try clabe_stp_tmp_apartado, if null get from cuentas_cobranza
+    let clabeStp = propiedad.clabe_stp_tmp_apartado;
+    if (!clabeStp) {
+      const { data: cuentaCobranza } = await supabase
+        .from('cuentas_cobranza')
+        .select(`
+          clabe_stp,
+          ofertas!inner(id_propiedad)
+        `)
+        .eq('ofertas.id_propiedad', propertyId)
+        .eq('activo', true)
+        .not('clabe_stp', 'is', null)
+        .order('fecha_creacion', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cuentaCobranza?.clabe_stp) {
+        clabeStp = cuentaCobranza.clabe_stp;
+      }
+    }
+
     return {
       id: propiedad.id,
       numero_propiedad: propiedad.numero_propiedad,
@@ -592,7 +613,7 @@ class HTMLToPDFService {
       m2_escriturables: propiedad.m2_escriturables,
       descripcion: propiedad.descripcion,
       numero_piso: propiedad.numero_piso,
-      clabe_stp_tmp_apartado: propiedad.clabe_stp_tmp_apartado,
+      clabe_stp_tmp_apartado: clabeStp,
       building,
       model,
       vista,
