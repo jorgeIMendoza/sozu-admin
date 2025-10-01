@@ -648,7 +648,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 <div style={{ fontSize: '24px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
                   <p style={{ color: '#000000', marginBottom: '12px' }}>
                     <span style={{ fontWeight: '400' }}>Banco: </span>
-                    <span style={{ fontWeight: '400' }}>Sistema de Transacciones y Pagos</span>
+                    <span style={{ fontWeight: '400' }}>Sistema de Transferencias y Pagos (STP)</span>
                   </p>
                   <p style={{ color: '#000000', marginBottom: '12px' }}>
                     <span style={{ fontWeight: '400' }}>Titular: </span>
