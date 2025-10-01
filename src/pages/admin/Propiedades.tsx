@@ -320,7 +320,7 @@ const Propiedades = () => {
             .select(`
               id_acuerdo_pago,
               monto,
-              pagos!inner(id_metodos_pago)
+              pagos!fk_aplicaciones_pago_pago!inner(id_metodos_pago)
             `)
             .in('id_acuerdo_pago', acuerdoIds)
             .eq('activo', true);
