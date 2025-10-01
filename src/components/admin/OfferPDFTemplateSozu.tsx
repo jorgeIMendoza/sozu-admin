@@ -178,8 +178,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           justifyContent: 'space-between', 
           alignItems: 'center',
           marginBottom: '60px',
-          paddingBottom: '40px',
-          borderBottom: '2px solid #e0e0e0'
+          paddingBottom: '40px'
         }}>
           <div style={{ 
             flex: '0 0 320px', 
@@ -227,7 +226,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Divider Line before Property Details */}
         <div style={{ 
           width: '100%',
-          height: '2px',
+          height: '4px',
           backgroundColor: '#585858',
           marginBottom: '32px'
         }} />
