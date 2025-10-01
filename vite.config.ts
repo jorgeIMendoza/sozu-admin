@@ -100,6 +100,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
+    sourcemap: true,
     cssCodeSplit: true,
     cssMinify: true,
     assetsInlineLimit: 4096,
