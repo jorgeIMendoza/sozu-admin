@@ -292,7 +292,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                   <line x1="6" y1="38" x2="6" y2="42" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
                   <line x1="42" y1="38" x2="42" y2="42" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
                 </svg>
-                <div style={{ fontSize: '16px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   Una
                 </div>
               </div>
@@ -307,7 +307,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                   <line x1="24" y1="32" x2="24" y2="36" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"/>
                   <line x1="32" y1="32" x2="32" y2="36" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"/>
                 </svg>
-                <div style={{ fontSize: '16px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   Uno
                 </div>
               </div>
@@ -320,7 +320,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                   <line x1="24" y1="8" x2="24" y2="18" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
                   <circle cx="24" cy="6" r="2" fill="#1a1a1a"/>
                 </svg>
-                <div style={{ fontSize: '16px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   Uno
                 </div>
               </div>
@@ -336,7 +336,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                   <path d="M10 24L14.4 13.6C15.2 11.8 17 10.4 19 10.4H29C31 10.4 32.8 11.8 33.6 13.6L38 24" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
                   <rect x="14" y="17" width="20" height="5" rx="1" fill="#1a1a1a"/>
                 </svg>
-                <div style={{ fontSize: '16px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   1 Normal
                 </div>
               </div>
@@ -350,7 +350,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                   <line x1="9" y1="34" x2="39" y2="34" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
                   <circle cx="31" cy="27" r="1.8" fill="#1a1a1a"/>
                 </svg>
-                <div style={{ fontSize: '16px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   N/A
                 </div>
               </div>
