@@ -13,7 +13,7 @@
     <link rel="dns-prefetch" href="https://tzmhgfjmddkfyffkkmto.supabase.co" />
     
     <!-- Optimize CSS loading -->
-    <link rel="preload" href="/src/index.css" as="style" />
+    <link rel="preload" href="/src/index.css" as="style" fetchpriority="high" />
     
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#ffffff" />
@@ -34,10 +34,41 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@lovable_dev" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    
+    <style>
+      /* Inline critical CSS for initial paint */
+      #root-loader {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: hsl(0 0% 98%);
+      }
+      @media (prefers-color-scheme: dark) {
+        #root-loader {
+          background: hsl(222.2 84% 4.9%);
+        }
+      }
+      .loader-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid hsl(158 64% 38% / 0.2);
+        border-top-color: hsl(158 64% 38%);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="root-loader">
+        <div class="loader-spinner"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
