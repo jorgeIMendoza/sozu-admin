@@ -130,270 +130,347 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
     };
 
     return (
-      <div ref={ref} className="bg-white" style={{ width: '2550px', minHeight: '3300px', fontFamily: 'Arial, sans-serif', position: 'relative' }}>
-        {/* Header Section */}
-        <div style={{ padding: '60px 80px 40px 80px' }}>
-          {/* Logo and Title Area */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
-            <div>
-              <h1 style={{ fontSize: '48px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '12px', lineHeight: '1.2' }}>
-                {propertyDetails.projectData?.nombre || 'Dotar Expedición'}
-              </h1>
-              <p style={{ fontSize: '24px', color: '#585858', fontWeight: '500' }}>
-                Orden de Compra: {formatOfferNumber(offerData.id)}
-              </p>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <p style={{ fontSize: '20px', color: '#585858', marginBottom: '4px' }}>
-                Fecha: {new Date(offerData.fecha_generacion).toLocaleDateString('es-MX')}
-              </p>
-            </div>
-          </div>
-
-          {/* Property Image */}
-          {propertyDetails.projectData?.url_imagen_portada && (
-            <div style={{ marginBottom: '40px', borderRadius: '8px', overflow: 'hidden' }}>
+      <div 
+        ref={ref} 
+        style={{ 
+          width: '2550px', 
+          height: '3300px', 
+          backgroundColor: 'white',
+          fontFamily: 'Arial, sans-serif',
+          position: 'relative',
+          padding: '80px'
+        }}
+      >
+        {/* Header with Project Logo and Offer Info */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'flex-start',
+          marginBottom: '60px'
+        }}>
+          <div>
+            {propertyDetails.projectData?.url_imagen_portada && (
               <img
                 src={propertyDetails.projectData.url_imagen_portada}
-                alt="Proyecto"
-                style={{ width: '100%', height: '600px', objectFit: 'cover' }}
+                alt="Logo"
+                style={{ height: '120px', objectFit: 'contain' }}
               />
+            )}
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '48px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '12px' }}>
+              {formatOfferNumber(offerData.id)}
             </div>
-          )}
+            <div style={{ fontSize: '32px', color: '#585858' }}>
+              {new Date(offerData.fecha_generacion).toLocaleDateString('es-MX')}
+            </div>
+          </div>
+        </div>
 
-          {/* Property Information Section */}
-          <div style={{ backgroundColor: '#f8f8f8', padding: '40px', borderRadius: '8px', marginBottom: '40px' }}>
-            <h2 style={{ fontSize: '36px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '30px', borderBottom: '3px solid #1a1a1a', paddingBottom: '15px' }}>
-              Datos del Inmueble
-            </h2>
+        {/* Main Property Image */}
+        {propertyDetails.projectData?.url_imagen_portada && (
+          <div style={{ 
+            marginBottom: '80px',
+            width: '100%',
+            height: '800px',
+            borderRadius: '12px',
+            overflow: 'hidden'
+          }}>
+            <img
+              src={propertyDetails.projectData.url_imagen_portada}
+              alt="Proyecto"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          </div>
+        )}
+
+        {/* Property Details Section */}
+        <div style={{ marginBottom: '80px' }}>
+          <h2 style={{ 
+            fontSize: '56px', 
+            fontWeight: 'bold', 
+            color: '#1a1a1a',
+            marginBottom: '48px',
+            borderBottom: '4px solid #1a1a1a',
+            paddingBottom: '20px'
+          }}>
+            Datos del Inmueble
+          </h2>
+          
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr', 
+            gap: '40px',
+            fontSize: '32px'
+          }}>
+            <div style={{ 
+              padding: '32px', 
+              backgroundColor: '#f8f8f8',
+              borderRadius: '8px'
+            }}>
+              <div style={{ color: '#585858', marginBottom: '12px' }}>Departamento:</div>
+              <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
+                {propertyDetails.numero_propiedad}
+              </div>
+            </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', fontSize: '22px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #d0d0d0' }}>
-                <span style={{ color: '#585858', fontWeight: '500' }}>Departamento:</span>
-                <span style={{ color: '#1a1a1a', fontWeight: 'bold' }}>{propertyDetails.numero_propiedad}</span>
-              </div>
-              
-              {propertyDetails.model && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #d0d0d0' }}>
-                  <span style={{ color: '#585858', fontWeight: '500' }}>Modelo:</span>
-                  <span style={{ color: '#1a1a1a', fontWeight: 'bold' }}>{propertyDetails.model.nombre}</span>
+            {propertyDetails.model && (
+              <div style={{ 
+                padding: '32px', 
+                backgroundColor: '#f8f8f8',
+                borderRadius: '8px'
+              }}>
+                <div style={{ color: '#585858', marginBottom: '12px' }}>Modelo:</div>
+                <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
+                  {propertyDetails.model.nombre}
                 </div>
-              )}
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #d0d0d0' }}>
-                <span style={{ color: '#585858', fontWeight: '500' }}>Recámaras:</span>
-                <span style={{ color: '#1a1a1a', fontWeight: 'bold' }}>{propertyDetails.model?.numero_recamaras || 'N/A'}</span>
               </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #d0d0d0' }}>
-                <span style={{ color: '#585858', fontWeight: '500' }}>Baños:</span>
-                <span style={{ color: '#1a1a1a', fontWeight: 'bold' }}>
-                  {propertyDetails.model?.numero_completo_banos || 0} + {propertyDetails.model?.numero_medio_bano || 0} medios
-                </span>
+            )}
+            
+            <div style={{ 
+              padding: '32px', 
+              backgroundColor: '#f8f8f8',
+              borderRadius: '8px'
+            }}>
+              <div style={{ color: '#585858', marginBottom: '12px' }}>Recámaras:</div>
+              <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
+                {propertyDetails.model?.numero_recamaras || 'N/A'}
               </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #d0d0d0' }}>
-                <span style={{ color: '#585858', fontWeight: '500' }}>M² Construidos:</span>
-                <span style={{ color: '#1a1a1a', fontWeight: 'bold' }}>{propertyDetails.m2_reales?.toFixed(2) || 'N/A'} m²</span>
-              </div>
-              
-              {propertyDetails.building && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #d0d0d0' }}>
-                  <span style={{ color: '#585858', fontWeight: '500' }}>Edificio:</span>
-                  <span style={{ color: '#1a1a1a', fontWeight: 'bold' }}>{propertyDetails.building.nombre}</span>
-                </div>
-              )}
-              
-              {propertyDetails.numero_piso && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #d0d0d0' }}>
-                  <span style={{ color: '#585858', fontWeight: '500' }}>Piso:</span>
-                  <span style={{ color: '#1a1a1a', fontWeight: 'bold' }}>{propertyDetails.numero_piso}</span>
-                </div>
-              )}
-              
-              {propertyDetails.vista && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #d0d0d0' }}>
-                  <span style={{ color: '#585858', fontWeight: '500' }}>Vista:</span>
-                  <span style={{ color: '#1a1a1a', fontWeight: 'bold' }}>{propertyDetails.vista.nombre}</span>
-                </div>
-              )}
             </div>
-
-            {/* Price Section */}
-            <div style={{ marginTop: '40px', padding: '30px', backgroundColor: '#fff', borderRadius: '8px', border: '2px solid #1a1a1a' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '28px', color: '#585858', fontWeight: '600' }}>Precio de Lista:</span>
-                <span style={{ fontSize: '42px', color: '#1a1a1a', fontWeight: 'bold' }}>{formatCurrency(propertyDetails.precio_lista)}</span>
+            
+            <div style={{ 
+              padding: '32px', 
+              backgroundColor: '#f8f8f8',
+              borderRadius: '8px'
+            }}>
+              <div style={{ color: '#585858', marginBottom: '12px' }}>Baños:</div>
+              <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
+                {propertyDetails.model?.numero_completo_banos || 0} + {propertyDetails.model?.numero_medio_bano || 0}
+              </div>
+            </div>
+            
+            <div style={{ 
+              padding: '32px', 
+              backgroundColor: '#f8f8f8',
+              borderRadius: '8px'
+            }}>
+              <div style={{ color: '#585858', marginBottom: '12px' }}>M² Construidos:</div>
+              <div style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '40px' }}>
+                {propertyDetails.m2_reales?.toFixed(2) || 'N/A'}
+              </div>
+            </div>
+            
+            <div style={{ 
+              padding: '32px', 
+              backgroundColor: '#1a1a1a',
+              borderRadius: '8px',
+              gridColumn: '1 / -1'
+            }}>
+              <div style={{ color: '#fff', marginBottom: '12px', fontSize: '36px' }}>Precio de Lista:</div>
+              <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '64px' }}>
+                {formatCurrency(propertyDetails.precio_lista)}
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Payment Schemes Section */}
-          {filteredPaymentSchemes.length > 0 && (
-            <div style={{ marginBottom: '40px' }}>
-              <h2 style={{ fontSize: '36px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '30px', borderBottom: '3px solid #1a1a1a', paddingBottom: '15px' }}>
-                Esquemas de Pago
-              </h2>
-              
-              {filteredPaymentSchemes.map((scheme, index) => {
-                const amounts = calculatePaymentAmounts(scheme);
-                return (
-                  <div key={scheme.id} style={{ backgroundColor: index % 2 === 0 ? '#f8f8f8' : '#fff', padding: '30px', marginBottom: '20px', borderRadius: '8px', border: '1px solid #d0d0d0' }}>
-                    <h3 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '25px' }}>
-                      {scheme.nombre}
-                      {scheme.porcentaje_descuento_aumento !== 0 && (
-                        <span style={{ fontSize: '22px', color: scheme.porcentaje_descuento_aumento > 0 ? '#dc2626' : '#16a34a', marginLeft: '15px' }}>
-                          ({scheme.porcentaje_descuento_aumento > 0 ? '+' : ''}{scheme.porcentaje_descuento_aumento}%)
-                        </span>
-                      )}
-                    </h3>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '30px', fontSize: '20px' }}>
-                      <div style={{ padding: '20px', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #d0d0d0' }}>
-                        <p style={{ color: '#585858', marginBottom: '10px', fontWeight: '500' }}>Enganche ({scheme.porcentaje_enganche}%)</p>
-                        <p style={{ color: '#1a1a1a', fontSize: '26px', fontWeight: 'bold' }}>{formatCurrency(amounts.enganche)}</p>
+        {/* Payment Schemes */}
+        {filteredPaymentSchemes.length > 0 && (
+          <div style={{ marginBottom: '80px' }}>
+            <h2 style={{ 
+              fontSize: '56px', 
+              fontWeight: 'bold', 
+              color: '#1a1a1a',
+              marginBottom: '48px',
+              borderBottom: '4px solid #1a1a1a',
+              paddingBottom: '20px'
+            }}>
+              Esquemas de Pago
+            </h2>
+            
+            {filteredPaymentSchemes.map((scheme, index) => {
+              const amounts = calculatePaymentAmounts(scheme);
+              return (
+                <div 
+                  key={scheme.id} 
+                  style={{ 
+                    backgroundColor: '#f8f8f8',
+                    padding: '48px',
+                    marginBottom: '32px',
+                    borderRadius: '12px',
+                    border: '2px solid #d0d0d0'
+                  }}
+                >
+                  <h3 style={{ 
+                    fontSize: '40px', 
+                    fontWeight: 'bold', 
+                    color: '#1a1a1a',
+                    marginBottom: '40px'
+                  }}>
+                    {scheme.nombre}
+                  </h3>
+                  
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '1fr 1fr 1fr', 
+                    gap: '40px',
+                    fontSize: '28px'
+                  }}>
+                    <div style={{ 
+                      padding: '32px', 
+                      backgroundColor: '#fff',
+                      borderRadius: '8px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ color: '#585858', marginBottom: '16px' }}>
+                        Enganche ({scheme.porcentaje_enganche}%)
                       </div>
-                      
-                      <div style={{ padding: '20px', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #d0d0d0' }}>
-                        <p style={{ color: '#585858', marginBottom: '10px', fontWeight: '500' }}>
-                          Mensualidades ({scheme.numero_mensualidades} meses)
-                        </p>
-                        <p style={{ color: '#1a1a1a', fontSize: '26px', fontWeight: 'bold' }}>{formatCurrency(amounts.mensualidad)}</p>
-                        <p style={{ color: '#585858', fontSize: '16px', marginTop: '5px' }}>
-                          Total: {formatCurrency(amounts.mensualidad * scheme.numero_mensualidades)}
-                        </p>
-                      </div>
-                      
-                      <div style={{ padding: '20px', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #d0d0d0' }}>
-                        <p style={{ color: '#585858', marginBottom: '10px', fontWeight: '500' }}>Contra Entrega ({scheme.porcentaje_entrega}%)</p>
-                        <p style={{ color: '#1a1a1a', fontSize: '26px', fontWeight: 'bold' }}>{formatCurrency(amounts.entrega)}</p>
+                      <div style={{ color: '#1a1a1a', fontSize: '48px', fontWeight: 'bold' }}>
+                        {formatCurrency(amounts.enganche)}
                       </div>
                     </div>
                     
-                    <div style={{ marginTop: '25px', padding: '20px', backgroundColor: '#1a1a1a', borderRadius: '6px', textAlign: 'center' }}>
-                      <span style={{ color: '#fff', fontSize: '22px', fontWeight: '500', marginRight: '15px' }}>Precio Final:</span>
-                      <span style={{ color: '#fff', fontSize: '32px', fontWeight: 'bold' }}>{formatCurrency(amounts.finalPrice)}</span>
+                    <div style={{ 
+                      padding: '32px', 
+                      backgroundColor: '#fff',
+                      borderRadius: '8px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ color: '#585858', marginBottom: '16px' }}>
+                        Mensualidades ({scheme.numero_mensualidades})
+                      </div>
+                      <div style={{ color: '#1a1a1a', fontSize: '48px', fontWeight: 'bold' }}>
+                        {formatCurrency(amounts.mensualidad)}
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      padding: '32px', 
+                      backgroundColor: '#fff',
+                      borderRadius: '8px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ color: '#585858', marginBottom: '16px' }}>
+                        Contra Entrega ({scheme.porcentaje_entrega}%)
+                      </div>
+                      <div style={{ color: '#1a1a1a', fontSize: '48px', fontWeight: 'bold' }}>
+                        {formatCurrency(amounts.entrega)}
+                      </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Amenities Section */}
-          {amenities.length > 0 && (
-            <div style={{ marginBottom: '40px' }}>
-              <h2 style={{ fontSize: '36px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '30px', borderBottom: '3px solid #1a1a1a', paddingBottom: '15px' }}>
-                Amenidades
-              </h2>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '25px' }}>
-                {amenities.map((amenity) => (
-                  <div key={amenity.id} style={{ padding: '20px', backgroundColor: '#f8f8f8', borderRadius: '8px', textAlign: 'center', border: '1px solid #d0d0d0' }}>
-                    {amenity.url && (
-                      <img
-                        src={amenity.url}
-                        alt={amenity.nombre}
-                        style={{ width: '60px', height: '60px', marginBottom: '15px', objectFit: 'contain' }}
-                      />
-                    )}
-                    <p style={{ fontSize: '18px', color: '#1a1a1a', fontWeight: '500' }}>{amenity.nombre}</p>
+                  
+                  <div style={{ 
+                    marginTop: '40px', 
+                    padding: '32px', 
+                    backgroundColor: '#1a1a1a',
+                    borderRadius: '8px',
+                    textAlign: 'center'
+                  }}>
+                    <span style={{ color: '#fff', fontSize: '32px', marginRight: '20px' }}>
+                      Precio Final:
+                    </span>
+                    <span style={{ color: '#fff', fontSize: '56px', fontWeight: 'bold' }}>
+                      {formatCurrency(amounts.finalPrice)}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-          {/* Contact Information */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginBottom: '40px' }}>
-            {/* Agent Contact */}
-            <div style={{ backgroundColor: '#f8f8f8', padding: '30px', borderRadius: '8px' }}>
-              <h3 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '20px' }}>Agente</h3>
-              <div style={{ fontSize: '20px', lineHeight: '1.8' }}>
-                <p style={{ color: '#585858' }}>
-                  <span style={{ fontWeight: '600' }}>Nombre:</span> {creatorInfo?.nombre || 'N/A'}
+        {/* Contact Info */}
+        <div style={{ marginBottom: '80px' }}>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr', 
+            gap: '40px'
+          }}>
+            <div style={{ 
+              backgroundColor: '#f8f8f8',
+              padding: '48px',
+              borderRadius: '12px'
+            }}>
+              <h3 style={{ fontSize: '40px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '32px' }}>
+                Agente
+              </h3>
+              <div style={{ fontSize: '28px', lineHeight: '1.8' }}>
+                <p style={{ color: '#585858', marginBottom: '16px' }}>
+                  <span style={{ fontWeight: '600' }}>Nombre:</span><br/>
+                  {creatorInfo?.nombre || 'N/A'}
                 </p>
-                <p style={{ color: '#585858' }}>
-                  <span style={{ fontWeight: '600' }}>Email:</span> {creatorInfo?.email || offerData.leadEmail}
+                <p style={{ color: '#585858', marginBottom: '16px' }}>
+                  <span style={{ fontWeight: '600' }}>Email:</span><br/>
+                  {creatorInfo?.email || offerData.leadEmail}
                 </p>
                 {creatorInfo?.telefono && (
                   <p style={{ color: '#585858' }}>
-                    <span style={{ fontWeight: '600' }}>Teléfono:</span> {creatorInfo.telefono}
+                    <span style={{ fontWeight: '600' }}>Teléfono:</span><br/>
+                    {creatorInfo.telefono}
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Client Contact */}
-            <div style={{ backgroundColor: '#f8f8f8', padding: '30px', borderRadius: '8px' }}>
-              <h3 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '20px' }}>Cliente</h3>
-              <div style={{ fontSize: '20px', lineHeight: '1.8' }}>
-                <p style={{ color: '#585858' }}>
-                  <span style={{ fontWeight: '600' }}>Nombre:</span> {leadInfo?.nombre_legal || offerData.leadName}
+            <div style={{ 
+              backgroundColor: '#f8f8f8',
+              padding: '48px',
+              borderRadius: '12px'
+            }}>
+              <h3 style={{ fontSize: '40px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '32px' }}>
+                Comprador:
+              </h3>
+              <div style={{ fontSize: '28px', lineHeight: '1.8' }}>
+                <p style={{ color: '#585858', marginBottom: '16px' }}>
+                  <span style={{ fontWeight: '600' }}>Nombre:</span><br/>
+                  {leadInfo?.nombre_legal || offerData.leadName}
                 </p>
-                <p style={{ color: '#585858' }}>
-                  <span style={{ fontWeight: '600' }}>Email:</span> {leadInfo?.email || offerData.leadEmail}
+                <p style={{ color: '#585858', marginBottom: '16px' }}>
+                  <span style={{ fontWeight: '600' }}>Email:</span><br/>
+                  {leadInfo?.email || offerData.leadEmail}
                 </p>
                 {leadInfo?.telefono && (
                   <p style={{ color: '#585858' }}>
-                    <span style={{ fontWeight: '600' }}>Teléfono:</span> {leadInfo.telefono}
+                    <span style={{ fontWeight: '600' }}>Teléfono:</span><br/>
+                    {leadInfo.telefono}
                   </p>
                 )}
               </div>
             </div>
           </div>
-
-          {/* Banking Information */}
-          {propertyDetails.ownerStpBankAccount && (
-            <div style={{ backgroundColor: '#1a1a1a', padding: '40px', borderRadius: '8px', marginBottom: '40px' }}>
-              <h2 style={{ fontSize: '36px', fontWeight: 'bold', color: '#fff', marginBottom: '30px' }}>
-                Datos Bancarios
-              </h2>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', fontSize: '20px', color: '#fff' }}>
-                <div style={{ padding: '20px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
-                  <p style={{ opacity: 0.8, marginBottom: '8px', fontSize: '18px' }}>Banco:</p>
-                  <p style={{ fontWeight: 'bold', fontSize: '24px' }}>{propertyDetails.ownerStpBankAccount.banco_nombre}</p>
-                </div>
-                
-                <div style={{ padding: '20px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
-                  <p style={{ opacity: 0.8, marginBottom: '8px', fontSize: '18px' }}>Beneficiario:</p>
-                  <p style={{ fontWeight: 'bold', fontSize: '24px' }}>{propertyDetails.ownerData?.nombre_legal || 'N/A'}</p>
-                </div>
-                
-                <div style={{ padding: '20px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
-                  <p style={{ opacity: 0.8, marginBottom: '8px', fontSize: '18px' }}>CLABE:</p>
-                  <p style={{ fontWeight: 'bold', fontSize: '24px', fontFamily: 'monospace' }}>{propertyDetails.ownerStpBankAccount.cuenta_clabe}</p>
-                </div>
-                
-                <div style={{ padding: '20px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
-                  <p style={{ opacity: 0.8, marginBottom: '8px', fontSize: '18px' }}>Cuenta:</p>
-                  <p style={{ fontWeight: 'bold', fontSize: '24px', fontFamily: 'monospace' }}>{propertyDetails.ownerStpBankAccount.numero_cuenta}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Legal Notices */}
-          {legalNotices.length > 0 && (
-            <div style={{ borderTop: '2px solid #585858', paddingTop: '30px' }}>
-              <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '20px' }}>
-                Avisos Legales
-              </h3>
-              {legalNotices.map((notice, index) => (
-                <p key={index} style={{ fontSize: '16px', color: '#585858', marginBottom: '15px', lineHeight: '1.6', textAlign: 'justify' }}>
-                  {notice}
-                </p>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* Footer */}
-        <div style={{ position: 'absolute', bottom: '60px', left: '80px', right: '80px', textAlign: 'center', borderTop: '2px solid #585858', paddingTop: '20px' }}>
-          <p style={{ fontSize: '18px', color: '#585858' }}>
-            Datos del Comprador: {offerData.leadName} | Email: {offerData.leadEmail}
-          </p>
+        {/* Footer Divider Line */}
+        <div style={{ 
+          position: 'absolute',
+          bottom: '300px',
+          left: '0',
+          right: '0',
+          height: '2px',
+          backgroundColor: '#585858'
+        }} />
+
+        {/* Footer Section */}
+        <div style={{ 
+          position: 'absolute',
+          bottom: '80px',
+          left: '80px',
+          right: '80px'
+        }}>
+          <div style={{ fontSize: '24px', color: '#585858', lineHeight: '1.6' }}>
+            <p style={{ marginBottom: '16px' }}>
+              <strong>Datos del Inmueble Comprador:</strong> {leadInfo?.nombre_legal || offerData.leadName}
+            </p>
+            {propertyDetails.ownerStpBankAccount && (
+              <p style={{ marginBottom: '16px' }}>
+                <strong>Banco:</strong> {propertyDetails.ownerStpBankAccount.banco_nombre} | 
+                <strong> CLABE:</strong> {propertyDetails.ownerStpBankAccount.cuenta_clabe}
+              </p>
+            )}
+            <p style={{ fontSize: '20px', opacity: 0.7 }}>
+              S15,138.00 | 15,138.00 | Precio: $1,515,138.00
+            </p>
+          </div>
         </div>
       </div>
     );
