@@ -1802,7 +1802,9 @@ const Propiedades = () => {
       <Dialog open={offersDialogOpen} onOpenChange={setOffersDialogOpen}>
         <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Ofertas Comerciales</DialogTitle>
+            <DialogTitle>
+              Ofertas comerciales para propiedad {selectedPropertyForOffers?.numero_propiedad} de {selectedPropertyForOffers?.proyecto}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             {selectedPropertyOffers && selectedPropertyOffers.length > 0 ? (
@@ -1863,7 +1865,18 @@ const Propiedades = () => {
                           </TableCell>
                           <TableCell>
                              {offer.esquema_es_manual ? (
-                               <span className="text-sm">{offer.esquema_nombre}</span>
+                               <span className="text-sm font-medium">{offer.esquema_nombre}</span>
+                             ) : hasPaymentScheme ? (
+                               <Badge 
+                                 variant="outline" 
+                                 className={`font-medium ${
+                                   isAccountActive 
+                                     ? "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700" 
+                                     : "bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600"
+                                 }`}
+                               >
+                                 {offer.esquema_nombre || availableSchemes.find(s => s.id === offer.esquema_id)?.nombre || `ID: ${offer.esquema_id}`}
+                               </Badge>
                              ) : (
                                 <Select 
                                   value={offer.esquema_id ? offer.esquema_id.toString() : ""}
