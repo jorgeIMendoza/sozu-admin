@@ -234,9 +234,9 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Property Details Section */}
         <div style={{ marginBottom: '80px' }}>
           <h2 style={{ 
-            fontSize: '48px', 
+            fontSize: '40px', 
             fontWeight: 'bold', 
-            color: '#000',
+            color: '#000000',
             marginBottom: '40px'
           }}>
             Datos de la Propiedad:
@@ -519,9 +519,8 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           <h2 style={{ 
             fontSize: '40px', 
             fontWeight: 'bold', 
-            color: '#1a1a1a', 
-            marginBottom: '32px',
-            fontFamily: 'Arial, sans-serif'
+            color: '#000000', 
+            marginBottom: '40px'
           }}>
             Datos Bancarios
           </h2>
@@ -639,9 +638,8 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           <h2 style={{ 
             fontSize: '40px', 
             fontWeight: 'bold', 
-            color: '#1a1a1a', 
-            marginBottom: '32px',
-            fontFamily: 'Arial, sans-serif'
+            color: '#000000', 
+            marginBottom: '40px'
           }}>
             Datos de Contacto
           </h2>
