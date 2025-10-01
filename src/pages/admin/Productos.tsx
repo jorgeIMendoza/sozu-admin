@@ -181,6 +181,8 @@ export default function Productos() {
           es_producto: true,
           id_categoria: parseInt(data.id_categoria),
           id_persona: parseInt(data.id_persona),
+          id_unidad_sat: data.id_unidad_sat === "" ? null : data.id_unidad_sat,
+          sat_id: data.sat_id === "" ? null : data.sat_id,
         }]);
       
       if (error) throw error;
@@ -211,6 +213,8 @@ export default function Productos() {
           ...data,
           id_categoria: parseInt(data.id_categoria),
           id_persona: parseInt(data.id_persona),
+          id_unidad_sat: data.id_unidad_sat === "" ? null : data.id_unidad_sat,
+          sat_id: data.sat_id === "" ? null : data.sat_id,
         })
         .eq('id', editingEntity?.id);
       
