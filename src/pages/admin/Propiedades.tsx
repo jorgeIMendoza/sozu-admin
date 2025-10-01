@@ -1504,7 +1504,7 @@ const Propiedades = () => {
                             property.disponibilidad === "Entregado") && (
                             <NewProductOfferDialog 
                               propertyId={property.id}
-                              currentBuyerData={null}
+                              property={property}
                             />
                           )}
                            <Tooltip>

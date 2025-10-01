@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart } from "lucide-react";
@@ -8,44 +8,85 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 interface NewProductOfferDialogProps {
   propertyId: number;
-  currentBuyerData?: {
-    nombre_legal: string;
-    email: string;
-    telefono: string;
-    rfc?: string;
-    curp?: string;
-  } | null;
+  property: any;
 }
 
-export function NewProductOfferDialog({ propertyId, currentBuyerData }: NewProductOfferDialogProps) {
+export function NewProductOfferDialog({ propertyId, property }: NewProductOfferDialogProps) {
   const [open, setOpen] = useState(false);
   const [useCurrentBuyer, setUseCurrentBuyer] = useState(true);
   const [showProspectSearch, setShowProspectSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [porcentajePagoInicial, setPorcentajePagoInicial] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   
+  const [paymentScheme, setPaymentScheme] = useState({
+    porcentaje_enganche: "",
+    porcentaje_mensualidades: "",
+    porcentaje_entrega: "",
+    numero_mensualidades: "",
+    porcentaje_descuento_aumento: ""
+  });
+  
   const [prospectData, setProspectData] = useState({
     tipo_persona: "Persona Física",
-    nombre_completo: "",
+    razon_social: "",
     email: "",
     telefono: "",
-    rfc: "",
-    curp: ""
+    rfc: ""
   });
 
   const { toast } = useToast();
 
-  // Fetch active categories
-  const { data: categories = [] } = useQuery({
+  // Fetch current buyer data
+  const { data: currentBuyerData } = useQuery({
+    queryKey: ['current-buyer', propertyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('compradores')
+        .select('personas!compradores_id_persona_fkey(*)')
+        .eq('id_cuenta_cobranza', property.cuenta_cobranza_id)
+        .eq('activo', true)
+        .order('porcentaje_copropiedad', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (error) throw error;
+      return data?.personas;
+    },
+    enabled: !!property.cuenta_cobranza_id,
+  });
+
+  // Update prospectData when currentBuyerData changes or useCurrentBuyer changes
+  useEffect(() => {
+    if (useCurrentBuyer && currentBuyerData) {
+      setProspectData({
+        tipo_persona: currentBuyerData.tipo_persona || "Persona Física",
+        razon_social: currentBuyerData.nombre_legal || "",
+        email: currentBuyerData.email || "",
+        telefono: currentBuyerData.telefono || "",
+        rfc: currentBuyerData.rfc || ""
+      });
+    } else if (!useCurrentBuyer) {
+      setProspectData({
+        tipo_persona: "Persona Física",
+        razon_social: "",
+        email: "",
+        telefono: "",
+        rfc: ""
+      });
+    }
+  }, [useCurrentBuyer, currentBuyerData]);
+
+  // Fetch active categories + add "Servicios" option
+  const { data: categoriesData = [] } = useQuery({
     queryKey: ['categorias-productos-activas'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -58,11 +99,31 @@ export function NewProductOfferDialog({ propertyId, currentBuyerData }: NewProdu
     },
   });
 
-  // Fetch products by category
+  // Add "Servicios" as a special category
+  const categories = [
+    { id: -1, nombre: 'Servicios' },
+    ...categoriesData
+  ];
+
+  // Fetch products/services by category
   const { data: products = [] } = useQuery({
-    queryKey: ['productos-por-categoria', selectedCategory],
+    queryKey: ['productos-servicios-por-categoria', selectedCategory],
     queryFn: async () => {
       if (!selectedCategory) return [];
+      
+      // If "Servicios" category is selected (id = -1)
+      if (selectedCategory === -1) {
+        const { data, error } = await supabase
+          .from('productos_servicios')
+          .select('*')
+          .eq('es_producto', false)
+          .eq('activo', true)
+          .order('nombre');
+        if (error) throw error;
+        return data || [];
+      }
+      
+      // Otherwise, fetch by category
       const { data, error } = await supabase
         .from('productos_servicios')
         .select('*')
@@ -95,52 +156,73 @@ export function NewProductOfferDialog({ propertyId, currentBuyerData }: NewProdu
   const handleCheckboxChange = (checked: boolean) => {
     setUseCurrentBuyer(checked);
     setShowProspectSearch(!checked);
-    
-    if (checked && currentBuyerData) {
-      setProspectData({
-        tipo_persona: "Persona Física",
-        nombre_completo: currentBuyerData.nombre_legal,
-        email: currentBuyerData.email,
-        telefono: currentBuyerData.telefono,
-        rfc: currentBuyerData.rfc || "",
-        curp: currentBuyerData.curp || ""
-      });
-    } else {
-      setProspectData({
-        tipo_persona: "Persona Física",
-        nombre_completo: "",
-        email: "",
-        telefono: "",
-        rfc: "",
-        curp: ""
-      });
-    }
   };
 
   const handleSelectExistingPerson = (persona: any) => {
     setProspectData({
       tipo_persona: persona.tipo_persona || "Persona Física",
-      nombre_completo: persona.nombre_legal,
+      razon_social: persona.nombre_legal,
       email: persona.email,
       telefono: persona.telefono || "",
-      rfc: persona.rfc || "",
-      curp: persona.curp || ""
+      rfc: persona.rfc || ""
     });
     setSearchTerm("");
   };
 
   const handleSelectProductService = () => {
-    // Validate form
-    if (!porcentajePagoInicial || parseFloat(porcentajePagoInicial) <= 0 || parseFloat(porcentajePagoInicial) > 100) {
+    // Validate payment scheme
+    const eng = parseFloat(paymentScheme.porcentaje_enganche);
+    const mens = parseFloat(paymentScheme.porcentaje_mensualidades);
+    const ent = parseFloat(paymentScheme.porcentaje_entrega);
+    const numMens = parseInt(paymentScheme.numero_mensualidades);
+
+    if (!paymentScheme.porcentaje_enganche || eng <= 0 || eng > 100) {
       toast({
         title: "Error",
-        description: "El porcentaje de pago inicial debe estar entre 0 y 100",
+        description: "El porcentaje de enganche debe estar entre 0 y 100",
         variant: "destructive",
       });
       return;
     }
 
-    if (!prospectData.nombre_completo || !prospectData.email || !prospectData.telefono) {
+    if (!paymentScheme.porcentaje_mensualidades || mens < 0 || mens > 100) {
+      toast({
+        title: "Error",
+        description: "El porcentaje de mensualidades debe estar entre 0 y 100",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!paymentScheme.porcentaje_entrega || ent < 0 || ent > 100) {
+      toast({
+        title: "Error",
+        description: "El porcentaje de entrega debe estar entre 0 y 100",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!paymentScheme.numero_mensualidades || numMens <= 0) {
+      toast({
+        title: "Error",
+        description: "El número de mensualidades debe ser mayor a 0",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const total = eng + mens + ent;
+    if (Math.abs(total - 100) > 0.01) {
+      toast({
+        title: "Error",
+        description: `La suma de los porcentajes debe ser 100%. Actualmente es ${total.toFixed(2)}%`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!prospectData.razon_social || !prospectData.email || !prospectData.telefono || !prospectData.rfc) {
       toast({
         title: "Error",
         description: "Por favor completa todos los campos obligatorios del comprador",
@@ -169,14 +251,19 @@ export function NewProductOfferDialog({ propertyId, currentBuyerData }: NewProdu
     setOpen(false);
     
     // Reset form
-    setPorcentajePagoInicial("");
+    setPaymentScheme({
+      porcentaje_enganche: "",
+      porcentaje_mensualidades: "",
+      porcentaje_entrega: "",
+      numero_mensualidades: "",
+      porcentaje_descuento_aumento: ""
+    });
     setProspectData({
       tipo_persona: "Persona Física",
-      nombre_completo: "",
+      razon_social: "",
       email: "",
       telefono: "",
-      rfc: "",
-      curp: ""
+      rfc: ""
     });
     setUseCurrentBuyer(true);
     setShowProspectSearch(false);
@@ -188,9 +275,18 @@ export function NewProductOfferDialog({ propertyId, currentBuyerData }: NewProdu
     <>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="hover:bg-blue-50 hover:text-blue-600">
-            <ShoppingCart className="h-4 w-4" />
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" className="hover:bg-blue-50 hover:text-blue-600">
+                  <ShoppingCart className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Generar oferta de productos/servicios</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </DialogTrigger>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -198,19 +294,78 @@ export function NewProductOfferDialog({ propertyId, currentBuyerData }: NewProdu
           </DialogHeader>
 
           <div className="space-y-6">
-            {/* Porcentaje de Pago Inicial */}
-            <div className="space-y-2">
-              <Label htmlFor="porcentaje-pago-inicial">Porcentaje de pago inicial (%)</Label>
-              <Input
-                id="porcentaje-pago-inicial"
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={porcentajePagoInicial}
-                onChange={(e) => setPorcentajePagoInicial(e.target.value)}
-                placeholder="0.00"
-              />
+            {/* Esquema de Pago Personalizado */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Esquema de Pago Personalizado</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="porcentaje-enganche">Porcentaje Enganche (%) *</Label>
+                  <Input
+                    id="porcentaje-enganche"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={paymentScheme.porcentaje_enganche}
+                    onChange={(e) => setPaymentScheme({ ...paymentScheme, porcentaje_enganche: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="porcentaje-mensualidades">Porcentaje Mensualidades (%) *</Label>
+                  <Input
+                    id="porcentaje-mensualidades"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={paymentScheme.porcentaje_mensualidades}
+                    onChange={(e) => setPaymentScheme({ ...paymentScheme, porcentaje_mensualidades: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="porcentaje-entrega">Porcentaje Entrega (%) *</Label>
+                  <Input
+                    id="porcentaje-entrega"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={paymentScheme.porcentaje_entrega}
+                    onChange={(e) => setPaymentScheme({ ...paymentScheme, porcentaje_entrega: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="numero-mensualidades">Número de Mensualidades *</Label>
+                  <Input
+                    id="numero-mensualidades"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={paymentScheme.numero_mensualidades}
+                    onChange={(e) => setPaymentScheme({ ...paymentScheme, numero_mensualidades: e.target.value })}
+                    placeholder="12"
+                  />
+                </div>
+
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="porcentaje-descuento-aumento">Porcentaje Descuento/Aumento (%)</Label>
+                  <Input
+                    id="porcentaje-descuento-aumento"
+                    type="number"
+                    step="0.01"
+                    value={paymentScheme.porcentaje_descuento_aumento}
+                    onChange={(e) => setPaymentScheme({ ...paymentScheme, porcentaje_descuento_aumento: e.target.value })}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Comprador Actual Checkbox */}
@@ -229,19 +384,16 @@ export function NewProductOfferDialog({ propertyId, currentBuyerData }: NewProdu
             {showProspectSearch && (
               <div className="space-y-2">
                 <Label>Buscar Prospecto</Label>
-                <Popover>
+                <Popover open={searchTerm.length >= 2}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start">
-                      Buscar por nombre...
-                    </Button>
+                    <Input
+                      placeholder="Buscar por nombre, email o RFC..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
                   </PopoverTrigger>
-                  <PopoverContent className="w-[400px] p-0">
+                  <PopoverContent className="w-[400px] p-0" align="start">
                     <Command>
-                      <CommandInput 
-                        placeholder="Buscar por nombre..." 
-                        value={searchTerm}
-                        onValueChange={setSearchTerm}
-                      />
                       <CommandEmpty>No se encontraron resultados.</CommandEmpty>
                       <CommandGroup>
                         {existingPersonas.map((persona: any) => (
@@ -266,77 +418,68 @@ export function NewProductOfferDialog({ propertyId, currentBuyerData }: NewProdu
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Información del Prospecto</h3>
               
-              <div className="space-y-2">
-                <Label htmlFor="tipo-persona">Tipo de Persona *</Label>
-                <Select
-                  value={prospectData.tipo_persona}
-                  onValueChange={(value) => setProspectData({ ...prospectData, tipo_persona: value })}
-                  disabled={useCurrentBuyer}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Persona Física">Persona Física</SelectItem>
-                    <SelectItem value="Persona Moral">Persona Moral</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="tipo-persona">Tipo de Persona *</Label>
+                  <Select
+                    value={prospectData.tipo_persona}
+                    onValueChange={(value) => setProspectData({ ...prospectData, tipo_persona: value })}
+                    disabled={useCurrentBuyer}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Persona Física">Persona Física</SelectItem>
+                      <SelectItem value="Persona Moral">Persona Moral</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="nombre-completo">Nombre Completo *</Label>
-                <Input
-                  id="nombre-completo"
-                  value={prospectData.nombre_completo}
-                  onChange={(e) => setProspectData({ ...prospectData, nombre_completo: e.target.value })}
-                  placeholder="Ingresa el nombre completo"
-                  disabled={useCurrentBuyer}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="razon-social">Razón Social *</Label>
+                  <Input
+                    id="razon-social"
+                    value={prospectData.razon_social}
+                    onChange={(e) => setProspectData({ ...prospectData, razon_social: e.target.value })}
+                    placeholder="Ingresa la razón social"
+                    disabled={useCurrentBuyer}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={prospectData.email}
-                  onChange={(e) => setProspectData({ ...prospectData, email: e.target.value })}
-                  placeholder="Ingresa el email"
-                  disabled={useCurrentBuyer}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={prospectData.email}
+                    onChange={(e) => setProspectData({ ...prospectData, email: e.target.value })}
+                    placeholder="Ingresa el email"
+                    disabled={useCurrentBuyer}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="telefono">Teléfono *</Label>
-                <Input
-                  id="telefono"
-                  value={prospectData.telefono}
-                  onChange={(e) => setProspectData({ ...prospectData, telefono: e.target.value })}
-                  placeholder="Ingresa el teléfono (10 dígitos obligatorios)"
-                  disabled={useCurrentBuyer}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="telefono">Teléfono *</Label>
+                  <Input
+                    id="telefono"
+                    value={prospectData.telefono}
+                    onChange={(e) => setProspectData({ ...prospectData, telefono: e.target.value })}
+                    placeholder="Ingresa el teléfono (10 dígitos obligatorios)"
+                    disabled={useCurrentBuyer}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="rfc">RFC *</Label>
-                <Input
-                  id="rfc"
-                  value={prospectData.rfc}
-                  onChange={(e) => setProspectData({ ...prospectData, rfc: e.target.value })}
-                  placeholder="Ingresa el RFC (Ej: ABC123456DEF)"
-                  disabled={useCurrentBuyer}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="curp">CURP</Label>
-                <Input
-                  id="curp"
-                  value={prospectData.curp}
-                  onChange={(e) => setProspectData({ ...prospectData, curp: e.target.value })}
-                  placeholder="Ingresa la CURP (Ej: ABCD123456HMNERR09)"
-                  disabled={useCurrentBuyer}
-                />
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="rfc">RFC *</Label>
+                  <Input
+                    id="rfc"
+                    value={prospectData.rfc}
+                    onChange={(e) => setProspectData({ ...prospectData, rfc: e.target.value })}
+                    placeholder="Ingresa el RFC (Ej: ABC123456DEF)"
+                    disabled={useCurrentBuyer}
+                  />
+                </div>
               </div>
             </div>
 
