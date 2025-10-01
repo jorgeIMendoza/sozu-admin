@@ -1,6 +1,6 @@
 // Centralized configuration constants
 // N8N Webhook Configuration
-export const N8N_WEBHOOK_BASE_URL = import.meta.env.VITE_N8N_WEBHOOK_BASE_URL || 'https://automatizacion-n8n.fbqqbe.easypanel.host/webhook-test';
+export const N8N_WEBHOOK_BASE_URL = import.meta.env.VITE_N8N_WEBHOOK_BASE_URL || 'https://automatizacion-n8n.fbqqbe.easypanel.host/webhook';
 
 // Supabase Configuration
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://tzmhgfjmddkfyffkkmto.supabase.co';
@@ -8,4 +8,4 @@ export const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABL
 export const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'tzmhgfjmddkfyffkkmto';
 
 // Environment Configuration
-export const ENVIRONMENT = import.meta.env.VITE_ENVIRONMENT || 'development';
+export const ENVIRONMENT = import.meta.env.VITE_ENVIRONMENT || 'produccion';
