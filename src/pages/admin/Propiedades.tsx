@@ -182,51 +182,55 @@ const Propiedades = () => {
     }
   };
 
-  const { data: properties, isLoading } = useQuery({
+  const { data: properties, isLoading, error: queryError } = useQuery({
     queryKey: ['properties-detailed'],
     queryFn: async () => {
-      // First, get the base property data
-      const { data, error } = await supabase
-        .from('propiedades')
-        .select(`
-          id,
-          numero_propiedad,
-          numero_piso,
-          m2_reales,
-          precio_lista,
-          monto_apartado,
-          monto_apartado_pagando,
-          clabe_stp_tmp_apartado,
-          activo,
-          es_aprobado,
-          edificios_modelos!inner(
-            edificios!edificios_modelos_id_edificio_fkey!inner(
-              nombre,
-              proyectos!edificios_id_proyecto_fkey!inner(id, nombre)
-            ),
-            modelos!edificios_modelos_id_modelo_fkey!inner(
-              nombre,
-              numero_recamaras,
-              numero_completo_banos,
-              numero_medio_bano
-            )
-          ),
-          entidades_relacionadas(
-            personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
-          ),
-          vistas(nombre),
-          estatus_disponibilidad!inner(nombre),
-          ofertas!ofertas_id_propiedad_fkey(
+      try {
+        console.log('Starting properties query...');
+        // First, get the base property data
+        const { data, error } = await supabase
+          .from('propiedades')
+          .select(`
             id,
-            cuentas_cobranza!fk_cuentas_cobranza_oferta(clabe_stp, id)
-          )
-        `)
-        .order('id', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching properties:', error);
-        throw error;
-      }
+            numero_propiedad,
+            numero_piso,
+            m2_reales,
+            precio_lista,
+            monto_apartado,
+            monto_apartado_pagando,
+            clabe_stp_tmp_apartado,
+            activo,
+            es_aprobado,
+            edificios_modelos!inner(
+              edificios!edificios_modelos_id_edificio_fkey!inner(
+                nombre,
+                proyectos!edificios_id_proyecto_fkey!inner(id, nombre)
+              ),
+              modelos!edificios_modelos_id_modelo_fkey!inner(
+                nombre,
+                numero_recamaras,
+                numero_completo_banos,
+                numero_medio_bano
+              )
+            ),
+            entidades_relacionadas(
+              personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
+            ),
+            vistas(nombre),
+            estatus_disponibilidad!inner(nombre),
+            ofertas!ofertas_id_propiedad_fkey(
+              id,
+              cuentas_cobranza!fk_cuentas_cobranza_oferta(clabe_stp, id)
+            )
+          `)
+          .order('id', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching properties:', error);
+          throw error;
+        }
+        
+        console.log('Properties fetched:', data?.length);
 
       // Get parking counts
       const { data: estacionamientosData, error: estacionamientosError } = await supabase
@@ -479,7 +483,12 @@ const Propiedades = () => {
         };
       }) || [];
       
-      return transformedData;
+        console.log('Transforming data...');
+        return transformedData;
+      } catch (error) {
+        console.error('Error in properties query:', error);
+        throw error;
+      }
     },
   });
 
