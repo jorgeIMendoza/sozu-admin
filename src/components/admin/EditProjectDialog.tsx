@@ -473,20 +473,26 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                     )}
                   />
 
-                   <div className="grid grid-cols-2 gap-4">
-                     <FormField
-                       control={form.control}
-                       name="precio_m2_actual"
-                       render={({ field }) => (
-                         <FormItem>
-                           <FormLabel>Precio por m²</FormLabel>
-                           <FormControl>
-                             <Input type="number" placeholder="0.00" {...field} />
-                           </FormControl>
-                           <FormMessage />
-                         </FormItem>
-                       )}
-                     />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="precio_m2_actual"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Precio por m² (calculado automáticamente)</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                placeholder="0.00" 
+                                {...field}
+                                disabled
+                                className="bg-muted"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
                      <FormField
                        control={form.control}

@@ -467,9 +467,15 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                   name="precio_m2_actual"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Precio por m²</FormLabel>
+                      <FormLabel>Precio por m² (calculado automáticamente)</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="0.00" {...field} />
+                        <Input 
+                          type="number" 
+                          placeholder="0.00" 
+                          {...field}
+                          disabled
+                          className="bg-muted"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

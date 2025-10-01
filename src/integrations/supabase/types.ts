@@ -2717,7 +2717,7 @@ export type Database = {
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
-          id_categoria: number
+          id_categoria: number | null
           id_persona: number
           id_unidad_sat: string | null
           nombre: string
@@ -2731,7 +2731,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
-          id_categoria: number
+          id_categoria?: number | null
           id_persona: number
           id_unidad_sat?: string | null
           nombre: string
@@ -2745,7 +2745,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
-          id_categoria?: number
+          id_categoria?: number | null
           id_persona?: number
           id_unidad_sat?: string | null
           nombre?: string
@@ -3039,7 +3039,7 @@ export type Database = {
           porcentaje_anual_cuota_estancia_corta: number | null
           porcentaje_anual_cuota_extraordinaria: number | null
           porcentaje_anual_cuota_garantia_renta: number | null
-          precio_m2: number | null
+          precio_m2_actual: number | null
           url_firma_recibos: string | null
           url_imagen_portada: string | null
           url_logo: string | null
@@ -3076,7 +3076,7 @@ export type Database = {
           porcentaje_anual_cuota_estancia_corta?: number | null
           porcentaje_anual_cuota_extraordinaria?: number | null
           porcentaje_anual_cuota_garantia_renta?: number | null
-          precio_m2?: number | null
+          precio_m2_actual?: number | null
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null
           url_logo?: string | null
@@ -3113,7 +3113,7 @@ export type Database = {
           porcentaje_anual_cuota_estancia_corta?: number | null
           porcentaje_anual_cuota_extraordinaria?: number | null
           porcentaje_anual_cuota_garantia_renta?: number | null
-          precio_m2?: number | null
+          precio_m2_actual?: number | null
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null
           url_logo?: string | null
