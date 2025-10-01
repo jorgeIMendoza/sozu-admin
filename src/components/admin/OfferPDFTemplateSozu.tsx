@@ -511,20 +511,29 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Divider Line before Contact Info */}
         <div style={{ 
           position: 'absolute',
-          bottom: '1280px',
+          bottom: '530px',
           left: '0',
           right: '0',
           height: '2px',
           backgroundColor: '#585858'
         }} />
 
-        {/* Contact Info */}
+        {/* Contact Info (Datos de Contacto) */}
         <div style={{ 
           position: 'absolute',
-          bottom: '1000px',
+          bottom: '250px',
           left: '80px',
           right: '80px'
         }}>
+          <h2 style={{ 
+            fontSize: '40px', 
+            fontWeight: 'bold', 
+            color: '#1a1a1a', 
+            marginBottom: '32px',
+            fontFamily: 'Arial, sans-serif'
+          }}>
+            Datos de Contacto
+          </h2>
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: '1fr 1fr', 
@@ -587,7 +596,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Divider Line before Banking Data */}
         <div style={{ 
           position: 'absolute',
-          bottom: '730px',
+          bottom: '980px',
           left: '0',
           right: '0',
           height: '2px',
@@ -597,7 +606,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Banking Data Section */}
         <div style={{ 
           position: 'absolute',
-          bottom: '350px',
+          bottom: '600px',
           left: '80px',
           right: '80px'
         }}>
@@ -613,13 +622,16 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta ? '1fr 1fr' : '1fr', 
-            gap: '40px'
+            gap: '40px',
+            backgroundColor: '#D3D3D3',
+            padding: '0',
+            borderRadius: '20px'
           }}>
             {/* Transfer Banking Data - Always shown */}
             <div style={{ 
               backgroundColor: '#D3D3D3',
               padding: '32px',
-              borderRadius: '8px'
+              borderRadius: '20px'
             }}>
               <h3 style={{ 
                 fontSize: '28px', 
@@ -655,7 +667,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               <div style={{ 
                 backgroundColor: '#D3D3D3',
                 padding: '32px',
-                borderRadius: '8px'
+                borderRadius: '20px'
               }}>
                 <h3 style={{ 
                   fontSize: '28px', 
@@ -700,7 +712,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Divider Line before Footer */}
         <div style={{ 
           position: 'absolute',
-          bottom: '300px',
+          bottom: '200px',
           left: '0',
           right: '0',
           height: '2px',
