@@ -273,56 +273,55 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
             <div style={{ 
               display: 'flex', 
               flexDirection: 'column',
-              gap: '24px',
+              gap: '32px',
               alignItems: 'center',
               justifyContent: 'flex-start'
             }}>
               {/* Recámaras */}
               <div style={{ textAlign: 'center' }}>
-                <div style={{ 
-                  width: '48px', 
-                  height: '48px', 
-                  margin: '0 auto 8px',
-                  fontSize: '32px'
-                }}>🛏️</div>
-                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
-                  {propertyDetails.model?.numero_recamaras || 'N/A'}
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 8px' }}>
+                  <rect x="3" y="11" width="18" height="10" rx="1" stroke="#666" strokeWidth="1.5"/>
+                  <path d="M7 11V9C7 7.89543 7.89543 7 9 7H15C16.1046 7 17 7.89543 17 9V11" stroke="#666" strokeWidth="1.5"/>
+                  <line x1="3" y1="16" x2="21" y2="16" stroke="#666" strokeWidth="1.5"/>
+                </svg>
+                <div style={{ fontSize: '20px', fontWeight: 'normal', color: '#666' }}>
+                  Una
                 </div>
               </div>
               
               {/* Baños */}
               <div style={{ textAlign: 'center' }}>
-                <div style={{ 
-                  width: '48px', 
-                  height: '48px', 
-                  margin: '0 auto 8px',
-                  fontSize: '32px'
-                }}>🚿</div>
-                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
-                  {propertyDetails.model?.numero_completo_banos || 0}
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 8px' }}>
+                  <path d="M12 3V8M12 8C10.3431 8 9 9.34315 9 11V12H15V11C15 9.34315 13.6569 8 12 8Z" stroke="#666" strokeWidth="1.5"/>
+                  <path d="M4 12H20V16C20 18.2091 18.2091 20 16 20H8C5.79086 20 4 18.2091 4 16V12Z" stroke="#666" strokeWidth="1.5"/>
+                </svg>
+                <div style={{ fontSize: '20px', fontWeight: 'normal', color: '#666' }}>
+                  Uno
                 </div>
               </div>
               
               {/* Estacionamientos */}
               <div style={{ textAlign: 'center' }}>
-                <div style={{ 
-                  width: '48px', 
-                  height: '48px', 
-                  margin: '0 auto 8px',
-                  fontSize: '32px'
-                }}>🚗</div>
-                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>1 Normal</div>
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 8px' }}>
+                  <path d="M5 17C5 18.1046 5.89543 19 7 19C8.10457 19 9 18.1046 9 17M15 17C15 18.1046 15.8954 19 17 19C18.1046 19 19 18.1046 19 17" stroke="#666" strokeWidth="1.5"/>
+                  <path d="M5 17H4C3.44772 17 3 16.5523 3 16V11L5.4 6.2C5.73137 5.53726 6.41316 5.07143 7.16667 5.07143H16.8333C17.5868 5.07143 18.2686 5.53726 18.6 6.2L21 11V16C21 16.5523 20.5523 17 20 17H19M5 17C5 15.8954 5.89543 15 7 15C8.10457 15 9 15.8954 9 17M5 17H9M19 17C19 15.8954 18.1046 15 17 15C15.8954 15 15 15.8954 15 17M19 17H15M9 17H15" stroke="#666" strokeWidth="1.5"/>
+                  <path d="M5 11L7 8H17L19 11H5Z" stroke="#666" strokeWidth="1.5"/>
+                </svg>
+                <div style={{ fontSize: '20px', fontWeight: 'normal', color: '#666' }}>
+                  1 Normal
+                </div>
               </div>
               
               {/* Bodegas (if exists) */}
               <div style={{ textAlign: 'center' }}>
-                <div style={{ 
-                  width: '48px', 
-                  height: '48px', 
-                  margin: '0 auto 8px',
-                  fontSize: '32px'
-                }}>📦</div>
-                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>N/A</div>
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 8px' }}>
+                  <rect x="4" y="8" width="16" height="12" rx="1" stroke="#666" strokeWidth="1.5"/>
+                  <path d="M8 8V6C8 4.89543 8.89543 4 10 4H14C15.1046 4 16 4.89543 16 6V8" stroke="#666" strokeWidth="1.5"/>
+                  <line x1="4" y1="12" x2="20" y2="12" stroke="#666" strokeWidth="1.5"/>
+                </svg>
+                <div style={{ fontSize: '20px', fontWeight: 'normal', color: '#666' }}>
+                  N/A
+                </div>
               </div>
             </div>
 
