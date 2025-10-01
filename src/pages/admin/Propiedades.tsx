@@ -1864,9 +1864,7 @@ const Propiedades = () => {
                             {new Date(offer.fecha_generacion).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
-                             {offer.esquema_es_manual ? (
-                               <span className="text-sm font-medium">{offer.esquema_nombre}</span>
-                             ) : hasPaymentScheme ? (
+                             {(offer.esquema_es_manual || hasPaymentScheme) ? (
                                <Badge 
                                  variant="outline" 
                                  className={`font-medium ${

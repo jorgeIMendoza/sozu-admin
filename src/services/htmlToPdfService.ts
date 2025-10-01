@@ -133,6 +133,7 @@ class HTMLToPDFService {
         propertyNumber: offerData.propertyNumber,
         leadName: offerData.leadName,
         leadEmail: offerData.leadEmail,
+        id_esquema_pago_seleccionado: offerDetails.id_esquema_pago_seleccionado,
       };
 
       console.log('Property details before PDF generation:', {
