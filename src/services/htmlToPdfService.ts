@@ -598,6 +598,7 @@ class HTMLToPDFService {
       vista,
       projectData,
       ownerStpBankAccount,
+      ownerData,
       modelImages,
     };
   }
