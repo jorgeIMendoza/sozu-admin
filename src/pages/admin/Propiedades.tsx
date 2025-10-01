@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1289,7 +1289,45 @@ const Propiedades = () => {
                     </TableCell>
                    <TableCell className="font-mono text-sm">{property.clabe_stp || 'Sin CLABE'}</TableCell>
                    <TableCell className="text-right font-semibold">
-                     {property.precio_final ? formatCurrency(property.precio_final) : '-'}
+                     {property.precio_final ? (
+                       <div className="flex items-center justify-end gap-2">
+                         <span>{formatCurrency(property.precio_final)}</span>
+                         {property.precio_final > property.precio_lista ? (
+                           <TooltipProvider>
+                             <Tooltip>
+                               <TooltipTrigger>
+                                 <TrendingUp className="h-4 w-4 text-orange-600" />
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                 <p>Precio final mayor a precio de lista</p>
+                               </TooltipContent>
+                             </Tooltip>
+                           </TooltipProvider>
+                         ) : property.precio_final < property.precio_lista ? (
+                           <TooltipProvider>
+                             <Tooltip>
+                               <TooltipTrigger>
+                                 <TrendingDown className="h-4 w-4 text-green-600" />
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                 <p>Precio final menor a precio de lista</p>
+                               </TooltipContent>
+                             </Tooltip>
+                           </TooltipProvider>
+                         ) : (
+                           <TooltipProvider>
+                             <Tooltip>
+                               <TooltipTrigger>
+                                 <Equal className="h-4 w-4 text-blue-600" />
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                 <p>Precio final igual a precio de lista</p>
+                               </TooltipContent>
+                             </Tooltip>
+                           </TooltipProvider>
+                         )}
+                       </div>
+                     ) : '-'}
                    </TableCell>
                    <TableCell className="text-right">
                      {property.total_pagado > 0 ? formatCurrency(property.total_pagado) : '-'}
