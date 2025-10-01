@@ -494,7 +494,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       
       // Generate PDF
       try {
-        const { generateOfferPDF } = await import('@/services/pdfGenerationService');
+        const { generateOfferPDF } = await import('@/services/htmlToPdfService');
         await generateOfferPDF({
           propertyId,
           offerId: result.offerId,
