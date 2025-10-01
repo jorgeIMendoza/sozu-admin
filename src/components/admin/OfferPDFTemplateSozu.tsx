@@ -402,14 +402,6 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Payment Schemes */}
         {filteredPaymentSchemes.length > 0 && (
           <div style={{ marginBottom: '80px' }}>
-            {/* Divider Line before Payment Schemes */}
-            <div style={{ 
-              width: '100%',
-              height: '2px',
-              backgroundColor: '#585858',
-              marginBottom: '32px'
-            }} />
-            
             <h2 style={{ 
               fontSize: '40px', 
               fontWeight: 'bold', 
@@ -508,91 +500,6 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           </div>
         )}
 
-        {/* Divider Line before Contact Info */}
-        <div style={{ 
-          position: 'absolute',
-          bottom: '530px',
-          left: '0',
-          right: '0',
-          height: '2px',
-          backgroundColor: '#585858'
-        }} />
-
-        {/* Contact Info (Datos de Contacto) */}
-        <div style={{ 
-          position: 'absolute',
-          bottom: '250px',
-          left: '80px',
-          right: '80px'
-        }}>
-          <h2 style={{ 
-            fontSize: '40px', 
-            fontWeight: 'bold', 
-            color: '#1a1a1a', 
-            marginBottom: '32px',
-            fontFamily: 'Arial, sans-serif'
-          }}>
-            Datos de Contacto
-          </h2>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: '1fr 1fr', 
-            gap: '40px'
-          }}>
-            <div style={{ 
-              backgroundColor: '#f8f8f8',
-              padding: '48px',
-              borderRadius: '12px'
-            }}>
-              <h3 style={{ fontSize: '40px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '32px' }}>
-                Agente
-              </h3>
-              <div style={{ fontSize: '28px', lineHeight: '1.8' }}>
-                <p style={{ color: '#585858', marginBottom: '16px' }}>
-                  <span style={{ fontWeight: '600' }}>Nombre:</span><br/>
-                  {creatorInfo?.nombre || 'N/A'}
-                </p>
-                <p style={{ color: '#585858', marginBottom: '16px' }}>
-                  <span style={{ fontWeight: '600' }}>Email:</span><br/>
-                  {creatorInfo?.email || offerData.leadEmail}
-                </p>
-                {creatorInfo?.telefono && (
-                  <p style={{ color: '#585858' }}>
-                    <span style={{ fontWeight: '600' }}>Teléfono:</span><br/>
-                    {creatorInfo.telefono}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div style={{ 
-              backgroundColor: '#f8f8f8',
-              padding: '48px',
-              borderRadius: '12px'
-            }}>
-              <h3 style={{ fontSize: '40px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '32px' }}>
-                Comprador:
-              </h3>
-              <div style={{ fontSize: '28px', lineHeight: '1.8' }}>
-                <p style={{ color: '#585858', marginBottom: '16px' }}>
-                  <span style={{ fontWeight: '600' }}>Nombre:</span><br/>
-                  {leadInfo?.nombre_legal || offerData.leadName}
-                </p>
-                <p style={{ color: '#585858', marginBottom: '16px' }}>
-                  <span style={{ fontWeight: '600' }}>Email:</span><br/>
-                  {leadInfo?.email || offerData.leadEmail}
-                </p>
-                {leadInfo?.telefono && (
-                  <p style={{ color: '#585858' }}>
-                    <span style={{ fontWeight: '600' }}>Teléfono:</span><br/>
-                    {leadInfo.telefono}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Divider Line before Banking Data */}
         <div style={{ 
           position: 'absolute',
@@ -665,8 +572,8 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 </div>
               </div>
             )}
-
-            {/* Cash Banking Data - Conditional */}
+            
+            {/* Cash Banking Data - Only shown if enabled in project settings */}
             {propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta && propertyDetails.ownerStpBankAccount && (
               <div style={{ 
                 backgroundColor: '#D3D3D3',
@@ -713,36 +620,92 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           </div>
         </div>
 
-        {/* Divider Line before Footer */}
+        {/* Divider Line before Contact Info */}
         <div style={{ 
           position: 'absolute',
-          bottom: '200px',
+          bottom: '330px',
           left: '0',
           right: '0',
           height: '2px',
           backgroundColor: '#585858'
         }} />
 
-        {/* Footer Section */}
+        {/* Contact Info (Datos de Contacto) */}
         <div style={{ 
           position: 'absolute',
           bottom: '80px',
           left: '80px',
           right: '80px'
         }}>
-          <div style={{ fontSize: '24px', color: '#585858', lineHeight: '1.6' }}>
-            <p style={{ marginBottom: '16px' }}>
-              <strong>Datos del Inmueble Comprador:</strong> {leadInfo?.nombre_legal || offerData.leadName}
-            </p>
-            {propertyDetails.ownerStpBankAccount && (
-              <p style={{ marginBottom: '16px' }}>
-                <strong>Banco:</strong> {propertyDetails.ownerStpBankAccount.banco_nombre} | 
-                <strong> CLABE:</strong> {propertyDetails.ownerStpBankAccount.cuenta_clabe}
-              </p>
-            )}
-            <p style={{ fontSize: '20px', opacity: 0.7 }}>
-              S15,138.00 | 15,138.00 | Precio: $1,515,138.00
-            </p>
+          <h2 style={{ 
+            fontSize: '40px', 
+            fontWeight: 'bold', 
+            color: '#1a1a1a', 
+            marginBottom: '32px',
+            fontFamily: 'Arial, sans-serif'
+          }}>
+            Datos de Contacto
+          </h2>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr', 
+            gap: '40px'
+          }}>
+            {/* Agente */}
+            <div>
+              <h3 style={{ 
+                fontSize: '28px', 
+                fontWeight: 'bold', 
+                color: '#000000', 
+                marginBottom: '16px',
+                fontFamily: 'Arial, sans-serif'
+              }}>
+                Agente
+              </h3>
+              <div style={{ fontSize: '22px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
+                <p style={{ color: '#000000', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: '600' }}>Nombre: </span>
+                  <span style={{ fontWeight: '400' }}>{creatorInfo?.nombre || 'N/A'}</span>
+                </p>
+                <p style={{ color: '#000000', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: '600' }}>Email: </span>
+                  <span style={{ fontWeight: '400' }}>{creatorInfo?.email || offerData.leadEmail}</span>
+                </p>
+                <p style={{ color: '#000000' }}>
+                  <span style={{ fontWeight: '600' }}>Teléfono: </span>
+                  <span style={{ fontWeight: '400' }}>{creatorInfo?.telefono || 'N/A'}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Comprador */}
+            <div>
+              <h3 style={{ 
+                fontSize: '28px', 
+                fontWeight: 'bold', 
+                color: '#000000', 
+                marginBottom: '16px',
+                fontFamily: 'Arial, sans-serif'
+              }}>
+                Comprador
+              </h3>
+              <div style={{ fontSize: '22px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
+                <p style={{ color: '#000000', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: '600' }}>Nombre: </span>
+                  <span style={{ fontWeight: '400' }}>{leadInfo?.nombre_legal || offerData.leadName}</span>
+                </p>
+                <p style={{ color: '#000000', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: '600' }}>Email: </span>
+                  <span style={{ fontWeight: '400' }}>{leadInfo?.email || offerData.leadEmail}</span>
+                </p>
+                {leadInfo?.telefono && (
+                  <p style={{ color: '#000000' }}>
+                    <span style={{ fontWeight: '600' }}>Teléfono: </span>
+                    <span style={{ fontWeight: '400' }}>{leadInfo.telefono}</span>
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
