@@ -214,8 +214,8 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'auto 160px 1fr', 
-            gap: '60px',
+            gridTemplateColumns: '35% 20% 35%', 
+            gap: '5%',
             alignItems: 'start',
             border: '2px solid red'
           }}>
@@ -280,6 +280,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               gap: '48px',
               paddingTop: '20px',
               alignItems: 'center',
+              justifyContent: 'center',
               border: '2px solid green'
             }}>
               {/* Recámara */}
