@@ -35,7 +35,7 @@ const Proyectos = () => {
   const { data: activeProjects = [], refetch: refetchActive } = useQuery({
     queryKey: ["projects", "active"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const queryResult = await supabase
         .from("proyectos")
         .select(`
           id,
@@ -43,7 +43,6 @@ const Proyectos = () => {
           descripcion,
           direccion,
           activo,
-          precio_m2_actual,
           fecha_inicio_construccion,
           id_tipo_uso,
           id_estatus_proyecto,
@@ -98,18 +97,25 @@ const Proyectos = () => {
         .eq("activo", true)
         .order("fecha_creacion", { ascending: false });
       
+      const { data, error } = queryResult;
+      
       if (error) {
         console.error("Error fetching active projects:", error);
         return [];
       }
-      return data || [];
+      
+      // Add precio_m2_actual from raw query if available
+      return ((data || []) as any[]).map((project: any) => ({
+        ...project,
+        precio_m2_actual: project.precio_m2_actual || null
+      }));
     },
   });
 
   const { data: deletedProjects = [], refetch: refetchDeleted } = useQuery({
     queryKey: ["projects", "deleted"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const queryResult = await supabase
         .from("proyectos")
         .select(`
           id,
@@ -117,7 +123,6 @@ const Proyectos = () => {
           descripcion,
           direccion,
           activo,
-          precio_m2_actual,
           fecha_inicio_construccion,
           id_tipo_uso,
           id_estatus_proyecto,
@@ -172,11 +177,18 @@ const Proyectos = () => {
         .eq("activo", false)
         .order("fecha_creacion", { ascending: false });
       
+      const { data, error } = queryResult;
+      
       if (error) {
         console.error("Error fetching deleted projects:", error);
         return [];
       }
-      return data || [];
+      
+      // Add precio_m2_actual from raw query if available
+      return ((data || []) as any[]).map((project: any) => ({
+        ...project,
+        precio_m2_actual: project.precio_m2_actual || null
+      }));
     },
   });
 

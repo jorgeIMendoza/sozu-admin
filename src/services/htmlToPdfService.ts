@@ -445,7 +445,7 @@ class HTMLToPDFService {
 
           // Get project data
           if (edificioData.id_proyecto) {
-            const { data: proyecto } = await supabase
+            const proyectoQuery = await supabase
               .from('proyectos')
               .select(`
                 id, 
@@ -463,6 +463,8 @@ class HTMLToPDFService {
               `)
               .eq('id', edificioData.id_proyecto)
               .single();
+            
+            const proyecto = proyectoQuery.data as any;
 
             if (proyecto) {
               console.log('Project data fetched:', proyecto);

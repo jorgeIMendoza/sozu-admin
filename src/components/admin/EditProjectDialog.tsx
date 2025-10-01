@@ -235,7 +235,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
         direccion: project.direccion || "",
         id_tipo_uso: project.id_tipo_uso?.toString() || "",
         id_estatus_proyecto: project.id_estatus_proyecto?.toString() || "",
-        precio_m2_actual: project.precio_m2_actual?.toString() || "",
+        precio_m2_actual: (project as any).precio_m2_actual?.toString() || "",
         fecha_lanzamiento: project.fecha_lanzamiento || "",
         fecha_inicio_construccion: project.fecha_inicio_construccion || "",
         fecha_entrega: project.fecha_entrega || "",
