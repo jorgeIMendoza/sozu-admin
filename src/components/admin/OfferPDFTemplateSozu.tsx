@@ -258,13 +258,21 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                   <span style={{ fontWeight: 'bold' }}>{propertyDetails.m2_reales?.toFixed(2) || 'N/A'} m²</span>
                 </div>
                 <div style={{ marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 'normal' }}>m² reales: </span>
+                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.m2_reales?.toFixed(2) || 'N/A'} m²</span>
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 'normal' }}>m² escriturables: </span>
+                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.m2_escriturables?.toFixed(2) || 'N/A'} m²</span>
+                </div>
+                <div style={{ marginBottom: '8px' }}>
                   <span style={{ fontWeight: 'normal' }}>Precio de lista: </span>
                   <span style={{ fontWeight: 'bold' }}>{formatCurrency(propertyDetails.precio_lista)}</span>
                 </div>
-                {propertyDetails.projectData?.precio_m2_actual && (
+                {propertyDetails.m2_escriturables && propertyDetails.m2_escriturables > 0 && (
                   <div style={{ marginBottom: '8px' }}>
                     <span style={{ fontWeight: 'normal' }}>Precio m2: </span>
-                    <span style={{ fontWeight: 'bold' }}>{formatCurrency(propertyDetails.projectData.precio_m2_actual)}</span>
+                    <span style={{ fontWeight: 'bold' }}>{formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_escriturables)}</span>
                   </div>
                 )}
                 <div style={{ marginBottom: '8px' }}>

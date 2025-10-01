@@ -206,16 +206,24 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                   <span className="font-semibold">{propertyDetails.numero_piso !== null && propertyDetails.numero_piso !== undefined ? propertyDetails.numero_piso : 'N/A'}</span>
                 </div>
               )}
-              {propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && propertyDetails.projectData?.precio_m2_actual && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Precio por m²:</span>
-                  <span className="font-semibold">{formatCurrency(propertyDetails.projectData.precio_m2_actual)}</span>
-                </div>
-              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">m² reales:</span>
+                <span className="font-semibold">{propertyDetails.m2_reales?.toFixed(2) || 'N/A'} m²</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">m² escriturables:</span>
+                <span className="font-semibold">{propertyDetails.m2_escriturables?.toFixed(2) || 'N/A'} m²</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Precio de lista:</span>
                 <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista)}</span>
               </div>
+              {propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && propertyDetails.m2_escriturables && propertyDetails.m2_escriturables > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Precio por m²:</span>
+                  <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_escriturables)}</span>
+                </div>
+              )}
               {propertyDetails.projectData?.mostrar_estacionamientos_en_oferta !== false && estacionamientos && estacionamientos.length > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Estacionamientos:</span>
