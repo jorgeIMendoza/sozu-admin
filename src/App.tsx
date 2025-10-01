@@ -7,9 +7,11 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { AdminLayout } from "./components/admin/AdminLayout";
+import Dashboard from "./pages/admin/Dashboard";
+import Index from "./pages/Index";
+import NotFound from "./pages/NotFound";
 
-// Lazy load all route components
-const Dashboard = lazy(() => import("./pages/admin/Dashboard"));
+// Lazy load non-critical route components
 const Proyectos = lazy(() => import("./pages/admin/Proyectos"));
 const Propiedades = lazy(() => import("./pages/admin/Propiedades"));
 const Modelos = lazy(() => import("./pages/admin/Modelos"));
@@ -38,8 +40,6 @@ const Productos = lazy(() => import("./pages/admin/Productos"));
 const Servicios = lazy(() => import("./pages/admin/Servicios"));
 const CategoriasProductos = lazy(() => import("./pages/admin/CategoriasProductos"));
 const ComingSoon = lazy(() => import("./pages/admin/ComingSoon"));
-const Index = lazy(() => import("./pages/Index"));
-const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
