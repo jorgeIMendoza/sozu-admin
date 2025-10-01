@@ -1260,11 +1260,11 @@ const Propiedades = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className={`p-1 rounded-md ${
-                                property.payment_status.apartado.status === 'pagado' 
+                                property.payment_status?.apartado?.status === 'pagado' 
                                   ? 'bg-[hsl(var(--pago-pagado))]' 
-                                  : property.payment_status.apartado.status === 'en_proceso'
+                                  : property.payment_status?.apartado?.status === 'en_proceso'
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
-                                  : property.payment_status.apartado.monto > 0
+                                  : (property.payment_status?.apartado?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
                                   : 'bg-muted opacity-40'
                               }`}>
@@ -1274,10 +1274,10 @@ const Propiedades = () => {
                             <TooltipContent>
                               <div className="text-sm">
                                 <p className="font-semibold">Apartado</p>
-                                {property.payment_status.apartado.monto > 0 ? (
+                                {(property.payment_status?.apartado?.monto || 0) > 0 ? (
                                   <>
-                                    <p>Monto: ${property.payment_status.apartado.monto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                    <p>Pagado: ${property.payment_status.apartado.monto_pagado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Monto: ${(property.payment_status?.apartado?.monto || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Pagado: ${(property.payment_status?.apartado?.monto_pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                   </>
                                 ) : (
                                   <p>No aplica</p>
@@ -1290,11 +1290,11 @@ const Propiedades = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className={`p-1 rounded-md ${
-                                property.payment_status.enganche.status === 'pagado' 
+                                property.payment_status?.enganche?.status === 'pagado' 
                                   ? 'bg-[hsl(var(--pago-pagado))]' 
-                                  : property.payment_status.enganche.status === 'en_proceso'
+                                  : property.payment_status?.enganche?.status === 'en_proceso'
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
-                                  : property.payment_status.enganche.monto > 0
+                                  : (property.payment_status?.enganche?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
                                   : 'bg-muted opacity-40'
                               }`}>
@@ -1304,10 +1304,10 @@ const Propiedades = () => {
                             <TooltipContent>
                               <div className="text-sm">
                                 <p className="font-semibold">Enganche</p>
-                                {property.payment_status.enganche.monto > 0 ? (
+                                {(property.payment_status?.enganche?.monto || 0) > 0 ? (
                                   <>
-                                    <p>Monto: ${property.payment_status.enganche.monto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                    <p>Pagado: ${property.payment_status.enganche.monto_pagado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Monto: ${(property.payment_status?.enganche?.monto || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Pagado: ${(property.payment_status?.enganche?.monto_pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                   </>
                                 ) : (
                                   <p>No aplica</p>
@@ -1320,11 +1320,11 @@ const Propiedades = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className={`p-1 rounded-md ${
-                                property.payment_status.mensualidades.status === 'pagado' 
+                                property.payment_status?.mensualidades?.status === 'pagado' 
                                   ? 'bg-[hsl(var(--pago-pagado))]' 
-                                  : property.payment_status.mensualidades.status === 'en_proceso'
+                                  : property.payment_status?.mensualidades?.status === 'en_proceso'
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
-                                  : property.payment_status.mensualidades.monto > 0
+                                  : (property.payment_status?.mensualidades?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
                                   : 'bg-muted opacity-40'
                               }`}>
@@ -1334,10 +1334,10 @@ const Propiedades = () => {
                             <TooltipContent>
                               <div className="text-sm">
                                 <p className="font-semibold">Parcialidades</p>
-                                {property.payment_status.mensualidades.monto > 0 ? (
+                                {(property.payment_status?.mensualidades?.monto || 0) > 0 ? (
                                   <>
-                                    <p>Monto: ${property.payment_status.mensualidades.monto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                    <p>Pagado: ${property.payment_status.mensualidades.monto_pagado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Monto: ${(property.payment_status?.mensualidades?.monto || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Pagado: ${(property.payment_status?.mensualidades?.monto_pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                   </>
                                 ) : (
                                   <p>No aplica</p>
@@ -1350,11 +1350,11 @@ const Propiedades = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className={`p-1 rounded-md ${
-                                property.payment_status.entrega.status === 'pagado' 
+                                property.payment_status?.entrega?.status === 'pagado' 
                                   ? 'bg-[hsl(var(--pago-pagado))]' 
-                                  : property.payment_status.entrega.status === 'en_proceso'
+                                  : property.payment_status?.entrega?.status === 'en_proceso'
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
-                                  : property.payment_status.entrega.monto > 0
+                                  : (property.payment_status?.entrega?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
                                   : 'bg-muted opacity-40'
                               }`}>
@@ -1364,10 +1364,10 @@ const Propiedades = () => {
                             <TooltipContent>
                               <div className="text-sm">
                                 <p className="font-semibold">Entrega</p>
-                                {property.payment_status.entrega.monto > 0 ? (
+                                {(property.payment_status?.entrega?.monto || 0) > 0 ? (
                                   <>
-                                    <p>Monto: ${property.payment_status.entrega.monto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                    <p>Pagado: ${property.payment_status.entrega.monto_pagado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Monto: ${(property.payment_status?.entrega?.monto || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Pagado: ${(property.payment_status?.entrega?.monto_pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                   </>
                                 ) : (
                                   <p>No aplica</p>
@@ -1380,11 +1380,11 @@ const Propiedades = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className={`p-1 rounded-md ${
-                                property.payment_status.especial.status === 'pagado' 
+                                property.payment_status?.especial?.status === 'pagado' 
                                   ? 'bg-[hsl(var(--pago-pagado))]' 
-                                  : property.payment_status.especial.status === 'en_proceso'
+                                  : property.payment_status?.especial?.status === 'en_proceso'
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
-                                  : property.payment_status.especial.monto > 0
+                                  : (property.payment_status?.especial?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
                                   : 'bg-muted opacity-40'
                               }`}>
@@ -1394,10 +1394,10 @@ const Propiedades = () => {
                             <TooltipContent>
                               <div className="text-sm">
                                 <p className="font-semibold">Especial</p>
-                                {property.payment_status.especial.monto > 0 ? (
+                                {(property.payment_status?.especial?.monto || 0) > 0 ? (
                                   <>
-                                    <p>Monto: ${property.payment_status.especial.monto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                    <p>Pagado: ${property.payment_status.especial.monto_pagado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Monto: ${(property.payment_status?.especial?.monto || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Pagado: ${(property.payment_status?.especial?.monto_pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                   </>
                                 ) : (
                                   <p>No aplica</p>
@@ -1410,11 +1410,11 @@ const Propiedades = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className={`p-1 rounded-md ${
-                                property.payment_status.cesion_derechos.status === 'pagado' 
+                                property.payment_status?.cesion_derechos?.status === 'pagado' 
                                   ? 'bg-[hsl(var(--pago-pagado))]' 
-                                  : property.payment_status.cesion_derechos.status === 'en_proceso'
+                                  : property.payment_status?.cesion_derechos?.status === 'en_proceso'
                                   ? 'bg-[hsl(var(--pago-en-proceso))]'
-                                  : property.payment_status.cesion_derechos.monto > 0
+                                  : (property.payment_status?.cesion_derechos?.monto || 0) > 0
                                   ? 'bg-[hsl(var(--pago-no-pagado))]'
                                   : 'bg-muted opacity-40'
                               }`}>
@@ -1424,10 +1424,10 @@ const Propiedades = () => {
                             <TooltipContent>
                               <div className="text-sm">
                                 <p className="font-semibold">Cesión de derechos</p>
-                                {property.payment_status.cesion_derechos.monto > 0 ? (
+                                {(property.payment_status?.cesion_derechos?.monto || 0) > 0 ? (
                                   <>
-                                    <p>Monto: ${property.payment_status.cesion_derechos.monto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                    <p>Pagado: ${property.payment_status.cesion_derechos.monto_pagado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Monto: ${(property.payment_status?.cesion_derechos?.monto || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p>Pagado: ${(property.payment_status?.cesion_derechos?.monto_pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                   </>
                                 ) : (
                                   <p>No aplica</p>
