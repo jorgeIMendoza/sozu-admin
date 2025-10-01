@@ -224,6 +224,14 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         </div>
 
 
+        {/* Divider Line before Property Details */}
+        <div style={{ 
+          width: '100%',
+          height: '2px',
+          backgroundColor: '#585858',
+          marginBottom: '32px'
+        }} />
+
         {/* Property Details Section */}
         <div style={{ marginBottom: '80px' }}>
           <h2 style={{ 
@@ -394,13 +402,19 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {/* Payment Schemes */}
         {filteredPaymentSchemes.length > 0 && (
           <div style={{ marginBottom: '80px' }}>
+            {/* Divider Line before Payment Schemes */}
+            <div style={{ 
+              width: '100%',
+              height: '2px',
+              backgroundColor: '#585858',
+              marginBottom: '32px'
+            }} />
+            
             <h2 style={{ 
               fontSize: '40px', 
               fontWeight: 'bold', 
               color: '#000000',
-              marginBottom: '40px',
-              borderBottom: '2px solid #e0e0e0',
-              paddingBottom: '12px'
+              marginBottom: '40px'
             }}>
               Esquemas de pago:
             </h2>
@@ -494,6 +508,16 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           </div>
         )}
 
+        {/* Divider Line before Contact Info */}
+        <div style={{ 
+          position: 'absolute',
+          bottom: '1280px',
+          left: '0',
+          right: '0',
+          height: '2px',
+          backgroundColor: '#585858'
+        }} />
+
         {/* Contact Info */}
         <div style={{ 
           position: 'absolute',
@@ -560,10 +584,10 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           </div>
         </div>
 
-        {/* Banking Data Divider Line */}
+        {/* Divider Line before Banking Data */}
         <div style={{ 
           position: 'absolute',
-          bottom: '680px',
+          bottom: '730px',
           left: '0',
           right: '0',
           height: '2px',
@@ -673,7 +697,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           </div>
         </div>
 
-        {/* Footer Divider Line */}
+        {/* Divider Line before Footer */}
         <div style={{ 
           position: 'absolute',
           bottom: '300px',
