@@ -1868,7 +1868,7 @@ const Propiedades = () => {
                                <Badge 
                                  variant="outline" 
                                  className={`font-medium ${
-                                   isAccountActive 
+                                   (offer.esquema_es_manual || isAccountActive)
                                      ? "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700" 
                                      : "bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600"
                                  }`}

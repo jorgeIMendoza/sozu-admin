@@ -433,7 +433,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                       color: '#000000',
                       marginBottom: '24px'
                     }}>
-                      Plan {index + 1}
+                      {scheme.nombre}
                     </h3>
                     
                     <div style={{ 
@@ -474,7 +474,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                       </div>
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#000000' }}>48 mensualidades:</span>
+                        <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
                         <span style={{ color: '#000000', fontWeight: 'bold' }}>
                           {formatCurrency(amounts.mensualidad)}
                         </span>
