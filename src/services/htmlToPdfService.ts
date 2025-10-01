@@ -153,50 +153,8 @@ class HTMLToPDFService {
     estacionamientos: any[],
     bodegas: any[]
   ): Promise<void> {
-    // Check if this is a Dotar Expedición / Sozu project
-    const projectName = propertyDetails.projectData?.nombre || '';
-    const useSozuTemplate = projectName.toLowerCase().includes('dotar') || 
-                           projectName.toLowerCase().includes('expedición') ||
-                           projectName.toLowerCase().includes('expedicion') ||
-                           projectName.toLowerCase().includes('sozu');
-
-    console.log('=== PDF GENERATION DEBUG ===');
-    console.log('Project name:', projectName);
-    console.log('Using Sozu template:', useSozuTemplate);
-    console.log('========================');
-
-    if (useSozuTemplate) {
-      // Use Sozu template for A4 sized single-page PDF
-      await this.generateSozuPDF(offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas);
-    } else {
-      // Use default template with multiple pages
-      const pdf = new jsPDF('p', 'in', 'letter');
-      
-      // Generate each section as a separate page
-      await this.generateCoverPage(pdf, offerData, propertyDetails, amenities, creatorInfo, leadInfo, estacionamientos, bodegas);
-      
-      // Add payment options page
-      pdf.addPage();
-      await this.generatePaymentOptionsPage(pdf, offerData, propertyDetails, paymentSchemes);
-      
-      // Add banking data page (this ensures it starts on a new page)
-      pdf.addPage();
-      await this.generateBankingDataPage(pdf, offerData, propertyDetails, legalNotices);
-
-      // Generate filename
-      const propertyNumber = propertyDetails.numero_propiedad || 'N/A';
-      const offerNumber = offerData.id.toString().padStart(6, '0') || '000000';
-      
-      const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
-      const cleanPropertyNumber = propertyNumber.replace(/[^a-zA-Z0-9]/g, '_');
-      
-      const filename = `Oferta_${cleanPropertyNumber}_${cleanProjectName}_${offerNumber}.pdf`;
-
-      // Download the PDF
-      pdf.save(filename);
-      
-      console.log('PDF generated successfully:', filename);
-    }
+    // Always use the new single-page template for all projects
+    await this.generateSozuPDF(offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas);
   }
 
   private async generateSozuPDF(
