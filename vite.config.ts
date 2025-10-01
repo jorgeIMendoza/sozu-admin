@@ -83,6 +83,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     cssCodeSplit: true,
+    cssMinify: true,
     assetsInlineLimit: 4096,
     rollupOptions: {
       output: {
