@@ -1,4 +1,9 @@
 import { forwardRef } from 'react';
+import recamarasIcon from '@/assets/icons/recamaras.png';
+import banosIcon from '@/assets/icons/banos.png';
+import mediosBanosIcon from '@/assets/icons/medios-banos.png';
+import estacionamientoIcon from '@/assets/icons/estacionamiento.png';
+import bodegaIcon from '@/assets/icons/bodega.png';
 
 interface OfferData {
   id: number;
@@ -214,7 +219,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: '35% 20% 35%', 
+            gridTemplateColumns: '30% 20% 40%', 
             gap: '5%',
             alignItems: 'start'
           }}>
@@ -283,15 +288,11 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
             }}>
               {/* Recámara */}
               <div style={{ textAlign: 'center', width: '100%' }}>
-                <svg width="50" height="50" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 8px', display: 'block' }}>
-                  <rect x="6" y="22" width="36" height="16" rx="2" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M12 22V18C12 15.7909 13.7909 14 16 14H32C34.2091 14 36 18V22" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <line x1="6" y1="32" x2="42" y2="32" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                  <rect x="12" y="28" width="6" height="4" rx="1" fill="#1a1a1a"/>
-                  <rect x="30" y="28" width="6" height="4" rx="1" fill="#1a1a1a"/>
-                  <line x1="6" y1="38" x2="6" y2="42" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                  <line x1="42" y1="38" x2="42" y2="42" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                </svg>
+                <img 
+                  src={recamarasIcon} 
+                  alt="Recámaras"
+                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                />
                 <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   Una
                 </div>
@@ -299,14 +300,11 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               
               {/* Baño Completo */}
               <div style={{ textAlign: 'center', width: '100%' }}>
-                <svg width="50" height="50" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 8px', display: 'block' }}>
-                  <path d="M8 26H40V32C40 36.4183 36.4183 40 32 40H16C11.5817 40 8 36.4183 8 32V26Z" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M18 26V22C18 18.6863 20.6863 16 24 16C27.3137 16 30 18.6863 30 22V26" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="24" cy="10" r="3" fill="#1a1a1a"/>
-                  <line x1="16" y1="32" x2="16" y2="36" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"/>
-                  <line x1="24" y1="32" x2="24" y2="36" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"/>
-                  <line x1="32" y1="32" x2="32" y2="36" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"/>
-                </svg>
+                <img 
+                  src={banosIcon} 
+                  alt="Baños"
+                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                />
                 <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   Uno
                 </div>
@@ -314,12 +312,11 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               
               {/* Medio Baño */}
               <div style={{ textAlign: 'center', width: '100%' }}>
-                <svg width="50" height="50" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 8px', display: 'block' }}>
-                  <ellipse cx="24" cy="18" rx="10" ry="7" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M14 18V30C14 33.3137 18.4772 36 24 36C29.5228 36 34 33.3137 34 30V18" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <line x1="24" y1="8" x2="24" y2="18" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                  <circle cx="24" cy="6" r="2" fill="#1a1a1a"/>
-                </svg>
+                <img 
+                  src={mediosBanosIcon} 
+                  alt="Medios Baños"
+                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                />
                 <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   Uno
                 </div>
@@ -327,15 +324,11 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               
               {/* Estacionamiento */}
               <div style={{ textAlign: 'center', width: '100%' }}>
-                <svg width="50" height="50" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 8px', display: 'block' }}>
-                  <path d="M6 24V32C6 33.1046 6.89543 34 8 34H10" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                  <path d="M42 24V32C42 33.1046 41.1046 34 40 34H38" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                  <circle cx="14" cy="34" r="3.5" fill="#1a1a1a"/>
-                  <circle cx="34" cy="34" r="3.5" fill="#1a1a1a"/>
-                  <path d="M10 34C10 30.134 13.134 27 17 27H31C34.866 27 38 30.134 38 34" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                  <path d="M10 24L14.4 13.6C15.2 11.8 17 10.4 19 10.4H29C31 10.4 32.8 11.8 33.6 13.6L38 24" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                  <rect x="14" y="17" width="20" height="5" rx="1" fill="#1a1a1a"/>
-                </svg>
+                <img 
+                  src={estacionamientoIcon} 
+                  alt="Estacionamiento"
+                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                />
                 <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   1 Normal
                 </div>
@@ -343,13 +336,11 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               
               {/* Bodega */}
               <div style={{ textAlign: 'center', width: '100%' }}>
-                <svg width="50" height="50" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto 8px', display: 'block' }}>
-                  <rect x="9" y="19" width="30" height="22" rx="2" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 19V13C16 10.2386 18.2386 8 21 8H27C29.7614 8 32 10.2386 32 13V19" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <line x1="9" y1="27" x2="39" y2="27" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                  <line x1="9" y1="34" x2="39" y2="34" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                  <circle cx="31" cy="27" r="1.8" fill="#1a1a1a"/>
-                </svg>
+                <img 
+                  src={bodegaIcon} 
+                  alt="Bodega"
+                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                />
                 <div style={{ fontSize: '20px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
                   N/A
                 </div>
