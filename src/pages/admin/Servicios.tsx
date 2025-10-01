@@ -97,17 +97,37 @@ export default function Servicios() {
     },
   });
 
-  // Fetch personas
+  // Fetch personas - solo entidades legales de tipo Contratista (13), Dueño Vendedor (4), Proveedor (8)
   const { data: personas = [] } = useQuery({
     queryKey: ['personas-servicios'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('personas')
-        .select('id, nombre_legal')
-        .eq('activo', true)
-        .order('nombre_legal');
+        .from('entidades_relacionadas')
+        .select(`
+          id_persona,
+          personas!entidades_relacionadas_id_persona_fkey (
+            id,
+            nombre_legal
+          )
+        `)
+        .in('id_tipo_entidad', [4, 8, 13])
+        .eq('activo', true);
       if (error) throw error;
-      return data || [];
+      
+      // Extraer personas únicas y mapear al formato esperado
+      const uniquePersonas = new Map();
+      (data || []).forEach((item: any) => {
+        if (item.personas && !uniquePersonas.has(item.personas.id)) {
+          uniquePersonas.set(item.personas.id, {
+            id: item.personas.id,
+            nombre_legal: item.personas.nombre_legal
+          });
+        }
+      });
+      
+      return Array.from(uniquePersonas.values()).sort((a, b) => 
+        a.nombre_legal.localeCompare(b.nombre_legal)
+      );
     },
   });
 
@@ -178,6 +198,8 @@ export default function Servicios() {
           stock: 0,
           id_categoria: parseInt(data.id_categoria),
           id_persona: parseInt(data.id_persona),
+          id_unidad_sat: data.id_unidad_sat === "" ? null : data.id_unidad_sat,
+          sat_id: data.sat_id === "" ? null : data.sat_id,
         }]);
       
       if (error) throw error;
@@ -208,6 +230,8 @@ export default function Servicios() {
           ...data,
           id_categoria: parseInt(data.id_categoria),
           id_persona: parseInt(data.id_persona),
+          id_unidad_sat: data.id_unidad_sat === "" ? null : data.id_unidad_sat,
+          sat_id: data.sat_id === "" ? null : data.sat_id,
         })
         .eq('id', editingEntity?.id);
       
