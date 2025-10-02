@@ -776,16 +776,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                           ))}
                         </div>
                         <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                   <div className="flex justify-end space-x-2">
-                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                       Cancelar
-                     </Button>
-                   </div>
-                </TabsContent>
+                  </FormItem>
+                )}
+              />
+            </TabsContent>
 
                 <TabsContent value="images" className="mt-6">
                   <div className="space-y-6">
