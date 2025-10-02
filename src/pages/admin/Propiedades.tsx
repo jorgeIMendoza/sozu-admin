@@ -2038,12 +2038,12 @@ const Propiedades = () => {
                               variant="link"
                               size="sm"
                               onClick={() => {
-                                if (!hasAccount && !hasActiveAccountWithScheme && offer.esquema_id) {
-                                  // Crear cuenta de cobranza
+                                if (((!hasAccount || isAccountCancelled) && !hasActiveAccountWithScheme && offer.esquema_id) ||
+                                    (isAccountCancelled && offer.esquema_id)) {
                                   handleGenerateCollectionAccount(offer.id, selectedPropertyForOffers!.id);
                                 }
                               }}
-                              disabled={hasAccount || hasActiveAccountWithScheme || !offer.esquema_id}
+                              disabled={(hasAccount && !isAccountCancelled) || !offer.esquema_id || (hasActiveAccountWithScheme && !isAccountCancelled)}
                               className="p-0 h-auto font-semibold"
                             >
                               O-{String(offer.id).padStart(6, '0')}
@@ -2216,6 +2216,7 @@ const Propiedades = () => {
                     return selectedPropertyProductOffers.map((offer: any) => {
                       const hasAccount = !!offer.cuenta_cobranza_id;
                       const isAccountActive = hasAccount && offer.cuenta_activo;
+                      const isAccountCancelled = hasAccount && !offer.cuenta_activo;
                       
                       return (
                         <TableRow key={offer.id}>
@@ -2224,12 +2225,12 @@ const Propiedades = () => {
                              variant="link"
                              size="sm"
                              onClick={() => {
-                               if (!hasAccount && !hasActiveAccountWithScheme) {
-                                 // Crear cuenta de cobranza
+                               if (((!hasAccount || isAccountCancelled) && !hasActiveAccountWithScheme) ||
+                                   isAccountCancelled) {
                                  handleGenerateCollectionAccount(offer.id, selectedPropertyForProductOffers!.id);
                                }
                              }}
-                             disabled={hasAccount || hasActiveAccountWithScheme}
+                             disabled={(hasAccount && !isAccountCancelled) || (hasActiveAccountWithScheme && !isAccountCancelled)}
                              className="p-0 h-auto font-semibold"
                            >
                              OP-{String(offer.id).padStart(6, '0')}
