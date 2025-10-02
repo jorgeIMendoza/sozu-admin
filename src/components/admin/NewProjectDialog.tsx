@@ -117,6 +117,21 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   form.setValue('edificios', buildings);
   form.setValue('esquemas_pago', paymentSchemes);
 
+  // Query para verificar proyectos existentes de tipo Productos/Servicios
+  const { data: existingSpecialProjects } = useQuery({
+    queryKey: ["special-projects-check"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("proyectos")
+        .select("id, id_tipo_uso")
+        .in("id_tipo_uso", [9, 10])
+        .eq("activo", true);
+      
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const { data: tiposUso } = useQuery({
     queryKey: ["tipos-uso"],
     queryFn: async () => {
@@ -380,7 +395,9 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
             <Tabs defaultValue="information" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="information">Información</TabsTrigger>
-                <TabsTrigger value="images">Configuración general</TabsTrigger>
+                {!(form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10") && (
+                  <TabsTrigger value="images">Configuración general</TabsTrigger>
+                )}
               </TabsList>
               
               <TabsContent value="information" className="mt-6">
@@ -401,277 +418,294 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                 <FormField
                   control={form.control}
                   name="id_tipo_uso"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tipo de Uso</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona un tipo de uso" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {tiposUso?.map((tipo) => (
-                            <SelectItem key={tipo.id} value={tipo.id.toString()}>
-                              {tipo.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="id_estatus_proyecto"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Estatus del Proyecto</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona un estatus" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {estatusProyecto?.map((estatus) => (
-                            <SelectItem key={estatus.id} value={estatus.id.toString()}>
-                              {estatus.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="descripcion"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Descripción</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Descripción del proyecto" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="precio_m2_actual"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Precio por m² actual (calculado automáticamente)</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="0.00" 
-                          {...field}
-                          disabled
-                          className="bg-muted"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="fecha_lanzamiento"
-                    render={({ field }) => (
+                  render={({ field }) => {
+                    const selectedTipoUso = field.value;
+                    const isProductosOrServicios = selectedTipoUso === "9" || selectedTipoUso === "10";
+                    
+                    return (
                       <FormItem>
-                        <FormLabel>Fecha de Lanzamiento</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="fecha_inicio_construccion"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Fecha de Inicio Construcción</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="fecha_entrega"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Fecha de Entrega</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Location Fields */}
-                <FormField
-                  control={form.control}
-                  name="direccion_id_pais"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>País</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona un país" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {paises?.map((pais) => (
-                            <SelectItem key={pais.id} value={pais.id}>
-                              {pais.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="direccion_id_estado"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Estado</FormLabel>
-                        <Select 
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            form.setValue("direccion_id_municipio", "");
-                          }} 
-                          value={field.value}
-                        >
+                        <FormLabel>Tipo de Uso</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Selecciona un estado" />
+                              <SelectValue placeholder="Selecciona un tipo de uso" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {estados?.map((estado) => (
-                              <SelectItem key={estado.id} value={estado.id.toString()}>
-                                {estado.nombre}
-                              </SelectItem>
-                            ))}
+                            {tiposUso?.map((tipo) => {
+                              const isDisabled = 
+                                (tipo.id === 9 || tipo.id === 10) && 
+                                existingSpecialProjects?.some(p => p.id_tipo_uso === tipo.id);
+                              
+                              return (
+                                <SelectItem 
+                                  key={tipo.id} 
+                                  value={tipo.id.toString()}
+                                  disabled={isDisabled}
+                                >
+                                  {tipo.nombre} {isDisabled && "(Ya existe)"}
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
-                    )}
-                  />
+                    );
+                  }}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="direccion_id_municipio"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Municipio</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona un municipio" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {municipios?.map((municipio) => (
-                              <SelectItem key={municipio.id} value={municipio.id.toString()}>
-                                {municipio.nombre}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Location and Address Section */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-4">
+                {!(form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10") && (
+                  <>
                     <FormField
                       control={form.control}
-                      name="direccion"
+                      name="id_estatus_proyecto"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Dirección</FormLabel>
+                          <FormLabel>Estatus del Proyecto</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecciona un estatus" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {estatusProyecto?.map((estatus) => (
+                                <SelectItem key={estatus.id} value={estatus.id.toString()}>
+                                  {estatus.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="descripcion"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Descripción</FormLabel>
                           <FormControl>
-                            <Input placeholder="Dirección del proyecto" {...field} />
+                            <Textarea placeholder="Descripción del proyecto" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                    
-                    {selectedLocation && (
-                      <div className="flex items-center justify-between text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+
+                    <FormField
+                      control={form.control}
+                      name="precio_m2_actual"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Precio por m² actual (calculado automáticamente)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="0.00" 
+                              {...field}
+                              disabled
+                              className="bg-muted"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="fecha_lanzamiento"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Fecha de Lanzamiento</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="fecha_inicio_construccion"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Fecha de Inicio Construcción</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="fecha_entrega"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Fecha de Entrega</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {/* Location Fields */}
+                    <FormField
+                      control={form.control}
+                      name="direccion_id_pais"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>País</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecciona un país" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {paises?.map((pais) => (
+                                <SelectItem key={pais.id} value={pais.id}>
+                                  {pais.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="direccion_id_estado"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Estado</FormLabel>
+                            <Select 
+                              onValueChange={(value) => {
+                                field.onChange(value);
+                                form.setValue("direccion_id_municipio", "");
+                              }} 
+                              value={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecciona un estado" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {estados?.map((estado) => (
+                                  <SelectItem key={estado.id} value={estado.id.toString()}>
+                                    {estado.nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="direccion_id_municipio"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Municipio</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecciona un municipio" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {municipios?.map((municipio) => (
+                                  <SelectItem key={municipio.id} value={municipio.id.toString()}>
+                                    {municipio.nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {/* Location and Address Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="direccion"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Dirección</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Dirección del proyecto" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        {selectedLocation && (
+                          <div className="flex items-center justify-between text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                            <div className="flex items-center space-x-2">
+                              <MapPin className="w-4 h-4" />
+                              <div>
+                                <p className="font-medium">Coordenadas seleccionadas:</p>
+                                <p>Lat: {selectedLocation.lat.toFixed(6)}</p>
+                                <p>Lng: {selectedLocation.lng.toFixed(6)}</p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const coordinates = `${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}`;
+                                navigator.clipboard.writeText(coordinates);
+                                toast({
+                                  title: "Coordenadas copiadas",
+                                  description: coordinates,
+                                });
+                              }}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
                         <div className="flex items-center space-x-2">
                           <MapPin className="w-4 h-4" />
-                          <div>
-                            <p className="font-medium">Coordenadas seleccionadas:</p>
-                            <p>Lat: {selectedLocation.lat.toFixed(6)}</p>
-                            <p>Lng: {selectedLocation.lng.toFixed(6)}</p>
-                          </div>
+                          <label className="text-sm font-medium">Ubicación en Google Maps</label>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            const coordinates = `${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}`;
-                            navigator.clipboard.writeText(coordinates);
-                            toast({
-                              title: "Coordenadas copiadas",
-                              description: coordinates,
-                            });
-                          }}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
+                        <GoogleMapComponent
+                          onLocationSelect={setSelectedLocation}
+                          onAddressSelect={(address) => form.setValue('direccion', address)}
+                          initialLocation={selectedLocation}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Haz clic en el mapa para seleccionar la ubicación del proyecto
+                        </p>
                       </div>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <MapPin className="w-4 h-4" />
-                      <label className="text-sm font-medium">Ubicación en Google Maps</label>
                     </div>
-                    <GoogleMapComponent
-                      onLocationSelect={setSelectedLocation}
-                      onAddressSelect={(address) => form.setValue('direccion', address)}
-                      initialLocation={selectedLocation}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Haz clic en el mapa para seleccionar la ubicación del proyecto
-                    </p>
-                  </div>
-                </div>
 
                 {/* Buildings Section */}
                 <BuildingFormSection 
@@ -758,6 +792,8 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                     </FormItem>
                   )}
                 />
+                  </>
+                )}
 
                 <div className="flex justify-end space-x-2">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -767,8 +803,9 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                 </div>
               </TabsContent>
               
-              <TabsContent value="images" className="mt-6">
-                <div className="space-y-6">
+              {!(form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10") && (
+                <TabsContent value="images" className="mt-6">
+                  <div className="space-y-6">
                   <FormField
                     control={form.control}
                     name="url_logo"
@@ -927,9 +964,10 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                       Crear Proyecto
                     </Button>
                   </div>
-                </div>
+                  </div>
                 </TabsContent>
-              </Tabs>
+              )}
+            </Tabs>
           </form>
         </Form>
       </DialogContent>

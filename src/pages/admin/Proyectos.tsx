@@ -525,9 +525,10 @@ const Proyectos = () => {
                             }
                           />
                         )}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button 
+                        {!(project.id_tipo_uso === 9 || project.id_tipo_uso === 10) && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
                               variant="ghost" 
                               size="sm" 
                               className={isDeletedTab ? "text-green-600 hover:text-green-700 hover:bg-green-50" : "text-red-600 hover:text-red-700 hover:bg-red-50"}
@@ -567,7 +568,8 @@ const Proyectos = () => {
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
-                        </AlertDialog>
+                         </AlertDialog>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

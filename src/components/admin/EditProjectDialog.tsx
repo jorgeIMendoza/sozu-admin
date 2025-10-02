@@ -108,6 +108,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
     },
   });
 
+  // Determinar si es proyecto de tipo Productos o Servicios
+  const isProductosOrServicios = form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10";
+
   const { data: project, isLoading: isLoadingProject } = useQuery({
     queryKey: ["project", projectId],
     queryFn: async () => {
@@ -381,12 +384,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" id="edit-project-form">
               <Tabs defaultValue="information" className="w-full">
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className={`grid w-full ${isProductosOrServicios ? 'grid-cols-2' : 'grid-cols-5'}`}>
                   <TabsTrigger value="information">Información</TabsTrigger>
-                  <TabsTrigger value="images">Configuración general</TabsTrigger>
-                  <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
+                  {!isProductosOrServicios && <TabsTrigger value="images">Configuración general</TabsTrigger>}
+                  {!isProductosOrServicios && <TabsTrigger value="multimedia">Multimedia</TabsTrigger>}
                   <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
-                  <TabsTrigger value="offer-config">Configuración de oferta</TabsTrigger>
+                  {!isProductosOrServicios && <TabsTrigger value="offer-config">Configuración de oferta</TabsTrigger>}
                 </TabsList>
                 
                 <TabsContent value="information" className="mt-6">
@@ -415,9 +418,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tipo de Uso</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isProductosOrServicios}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""}>
                               <SelectValue placeholder="Selecciona un tipo de uso" />
                             </SelectTrigger>
                           </FormControl>
@@ -440,9 +443,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Estatus del Proyecto</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isProductosOrServicios}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""}>
                               <SelectValue placeholder="Selecciona un estatus" />
                             </SelectTrigger>
                           </FormControl>
@@ -466,7 +469,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                       <FormItem>
                         <FormLabel>Descripción</FormLabel>
                         <FormControl>
-                          <Textarea placeholder="Descripción del proyecto" {...field} />
+                          <Textarea placeholder="Descripción del proyecto" {...field} readOnly={isProductosOrServicios} className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -501,7 +504,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                          <FormItem>
                            <FormLabel>Fecha de Lanzamiento</FormLabel>
                            <FormControl>
-                             <Input type="date" {...field} />
+                             <Input type="date" {...field} readOnly={isProductosOrServicios} className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""} />
                            </FormControl>
                            <FormMessage />
                          </FormItem>
@@ -517,7 +520,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                          <FormItem>
                            <FormLabel>Fecha de Inicio Construcción</FormLabel>
                            <FormControl>
-                             <Input type="date" {...field} />
+                             <Input type="date" {...field} readOnly={isProductosOrServicios} className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""} />
                            </FormControl>
                            <FormMessage />
                          </FormItem>
@@ -531,7 +534,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                          <FormItem>
                            <FormLabel>Fecha de Entrega</FormLabel>
                            <FormControl>
-                             <Input type="date" {...field} />
+                             <Input type="date" {...field} readOnly={isProductosOrServicios} className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""} />
                            </FormControl>
                            <FormMessage />
                          </FormItem>
@@ -558,9 +561,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                                }
                              }} 
                              value={field.value}
+                             disabled={isProductosOrServicios}
                            >
                              <FormControl>
-                               <SelectTrigger>
+                               <SelectTrigger className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""}>
                                  <SelectValue placeholder="Selecciona un país" />
                                </SelectTrigger>
                              </FormControl>
@@ -592,9 +596,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                                    form.setValue("direccion_id_municipio", "");
                                  }} 
                                  value={field.value}
+                                 disabled={isProductosOrServicios}
                                >
                                  <FormControl>
-                                   <SelectTrigger>
+                                   <SelectTrigger className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""}>
                                      <SelectValue placeholder="Selecciona un estado" />
                                    </SelectTrigger>
                                  </FormControl>
@@ -617,9 +622,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                            render={({ field }) => (
                              <FormItem>
                                <FormLabel>Municipio</FormLabel>
-                               <Select onValueChange={field.onChange} value={field.value}>
+                               <Select onValueChange={field.onChange} value={field.value} disabled={isProductosOrServicios}>
                                  <FormControl>
-                                   <SelectTrigger>
+                                   <SelectTrigger className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""}>
                                      <SelectValue placeholder="Selecciona un municipio" />
                                    </SelectTrigger>
                                  </FormControl>
@@ -649,7 +654,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                           <FormItem>
                             <FormLabel>Dirección</FormLabel>
                             <FormControl>
-                              <Input placeholder="Dirección del proyecto" {...field} />
+                              <Input placeholder="Dirección del proyecto" {...field} readOnly={isProductosOrServicios} className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
