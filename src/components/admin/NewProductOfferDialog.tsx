@@ -98,6 +98,30 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
 
   const selectedPersonType = form.watch("tipo_persona");
 
+  // Reset form and states when dialog opens
+  useEffect(() => {
+    if (open) {
+      setUseCurrentBuyer(true);
+      setShowProspectSearch(false);
+      setSelectedPerson(null);
+      setSearchTerm("");
+      setSearchOpen(false);
+      form.reset({
+        porcentaje_enganche: "",
+        porcentaje_mensualidades: "",
+        porcentaje_entrega: "",
+        numero_mensualidades: "",
+        porcentaje_descuento_aumento: "",
+        tipo_persona: "pf",
+        razon_social: "",
+        email: "",
+        telefono: "",
+        rfc: "",
+        curp: "",
+      });
+    }
+  }, [open, form]);
+
   // Fetch property details with project information
   const { data: propertyDetails } = useQuery({
     queryKey: ["property-details-product", propertyId],
