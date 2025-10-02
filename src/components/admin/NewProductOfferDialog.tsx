@@ -427,7 +427,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
                     disabled={useCurrentBuyer}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Selecciona tipo de persona" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Persona Física">Persona Física</SelectItem>
