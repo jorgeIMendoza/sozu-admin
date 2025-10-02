@@ -108,8 +108,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
     },
   });
 
-  // Determinar si es proyecto de tipo Productos o Servicios
-  const isProductosOrServicios = form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10";
+  // Determinar si es proyecto de tipo Productos, Servicios o Mantenimientos
+  const isSpecialProject = form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10" || form.watch("id_tipo_uso") === "11";
 
   const { data: project, isLoading: isLoadingProject } = useQuery({
     queryKey: ["project", projectId],
@@ -384,12 +384,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" id="edit-project-form">
               <Tabs defaultValue="information" className="w-full">
-                <TabsList className={`grid w-full ${isProductosOrServicios ? 'grid-cols-2' : 'grid-cols-5'}`}>
+                <TabsList className={`grid w-full ${isSpecialProject ? 'grid-cols-2' : 'grid-cols-5'}`}>
                   <TabsTrigger value="information">Información</TabsTrigger>
-                  {!isProductosOrServicios && <TabsTrigger value="images">Configuración general</TabsTrigger>}
-                  {!isProductosOrServicios && <TabsTrigger value="multimedia">Multimedia</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="images">Configuración general</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="multimedia">Multimedia</TabsTrigger>}
                   <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
-                  {!isProductosOrServicios && <TabsTrigger value="offer-config">Configuración de oferta</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="offer-config">Configuración de oferta</TabsTrigger>}
                 </TabsList>
                 
                 <TabsContent value="information" className="mt-6">
@@ -418,9 +418,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tipo de Uso</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={isProductosOrServicios}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isSpecialProject}>
                           <FormControl>
-                            <SelectTrigger className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""}>
+                            <SelectTrigger className={isSpecialProject ? "bg-muted cursor-not-allowed" : ""}>
                               <SelectValue placeholder="Selecciona un tipo de uso" />
                             </SelectTrigger>
                           </FormControl>
@@ -429,7 +429,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                               <SelectItem 
                                 key={tipo.id} 
                                 value={tipo.id.toString()}
-                                disabled={tipo.id === 9 || tipo.id === 10}
+                                disabled={tipo.id === 9 || tipo.id === 10 || tipo.id === 11}
                               >
                                 {tipo.nombre}
                               </SelectItem>
@@ -438,12 +438,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                         </Select>
                         <FormMessage />
                       </FormItem>
-                    )}
-                  />
+                  )}
+                />
 
-                  {!isProductosOrServicios && (
-                    <>
-                      <FormField
+                {!isSpecialProject && (
+                  <>
+                    <FormField
                         control={form.control}
                         name="id_estatus_proyecto"
                         render={({ field }) => (
@@ -945,7 +945,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                 </TabsContent>
                 
                 <TabsContent value="legal-entities" className="mt-6">
-                  <ProjectLegalEntitiesSection projectId={projectId} isProductosOrServicios={isProductosOrServicios} />
+                  <ProjectLegalEntitiesSection projectId={projectId} isProductosOrServicios={isSpecialProject} />
                 </TabsContent>
                 
                 <TabsContent value="offer-config" className="mt-6 space-y-6">

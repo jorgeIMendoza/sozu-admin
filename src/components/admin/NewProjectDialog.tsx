@@ -68,8 +68,8 @@ const formSchema = z.object({
   porcentaje_anual_cuota_estancia_corta: z.string().optional(),
   porcentaje_anual_cuota_garantia_renta: z.string().optional(),
 }).refine((data) => {
-  // Si no es tipo Productos o Servicios, id_estatus_proyecto es requerido
-  if (data.id_tipo_uso !== "9" && data.id_tipo_uso !== "10") {
+  // Si no es tipo Productos, Servicios o Mantenimientos, id_estatus_proyecto es requerido
+  if (data.id_tipo_uso !== "9" && data.id_tipo_uso !== "10" && data.id_tipo_uso !== "11") {
     return data.id_estatus_proyecto && data.id_estatus_proyecto.length > 0;
   }
   return true;
@@ -126,14 +126,14 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   form.setValue('edificios', buildings);
   form.setValue('esquemas_pago', paymentSchemes);
 
-  // Query para verificar proyectos existentes de tipo Productos/Servicios
+  // Query para verificar proyectos existentes de tipo Productos/Servicios/Mantenimientos
   const { data: existingSpecialProjects } = useQuery({
     queryKey: ["special-projects-check"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("proyectos")
         .select("id, id_tipo_uso")
-        .in("id_tipo_uso", [9, 10])
+        .in("id_tipo_uso", [9, 10, 11])
         .eq("activo", true);
       
       if (error) throw error;
@@ -233,8 +233,8 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      // Para proyectos tipo Productos o Servicios, usar estatus por defecto (id=1)
-      const isProductosOrServicios = values.id_tipo_uso === "9" || values.id_tipo_uso === "10";
+      // Para proyectos tipo Productos, Servicios o Mantenimientos, usar estatus por defecto (id=1)
+      const isSpecialProject = values.id_tipo_uso === "9" || values.id_tipo_uso === "10" || values.id_tipo_uso === "11";
       
       const projectData = {
         nombre: values.nombre,
@@ -244,7 +244,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         direccion_id_municipio: values.direccion_id_municipio ? parseInt(values.direccion_id_municipio) : null,
         direccion: values.direccion || null,
         id_tipo_uso: parseInt(values.id_tipo_uso),
-        id_estatus_proyecto: isProductosOrServicios ? 1 : parseInt(values.id_estatus_proyecto),
+        id_estatus_proyecto: isSpecialProject ? 1 : parseInt(values.id_estatus_proyecto),
         precio_m2_actual: values.precio_m2_actual ? parseFloat(values.precio_m2_actual) : null,
         fecha_lanzamiento: values.fecha_lanzamiento || null,
         fecha_inicio_construccion: values.fecha_inicio_construccion || null,
@@ -407,7 +407,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
             <Tabs defaultValue="information" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="information">Información</TabsTrigger>
-                {!(form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10") && (
+                {!(form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10" || form.watch("id_tipo_uso") === "11") && (
                   <TabsTrigger value="images">Configuración general</TabsTrigger>
                 )}
               </TabsList>
@@ -432,7 +432,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                   name="id_tipo_uso"
                   render={({ field }) => {
                     const selectedTipoUso = field.value;
-                    const isProductosOrServicios = selectedTipoUso === "9" || selectedTipoUso === "10";
+                    const isSpecialProject = selectedTipoUso === "9" || selectedTipoUso === "10" || selectedTipoUso === "11";
                     
                     return (
                       <FormItem>
@@ -446,7 +446,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                           <SelectContent>
                             {tiposUso?.map((tipo) => {
                               const isDisabled = 
-                                (tipo.id === 9 || tipo.id === 10) && 
+                                (tipo.id === 9 || tipo.id === 10 || tipo.id === 11) && 
                                 existingSpecialProjects?.some(p => p.id_tipo_uso === tipo.id);
                               
                               return (
