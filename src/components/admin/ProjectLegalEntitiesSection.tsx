@@ -183,13 +183,16 @@ export const ProjectLegalEntitiesSection = ({
         throw new Error("Faltan datos requeridos");
       }
 
-      // Check if project already has an entity of this type
-      const existingEntity = projectLegalEntities.find(
-        (entity) => entity.id_tipo_entidad === parseInt(selectedEntityTypeId)
-      );
+      // Para proyectos de tipo Productos o Servicios, permitir múltiples entidades del mismo tipo
+      if (!isProductosOrServicios) {
+        // Check if project already has an entity of this type (solo para otros tipos de proyectos)
+        const existingEntity = projectLegalEntities.find(
+          (entity) => entity.id_tipo_entidad === parseInt(selectedEntityTypeId)
+        );
 
-      if (existingEntity) {
-        throw new Error("El proyecto ya tiene una entidad legal de este tipo");
+        if (existingEntity) {
+          throw new Error("El proyecto ya tiene una entidad legal de este tipo");
+        }
       }
 
       // Create a new entidades_relacionadas record for this project
@@ -432,7 +435,7 @@ export const ProjectLegalEntitiesSection = ({
             Agregar Entidad Legal
           </CardTitle>
           <CardDescription>
-            Selecciona una entidad legal para agregar al proyecto. Solo puede haber una entidad por tipo.
+            Selecciona una entidad legal para agregar al proyecto. {!isProductosOrServicios && "Solo puede haber una entidad por tipo."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -455,11 +458,11 @@ export const ProjectLegalEntitiesSection = ({
                     <SelectItem 
                       key={type.id} 
                       value={type.id.toString()}
-                      disabled={usedEntityTypes.has(type.id)}
+                      disabled={!isProductosOrServicios && usedEntityTypes.has(type.id)}
                     >
                       <div className="flex items-center justify-between">
                         <span>{type.nombre}</span>
-                        {usedEntityTypes.has(type.id) && (
+                        {!isProductosOrServicios && usedEntityTypes.has(type.id) && (
                           <Badge variant="secondary" className="ml-2">Ya asignado</Badge>
                         )}
                       </div>

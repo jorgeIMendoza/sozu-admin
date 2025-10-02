@@ -778,75 +778,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                       />
                     </>
                   )}
-
-                  <FormField
-                    control={form.control}
-                    name="amenidades"
-                    render={() => (
-                      <FormItem>
-                        <div className="flex items-center justify-between">
-                          <FormLabel>Amenidades</FormLabel>
-                          <NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
-                          {amenidades?.map((amenidad) => (
-                            <FormField
-                              key={amenidad.id}
-                              control={form.control}
-                              name="amenidades"
-                              render={({ field }) => {
-                                return (
-                                  <FormItem
-                                    key={amenidad.id}
-                                    className="flex flex-row items-start space-x-3 space-y-0"
-                                  >
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value?.includes(amenidad.id.toString())}
-                                        onCheckedChange={(checked) => {
-                                          return checked
-                                            ? field.onChange([...field.value, amenidad.id.toString()])
-                                            : field.onChange(
-                                                field.value?.filter(
-                                                  (value) => value !== amenidad.id.toString()
-                                                )
-                                              )
-                                        }}
-                                      />
-                                     </FormControl>
-                                      <div className="flex items-center justify-between flex-1">
-                                        <FormLabel className="text-sm font-normal">
-                                          {amenidad.nombre}
-                                        </FormLabel>
-                                        <div 
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                          }}
-                                          onMouseDown={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                          }}
-                                        >
-                                          <EditAmenityDialog 
-                                            amenityId={amenidad.id}
-                                            amenityName={amenidad.nombre}
-                                            onAmenityUpdated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
-                                            onAmenityDeleted={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
-                                          />
-                                        </div>
-                                      </div>
-                                  </FormItem>
-                                )
-                              }}
-                            />
-                          ))}
-                        </div>
-                        <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </TabsContent>
+                </TabsContent>
 
                 <TabsContent value="images" className="mt-6">
                   <div className="space-y-6">
