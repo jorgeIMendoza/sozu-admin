@@ -175,16 +175,20 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       form.setValue("rfc", currentBuyerData.rfc || "");
       form.setValue("curp", currentBuyerData.curp || "");
       setSelectedPerson(null);
-    } else if (!useCurrentBuyer) {
-      form.setValue("tipo_persona", "pf");
-      form.setValue("razon_social", "");
-      form.setValue("email", "");
-      form.setValue("telefono", "");
-      form.setValue("rfc", "");
-      form.setValue("curp", "");
-      setSelectedPerson(null);
     }
   }, [useCurrentBuyer, currentBuyerData, form]);
+
+  // Fill data when modal opens with current buyer selected
+  useEffect(() => {
+    if (open && useCurrentBuyer && currentBuyerData) {
+      form.setValue("tipo_persona", currentBuyerData.tipo_persona || "pf");
+      form.setValue("razon_social", currentBuyerData.nombre_legal || "");
+      form.setValue("email", currentBuyerData.email || "");
+      form.setValue("telefono", currentBuyerData.telefono || "");
+      form.setValue("rfc", currentBuyerData.rfc || "");
+      form.setValue("curp", currentBuyerData.curp || "");
+    }
+  }, [open, useCurrentBuyer, currentBuyerData, form]);
 
   // Fetch active categories + add "Servicios" option
   const { data: categoriesData = [] } = useQuery({
