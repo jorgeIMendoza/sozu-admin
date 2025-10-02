@@ -1105,8 +1105,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
             </form>
           </Form>
         )}
-        <DialogFooter className="px-6 pb-6 pt-4 border-t mt-6">
-          <div className="flex justify-end gap-3 w-full">
+        <DialogFooter className="px-6 pb-6 pt-6 border-t mt-8">
+          <div className="flex justify-end gap-4 w-full">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
