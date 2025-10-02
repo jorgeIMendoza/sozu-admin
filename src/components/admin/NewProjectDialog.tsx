@@ -467,7 +467,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                   }}
                 />
 
-                {!(form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10") && (
+                {!(form.watch("id_tipo_uso") === "9" || form.watch("id_tipo_uso") === "10" || form.watch("id_tipo_uso") === "11") && (
                   <>
                     <FormField
                       control={form.control}
