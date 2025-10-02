@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,7 @@ interface Property {
   };
   // Nueva propiedad para verificar si tiene ofertas
   tieneOfertas: boolean;
+  tieneOfertasProductos: boolean;
   // Nuevas propiedades para estacionamientos y bodegas
   estacionamientos_count: number;
   bodegas_count: number;
@@ -88,9 +89,12 @@ const Propiedades = () => {
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [selectedPropertyOffers, setSelectedPropertyOffers] = useState<any[] | null>(null);
+  const [selectedPropertyProductOffers, setSelectedPropertyProductOffers] = useState<any[] | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<number | null>(null);
   const [selectedPropertyForOffers, setSelectedPropertyForOffers] = useState<Property | null>(null);
+  const [selectedPropertyForProductOffers, setSelectedPropertyForProductOffers] = useState<Property | null>(null);
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
+  const [productOffersDialogOpen, setProductOffersDialogOpen] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState<number[]>([]);
   const [availableSchemes, setAvailableSchemes] = useState<any[]>([]);
   const [downloadingOfferId, setDownloadingOfferId] = useState<number | null>(null);
@@ -517,7 +521,8 @@ const Propiedades = () => {
           modelo: property.edificios_modelos?.modelos?.nombre || 'Sin modelo',
           vista: property.vistas?.nombre || 'Sin vista',
           disponibilidad: property.estatus_disponibilidad?.nombre || 'Sin estatus',
-          tieneOfertas: property.ofertas && property.ofertas.length > 0,
+          tieneOfertas: property.ofertas && property.ofertas.some((o: any) => o.id_producto === null),
+          tieneOfertasProductos: property.ofertas && property.ofertas.some((o: any) => o.id_producto !== null),
           estacionamientos_count: estacionamientosCounts[property.id] || 0,
           bodegas_count: bodegasCounts[property.id] || 0,
           payment_status: paymentStatus,
@@ -599,6 +604,89 @@ const Propiedades = () => {
           }
         } catch (err) {
           console.warn('Error fetching RFC for lead:', offer.id_persona_lead);
+        }
+      }
+      
+      return enrichedOffer;
+    }));
+
+    return enrichedOffers;
+  };
+
+  // Función para obtener ofertas de productos de una propiedad específica
+  const fetchPropertyProductOffers = async (propertyId: number) => {
+    const { data: offersData, error } = await supabase
+      .from('ofertas')
+      .select(`
+        id,
+        fecha_generacion,
+        activo,
+        id_persona_lead,
+        email_creador,
+        id_esquema_pago_seleccionado,
+        id_producto,
+        clabe_stp_tmp_producto,
+        productos_servicios!ofertas_id_producto_fkey(nombre)
+      `)
+      .eq('id_propiedad', propertyId)
+      .not('id_producto', 'is', null)
+      .eq('activo', true)
+      .order('fecha_generacion', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching product offers:', error);
+      throw error;
+    }
+
+    // Enrich offers with additional data
+    const enrichedOffers = await Promise.all((offersData || []).map(async (offer: any) => {
+      let enrichedOffer = {
+        ...offer,
+        product_name: offer.productos_servicios?.nombre || 'N/A',
+      };
+      
+      // Get cuenta_cobranza if available
+      const { data: cuentaData } = await supabase
+        .from('cuentas_cobranza')
+        .select('id, activo, clabe_stp, precio_final')
+        .eq('id_oferta', offer.id)
+        .eq('activo', true)
+        .single();
+      
+      if (cuentaData) {
+        enrichedOffer.cuenta_cobranza_id = cuentaData.id;
+        enrichedOffer.cuenta_activo = cuentaData.activo;
+        enrichedOffer.cuenta_clabe_stp = cuentaData.clabe_stp;
+        enrichedOffer.cuenta_precio_final = cuentaData.precio_final;
+      }
+      
+      // Get lead info
+      if (offer.id_persona_lead) {
+        const { data: personaData } = await supabase
+          .from('personas')
+          .select('nombre_legal, email, telefono, rfc')
+          .eq('id', offer.id_persona_lead)
+          .single();
+        
+        if (personaData) {
+          enrichedOffer.lead_name = personaData.nombre_legal;
+          enrichedOffer.lead_email = personaData.email;
+          enrichedOffer.lead_telefono = personaData.telefono;
+          enrichedOffer.lead_rfc = personaData.rfc;
+        }
+      }
+      
+      // Get payment scheme info
+      if (offer.id_esquema_pago_seleccionado) {
+        const { data: schemeData } = await supabase
+          .from('esquemas_pago')
+          .select('nombre, es_manual')
+          .eq('id', offer.id_esquema_pago_seleccionado)
+          .single();
+        
+        if (schemeData) {
+          enrichedOffer.esquema_nombre = schemeData.nombre;
+          enrichedOffer.esquema_es_manual = schemeData.es_manual;
         }
       }
       
@@ -692,6 +780,25 @@ const Propiedades = () => {
       toast({
         title: "Error",
         description: "No se pudieron cargar las ofertas",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleViewProductOffers = async (property: Property) => {
+    if (!property.tieneOfertasProductos) return;
+    
+    try {
+      const offers = await fetchPropertyProductOffers(property.id);
+      setSelectedPropertyProductOffers(offers);
+      setSelectedPropertyId(property.id);
+      setSelectedPropertyForProductOffers(property);
+      setProductOffersDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching product offers:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar las ofertas de productos",
         variant: "destructive",
       });
     }
@@ -1181,6 +1288,7 @@ const Propiedades = () => {
               <TableHead>Estacionamientos</TableHead>
               <TableHead>Bodegas</TableHead>
               <TableHead>Ofertas Comerciales</TableHead>
+              <TableHead>Ofertas de Productos</TableHead>
               <TableHead>Disponibilidad</TableHead>
               <TableHead>Cuenta de cobranza</TableHead>
               <TableHead>Cuenta Clabe</TableHead>
@@ -1194,7 +1302,7 @@ const Propiedades = () => {
           <TableBody>
           {propertiesToRender.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={tabType === "draft" ? 20 : 19} className="text-center py-6">
+                <TableCell colSpan={tabType === "draft" ? 21 : 20} className="text-center py-6">
                   {searchTerm || proyectoFilter || modeloFilter || recamarasFilter || banosFilter || disponibilidadFilter.length > 0 || bodegasFilter || estacionamientosFilter || cuentaCobranzaFilter
                     ? "No se encontraron resultados." 
                     : tabType === "eliminados"
@@ -1279,6 +1387,23 @@ const Propiedades = () => {
                        >
                          {property.tieneOfertas ? "Sí" : "No"}
                          {property.tieneOfertas && <Eye className="ml-1 h-3 w-3" />}
+                       </Badge>
+                     </Button>
+                   </TableCell>
+                   <TableCell>
+                     <Button
+                       variant="ghost"
+                       size="sm"
+                       onClick={() => handleViewProductOffers(property)}
+                       disabled={!property.tieneOfertasProductos}
+                       className="p-0 h-auto font-normal"
+                     >
+                       <Badge 
+                         variant={property.tieneOfertasProductos ? "default" : "outline"}
+                         className={property.tieneOfertasProductos ? "cursor-pointer hover:bg-primary/80" : ""}
+                       >
+                         {property.tieneOfertasProductos ? "Sí" : "No"}
+                         {property.tieneOfertasProductos && <ShoppingCart className="ml-1 h-3 w-3" />}
                        </Badge>
                      </Button>
                    </TableCell>
@@ -1906,9 +2031,22 @@ const Propiedades = () => {
                            key={offer.id}
                            className={rowClassName}
                          >
-                          <TableCell className="font-medium">
-                            {String(offer.id).padStart(6, '0')}
-                          </TableCell>
+                         <TableCell className="font-medium">
+                           <Button
+                             variant="link"
+                             size="sm"
+                             onClick={() => {
+                               if (!hasAccount && offer.esquema_id) {
+                                 // Crear cuenta de cobranza
+                                 handleGenerateCollectionAccount(offer.id, selectedPropertyForOffers!.id);
+                               }
+                             }}
+                             disabled={hasAccount || !offer.esquema_id}
+                             className="p-0 h-auto font-semibold"
+                           >
+                             {String(offer.id).padStart(6, '0')}
+                           </Button>
+                         </TableCell>
                           <TableCell>
                             {(offer.agent_name || 'AGENTE POR DEFINIR').toUpperCase()}
                           </TableCell>
@@ -2039,6 +2177,118 @@ const Propiedades = () => {
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 No se encontraron ofertas para esta propiedad
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para mostrar ofertas de productos */}
+      <Dialog open={productOffersDialogOpen} onOpenChange={setProductOffersDialogOpen}>
+        <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Ofertas de Productos para propiedad {selectedPropertyForProductOffers?.numero_propiedad} de {selectedPropertyForProductOffers?.proyecto}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedPropertyProductOffers && selectedPropertyProductOffers.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Folio</TableHead>
+                    <TableHead>Producto/Servicio</TableHead>
+                    <TableHead>Lead</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Esquema de Pago</TableHead>
+                    <TableHead>Cuenta de Cobranza</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedPropertyProductOffers.map((offer: any) => {
+                    const hasAccount = !!offer.cuenta_cobranza_id;
+                    const isAccountActive = hasAccount && offer.cuenta_activo;
+                    
+                    return (
+                      <TableRow key={offer.id}>
+                        <TableCell className="font-medium">
+                          <Button
+                            variant="link"
+                            size="sm"
+                            onClick={() => {
+                              if (!hasAccount) {
+                                // Crear cuenta de cobranza
+                                handleGenerateCollectionAccount(offer.id, selectedPropertyForProductOffers!.id);
+                              }
+                            }}
+                            disabled={hasAccount}
+                            className="p-0 h-auto font-semibold"
+                          >
+                            {String(offer.id).padStart(6, '0')}
+                          </Button>
+                        </TableCell>
+                        <TableCell>
+                          {(offer.product_name || 'N/A').toUpperCase()}
+                        </TableCell>
+                        <TableCell>
+                          {(offer.lead_name || 'N/A').toUpperCase()}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(offer.fecha_generacion).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline" 
+                            className="font-medium bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700"
+                          >
+                            {offer.esquema_nombre || 'Sin esquema'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {hasAccount ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={`font-mono text-xs ${
+                                    isAccountActive 
+                                      ? "text-green-700 bg-green-100 hover:bg-green-200 dark:text-green-300 dark:bg-green-900/50" 
+                                      : "text-orange-700 bg-orange-100 hover:bg-orange-200 dark:text-orange-300 dark:bg-orange-900/50"
+                                  }`}
+                                  onClick={() => navigate(`/admin/cuentas-cobranza/${offer.cuenta_cobranza_id}/detalle`)}
+                                >
+                                  CC-{String(offer.cuenta_cobranza_id).padStart(6, '0')}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{isAccountActive ? 'Activa' : 'Cancelada'} - Click para ver detalle</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              <span className="text-muted-foreground text-sm">Sin cuenta</span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-xs text-blue-600 dark:text-blue-400">
+                                    Haz clic en el folio para crear
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Click en el folio arriba para generar cuenta de cobranza</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No se encontraron ofertas de productos para esta propiedad
               </div>
             )}
           </div>

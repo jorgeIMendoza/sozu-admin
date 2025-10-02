@@ -434,7 +434,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
         .insert({
           id_persona_lead: personaId,
           id_producto: selectedProduct,
-          id_propiedad: null,
+          id_propiedad: propertyId,
           id_esquema_pago_seleccionado: esquemaPago.id,
           email_creador: 'jorge.mendoza@sozu.com', // Fixed user email
           clabe_stp_tmp_producto: clabeData,
