@@ -207,22 +207,19 @@ export const ProjectLegalEntitiesSection = ({
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Entidad agregada",
         description: "La entidad legal se agregó al proyecto exitosamente.",
       });
       setSelectedEntityId("");
       setSelectedEntityTypeId("");
-      // Invalidar solo la query de entidades legales específica, sin refetch automático
-      queryClient.invalidateQueries({ 
+      
+      // Refetch solo la query de entidades legales sin afectar otras queries
+      await queryClient.refetchQueries({ 
         queryKey: ["project-legal-entities", projectId],
-        refetchType: 'none' 
+        exact: true
       });
-      // Hacer refetch manual después de un pequeño delay
-      setTimeout(() => {
-        queryClient.refetchQueries({ queryKey: ["project-legal-entities", projectId] });
-      }, 100);
     },
     onError: (error: any) => {
       toast({
@@ -243,20 +240,17 @@ export const ProjectLegalEntitiesSection = ({
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Entidad removida",
         description: "La entidad legal se removió del proyecto exitosamente.",
       });
-      // Invalidar solo la query de entidades legales específica, sin refetch automático
-      queryClient.invalidateQueries({ 
+      
+      // Refetch solo la query de entidades legales sin afectar otras queries
+      await queryClient.refetchQueries({ 
         queryKey: ["project-legal-entities", projectId],
-        refetchType: 'none' 
+        exact: true
       });
-      // Hacer refetch manual después de un pequeño delay
-      setTimeout(() => {
-        queryClient.refetchQueries({ queryKey: ["project-legal-entities", projectId] });
-      }, 100);
     },
     onError: () => {
       toast({
@@ -411,22 +405,19 @@ export const ProjectLegalEntitiesSection = ({
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Cuenta actualizada",
         description: "La cuenta madre STP se actualizó exitosamente.",
       });
       setEditingCuentaMadre(null);
       setTempCuentaMadre("");
-      // Invalidar solo la query de entidades legales específica, sin refetch automático
-      queryClient.invalidateQueries({ 
+      
+      // Refetch solo la query de entidades legales sin afectar otras queries
+      await queryClient.refetchQueries({ 
         queryKey: ["project-legal-entities", projectId],
-        refetchType: 'none' 
+        exact: true
       });
-      // Hacer refetch manual después de un pequeño delay
-      setTimeout(() => {
-        queryClient.refetchQueries({ queryKey: ["project-legal-entities", projectId] });
-      }, 100);
     },
     onError: (error: any) => {
       toast({
@@ -523,6 +514,7 @@ export const ProjectLegalEntitiesSection = ({
           </div>
 
            <Button
+             type="button"
              onClick={() => addEntityMutation.mutate()}
              disabled={!selectedEntityId || !selectedEntityTypeId || addEntityMutation.isPending || availableFilteredEntities.length === 0}
              className="w-full"
@@ -633,8 +625,9 @@ export const ProjectLegalEntitiesSection = ({
                                 <span className="text-sm font-mono flex-1">
                                   {entity.cuenta_madre_stp || <span className="text-muted-foreground italic">No asignada</span>}
                                 </span>
-                                {!hasAccounts && (
+                                 {!hasAccounts && (
                                   <Button
+                                    type="button"
                                     size="sm"
                                     variant="ghost"
                                     onClick={(e) => {
@@ -658,6 +651,7 @@ export const ProjectLegalEntitiesSection = ({
                         )}
                       </div>
                       <Button
+                        type="button"
                         variant="ghost"
                         size="sm"
                         onClick={() => removeEntityMutation.mutate(entity.id)}
@@ -666,9 +660,9 @@ export const ProjectLegalEntitiesSection = ({
                         title={
                           hasAccounts 
                             ? "No se puede eliminar: tiene cuentas STP generadas" 
-                            : hasProperties
-                            ? "No se puede eliminar: tiene propiedades asignadas"
-                            : "Eliminar entidad"
+                            : hasProperties 
+                              ? "No se puede eliminar: tiene propiedades asignadas"
+                              : "Eliminar entidad"
                         }
                       >
                         <Trash2 className="h-4 w-4" />
