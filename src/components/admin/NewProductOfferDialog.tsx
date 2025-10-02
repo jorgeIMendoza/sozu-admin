@@ -156,6 +156,11 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
   const handleCheckboxChange = (checked: boolean) => {
     setUseCurrentBuyer(checked);
     setShowProspectSearch(!checked);
+    
+    // Set default to "pf" when unchecking current buyer
+    if (!checked) {
+      setProspectData({ ...prospectData, tipo_persona: "pf" });
+    }
   };
 
   const handleSelectExistingPerson = (persona: any) => {
