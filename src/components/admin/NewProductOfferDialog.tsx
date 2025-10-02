@@ -155,14 +155,14 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
         .select('personas!compradores_id_persona_fkey(*)')
         .eq('id_cuenta_cobranza', property.cuenta_cobranza_id)
         .eq('activo', true)
-        .order('porcentaje_copropiedad', { ascending: false })
+        .order('id', { ascending: true })
         .limit(1)
         .single();
       
       if (error) throw error;
       return data?.personas;
     },
-    enabled: !!property.cuenta_cobranza_id,
+    enabled: !!property.cuenta_cobranza_id && useCurrentBuyer,
   });
 
   // Update form when currentBuyerData changes or useCurrentBuyer changes
