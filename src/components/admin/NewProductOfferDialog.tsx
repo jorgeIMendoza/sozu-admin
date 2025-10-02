@@ -36,7 +36,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
   });
   
   const [prospectData, setProspectData] = useState({
-    tipo_persona: "Persona Física",
+    tipo_persona: "pf",
     razon_social: "",
     email: "",
     telefono: "",
@@ -68,7 +68,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
   useEffect(() => {
     if (useCurrentBuyer && currentBuyerData) {
       setProspectData({
-        tipo_persona: currentBuyerData.tipo_persona || "Persona Física",
+        tipo_persona: currentBuyerData.tipo_persona || "pf",
         razon_social: currentBuyerData.nombre_legal || "",
         email: currentBuyerData.email || "",
         telefono: currentBuyerData.telefono || "",
@@ -76,7 +76,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       });
     } else if (!useCurrentBuyer) {
       setProspectData({
-        tipo_persona: "Persona Física",
+        tipo_persona: "pf",
         razon_social: "",
         email: "",
         telefono: "",
@@ -165,7 +165,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
 
   const handleSelectExistingPerson = (persona: any) => {
     setProspectData({
-      tipo_persona: persona.tipo_persona || "Persona Física",
+      tipo_persona: persona.tipo_persona || "pf",
       razon_social: persona.nombre_legal,
       email: persona.email,
       telefono: persona.telefono || "",
