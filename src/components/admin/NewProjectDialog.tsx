@@ -49,7 +49,7 @@ const formSchema = z.object({
   direccion_id_municipio: z.string().optional(),
   direccion: z.string().optional(),
   id_tipo_uso: z.string().min(1, "El tipo de uso es requerido"),
-  id_estatus_proyecto: z.string().min(1, "El estatus del proyecto es requerido"),
+  id_estatus_proyecto: z.string().optional(),
   precio_m2_actual: z.string().optional(),
   fecha_lanzamiento: z.string().optional(),
   fecha_inicio_construccion: z.string().optional(),
@@ -67,6 +67,15 @@ const formSchema = z.object({
   porcentaje_anual_cuota_extraordinaria: z.string().optional(),
   porcentaje_anual_cuota_estancia_corta: z.string().optional(),
   porcentaje_anual_cuota_garantia_renta: z.string().optional(),
+}).refine((data) => {
+  // Si no es tipo Productos o Servicios, id_estatus_proyecto es requerido
+  if (data.id_tipo_uso !== "9" && data.id_tipo_uso !== "10") {
+    return data.id_estatus_proyecto && data.id_estatus_proyecto.length > 0;
+  }
+  return true;
+}, {
+  message: "El estatus del proyecto es requerido",
+  path: ["id_estatus_proyecto"],
 });
 
 interface NewProjectDialogProps {
@@ -224,6 +233,9 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      // Para proyectos tipo Productos o Servicios, usar estatus por defecto (id=1)
+      const isProductosOrServicios = values.id_tipo_uso === "9" || values.id_tipo_uso === "10";
+      
       const projectData = {
         nombre: values.nombre,
         descripcion: values.descripcion || null,
@@ -232,7 +244,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         direccion_id_municipio: values.direccion_id_municipio ? parseInt(values.direccion_id_municipio) : null,
         direccion: values.direccion || null,
         id_tipo_uso: parseInt(values.id_tipo_uso),
-        id_estatus_proyecto: parseInt(values.id_estatus_proyecto),
+        id_estatus_proyecto: isProductosOrServicios ? 1 : parseInt(values.id_estatus_proyecto),
         precio_m2_actual: values.precio_m2_actual ? parseFloat(values.precio_m2_actual) : null,
         fecha_lanzamiento: values.fecha_lanzamiento || null,
         fecha_inicio_construccion: values.fecha_inicio_construccion || null,
