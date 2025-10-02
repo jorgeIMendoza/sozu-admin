@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, UserPlus } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -47,6 +47,7 @@ const formSchema = z.object({
     .min(1, "El RFC es requerido")
     .regex(/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/, "Formato de RFC inválido")
     .max(13, "El RFC no puede tener más de 13 caracteres"),
+  curp: z.string().optional(),
 }).refine((data) => {
   const eng = parseFloat(data.porcentaje_enganche || "0");
   const mens = parseFloat(data.porcentaje_mensualidades || "0");
@@ -91,8 +92,11 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       email: "",
       telefono: "",
       rfc: "",
+      curp: "",
     },
   });
+
+  const selectedPersonType = form.watch("tipo_persona");
 
   // Fetch property details with project information
   const { data: propertyDetails } = useQuery({
@@ -145,6 +149,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       form.setValue("email", currentBuyerData.email || "");
       form.setValue("telefono", currentBuyerData.telefono || "");
       form.setValue("rfc", currentBuyerData.rfc || "");
+      form.setValue("curp", currentBuyerData.curp || "");
       setSelectedPerson(null);
     } else if (!useCurrentBuyer) {
       form.setValue("tipo_persona", "pf");
@@ -152,6 +157,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       form.setValue("email", "");
       form.setValue("telefono", "");
       form.setValue("rfc", "");
+      form.setValue("curp", "");
       setSelectedPerson(null);
     }
   }, [useCurrentBuyer, currentBuyerData, form]);
@@ -240,7 +246,19 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
     form.setValue("email", persona.email);
     form.setValue("telefono", persona.telefono || "");
     form.setValue("rfc", persona.rfc || "");
+    form.setValue("curp", persona.curp || "");
     setSearchTerm("");
+    setSearchOpen(false);
+  };
+
+  const clearPersonSelection = () => {
+    setSelectedPerson(null);
+    form.setValue("tipo_persona", "pf");
+    form.setValue("razon_social", "");
+    form.setValue("email", "");
+    form.setValue("telefono", "");
+    form.setValue("rfc", "");
+    form.setValue("curp", "");
   };
 
   const handleSelectProductService = async () => {
@@ -278,6 +296,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       email: "",
       telefono: "",
       rfc: "",
+      curp: "",
     });
     setUseCurrentBuyer(true);
     setShowProspectSearch(false);
@@ -439,57 +458,83 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
               </Label>
             </div>
 
-            {/* Buscar Prospecto - Only shown if useCurrentBuyer is false */}
-            {showProspectSearch && (
-              <div className="space-y-2">
-                <Label>Buscar Prospecto</Label>
-                <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={searchOpen}
-                      className="w-full justify-between"
-                    >
-                      {searchTerm || "Buscar por nombre..."}
-                      <Command className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder="Buscar persona..."
-                        value={searchTerm}
-                        onValueChange={setSearchTerm}
-                      />
-                      <CommandEmpty>
-                        {searchTerm.length < 2 
-                          ? "Escribe al menos 2 caracteres para buscar" 
-                          : "No se encontraron resultados."}
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {existingPersonas.map((persona: any) => (
-                          <CommandItem
-                            key={persona.id}
-                            value={persona.nombre_legal}
-                            onSelect={() => {
-                              handleSelectExistingPerson(persona);
-                              setSearchOpen(false);
-                              setSearchTerm("");
-                            }}
+              {/* Buscar Prospecto - Only shown if useCurrentBuyer is false */}
+              {showProspectSearch && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-medium">Buscar Prospecto</h3>
+                    {selectedPerson && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={clearPersonSelection}
+                      >
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Nuevo Prospecto
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {!selectedPerson && (
+                    <div className="space-y-2">
+                      <Popover open={searchOpen} onOpenChange={setSearchOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={searchOpen}
+                            className="w-full justify-between"
                           >
-                            <div className="flex flex-col">
-                              <span className="font-medium">{persona.nombre_legal}</span>
-                              <span className="text-sm text-muted-foreground">{persona.email}</span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            )}
+                            {selectedPerson
+                              ? selectedPerson.nombre_legal
+                              : "Buscar por nombre..."}
+                            <Command className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0" align="start">
+                          <Command>
+                            <CommandInput
+                              placeholder="Buscar persona..."
+                              value={searchTerm}
+                              onValueChange={setSearchTerm}
+                            />
+                            <CommandEmpty>
+                              {searchTerm.length < 2 
+                                ? "Escribe al menos 2 caracteres para buscar" 
+                                : "No se encontraron resultados."}
+                            </CommandEmpty>
+                            <CommandGroup>
+                              {existingPersonas.map((persona: any) => (
+                                <CommandItem
+                                  key={persona.id}
+                                  value={persona.nombre_legal}
+                                  onSelect={() => handleSelectExistingPerson(persona)}
+                                >
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{persona.nombre_legal}</span>
+                                    <span className="text-sm text-muted-foreground">
+                                      {persona.email} - {persona.rfc}
+                                    </span>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  )}
+
+                  {selectedPerson && (
+                    <div className="p-4 border rounded-lg bg-muted/50">
+                      <p className="font-medium">{selectedPerson.nombre_legal}</p>
+                      <p className="text-sm text-muted-foreground">{selectedPerson.email}</p>
+                      <p className="text-sm text-muted-foreground">RFC: {selectedPerson.rfc}</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Información del Prospecto */}
               <div className="space-y-4">
@@ -583,12 +628,13 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
                     control={form.control}
                     name="rfc"
                     render={({ field }) => (
-                      <FormItem className="col-span-2">
+                      <FormItem className={selectedPersonType === "pf" ? "" : "col-span-2"}>
                         <FormLabel>RFC *</FormLabel>
                         <FormControl>
                           <Input
                             placeholder="Ingresa el RFC (Ej: ABC123456DEF)"
                             disabled={isFieldDisabled}
+                            maxLength={13}
                             {...field}
                           />
                         </FormControl>
@@ -596,6 +642,27 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
                       </FormItem>
                     )}
                   />
+
+                  {selectedPersonType === "pf" && (
+                    <FormField
+                      control={form.control}
+                      name="curp"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>CURP</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)"
+                              disabled={isFieldDisabled}
+                              maxLength={18}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
               </div>
 
