@@ -2038,12 +2038,12 @@ const Propiedades = () => {
                               variant="link"
                               size="sm"
                               onClick={() => {
-                                if (!hasAccount && offer.esquema_id) {
+                                if (!isAccountActive && offer.esquema_id) {
                                   // Crear cuenta de cobranza
                                   handleGenerateCollectionAccount(offer.id, selectedPropertyForOffers!.id);
                                 }
                               }}
-                              disabled={hasAccount || !offer.esquema_id}
+                              disabled={isAccountActive || !offer.esquema_id}
                               className="p-0 h-auto font-semibold"
                             >
                               O-{String(offer.id).padStart(6, '0')}
@@ -2218,12 +2218,12 @@ const Propiedades = () => {
                              variant="link"
                              size="sm"
                              onClick={() => {
-                               if (!hasAccount) {
+                               if (!isAccountActive) {
                                  // Crear cuenta de cobranza
                                  handleGenerateCollectionAccount(offer.id, selectedPropertyForProductOffers!.id);
                                }
                              }}
-                             disabled={hasAccount}
+                             disabled={isAccountActive}
                              className="p-0 h-auto font-semibold"
                            >
                              OP-{String(offer.id).padStart(6, '0')}
