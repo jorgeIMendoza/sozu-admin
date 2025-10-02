@@ -623,7 +623,14 @@ export const ProjectLegalEntitiesSection = ({
                             ) : (
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="text-sm font-mono flex-1">
-                                  {entity.cuenta_madre_stp || <span className="text-muted-foreground italic">No asignada</span>}
+                                  {entity.cuenta_madre_stp ? (
+                                    <>
+                                      <span>{entity.cuenta_madre_stp.substring(0, 10)}</span>
+                                      <span className="font-bold text-base text-primary">{entity.cuenta_madre_stp.substring(10)}</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground italic">No asignada</span>
+                                  )}
                                 </span>
                                  {!hasAccounts && (
                                   <Button
