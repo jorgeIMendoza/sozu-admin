@@ -231,6 +231,8 @@ const Propiedades = () => {
             estatus_disponibilidad!inner(nombre),
             ofertas!ofertas_id_propiedad_fkey(
               id,
+              id_producto,
+              activo,
               cuentas_cobranza!fk_cuentas_cobranza_oferta(clabe_stp, id)
             )
           `)
@@ -521,8 +523,8 @@ const Propiedades = () => {
           modelo: property.edificios_modelos?.modelos?.nombre || 'Sin modelo',
           vista: property.vistas?.nombre || 'Sin vista',
           disponibilidad: property.estatus_disponibilidad?.nombre || 'Sin estatus',
-          tieneOfertas: property.ofertas && property.ofertas.some((o: any) => o.id_producto === null),
-          tieneOfertasProductos: property.ofertas && property.ofertas.some((o: any) => o.id_producto !== null),
+          tieneOfertas: property.ofertas && property.ofertas.some((o: any) => o.activo && o.id_producto === null),
+          tieneOfertasProductos: property.ofertas && property.ofertas.some((o: any) => o.activo && o.id_producto !== null),
           estacionamientos_count: estacionamientosCounts[property.id] || 0,
           bodegas_count: bodegasCounts[property.id] || 0,
           payment_status: paymentStatus,
