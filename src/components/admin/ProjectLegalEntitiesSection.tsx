@@ -18,14 +18,17 @@ import {
 interface ProjectLegalEntitiesSectionProps {
   projectId?: number;
   isCreating?: boolean;
+  isProductosOrServicios?: boolean;
 }
 
 export const ProjectLegalEntitiesSection = ({ 
   projectId, 
-  isCreating = false 
+  isCreating = false,
+  isProductosOrServicios = false
 }: ProjectLegalEntitiesSectionProps) => {
   const [selectedEntityId, setSelectedEntityId] = useState<string>("");
-  const [selectedEntityTypeId, setSelectedEntityTypeId] = useState<string>("");
+  // Para Productos o Servicios, preseleccionar "Dueño Vendedor" (id=4)
+  const [selectedEntityTypeId, setSelectedEntityTypeId] = useState<string>(isProductosOrServicios ? "4" : "");
   const [editingCuentaMadre, setEditingCuentaMadre] = useState<number | null>(null);
   const [tempCuentaMadre, setTempCuentaMadre] = useState<string>("");
   const { toast } = useToast();
@@ -257,6 +260,16 @@ export const ProjectLegalEntitiesSection = ({
     projectLegalEntities.map(entity => entity.id_tipo_entidad)
   );
 
+  // Get used entity IDs (personas) for this specific project to avoid duplicates
+  const usedEntityIds = new Set(
+    projectLegalEntities.map(entity => entity.personas?.id)
+  );
+
+  // Filter out already selected entities
+  const availableFilteredEntities = filteredEntities.filter(
+    entity => !usedEntityIds.has(entity.id)
+  );
+
   // Check if entity has generated STP accounts (first 14 digits match)
   const { data: entitiesWithAccounts = [] } = useQuery({
     queryKey: ["entities-with-accounts", projectId],
@@ -432,8 +445,9 @@ export const ProjectLegalEntitiesSection = ({
                   setSelectedEntityTypeId(value);
                   setSelectedEntityId("");
                 }}
+                disabled={isProductosOrServicios}
               >
-                <SelectTrigger>
+                <SelectTrigger className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""}>
                   <SelectValue placeholder="Selecciona un tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -466,7 +480,7 @@ export const ProjectLegalEntitiesSection = ({
                   <SelectValue placeholder="Selecciona una entidad" />
                 </SelectTrigger>
                  <SelectContent>
-                   {filteredEntities.map((entity) => (
+                   {availableFilteredEntities.map((entity) => (
                      <SelectItem key={entity.id} value={entity.id.toString()}>
                        <div>
                          <div className="font-medium">{entity.nombre_legal}</div>
@@ -483,14 +497,16 @@ export const ProjectLegalEntitiesSection = ({
 
            <Button
              onClick={() => addEntityMutation.mutate()}
-             disabled={!selectedEntityId || !selectedEntityTypeId || addEntityMutation.isPending || filteredEntities.length === 0}
+             disabled={!selectedEntityId || !selectedEntityTypeId || addEntityMutation.isPending || availableFilteredEntities.length === 0}
              className="w-full"
            >
              {addEntityMutation.isPending ? "Agregando..." : "Agregar Entidad"}
            </Button>
-           {selectedEntityTypeId && filteredEntities.length === 0 && (
+           {selectedEntityTypeId && availableFilteredEntities.length === 0 && (
              <p className="text-sm text-muted-foreground text-center">
-               No hay entidades legales disponibles para este tipo.
+               {filteredEntities.length > 0 
+                 ? "Todas las entidades de este tipo ya fueron asignadas al proyecto."
+                 : "No hay entidades legales disponibles para este tipo."}
              </p>
            )}
         </CardContent>
