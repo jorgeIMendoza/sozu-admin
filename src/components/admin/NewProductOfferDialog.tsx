@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart, UserPlus } from "lucide-react";
@@ -78,6 +78,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const selectedProductRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
 
@@ -345,17 +346,26 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       title: "Producto/Servicio seleccionado",
       description: "Ahora puedes generar la oferta",
     });
+
+    // Scroll to selected product section
+    setTimeout(() => {
+      selectedProductRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'end' 
+      });
+    }, 100);
   };
 
   const handleGenerateOffer = async () => {
     setIsGenerating(true);
     
     try {
-      // Get current user email
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.email) {
+      // Get current user email from session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.email) {
         throw new Error("No se pudo obtener el email del usuario");
       }
+      const userEmail = session.user.email;
 
       const formValues = form.getValues();
       
@@ -421,7 +431,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
           id_producto: selectedProduct,
           id_propiedad: null,
           id_esquema_pago_seleccionado: esquemaPago.id,
-          email_creador: user.email,
+          email_creador: userEmail,
           clabe_stp_tmp_producto: clabeData,
         });
       
@@ -818,7 +828,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
 
               {/* Selected Product/Service Display */}
               {selectedProductData && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div ref={selectedProductRef} className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <h4 className="font-semibold text-green-900 mb-2">
                     ✓ Producto/Servicio Seleccionado
                   </h4>
