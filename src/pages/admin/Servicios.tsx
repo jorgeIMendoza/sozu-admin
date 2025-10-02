@@ -61,7 +61,7 @@ export default function Servicios() {
         *,
         categorias_producto!productos_servicios_id_categoria_fkey (nombre),
         entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
-          personas (nombre_legal)
+          personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
         ),
         unidades_sat (descripcion)
       `)
