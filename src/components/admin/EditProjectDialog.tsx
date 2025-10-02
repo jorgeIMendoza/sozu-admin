@@ -1105,7 +1105,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
             </form>
           </Form>
         )}
-        <DialogFooter className="px-6 pb-6">
+        <DialogFooter className="px-6 pb-6 gap-4">
           <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isSubmitting}>
             {isSubmitting ? "Guardando..." : "Guardar Cambios"}
           </Button>
