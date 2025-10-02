@@ -795,7 +795,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                   </>
                 )}
 
-                <div className="flex justify-end space-x-2">
+                <div className="flex justify-end space-x-2 mt-8">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Cancelar
                   </Button>
