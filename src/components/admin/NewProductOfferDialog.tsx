@@ -274,20 +274,20 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DialogTrigger asChild>
                 <Button variant="ghost" size="sm" className="hover:bg-blue-50 hover:text-blue-600">
                   <ShoppingCart className="h-4 w-4" />
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Generar oferta de productos/servicios</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </DialogTrigger>
+              </DialogTrigger>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Generar oferta de productos/servicios</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Generar Oferta de Producto/Servicio</DialogTitle>
