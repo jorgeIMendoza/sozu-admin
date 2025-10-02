@@ -22,12 +22,12 @@ type Producto = {
   sat_id?: string;
   id_unidad_sat?: string;
   id_categoria: number;
-  id_persona: number;
+  id_entidad_relacionada_dueno: number;
   stock: number;
   activo: boolean;
   precio_lista: number;
   categoria_nombre?: string;
-  persona_nombre?: string;
+  dueno_nombre?: string;
   unidad_sat_descripcion?: string;
 };
 
@@ -48,7 +48,7 @@ export default function Productos() {
     sat_id: "",
     id_unidad_sat: "",
     id_categoria: "",
-    id_persona: "",
+    id_entidad_relacionada_dueno: "",
     stock: 0,
     precio_lista: 0,
   });
@@ -63,7 +63,9 @@ export default function Productos() {
       .select(`
         *,
         categorias_producto!productos_servicios_id_categoria_fkey (nombre),
-        personas!productos_servicios_id_persona_fkey (nombre_legal),
+        entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
+          personas (nombre_legal)
+        ),
         unidades_sat (descripcion)
       `)
       .eq('activo', activo)
@@ -79,12 +81,12 @@ export default function Productos() {
       sat_id: item.sat_id,
       id_unidad_sat: item.id_unidad_sat,
       id_categoria: item.id_categoria,
-      id_persona: item.id_persona,
+      id_entidad_relacionada_dueno: item.id_entidad_relacionada_dueno,
       stock: item.stock,
       activo: item.activo,
       precio_lista: item.precio_lista || 0,
       categoria_nombre: item.categorias_producto?.nombre,
-      persona_nombre: item.personas?.nombre_legal,
+      dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
       unidad_sat_descripcion: item.unidades_sat?.descripcion,
     })) as Producto[];
   };
@@ -103,18 +105,18 @@ export default function Productos() {
     },
   });
 
-  // Fetch personas - solo entidades legales de tipo Contratista (13), Dueño Vendedor (4), Proveedor (8)
+  // Fetch entidades relacionadas - solo entidades legales de tipo Contratista (13), Dueño Vendedor (4), Proveedor (8)
   // filtradas por proyectos de tipo "Productos" (id_tipo_uso = 9)
-  const { data: personas = [] } = useQuery({
-    queryKey: ['personas-productos'],
+  const { data: entidadesRelacionadas = [] } = useQuery({
+    queryKey: ['entidades-relacionadas-productos'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('entidades_relacionadas')
         .select(`
+          id,
           id_persona,
           id_proyecto,
           personas!entidades_relacionadas_id_persona_fkey (
-            id,
             nombre_legal
           ),
           proyectos!entidades_relacionadas_id_proyecto_fkey (
@@ -131,18 +133,10 @@ export default function Productos() {
         item.proyectos && item.proyectos.id_tipo_uso === 9
       );
       
-      // Extraer personas únicas y mapear al formato esperado
-      const uniquePersonas = new Map();
-      filteredData.forEach((item: any) => {
-        if (item.personas && !uniquePersonas.has(item.personas.id)) {
-          uniquePersonas.set(item.personas.id, {
-            id: item.personas.id,
-            nombre_legal: item.personas.nombre_legal
-          });
-        }
-      });
-      
-      return Array.from(uniquePersonas.values()).sort((a, b) => 
+      return filteredData.map((item: any) => ({
+        id: item.id,
+        nombre_legal: item.personas?.nombre_legal || 'Sin nombre'
+      })).sort((a, b) => 
         a.nombre_legal.localeCompare(b.nombre_legal)
       );
     },
@@ -201,7 +195,7 @@ export default function Productos() {
       sat_id: "",
       id_unidad_sat: "",
       id_categoria: "",
-      id_persona: "",
+      id_entidad_relacionada_dueno: "",
       stock: 0,
       precio_lista: 0,
     });
@@ -215,7 +209,7 @@ export default function Productos() {
           ...data,
           es_producto: true,
           id_categoria: parseInt(data.id_categoria),
-          id_persona: parseInt(data.id_persona),
+          id_entidad_relacionada_dueno: parseInt(data.id_entidad_relacionada_dueno),
           id_unidad_sat: data.id_unidad_sat === "" ? null : data.id_unidad_sat,
           sat_id: data.sat_id === "" ? null : data.sat_id,
         }]);
@@ -247,7 +241,7 @@ export default function Productos() {
         .update({
           ...data,
           id_categoria: parseInt(data.id_categoria),
-          id_persona: parseInt(data.id_persona),
+          id_entidad_relacionada_dueno: parseInt(data.id_entidad_relacionada_dueno),
           id_unidad_sat: data.id_unidad_sat === "" ? null : data.id_unidad_sat,
           sat_id: data.sat_id === "" ? null : data.sat_id,
         })
@@ -336,7 +330,7 @@ export default function Productos() {
       sat_id: producto.sat_id || "",
       id_unidad_sat: producto.id_unidad_sat || "",
       id_categoria: producto.id_categoria.toString(),
-      id_persona: producto.id_persona.toString(),
+      id_entidad_relacionada_dueno: producto.id_entidad_relacionada_dueno.toString(),
       stock: producto.stock,
       precio_lista: producto.precio_lista || 0,
     });
@@ -440,7 +434,7 @@ export default function Productos() {
                 </TableCell>
                 <TableCell className="font-mono text-sm">{producto.sat_id || '-'}</TableCell>
                 <TableCell>{producto.unidad_sat_descripcion || '-'}</TableCell>
-                <TableCell>{producto.persona_nombre || '-'}</TableCell>
+                <TableCell>{producto.dueno_nombre || '-'}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end space-x-2">
                     {producto.activo ? (
@@ -641,19 +635,19 @@ export default function Productos() {
 
             {/* Dueño */}
             <div className="space-y-2">
-              <Label htmlFor="id_persona">Dueño *</Label>
+              <Label htmlFor="id_entidad_relacionada_dueno">Dueño *</Label>
               <Select
-                value={formData.id_persona}
-                onValueChange={(value) => setFormData({ ...formData, id_persona: value })}
+                value={formData.id_entidad_relacionada_dueno}
+                onValueChange={(value) => setFormData({ ...formData, id_entidad_relacionada_dueno: value })}
                 required
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona un dueño" />
                 </SelectTrigger>
                 <SelectContent>
-                  {personas.map((persona: any) => (
-                    <SelectItem key={persona.id} value={persona.id.toString()}>
-                      {persona.nombre_legal}
+                  {entidadesRelacionadas.map((entidad: any) => (
+                    <SelectItem key={entidad.id} value={entidad.id.toString()}>
+                      {entidad.nombre_legal}
                     </SelectItem>
                   ))}
                 </SelectContent>

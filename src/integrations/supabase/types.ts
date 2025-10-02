@@ -770,7 +770,6 @@ export type Database = {
         Row: {
           activo: boolean
           clabe_stp: string | null
-          clabe_stp_mantenimiento: string | null
           clave_rastreo_comision_venta: string | null
           es_aprobado: boolean
           es_comision_venta_efectivo: boolean
@@ -792,7 +791,6 @@ export type Database = {
         Insert: {
           activo?: boolean
           clabe_stp?: string | null
-          clabe_stp_mantenimiento?: string | null
           clave_rastreo_comision_venta?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
@@ -814,7 +812,6 @@ export type Database = {
         Update: {
           activo?: boolean
           clabe_stp?: string | null
-          clabe_stp_mantenimiento?: string | null
           clave_rastreo_comision_venta?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
@@ -867,6 +864,108 @@ export type Database = {
             columns: ["id_oferta"]
             isOneToOne: false
             referencedRelation: "ofertas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cuentas_cobranza_mantenimiento: {
+        Row: {
+          activo: boolean
+          clabe_stp_mantenimiento: string | null
+          clave_rastreo_comision_venta: string | null
+          es_aprobado: boolean
+          es_comision_venta_efectivo: boolean
+          es_pagada_comision_venta: boolean
+          fecha_actualizacion: string
+          fecha_compra: string | null
+          fecha_creacion: string
+          id: number
+          id_notario: number | null
+          id_oferta: number
+          id_tipo_cancelacion: number | null
+          moneda: string | null
+          monto_cobro_cancelacion: number | null
+          porcentaje_comision_venta: number
+          precio_final: number
+          url_evidencia_cancelacion: string | null
+          valor_uma: number | null
+        }
+        Insert: {
+          activo?: boolean
+          clabe_stp_mantenimiento?: string | null
+          clave_rastreo_comision_venta?: string | null
+          es_aprobado?: boolean
+          es_comision_venta_efectivo?: boolean
+          es_pagada_comision_venta?: boolean
+          fecha_actualizacion?: string
+          fecha_compra?: string | null
+          fecha_creacion?: string
+          id?: number
+          id_notario?: number | null
+          id_oferta: number
+          id_tipo_cancelacion?: number | null
+          moneda?: string | null
+          monto_cobro_cancelacion?: number | null
+          porcentaje_comision_venta?: number
+          precio_final?: number
+          url_evidencia_cancelacion?: string | null
+          valor_uma?: number | null
+        }
+        Update: {
+          activo?: boolean
+          clabe_stp_mantenimiento?: string | null
+          clave_rastreo_comision_venta?: string | null
+          es_aprobado?: boolean
+          es_comision_venta_efectivo?: boolean
+          es_pagada_comision_venta?: boolean
+          fecha_actualizacion?: string
+          fecha_compra?: string | null
+          fecha_creacion?: string
+          id?: number
+          id_notario?: number | null
+          id_oferta?: number
+          id_tipo_cancelacion?: number | null
+          moneda?: string | null
+          monto_cobro_cancelacion?: number | null
+          porcentaje_comision_venta?: number
+          precio_final?: number
+          url_evidencia_cancelacion?: string | null
+          valor_uma?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cuentas_cobranza_mantenimient_clave_rastreo_comision_venta_fkey"
+            columns: ["clave_rastreo_comision_venta"]
+            isOneToOne: true
+            referencedRelation: "pagos_stp_raw"
+            referencedColumns: ["claverastreo"]
+          },
+          {
+            foreignKeyName: "cuentas_cobranza_mantenimiento_id_notario_fkey"
+            columns: ["id_notario"]
+            isOneToOne: false
+            referencedRelation: "notarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuentas_cobranza_mantenimiento_id_oferta_fkey"
+            columns: ["id_oferta"]
+            isOneToOne: false
+            referencedRelation: "ofertas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuentas_cobranza_mantenimiento_id_oferta_fkey1"
+            columns: ["id_oferta"]
+            isOneToOne: false
+            referencedRelation: "ofertas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuentas_cobranza_mantenimiento_id_tipo_cancelacion_fkey"
+            columns: ["id_tipo_cancelacion"]
+            isOneToOne: false
+            referencedRelation: "tipos_cancelacion"
             referencedColumns: ["id"]
           },
         ]
@@ -2058,6 +2157,7 @@ export type Database = {
       ofertas: {
         Row: {
           activo: boolean
+          clabe_stp_tmp_producto: string | null
           email_creador: string
           fecha_actualizacion: string
           fecha_creacion: string
@@ -2070,6 +2170,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          clabe_stp_tmp_producto?: string | null
           email_creador: string
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -2082,6 +2183,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          clabe_stp_tmp_producto?: string | null
           email_creador?: string
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -2287,6 +2389,7 @@ export type Database = {
           fecha_operacion: string | null
           folio_codi: string | null
           id: number
+          id_tipo_pago: number
           institucion_beneficiaria: string | null
           institucion_ordenante: string | null
           monto: number
@@ -2317,6 +2420,7 @@ export type Database = {
           fecha_operacion?: string | null
           folio_codi?: string | null
           id?: number
+          id_tipo_pago?: number
           institucion_beneficiaria?: string | null
           institucion_ordenante?: string | null
           monto: number
@@ -2347,6 +2451,7 @@ export type Database = {
           fecha_operacion?: string | null
           folio_codi?: string | null
           id?: number
+          id_tipo_pago?: number
           institucion_beneficiaria?: string | null
           institucion_ordenante?: string | null
           monto?: number
@@ -2364,7 +2469,15 @@ export type Database = {
           tipo_pago?: string | null
           ts_liquidacion?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pagos_stp_raw_id_tipo_pago_fkey"
+            columns: ["id_tipo_pago"]
+            isOneToOne: false
+            referencedRelation: "tipos_pago"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       paises: {
         Row: {
@@ -2718,7 +2831,7 @@ export type Database = {
           fecha_creacion: string
           id: number
           id_categoria: number | null
-          id_persona: number
+          id_entidad_relacionada_dueno: number
           id_unidad_sat: string | null
           nombre: string
           precio_lista: number | null
@@ -2733,7 +2846,7 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           id_categoria?: number | null
-          id_persona: number
+          id_entidad_relacionada_dueno: number
           id_unidad_sat?: string | null
           nombre: string
           precio_lista?: number | null
@@ -2748,7 +2861,7 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           id_categoria?: number | null
-          id_persona?: number
+          id_entidad_relacionada_dueno?: number
           id_unidad_sat?: string | null
           nombre?: string
           precio_lista?: number | null
@@ -2765,7 +2878,7 @@ export type Database = {
           },
           {
             foreignKeyName: "fk_prodserv_persona"
-            columns: ["id_persona"]
+            columns: ["id_entidad_relacionada_dueno"]
             isOneToOne: false
             referencedRelation: "personas"
             referencedColumns: ["id"]
@@ -2786,7 +2899,7 @@ export type Database = {
           },
           {
             foreignKeyName: "productos_servicios_id_persona_fkey"
-            columns: ["id_persona"]
+            columns: ["id_entidad_relacionada_dueno"]
             isOneToOne: false
             referencedRelation: "personas"
             referencedColumns: ["id"]
@@ -3573,6 +3686,30 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           nombre?: string
+        }
+        Relationships: []
+      }
+      tipos_pago: {
+        Row: {
+          activo: boolean | null
+          fecha_actualizacion: string | null
+          fecha_creacion: string
+          id: number
+          nombre: string | null
+        }
+        Insert: {
+          activo?: boolean | null
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string
+          id?: number
+          nombre?: string | null
+        }
+        Update: {
+          activo?: boolean | null
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string
+          id?: number
+          nombre?: string | null
         }
         Relationships: []
       }
