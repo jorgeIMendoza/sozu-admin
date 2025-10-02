@@ -22,6 +22,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
   const [open, setOpen] = useState(false);
   const [useCurrentBuyer, setUseCurrentBuyer] = useState(true);
   const [showProspectSearch, setShowProspectSearch] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
@@ -389,22 +390,40 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
             {showProspectSearch && (
               <div className="space-y-2">
                 <Label>Buscar Prospecto</Label>
-                <Popover open={searchTerm.length >= 2}>
+                <Popover open={searchOpen} onOpenChange={setSearchOpen}>
                   <PopoverTrigger asChild>
-                    <Input
-                      placeholder="Buscar por nombre, email o RFC..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={searchOpen}
+                      className="w-full justify-between"
+                    >
+                      {searchTerm || "Buscar por nombre..."}
+                      <Command className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[400px] p-0" align="start">
+                  <PopoverContent className="w-full p-0" align="start">
                     <Command>
-                      <CommandEmpty>No se encontraron resultados.</CommandEmpty>
+                      <CommandInput
+                        placeholder="Buscar persona..."
+                        value={searchTerm}
+                        onValueChange={setSearchTerm}
+                      />
+                      <CommandEmpty>
+                        {searchTerm.length < 2 
+                          ? "Escribe al menos 2 caracteres para buscar" 
+                          : "No se encontraron resultados."}
+                      </CommandEmpty>
                       <CommandGroup>
                         {existingPersonas.map((persona: any) => (
                           <CommandItem
                             key={persona.id}
-                            onSelect={() => handleSelectExistingPerson(persona)}
+                            value={persona.nombre_legal}
+                            onSelect={() => {
+                              handleSelectExistingPerson(persona);
+                              setSearchOpen(false);
+                              setSearchTerm("");
+                            }}
                           >
                             <div className="flex flex-col">
                               <span className="font-medium">{persona.nombre_legal}</span>
