@@ -428,25 +428,27 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
                   >
                     <SelectTrigger id="tipo-persona">
                       <SelectValue>
-                        {prospectData.tipo_persona || "Selecciona tipo de persona"}
+                        {prospectData.tipo_persona === "pf" ? "Persona Física" : 
+                         prospectData.tipo_persona === "pm" ? "Persona Moral" : 
+                         "Selecciona tipo de persona"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Persona Física">Persona Física</SelectItem>
-                      <SelectItem value="Persona Moral">Persona Moral</SelectItem>
+                      <SelectItem value="pf">Persona Física</SelectItem>
+                      <SelectItem value="pm">Persona Moral</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="razon-social">
-                    {prospectData.tipo_persona === "Persona Física" ? "Nombre completo *" : "Razón Social *"}
+                    {prospectData.tipo_persona === "pf" ? "Nombre completo *" : "Razón Social *"}
                   </Label>
                   <Input
                     id="razon-social"
                     value={prospectData.razon_social}
                     onChange={(e) => setProspectData({ ...prospectData, razon_social: e.target.value })}
-                    placeholder={prospectData.tipo_persona === "Persona Física" ? "Ingresa el nombre completo" : "Ingresa la razón social"}
+                    placeholder={prospectData.tipo_persona === "pf" ? "Ingresa el nombre completo" : "Ingresa la razón social"}
                     disabled={useCurrentBuyer}
                   />
                 </div>
