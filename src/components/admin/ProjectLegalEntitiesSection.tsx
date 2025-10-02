@@ -214,7 +214,15 @@ export const ProjectLegalEntitiesSection = ({
       });
       setSelectedEntityId("");
       setSelectedEntityTypeId("");
-      queryClient.invalidateQueries({ queryKey: ["project-legal-entities", projectId] });
+      // Invalidar solo la query de entidades legales específica, sin refetch automático
+      queryClient.invalidateQueries({ 
+        queryKey: ["project-legal-entities", projectId],
+        refetchType: 'none' 
+      });
+      // Hacer refetch manual después de un pequeño delay
+      setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ["project-legal-entities", projectId] });
+      }, 100);
     },
     onError: (error: any) => {
       toast({
@@ -240,7 +248,15 @@ export const ProjectLegalEntitiesSection = ({
         title: "Entidad removida",
         description: "La entidad legal se removió del proyecto exitosamente.",
       });
-      queryClient.invalidateQueries({ queryKey: ["project-legal-entities", projectId] });
+      // Invalidar solo la query de entidades legales específica, sin refetch automático
+      queryClient.invalidateQueries({ 
+        queryKey: ["project-legal-entities", projectId],
+        refetchType: 'none' 
+      });
+      // Hacer refetch manual después de un pequeño delay
+      setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ["project-legal-entities", projectId] });
+      }, 100);
     },
     onError: () => {
       toast({
@@ -402,7 +418,15 @@ export const ProjectLegalEntitiesSection = ({
       });
       setEditingCuentaMadre(null);
       setTempCuentaMadre("");
-      queryClient.invalidateQueries({ queryKey: ["project-legal-entities", projectId] });
+      // Invalidar solo la query de entidades legales específica, sin refetch automático
+      queryClient.invalidateQueries({ 
+        queryKey: ["project-legal-entities", projectId],
+        refetchType: 'none' 
+      });
+      // Hacer refetch manual después de un pequeño delay
+      setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ["project-legal-entities", projectId] });
+      }, 100);
     },
     onError: (error: any) => {
       toast({
