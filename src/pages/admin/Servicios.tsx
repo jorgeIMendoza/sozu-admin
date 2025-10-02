@@ -100,6 +100,7 @@ export default function Servicios() {
   });
 
   // Fetch personas - solo entidades legales de tipo Contratista (13), Dueño Vendedor (4), Proveedor (8)
+  // filtradas por proyectos de tipo "Servicios" (id_tipo_uso = 10)
   const { data: personas = [] } = useQuery({
     queryKey: ['personas-servicios'],
     queryFn: async () => {
@@ -107,18 +108,28 @@ export default function Servicios() {
         .from('entidades_relacionadas')
         .select(`
           id_persona,
+          id_proyecto,
           personas!entidades_relacionadas_id_persona_fkey (
             id,
             nombre_legal
+          ),
+          proyectos!entidades_relacionadas_id_proyecto_fkey (
+            id_tipo_uso
           )
         `)
         .in('id_tipo_entidad', [4, 8, 13])
-        .eq('activo', true);
+        .eq('activo', true)
+        .not('id_proyecto', 'is', null);
       if (error) throw error;
+      
+      // Filtrar solo entidades de proyectos de tipo "Servicios" (id_tipo_uso = 10)
+      const filteredData = (data || []).filter((item: any) => 
+        item.proyectos && item.proyectos.id_tipo_uso === 10
+      );
       
       // Extraer personas únicas y mapear al formato esperado
       const uniquePersonas = new Map();
-      (data || []).forEach((item: any) => {
+      filteredData.forEach((item: any) => {
         if (item.personas && !uniquePersonas.has(item.personas.id)) {
           uniquePersonas.set(item.personas.id, {
             id: item.personas.id,
