@@ -5,7 +5,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Building2, Users } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Trash2, Building2, Users, Edit2, Save, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -25,6 +26,8 @@ export const ProjectLegalEntitiesSection = ({
 }: ProjectLegalEntitiesSectionProps) => {
   const [selectedEntityId, setSelectedEntityId] = useState<string>("");
   const [selectedEntityTypeId, setSelectedEntityTypeId] = useState<string>("");
+  const [editingCuentaMadre, setEditingCuentaMadre] = useState<number | null>(null);
+  const [tempCuentaMadre, setTempCuentaMadre] = useState<string>("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -144,6 +147,7 @@ export const ProjectLegalEntitiesSection = ({
         .select(`
           id,
           id_tipo_entidad,
+          cuenta_madre_stp,
           personas!entidades_relacionadas_id_persona_fkey (
             id,
             nombre_legal,
@@ -252,6 +256,70 @@ export const ProjectLegalEntitiesSection = ({
   const usedEntityTypes = new Set(
     projectLegalEntities.map(entity => entity.id_tipo_entidad)
   );
+
+  // Check if entity has collection accounts
+  const { data: entitiesWithAccounts = [] } = useQuery({
+    queryKey: ["entities-with-accounts", projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      
+      const { data, error } = await supabase
+        .from("propiedades")
+        .select(`
+          id_entidad_relacionada_dueno,
+          ofertas!inner (
+            id,
+            cuentas_cobranza!inner (
+              id
+            )
+          )
+        `)
+        .eq("activo", true);
+      
+      if (error) throw error;
+      
+      // Extract unique entity IDs that have collection accounts
+      const entityIds = new Set(
+        (data || []).map(prop => prop.id_entidad_relacionada_dueno)
+      );
+      
+      return Array.from(entityIds);
+    },
+    enabled: !!projectId,
+  });
+
+  // Update cuenta madre STP mutation
+  const updateCuentaMadreMutation = useMutation({
+    mutationFn: async ({ entityId, cuentaMadre }: { entityId: number; cuentaMadre: string }) => {
+      // Validate format (17 digits)
+      if (cuentaMadre && !/^\d{17}$/.test(cuentaMadre)) {
+        throw new Error("La cuenta madre STP debe tener exactamente 17 dígitos");
+      }
+
+      const { error } = await supabase
+        .from("entidades_relacionadas")
+        .update({ cuenta_madre_stp: cuentaMadre || null })
+        .eq("id", entityId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Cuenta actualizada",
+        description: "La cuenta madre STP se actualizó exitosamente.",
+      });
+      setEditingCuentaMadre(null);
+      setTempCuentaMadre("");
+      queryClient.invalidateQueries({ queryKey: ["project-legal-entities", projectId] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Hubo un error al actualizar la cuenta madre STP.",
+        variant: "destructive",
+      });
+    },
+  });
 
 
   if (isCreating) {
@@ -370,43 +438,109 @@ export const ProjectLegalEntitiesSection = ({
           </Card>
         ) : (
           <div className="grid gap-4">
-            {projectLegalEntities.map((entity) => (
-              <Card key={entity.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <h4 className="font-semibold text-lg">
-                            {entity.personas?.nombre_legal}
-                          </h4>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge variant="outline">
-                              {entity.tipos_entidad?.nombre}
-                            </Badge>
+            {projectLegalEntities.map((entity) => {
+              const hasAccounts = entitiesWithAccounts.includes(entity.id);
+              const isEditing = editingCuentaMadre === entity.id;
+              
+              return (
+                <Card key={entity.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-lg">
+                              {entity.personas?.nombre_legal}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline">
+                                {entity.tipos_entidad?.nombre}
+                              </Badge>
+                            </div>
                           </div>
                         </div>
+                        <div className="mt-2 text-sm text-muted-foreground">
+                          <div>Email: {entity.personas?.email}</div>
+                          {entity.personas?.telefono && (
+                            <div>Teléfono: {entity.personas.telefono}</div>
+                          )}
+                        </div>
+                        
+                        {/* Cuenta Madre STP Field */}
+                        <div className="mt-3 pt-3 border-t">
+                          <label className="text-sm font-medium">Cuenta Madre STP:</label>
+                          {isEditing ? (
+                            <div className="flex items-center gap-2 mt-1">
+                              <Input
+                                value={tempCuentaMadre}
+                                onChange={(e) => setTempCuentaMadre(e.target.value)}
+                                placeholder="17 dígitos"
+                                maxLength={17}
+                                className="flex-1"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  updateCuentaMadreMutation.mutate({
+                                    entityId: entity.id,
+                                    cuentaMadre: tempCuentaMadre
+                                  });
+                                }}
+                                disabled={updateCuentaMadreMutation.isPending}
+                              >
+                                <Save className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingCuentaMadre(null);
+                                  setTempCuentaMadre("");
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-sm font-mono flex-1">
+                                {entity.cuenta_madre_stp || <span className="text-muted-foreground italic">No asignada</span>}
+                              </span>
+                              {!hasAccounts && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setEditingCuentaMadre(entity.id);
+                                    setTempCuentaMadre(entity.cuenta_madre_stp || "");
+                                  }}
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {hasAccounts && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Con cuentas generadas
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="mt-2 text-sm text-muted-foreground">
-                        <div>Email: {entity.personas?.email}</div>
-                        {entity.personas?.telefono && (
-                          <div>Teléfono: {entity.personas.telefono}</div>
-                        )}
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeEntityMutation.mutate(entity.id)}
+                        disabled={removeEntityMutation.isPending}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeEntityMutation.mutate(entity.id)}
-                      disabled={removeEntityMutation.isPending}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
