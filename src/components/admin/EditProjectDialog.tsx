@@ -426,7 +426,11 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                           </FormControl>
                           <SelectContent>
                             {tiposUso?.map((tipo) => (
-                              <SelectItem key={tipo.id} value={tipo.id.toString()}>
+                              <SelectItem 
+                                key={tipo.id} 
+                                value={tipo.id.toString()}
+                                disabled={tipo.id === 9 || tipo.id === 10}
+                              >
                                 {tipo.nombre}
                               </SelectItem>
                             ))}
