@@ -344,12 +344,32 @@ export const ProjectLegalEntitiesSection = ({
     enabled: !!projectId,
   });
 
+  // Check if entity has assigned properties
+  const { data: entitiesWithProperties = [] } = useQuery({
+    queryKey: ["entities-with-properties", projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      
+      const { data, error } = await supabase
+        .from("propiedades")
+        .select("id_entidad_relacionada_dueno")
+        .eq("activo", true);
+      
+      if (error) throw error;
+      
+      // Get unique entity IDs that have properties
+      const entityIds = new Set(data?.map(p => p.id_entidad_relacionada_dueno) || []);
+      return Array.from(entityIds);
+    },
+    enabled: !!projectId,
+  });
+
   // Update cuenta madre STP mutation
   const updateCuentaMadreMutation = useMutation({
     mutationFn: async ({ entityId, cuentaMadre }: { entityId: number; cuentaMadre: string }) => {
-      // Validate format (17 digits)
-      if (cuentaMadre && !/^\d{17}$/.test(cuentaMadre)) {
-        throw new Error("La cuenta madre STP debe tener exactamente 17 dígitos");
+      // Validate format (14 digits)
+      if (cuentaMadre && !/^\d{14}$/.test(cuentaMadre)) {
+        throw new Error("La cuenta madre STP debe tener exactamente 14 dígitos");
       }
 
       const { error } = await supabase
@@ -496,6 +516,7 @@ export const ProjectLegalEntitiesSection = ({
           <div className="grid gap-4">
             {projectLegalEntities.map((entity) => {
               const hasAccounts = entitiesWithAccounts.includes(entity.id);
+              const hasProperties = entitiesWithProperties.includes(entity.id);
               const isEditing = editingCuentaMadre === entity.id;
               
               return (
@@ -531,8 +552,8 @@ export const ProjectLegalEntitiesSection = ({
                                 <Input
                                   value={tempCuentaMadre}
                                   onChange={(e) => setTempCuentaMadre(e.target.value)}
-                                  placeholder="17 dígitos"
-                                  maxLength={17}
+                                  placeholder="14 dígitos"
+                                  maxLength={14}
                                   className="flex-1"
                                 />
                                 <Button
@@ -591,9 +612,15 @@ export const ProjectLegalEntitiesSection = ({
                         variant="ghost"
                         size="sm"
                         onClick={() => removeEntityMutation.mutate(entity.id)}
-                        disabled={removeEntityMutation.isPending || hasAccounts}
+                        disabled={removeEntityMutation.isPending || hasAccounts || hasProperties}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        title={hasAccounts ? "No se puede eliminar: tiene cuentas STP generadas" : "Eliminar entidad"}
+                        title={
+                          hasAccounts 
+                            ? "No se puede eliminar: tiene cuentas STP generadas" 
+                            : hasProperties
+                            ? "No se puede eliminar: tiene propiedades asignadas"
+                            : "Eliminar entidad"
+                        }
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
