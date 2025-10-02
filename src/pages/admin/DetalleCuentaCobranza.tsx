@@ -574,7 +574,7 @@ export default function DetalleCuentaCobranza() {
                  url_recibo: pago?.url_recibo || null
                }
             };
-          }),
+          }).sort((a, b) => a.pago.id - b.pago.id),
           multas: multasConEstado.map(m => ({
             id: m.id,
             monto: m.saldoPendiente, // Show pending balance
