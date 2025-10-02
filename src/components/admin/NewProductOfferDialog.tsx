@@ -74,8 +74,10 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
+  const [selectedProductData, setSelectedProductData] = useState<any>(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const { toast } = useToast();
 
@@ -106,6 +108,9 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       setSelectedPerson(null);
       setSearchTerm("");
       setSearchOpen(false);
+      setSelectedCategory(null);
+      setSelectedProduct(null);
+      setSelectedProductData(null);
       form.reset({
         porcentaje_enganche: "",
         porcentaje_mensualidades: "",
@@ -316,36 +321,138 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
   };
 
   const handleProductSelect = async (productId: number) => {
+    // Fetch full product data
+    const { data: productData, error } = await supabase
+      .from('productos_servicios')
+      .select('*')
+      .eq('id', productId)
+      .single();
+    
+    if (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo cargar la información del producto",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSelectedProduct(productId);
+    setSelectedProductData(productData);
+    setShowCategoryDialog(false);
     
     toast({
       title: "Producto/Servicio seleccionado",
-      description: "Se ha registrado la oferta de producto/servicio",
+      description: "Ahora puedes generar la oferta",
     });
+  };
 
-    // Close dialogs
-    setShowCategoryDialog(false);
-    setOpen(false);
+  const handleGenerateOffer = async () => {
+    setIsGenerating(true);
     
-    // Reset form
-    form.reset({
-      porcentaje_enganche: "",
-      porcentaje_mensualidades: "",
-      porcentaje_entrega: "",
-      numero_mensualidades: "",
-      porcentaje_descuento_aumento: "",
-      tipo_persona: "pf",
-      razon_social: "",
-      email: "",
-      telefono: "",
-      rfc: "",
-      curp: "",
-    });
-    setUseCurrentBuyer(true);
-    setShowProspectSearch(false);
-    setSelectedCategory(null);
-    setSelectedProduct(null);
-    setSelectedPerson(null);
+    try {
+      // Get current user email
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        throw new Error("No se pudo obtener el email del usuario");
+      }
+
+      const formValues = form.getValues();
+      
+      // Step 1: Create or get persona (comprador)
+      let personaId: number;
+      
+      if (useCurrentBuyer && currentBuyerData) {
+        personaId = currentBuyerData.id;
+      } else if (selectedPerson) {
+        personaId = selectedPerson.id;
+      } else {
+        // Create new persona
+        const { data: newPersona, error: personaError } = await supabase
+          .from('personas')
+          .insert({
+            tipo_persona: formValues.tipo_persona,
+            nombre_legal: formValues.razon_social,
+            email: formValues.email,
+            telefono: formValues.telefono,
+            rfc: formValues.rfc,
+            curp: formValues.curp || null,
+          })
+          .select()
+          .single();
+        
+        if (personaError) throw personaError;
+        personaId = newPersona.id;
+      }
+
+      // Step 2: Create payment scheme
+      const { data: esquemaPago, error: esquemaError } = await supabase
+        .from('esquemas_pago')
+        .insert({
+          nombre: `Esquema ${formValues.razon_social} - ${new Date().toLocaleDateString()}`,
+          porcentaje_enganche: parseFloat(formValues.porcentaje_enganche),
+          porcentaje_mensualidades: parseFloat(formValues.porcentaje_mensualidades),
+          porcentaje_entrega: parseFloat(formValues.porcentaje_entrega),
+          numero_mensualidades: parseInt(formValues.numero_mensualidades),
+          porcentaje_descuento_aumento: formValues.porcentaje_descuento_aumento 
+            ? parseFloat(formValues.porcentaje_descuento_aumento) 
+            : 0,
+          es_manual: true,
+          id_producto: selectedProduct,
+        })
+        .select()
+        .single();
+      
+      if (esquemaError) throw esquemaError;
+
+      // Step 3: Get CLABE STP using crear_referencia_bancaria
+      const { data: clabeData, error: clabeError } = await supabase
+        .rpc('crear_referencia_bancaria', {
+          id_er_dueno: selectedProductData.id_entidad_relacionada_dueno
+        });
+      
+      if (clabeError) throw clabeError;
+
+      // Step 4: Create offer
+      const { error: ofertaError } = await supabase
+        .from('ofertas')
+        .insert({
+          id_persona_lead: personaId,
+          id_producto: selectedProduct,
+          id_propiedad: null,
+          id_esquema_pago_seleccionado: esquemaPago.id,
+          email_creador: user.email,
+          clabe_stp_tmp_producto: clabeData,
+        });
+      
+      if (ofertaError) throw ofertaError;
+
+      toast({
+        title: "Éxito",
+        description: "Oferta de producto/servicio generada correctamente",
+      });
+
+      // Reset and close
+      setOpen(false);
+      setShowCategoryDialog(false);
+      form.reset();
+      setUseCurrentBuyer(true);
+      setShowProspectSearch(false);
+      setSelectedCategory(null);
+      setSelectedProduct(null);
+      setSelectedProductData(null);
+      setSelectedPerson(null);
+
+    } catch (error: any) {
+      console.error("Error generating offer:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al generar la oferta",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
@@ -709,13 +816,49 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
                 </div>
               </div>
 
+              {/* Selected Product/Service Display */}
+              {selectedProductData && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-green-900 mb-2">
+                    ✓ Producto/Servicio Seleccionado
+                  </h4>
+                  <div className="space-y-1 text-sm">
+                    <p><span className="font-medium">Nombre:</span> {selectedProductData.nombre}</p>
+                    {selectedProductData.descripcion && (
+                      <p><span className="font-medium">Descripción:</span> {selectedProductData.descripcion}</p>
+                    )}
+                    {selectedProductData.precio_lista && (
+                      <p><span className="font-medium">Precio Lista:</span> ${parseFloat(selectedProductData.precio_lista).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 text-green-700 hover:text-green-900"
+                    onClick={() => {
+                      setSelectedProduct(null);
+                      setSelectedProductData(null);
+                      setShowCategoryDialog(true);
+                    }}
+                  >
+                    Cambiar producto/servicio
+                  </Button>
+                </div>
+              )}
+
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setOpen(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={handleSelectProductService}>
-                  Seleccionar producto/servicio
-                </Button>
+                {!selectedProduct ? (
+                  <Button onClick={handleSelectProductService}>
+                    Seleccionar producto/servicio
+                  </Button>
+                ) : (
+                  <Button onClick={handleGenerateOffer} disabled={isGenerating}>
+                    {isGenerating ? "Generando..." : "Generar Oferta"}
+                  </Button>
+                )}
               </div>
             </div>
           </Form>
