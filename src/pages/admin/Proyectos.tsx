@@ -525,7 +525,7 @@ const Proyectos = () => {
                             }
                           />
                         )}
-                        {!(project.id_tipo_uso === 9 || project.id_tipo_uso === 10) && (
+                        {!(project.id_tipo_uso === 9 || project.id_tipo_uso === 10 || project.id_tipo_uso === 11) && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button 
