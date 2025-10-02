@@ -2059,11 +2059,11 @@ const Propiedades = () => {
                             {new Date(offer.fecha_generacion).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
-                             {(offer.esquema_es_manual || hasPaymentScheme) ? (
+                              {(offer.esquema_es_manual || hasPaymentScheme) ? (
                                <Badge 
                                  variant="outline" 
                                  className={`font-medium ${
-                                   (offer.esquema_es_manual || isAccountActive)
+                                   offer.esquema_id
                                      ? "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700" 
                                      : "bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600"
                                  }`}
@@ -2241,7 +2241,11 @@ const Propiedades = () => {
                         <TableCell>
                           <Badge 
                             variant="outline" 
-                            className="font-medium bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700"
+                            className={`font-medium ${
+                              offer.esquema_id
+                                ? "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700" 
+                                : "bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600"
+                            }`}
                           >
                             {offer.esquema_nombre || 'Sin esquema'}
                           </Badge>
