@@ -2338,41 +2338,61 @@ const Propiedades = () => {
                       
                       return (
                          <TableRow key={offer.id}>
-                          <TableCell className="font-medium">
-                           <Tooltip>
-                             <TooltipTrigger asChild>
-                               <Button
-                                 variant="link"
-                                 size="sm"
-                                  onClick={async () => {
-                                    if (!hasAccount && !hasActiveAccountWithScheme && offer.esquema_id) {
-                                      // Load the specific scheme if not already loaded
-                                      if (!availableSchemes.find(s => s.id === offer.esquema_id)) {
-                                        const { data: schemeData } = await supabase
-                                          .from('esquemas_pago')
-                                          .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
-                                          .eq('id', offer.esquema_id)
-                                          .single();
-                                        
-                                        if (schemeData) {
-                                          setAvailableSchemes([...availableSchemes, schemeData]);
-                                        }
+                         <TableCell className="font-medium">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="link"
+                                size="sm"
+                                onClick={async () => {
+                                  // Si tiene cuenta de cobranza, navegar a ella
+                                  if (hasAccount) {
+                                    navigate(`/admin/cuentas-cobranza/${offer.cuenta_cobranza_id}/detalle`);
+                                    return;
+                                  }
+                                  
+                                  // Si no tiene cuenta pero tiene esquema, ofrecer generarla
+                                  if (!hasActiveAccountWithScheme && offer.esquema_id) {
+                                    // Load the specific scheme if not already loaded
+                                    if (!availableSchemes.find(s => s.id === offer.esquema_id)) {
+                                      const { data: schemeData } = await supabase
+                                        .from('esquemas_pago')
+                                        .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+                                        .eq('id', offer.esquema_id)
+                                        .maybeSingle();
+                                      
+                                      if (schemeData) {
+                                        setAvailableSchemes([...availableSchemes, schemeData]);
                                       }
-                                      setSelectedOfferForAccount({ ...offer, propertyId: selectedPropertyForProductOffers!.id, isProductOffer: true });
-                                      setConfirmGenerateAccountOpen(true);
                                     }
-                                  }}
-                                 disabled={hasAccount || hasActiveAccountWithScheme}
-                                 className="p-0 h-auto font-semibold"
-                               >
-                                 OP-{String(offer.id).padStart(6, '0')}
-                               </Button>
-                             </TooltipTrigger>
-                             <TooltipContent>
-                               <p>Generar cuenta de cobranza manualmente</p>
-                             </TooltipContent>
-                           </Tooltip>
-                         </TableCell>
+                                    setSelectedOfferForAccount({ ...offer, propertyId: selectedPropertyForProductOffers!.id, isProductOffer: true });
+                                    setConfirmGenerateAccountOpen(true);
+                                  } else {
+                                    // Si no tiene esquema, mostrar mensaje
+                                    toast({
+                                      title: "Sin esquema de pago",
+                                      description: "Esta oferta no tiene un esquema de pago asignado",
+                                      variant: "default",
+                                    });
+                                  }
+                                }}
+                                className="p-0 h-auto font-semibold hover:underline"
+                              >
+                                OP-{String(offer.id).padStart(6, '0')}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {hasAccount 
+                                  ? 'Ver detalle de cuenta de cobranza' 
+                                  : !hasActiveAccountWithScheme && offer.esquema_id
+                                    ? 'Generar cuenta de cobranza'
+                                    : 'Ver información de oferta'
+                                }
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
                         <TableCell>
                           {(offer.product_name || 'N/A').toUpperCase()}
                         </TableCell>
