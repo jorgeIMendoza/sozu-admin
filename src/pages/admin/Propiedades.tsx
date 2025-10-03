@@ -1049,7 +1049,7 @@ const Propiedades = () => {
       if (isProductOffer) {
         // Body for product offers
         requestBody = {
-          siguiente_accion: 'genera_cuenta_cobranza_manual_por_oferta',
+          siguiente_accion: 'genera_cuenta_cobranza_producto_manual_por_oferta',
           id_oferta: offerId,
           id_propiedad: propertyId,
           id_persona_lead: currentOffer.id_persona_lead,
