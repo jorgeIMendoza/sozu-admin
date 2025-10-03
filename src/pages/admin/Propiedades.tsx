@@ -679,7 +679,7 @@ const Propiedades = () => {
         .select('id, activo, clabe_stp, precio_final')
         .eq('id_oferta', offer.id)
         .eq('activo', true)
-        .single();
+        .maybeSingle();
       
       if (cuentaData) {
         enrichedOffer.cuenta_cobranza_id = cuentaData.id;
@@ -694,7 +694,7 @@ const Propiedades = () => {
           .from('personas')
           .select('nombre_legal, email, telefono, rfc')
           .eq('id', offer.id_persona_lead)
-          .single();
+          .maybeSingle();
         
         if (personaData) {
           enrichedOffer.lead_name = personaData.nombre_legal;
@@ -710,7 +710,7 @@ const Propiedades = () => {
           .from('esquemas_pago')
           .select('nombre, es_manual, porcentaje_descuento_aumento, porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega')
           .eq('id', offer.id_esquema_pago_seleccionado)
-          .single();
+          .maybeSingle();
         
         if (schemeData) {
           enrichedOffer.esquema_nombre = schemeData.nombre;
@@ -729,7 +729,7 @@ const Propiedades = () => {
           .from('productos_servicios')
           .select('precio_lista')
           .eq('id', offer.id_producto)
-          .single();
+          .maybeSingle();
         
         if (productData) {
           enrichedOffer.product_precio_lista = productData.precio_lista;
