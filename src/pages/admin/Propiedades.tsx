@@ -630,7 +630,7 @@ const Propiedades = () => {
         id_esquema_pago_seleccionado,
         id_producto,
         clabe_stp_tmp_producto,
-        productos_servicios!ofertas_id_producto_fkey(nombre, tipo)
+        productos_servicios!ofertas_id_producto_fkey(nombre)
       `)
       .eq('id_propiedad', propertyId)
       .not('id_producto', 'is', null)
@@ -647,7 +647,6 @@ const Propiedades = () => {
       let enrichedOffer = {
         ...offer,
         product_name: offer.productos_servicios?.nombre || 'N/A',
-        product_type: offer.productos_servicios?.tipo || 'Producto',
       };
       
       // Get cuenta_cobranza if available
@@ -2343,124 +2342,126 @@ const Propiedades = () => {
       />
 
       {/* Modal de confirmación para generar cuenta de cobranza */}
-      <AlertDialog open={confirmGenerateAccountOpen} onOpenChange={setConfirmGenerateAccountOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar generación de cuenta de cobranza</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-4">
-              {selectedOfferForAccount && (
-                <div className="space-y-3 pt-4">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="font-medium text-foreground">Folio:</div>
-                    <div>
-                      {selectedOfferForAccount.isProductOffer 
-                        ? `OP-${String(selectedOfferForAccount.id).padStart(6, '0')}`
-                        : `O-${String(selectedOfferForAccount.id).padStart(6, '0')}`
-                      }
-                    </div>
-                    
-                    <div className="font-medium text-foreground">
-                      {selectedOfferForAccount.isProductOffer 
-                        ? (selectedOfferForAccount.product_type === 'Servicio' ? 'Servicio:' : 'Producto:')
-                        : 'Agente:'
-                      }
-                    </div>
-                    <div>
-                      {selectedOfferForAccount.isProductOffer 
-                        ? (selectedOfferForAccount.product_name || 'N/A').toUpperCase()
-                        : (selectedOfferForAccount.agent_name || 'AGENTE POR DEFINIR').toUpperCase()
-                      }
-                    </div>
-                    
-                    <div className="font-medium text-foreground">Comprador:</div>
-                    <div>{(selectedOfferForAccount.lead_name || 'N/A').toUpperCase()}</div>
-                    
-                    <div className="font-medium text-foreground">Fecha:</div>
-                    <div>{new Date(selectedOfferForAccount.fecha_generacion).toLocaleDateString()}</div>
-                    
-                    <div className="font-medium text-foreground">Esquema de pago:</div>
-                    <div className="flex flex-col gap-1">
-                      <div className="font-medium">
-                        {selectedOfferForAccount.esquema_nombre || 
-                         availableSchemes.find(s => s.id === selectedOfferForAccount.esquema_id)?.nombre || 
-                         `ID: ${selectedOfferForAccount.esquema_id}`}
-                      </div>
-                      {(() => {
-                        const scheme = availableSchemes.find(s => s.id === selectedOfferForAccount.esquema_id);
-                        if (scheme) {
-                          return (
-                            <div className="flex flex-wrap gap-2 text-xs">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="flex items-center gap-1 text-muted-foreground">
-                                    <DollarSign className="h-3 w-3" />
-                                    {scheme.porcentaje_enganche}%
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Enganche</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="flex items-center gap-1 text-muted-foreground">
-                                    <Calendar className="h-3 w-3" />
-                                    {scheme.porcentaje_mensualidades}%
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Mensualidades</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="flex items-center gap-1 text-muted-foreground">
-                                    <Home className="h-3 w-3" />
-                                    {scheme.porcentaje_entrega}%
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Contra entrega</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          );
+      <TooltipProvider>
+        <AlertDialog open={confirmGenerateAccountOpen} onOpenChange={setConfirmGenerateAccountOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar generación de cuenta de cobranza</AlertDialogTitle>
+              <AlertDialogDescription className="space-y-4">
+                {selectedOfferForAccount && (
+                  <div className="space-y-3 pt-4">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="font-medium text-foreground">Folio:</div>
+                      <div>
+                        {selectedOfferForAccount.isProductOffer 
+                          ? `OP-${String(selectedOfferForAccount.id).padStart(6, '0')}`
+                          : `O-${String(selectedOfferForAccount.id).padStart(6, '0')}`
                         }
-                        return null;
-                      })()}
+                      </div>
+                      
+                      <div className="font-medium text-foreground">
+                        {selectedOfferForAccount.isProductOffer 
+                          ? 'Producto/Servicio:'
+                          : 'Agente:'
+                        }
+                      </div>
+                      <div>
+                        {selectedOfferForAccount.isProductOffer 
+                          ? (selectedOfferForAccount.product_name || 'N/A').toUpperCase()
+                          : (selectedOfferForAccount.agent_name || 'AGENTE POR DEFINIR').toUpperCase()
+                        }
+                      </div>
+                      
+                      <div className="font-medium text-foreground">Comprador:</div>
+                      <div>{(selectedOfferForAccount.lead_name || 'N/A').toUpperCase()}</div>
+                      
+                      <div className="font-medium text-foreground">Fecha:</div>
+                      <div>{new Date(selectedOfferForAccount.fecha_generacion).toLocaleDateString()}</div>
+                      
+                      <div className="font-medium text-foreground">Esquema de pago:</div>
+                      <div className="flex flex-col gap-1">
+                        <div className="font-medium">
+                          {selectedOfferForAccount.esquema_nombre || 
+                           availableSchemes.find(s => s.id === selectedOfferForAccount.esquema_id)?.nombre || 
+                           `ID: ${selectedOfferForAccount.esquema_id}`}
+                        </div>
+                        {(() => {
+                          const scheme = availableSchemes.find(s => s.id === selectedOfferForAccount.esquema_id);
+                          if (scheme) {
+                            return (
+                              <div className="flex flex-wrap gap-2 text-xs">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 text-muted-foreground cursor-help">
+                                      <DollarSign className="h-3 w-3" />
+                                      {scheme.porcentaje_enganche}%
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Enganche</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 text-muted-foreground cursor-help">
+                                      <Calendar className="h-3 w-3" />
+                                      {scheme.porcentaje_mensualidades}%
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Mensualidades</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 text-muted-foreground cursor-help">
+                                      <Home className="h-3 w-3" />
+                                      {scheme.porcentaje_entrega}%
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Contra entrega</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 p-3 bg-muted rounded-md">
+                      <p className="text-sm text-foreground">
+                        ¿Está seguro que desea generar una cuenta de cobranza para esta oferta?
+                      </p>
                     </div>
                   </div>
-                  
-                  <div className="mt-4 p-3 bg-muted rounded-md">
-                    <p className="text-sm text-foreground">
-                      ¿Está seguro que desea generar una cuenta de cobranza para esta oferta?
-                    </p>
-                  </div>
-                </div>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setConfirmGenerateAccountOpen(false);
-              setSelectedOfferForAccount(null);
-            }}>
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (selectedOfferForAccount) {
-                  handleGenerateCollectionAccount(selectedOfferForAccount.id, selectedOfferForAccount.propertyId);
-                }
-              }}
-            >
-              Confirmar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setConfirmGenerateAccountOpen(false);
+                setSelectedOfferForAccount(null);
+              }}>
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (selectedOfferForAccount) {
+                    handleGenerateCollectionAccount(selectedOfferForAccount.id, selectedOfferForAccount.propertyId);
+                  }
+                }}
+              >
+                Confirmar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </TooltipProvider>
       </div>
     </TooltipProvider>
   );
