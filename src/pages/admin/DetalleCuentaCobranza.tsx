@@ -18,6 +18,7 @@ import { NewMultaDialog } from "@/components/admin/NewMultaDialog";
 import { AddCepDialog } from "@/components/admin/AddCepDialog";
 import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 import { TransferirEntreComisionesDialog } from "@/components/admin/TransferirEntreComisionesDialog";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -986,7 +987,7 @@ export default function DetalleCuentaCobranza() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-bold">
-                Detalle Cuenta de Cobranza CC-{String(cuentaDetalle.id).padStart(6, '0')}
+                Detalle Cuenta de Cobranza {formatCuentaCobranzaId(cuentaDetalle.id, cuentaDetalle.tipo_cuenta)}
               </h1>
               <Badge 
                 variant={
@@ -1719,7 +1720,7 @@ export default function DetalleCuentaCobranza() {
         isOpen={manualPaymentDialog}
         onClose={() => setManualPaymentDialog(false)}
         cuentaCobranzaId={cuentaId}
-        cuentaCobranzaLabel={`CC-${String(cuentaId).padStart(6, '0')}`}
+        cuentaCobranzaLabel={formatCuentaCobranzaId(cuentaId, cuentaDetalle?.tipo_cuenta)}
         tipoCuenta={cuentaDetalle?.tipo_cuenta}
       />
 

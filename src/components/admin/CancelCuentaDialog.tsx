@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2, Upload } from "lucide-react";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 interface Comprador {
   id: number;
@@ -36,6 +37,7 @@ interface CancelCuentaDialogProps {
   idOferta: number;
   clabeStpOriginal: string | null;
   onSuccess: () => void;
+  tipoCuenta?: 'Propiedad' | 'Producto' | 'Servicio';
 }
 
 export function CancelCuentaDialog({
@@ -46,7 +48,8 @@ export function CancelCuentaDialog({
   totalPagado,
   idOferta,
   clabeStpOriginal,
-  onSuccess
+  onSuccess,
+  tipoCuenta = 'Propiedad'
 }: CancelCuentaDialogProps) {
   const [tipoCancelacion, setTipoCancelacion] = useState<string>("");
   const [montoCobro, setMontoCobro] = useState<string>("0");
@@ -444,7 +447,7 @@ export function CancelCuentaDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Cancelar Cuenta de Cobranza CC-{String(cuentaId).padStart(6, '0')}</DialogTitle>
+          <DialogTitle>Cancelar Cuenta de Cobranza {formatCuentaCobranzaId(cuentaId, tipoCuenta)}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">

@@ -19,6 +19,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import {
   DndContext,
   closestCenter,
@@ -1504,7 +1505,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar Cuenta de Cobranza - CC-{String(cuenta.id).padStart(6, '0')}</DialogTitle>
+          <DialogTitle>Editar Cuenta de Cobranza - {formatCuentaCobranzaId(cuenta.id, tipoCuenta)}</DialogTitle>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">

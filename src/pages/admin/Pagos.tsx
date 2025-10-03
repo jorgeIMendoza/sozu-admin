@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 interface Comprador {
   nombre_legal: string;
@@ -510,7 +511,7 @@ export default function Pagos() {
                   <TableBody>
                     {filteredCuentas.map((cuenta) => (
                       <TableRow key={cuenta.id}>
-                        <TableCell className="font-semibold">CC-{String(cuenta.id).padStart(6, '0')}</TableCell>
+                        <TableCell className="font-semibold">{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</TableCell>
                         <TableCell>
                           <Badge variant={cuenta.tipo === 'Propiedad' ? 'default' : cuenta.tipo === 'Producto' ? 'secondary' : 'outline'}>
                             {cuenta.tipo}
@@ -789,7 +790,7 @@ export default function Pagos() {
                   <TableBody>
                     {filteredCuentas.map((cuenta) => (
                       <TableRow key={cuenta.id}>
-                        <TableCell className="font-semibold">CC-{String(cuenta.id).padStart(6, '0')}</TableCell>
+                        <TableCell className="font-semibold">{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</TableCell>
                         <TableCell>
                           <Badge variant={cuenta.tipo === 'Propiedad' ? 'default' : cuenta.tipo === 'Producto' ? 'secondary' : 'outline'}>
                             {cuenta.tipo}
@@ -973,8 +974,9 @@ export default function Pagos() {
         <AddManualPaymentDialog
           isOpen={paymentDialog.isOpen}
           cuentaCobranzaId={paymentDialog.cuenta.id}
-          cuentaCobranzaLabel={`CC-${String(paymentDialog.cuenta.id).padStart(6, '0')}`}
+          cuentaCobranzaLabel={formatCuentaCobranzaId(paymentDialog.cuenta.id, paymentDialog.cuenta.tipo)}
           onClose={() => setPaymentDialog({ isOpen: false, cuenta: null })}
+          tipoCuenta={paymentDialog.cuenta.tipo}
         />
       )}
     </div>
