@@ -555,9 +555,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   // Mutation to update fecha_compra
   const updateFechaCompraMutation = useMutation({
     mutationFn: async (newDate: Date) => {
+      // Format date locally to avoid timezone issues
+      const formattedDate = format(newDate, 'yyyy-MM-dd');
       const { error } = await supabase
         .from('cuentas_cobranza')
-        .update({ fecha_compra: newDate.toISOString().split('T')[0] })
+        .update({ fecha_compra: formattedDate })
         .eq('id', cuenta.id);
       
       if (error) throw error;
