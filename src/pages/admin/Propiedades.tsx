@@ -654,7 +654,14 @@ const Propiedades = () => {
         id_esquema_pago_seleccionado,
         id_producto,
         clabe_stp_tmp_producto,
-        productos_servicios!ofertas_id_producto_fkey(nombre)
+        productos_servicios!ofertas_id_producto_fkey(nombre, precio_lista),
+        esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(
+          porcentaje_descuento_aumento,
+          porcentaje_enganche,
+          porcentaje_mensualidades,
+          numero_mensualidades,
+          porcentaje_entrega
+        )
       `)
       .eq('id_propiedad', propertyId)
       .not('id_producto', 'is', null)
@@ -671,6 +678,12 @@ const Propiedades = () => {
       let enrichedOffer = {
         ...offer,
         product_name: offer.productos_servicios?.nombre || 'N/A',
+        product_precio_lista: offer.productos_servicios?.precio_lista || 0,
+        porcentaje_descuento_aumento: offer.esquemas_pago?.porcentaje_descuento_aumento || 0,
+        esquema_porcentaje_enganche: offer.esquemas_pago?.porcentaje_enganche || 0,
+        esquema_porcentaje_mensualidades: offer.esquemas_pago?.porcentaje_mensualidades || 0,
+        esquema_numero_mensualidades: offer.esquemas_pago?.numero_mensualidades || 0,
+        esquema_porcentaje_entrega: offer.esquemas_pago?.porcentaje_entrega || 0,
       };
       
       // Get cuenta_cobranza if available
@@ -961,6 +974,8 @@ const Propiedades = () => {
         throw new Error('No se encontró la oferta');
       }
 
+      console.log('📋 Oferta encontrada:', currentOffer);
+
       // Determine if this is a product offer
       const isProductOffer = !!currentOffer.id_producto;
       
@@ -976,11 +991,17 @@ const Propiedades = () => {
         precio_lista = property?.precio_lista || 0;
       }
 
+      console.log('💰 Precio lista:', precio_lista);
+
       // Get porcentaje_descuento_aumento from payment scheme
       const porcentaje_descuento_aumento = currentOffer.porcentaje_descuento_aumento || 0;
+      
+      console.log('📊 Porcentaje descuento/aumento:', porcentaje_descuento_aumento);
 
       // Calculate precio_final
       const precio_final = precio_lista * (1 + porcentaje_descuento_aumento / 100);
+      
+      console.log('💵 Precio final calculado:', precio_final);
       
       // Get payment scheme data
       let esquema_data = {
@@ -990,17 +1011,14 @@ const Propiedades = () => {
         porcentaje_entrega: 0
       };
 
-      if (isProductOffer && currentOffer.id_esquema_pago_seleccionado) {
-        // For product offers, fetch the scheme
-        const { data: schemeData } = await supabase
-          .from('esquemas_pago')
-          .select('porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega')
-          .eq('id', currentOffer.id_esquema_pago_seleccionado)
-          .maybeSingle();
-        
-        if (schemeData) {
-          esquema_data = schemeData;
-        }
+      if (isProductOffer) {
+        // For product offers, use data already loaded from the query
+        esquema_data = {
+          porcentaje_enganche: currentOffer.esquema_porcentaje_enganche || 0,
+          porcentaje_mensualidades: currentOffer.esquema_porcentaje_mensualidades || 0,
+          numero_mensualidades: currentOffer.esquema_numero_mensualidades || 0,
+          porcentaje_entrega: currentOffer.esquema_porcentaje_entrega || 0
+        };
       } else {
         // For property offers, use data from currentOffer
         esquema_data = {
@@ -1011,11 +1029,19 @@ const Propiedades = () => {
         };
       }
       
+      console.log('📋 Datos esquema:', esquema_data);
+      
       // Calculate montos
       const monto_apartado = selectedPropertyForOffers?.monto_apartado || selectedPropertyForProductOffers?.monto_apartado || 0;
       const monto_enganche = precio_final * (esquema_data.porcentaje_enganche / 100);
       const monto_mensualidades = precio_final * (esquema_data.porcentaje_mensualidades / 100);
       const monto_entrega = precio_final * (esquema_data.porcentaje_entrega / 100);
+      
+      console.log('💸 Montos calculados:', {
+        monto_enganche,
+        monto_mensualidades,
+        monto_entrega
+      });
       
       // Build request body based on offer type
       let requestBody: any;
