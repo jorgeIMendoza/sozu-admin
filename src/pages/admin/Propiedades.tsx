@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, Wallet, HandCoins } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -2379,10 +2379,34 @@ const Propiedades = () => {
                     <div>{new Date(selectedOfferForAccount.fecha_generacion).toLocaleDateString()}</div>
                     
                     <div className="font-medium text-foreground">Esquema de pago:</div>
-                    <div>
-                      {selectedOfferForAccount.esquema_nombre || 
-                       availableSchemes.find(s => s.id === selectedOfferForAccount.esquema_id)?.nombre || 
-                       `ID: ${selectedOfferForAccount.esquema_id}`}
+                    <div className="flex flex-col gap-1">
+                      <div className="font-medium">
+                        {selectedOfferForAccount.esquema_nombre || 
+                         availableSchemes.find(s => s.id === selectedOfferForAccount.esquema_id)?.nombre || 
+                         `ID: ${selectedOfferForAccount.esquema_id}`}
+                      </div>
+                      {(() => {
+                        const scheme = availableSchemes.find(s => s.id === selectedOfferForAccount.esquema_id);
+                        if (scheme) {
+                          return (
+                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Wallet className="h-3 w-3" />
+                                {scheme.porcentaje_enganche}%
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {scheme.porcentaje_mensualidades}%
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <HandCoins className="h-3 w-3" />
+                                {scheme.porcentaje_entrega}%
+                              </span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
                   
