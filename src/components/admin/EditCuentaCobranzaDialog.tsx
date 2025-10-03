@@ -1473,9 +1473,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className={`grid w-full ${tipoCuenta === 'Propiedad' ? 'grid-cols-5' : 'grid-cols-6'}`}>
-            <TabsTrigger value="propiedad">
-              {tipoCuenta === 'Propiedad' ? 'Datos de la Propiedad' : `Datos del ${tipoCuenta}`}
-            </TabsTrigger>
+            <TabsTrigger value="propiedad">Datos de la Propiedad</TabsTrigger>
             {(tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') && (
               <TabsTrigger value="producto">Detalles {tipoCuenta}</TabsTrigger>
             )}
@@ -1488,9 +1486,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
           <TabsContent value="propiedad" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>
-                  {tipoCuenta === 'Propiedad' ? 'Información de la Propiedad' : `Información del ${tipoCuenta}`}
-                </CardTitle>
+                <CardTitle>Información de la Propiedad</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {propiedadDetalle ? (
