@@ -2472,7 +2472,7 @@ const Propiedades = () => {
                                   if (hasActiveAccountForThisProduct) {
                                     toast({
                                       title: "No disponible",
-                                      description: "Ya existe una cuenta de cobranza activa para este producto. No se pueden generar más cuentas para el mismo producto.",
+                                      description: `Ya existe una cuenta activa para este mismo producto (${offer.product_name}). Solo puede haber una cuenta activa por producto.`,
                                       variant: "default",
                                     });
                                     return;
@@ -2512,7 +2512,7 @@ const Propiedades = () => {
                                     : !offer.id_esquema_pago_seleccionado
                                     ? 'Sin esquema de pago - Selecciona uno primero'
                                     : hasActiveAccountForThisProduct
-                                    ? 'Ya existe cuenta activa para este producto - No se pueden generar más cuentas'
+                                    ? `Ya existe cuenta activa para ${offer.product_name} - Solo una cuenta por producto`
                                     : 'Generar cuenta de cobranza'
                                 }
                               </p>
