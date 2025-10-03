@@ -37,6 +37,7 @@ interface Property {
   monto_apartado: number | null;
   monto_apartado_pagando: number | null;
   clabe_stp_tmp_apartado: string | null;
+  id_entidad_relacionada_dueno: number;
   clabe_stp: string | null; // Nueva propiedad para CLABE de cuentas_cobranza
   cuenta_cobranza_id: number | null; // Nueva propiedad para ID de cuenta de cobranza
   precio_final: number | null; // Nueva propiedad para precio final de cuenta de cobranza
@@ -212,6 +213,7 @@ const Propiedades = () => {
             monto_apartado,
             monto_apartado_pagando,
             clabe_stp_tmp_apartado,
+            id_entidad_relacionada_dueno,
             activo,
             es_aprobado,
             edificios_modelos!inner(
@@ -511,6 +513,7 @@ const Propiedades = () => {
           monto_apartado: property.monto_apartado,
           monto_apartado_pagando: property.monto_apartado_pagando,
           clabe_stp_tmp_apartado: property.clabe_stp_tmp_apartado,
+          id_entidad_relacionada_dueno: property.id_entidad_relacionada_dueno,
           clabe_stp: cuentaCobranzaData?.clabe_stp || property.clabe_stp_tmp_apartado,
           cuenta_cobranza_id: cuentaCobranzaData?.id || null,
           precio_final: precio_final > 0 ? precio_final : null,
@@ -684,13 +687,27 @@ const Propiedades = () => {
       if (offer.id_esquema_pago_seleccionado) {
         const { data: schemeData } = await supabase
           .from('esquemas_pago')
-          .select('nombre, es_manual')
+          .select('nombre, es_manual, porcentaje_descuento_aumento')
           .eq('id', offer.id_esquema_pago_seleccionado)
           .single();
         
         if (schemeData) {
           enrichedOffer.esquema_nombre = schemeData.nombre;
           enrichedOffer.esquema_es_manual = schemeData.es_manual;
+          enrichedOffer.porcentaje_descuento_aumento = schemeData.porcentaje_descuento_aumento;
+        }
+      }
+      
+      // Get product price if this is a product offer
+      if (offer.id_producto) {
+        const { data: productData } = await supabase
+          .from('productos_servicios')
+          .select('precio_lista')
+          .eq('id', offer.id_producto)
+          .single();
+        
+        if (productData) {
+          enrichedOffer.product_precio_lista = productData.precio_lista;
         }
       }
       
@@ -914,7 +931,32 @@ const Propiedades = () => {
       const currentOffer = selectedPropertyOffers?.find(offer => offer.id === offerId) || 
                           selectedPropertyProductOffers?.find(offer => offer.id === offerId);
       
-      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaPago`, {
+      if (!currentOffer) {
+        throw new Error('No se encontró la oferta');
+      }
+
+      // Determine if this is a product offer
+      const isProductOffer = !!currentOffer.id_producto;
+      
+      // Get property details to get id_entidad_relacionada_dueno
+      const property = properties?.find(p => p.id === propertyId);
+      const id_er_dueno = property?.id_entidad_relacionada_dueno;
+
+      // Get precio_lista
+      let precio_lista = 0;
+      if (isProductOffer) {
+        precio_lista = currentOffer.product_precio_lista || 0;
+      } else {
+        precio_lista = property?.precio_lista || 0;
+      }
+
+      // Get porcentaje_descuento_aumento from payment scheme
+      const porcentaje_descuento_aumento = currentOffer.porcentaje_descuento_aumento || 0;
+
+      // Calculate precio_final
+      const precio_final = precio_lista * (1 + porcentaje_descuento_aumento / 100);
+      
+      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaP`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -926,7 +968,9 @@ const Propiedades = () => {
           id_persona_lead: currentOffer?.id_persona_lead,
           monto_apartado_pagando: selectedPropertyForOffers?.monto_apartado_pagando || selectedPropertyForProductOffers?.monto_apartado_pagando || 0,
           clabe_stp: selectedPropertyForOffers?.clabe_stp_tmp_apartado || selectedPropertyForProductOffers?.clabe_stp_tmp_apartado || '',
-          rfc_curp_ordenante: currentOffer?.lead_rfc || ''
+          rfc_curp_ordenante: currentOffer?.lead_rfc || '',
+          id_er_dueno: id_er_dueno,
+          precio_final: precio_final
         }),
       });
 
