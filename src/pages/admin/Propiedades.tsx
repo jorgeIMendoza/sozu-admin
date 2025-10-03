@@ -956,7 +956,7 @@ const Propiedades = () => {
       // Calculate precio_final
       const precio_final = precio_lista * (1 + porcentaje_descuento_aumento / 100);
       
-      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaP`, {
+      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaPago`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
