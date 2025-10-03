@@ -49,13 +49,15 @@ interface AddManualPaymentDialogProps {
   onClose: () => void;
   cuentaCobranzaId: number;
   cuentaCobranzaLabel: string;
+  tipoCuenta?: 'Propiedad' | 'Producto' | 'Servicio';
 }
 
 export function AddManualPaymentDialog({ 
   isOpen, 
   onClose, 
   cuentaCobranzaId, 
-  cuentaCobranzaLabel 
+  cuentaCobranzaLabel,
+  tipoCuenta = 'Propiedad'
 }: AddManualPaymentDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -202,9 +204,14 @@ export function AddManualPaymentDialog({
     onSuccess: async (result) => {
       // Call webhook after successful payment creation
       try {
+        // Determine siguiente_accion based on account type
+        const siguienteAccion = (tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') 
+          ? 'aplicar_pago_manual_producto'
+          : 'aplicar_pago_manual';
+        
         const webhookBody = {
           success: true,
-          siguiente_accion: "aplicar_pago_manual",
+          siguiente_accion: siguienteAccion,
           message: "Pago manual aplicado",
           clave_rastreo: result.clave_rastreo,
           id_cuenta_cobranza: cuentaCobranzaId,

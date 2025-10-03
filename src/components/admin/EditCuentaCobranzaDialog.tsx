@@ -163,6 +163,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [selectedNotario, setSelectedNotario] = useState<string>('');
   const [deleteAcuerdoDialogOpen, setDeleteAcuerdoDialogOpen] = useState(false);
   const [acuerdoToDelete, setAcuerdoToDelete] = useState<{ id: number; concepto: string; monto: number } | null>(null);
+  const [tipoCuenta, setTipoCuenta] = useState<'Propiedad' | 'Producto' | 'Servicio'>('Propiedad');
+  const [productoServicioInfo, setProductoServicioInfo] = useState<any>(null);
 
   const handleNavigateToCompradores = (rfc?: string) => {
     if (rfc) {
@@ -193,7 +195,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     }
   });
 
-  // Get property details
+  // Get property or product/service details
   const { data: propiedadDetalle } = useQuery({
     queryKey: ["propiedad_detalle", cuentaDetalle?.id_oferta],
     queryFn: async () => {
@@ -201,9 +203,29 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       
       const { data: ofertaData } = await supabase
         .from('ofertas')
-        .select('id_propiedad')
+        .select(`
+          id_propiedad,
+          id_producto,
+          productos_servicios!ofertas_id_producto_fkey(
+            id,
+            nombre,
+            descripcion,
+            precio_lista,
+            id_categoria,
+            categorias_producto!productos_servicios_id_categoria_fkey(nombre)
+          )
+        `)
         .eq('id', cuentaDetalle.id_oferta)
         .single();
+
+      // Determine account type
+      if (ofertaData?.id_producto && ofertaData?.productos_servicios) {
+        const categoriaNombre = ofertaData.productos_servicios.categorias_producto?.nombre?.toLowerCase();
+        setTipoCuenta(categoriaNombre === 'servicios' ? 'Servicio' : 'Producto');
+        setProductoServicioInfo(ofertaData.productos_servicios);
+      } else {
+        setTipoCuenta('Propiedad');
+      }
 
       if (!ofertaData?.id_propiedad) return null;
 
@@ -1450,8 +1472,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="propiedad">Datos de la Propiedad</TabsTrigger>
+          <TabsList className={`grid w-full ${tipoCuenta === 'Propiedad' ? 'grid-cols-5' : 'grid-cols-6'}`}>
+            <TabsTrigger value="propiedad">
+              {tipoCuenta === 'Propiedad' ? 'Datos de la Propiedad' : `Datos del ${tipoCuenta}`}
+            </TabsTrigger>
+            {(tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') && (
+              <TabsTrigger value="producto">Detalles {tipoCuenta}</TabsTrigger>
+            )}
             <TabsTrigger value="vendedor">Datos del Vendedor</TabsTrigger>
             <TabsTrigger value="compradores">Datos del Comprador</TabsTrigger>
             <TabsTrigger value="acuerdo">Acuerdo de Pago</TabsTrigger>
@@ -1461,7 +1488,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
           <TabsContent value="propiedad" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Información de la Propiedad</CardTitle>
+                <CardTitle>
+                  {tipoCuenta === 'Propiedad' ? 'Información de la Propiedad' : `Información del ${tipoCuenta}`}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {propiedadDetalle ? (
@@ -1566,6 +1595,44 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* New tab for Product/Service details */}
+          {(tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') && productoServicioInfo && (
+            <TabsContent value="producto" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Detalles del {tipoCuenta}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Nombre</Label>
+                      <Input value={productoServicioInfo.nombre || ''} readOnly />
+                    </div>
+                    <div>
+                      <Label>Categoría</Label>
+                      <Input value={productoServicioInfo.categorias_producto?.nombre || ''} readOnly />
+                    </div>
+                    <div>
+                      <Label>Precio de Lista</Label>
+                      <Input 
+                        value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(productoServicioInfo.precio_lista || 0)} 
+                        readOnly 
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Descripción</Label>
+                      <Textarea 
+                        value={productoServicioInfo.descripcion || 'Sin descripción'} 
+                        readOnly 
+                        rows={4}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
 
           <TabsContent value="vendedor" className="space-y-4">
             <Card>

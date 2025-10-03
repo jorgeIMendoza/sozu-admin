@@ -72,6 +72,9 @@ interface CuentaDetalle {
   dueno: string;
   proyecto_id: number;
   oferta_id: number;
+  tipo_cuenta: 'Propiedad' | 'Producto' | 'Servicio';
+  producto_servicio_nombre?: string;
+  producto_servicio_id?: number;
 }
 
 interface OfferData {
@@ -183,11 +186,20 @@ export default function DetalleCuentaCobranza() {
         .select(`
           id,
           id_esquema_pago_seleccionado,
+          id_producto,
           propiedades!ofertas_id_propiedad_fkey(
             id,
             numero_propiedad,
             id_entidad_relacionada_dueno,
             id_edificio_modelo
+          ),
+          productos_servicios!ofertas_id_producto_fkey(
+            id,
+            nombre,
+            id_categoria,
+            categorias_producto!productos_servicios_id_categoria_fkey(
+              nombre
+            )
           )
         `)
         .eq('id', cuenta.id_oferta)
@@ -230,6 +242,18 @@ export default function DetalleCuentaCobranza() {
           .maybeSingle()
       ]);
 
+      // Determine account type
+      let tipoCuenta: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
+      let productoServicioNombre: string | undefined;
+      let productoServicioId: number | undefined;
+      
+      if (oferta?.id_producto && oferta?.productos_servicios) {
+        productoServicioId = oferta.productos_servicios.id;
+        productoServicioNombre = oferta.productos_servicios.nombre;
+        const categoriaNombre = oferta.productos_servicios.categorias_producto?.nombre?.toLowerCase();
+        tipoCuenta = categoriaNombre === 'servicios' ? 'Servicio' : 'Producto';
+      }
+
       const detalle: CuentaDetalle = {
         id: cuenta.id,
         clabe_stp: cuenta.clabe_stp,
@@ -248,7 +272,10 @@ export default function DetalleCuentaCobranza() {
         modelo: edificioModeloResult.data?.modelos?.nombre || 'Sin modelo',
         dueno: duenoResult.data?.personas?.nombre_legal || 'Sin dueño',
         proyecto_id: entidadResult.data?.id_proyecto || 0,
-        oferta_id: cuenta.id_oferta
+        oferta_id: cuenta.id_oferta,
+        tipo_cuenta: tipoCuenta,
+        producto_servicio_nombre: productoServicioNombre,
+        producto_servicio_id: productoServicioId
       };
 
       return detalle;
@@ -957,15 +984,29 @@ export default function DetalleCuentaCobranza() {
             </Link>
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">
-              Detalle Cuenta de Cobranza CC-{String(cuentaDetalle.id).padStart(6, '0')}
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold">
+                Detalle Cuenta de Cobranza CC-{String(cuentaDetalle.id).padStart(6, '0')}
+              </h1>
+              <Badge 
+                variant={
+                  cuentaDetalle.tipo_cuenta === 'Propiedad' ? 'default' :
+                  cuentaDetalle.tipo_cuenta === 'Producto' ? 'secondary' :
+                  'outline'
+                }
+              >
+                {cuentaDetalle.tipo_cuenta}
+              </Badge>
               {esCuentaCancelada && (
-                <Badge variant="destructive" className="ml-3">
+                <Badge variant="destructive">
                   CANCELADA
                 </Badge>
               )}
-            </h1>
-            <p className="text-muted-foreground">Información detallada de pagos y acuerdos</p>
+            </div>
+            <p className="text-muted-foreground">
+              Información detallada de pagos y acuerdos
+              {cuentaDetalle.producto_servicio_nombre && ` - ${cuentaDetalle.producto_servicio_nombre}`}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -1042,10 +1083,12 @@ export default function DetalleCuentaCobranza() {
         </Card>
       </div>
 
-      {/* Información de la propiedad */}
+      {/* Información de la propiedad o producto/servicio */}
       <Card className={esCuentaCancelada ? 'opacity-60' : ''}>
         <CardHeader>
-          <CardTitle>Información de la Propiedad</CardTitle>
+          <CardTitle>
+            {cuentaDetalle.tipo_cuenta === 'Propiedad' ? 'Información de la Propiedad' : `Información del ${cuentaDetalle.tipo_cuenta}`}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -1648,7 +1691,8 @@ export default function DetalleCuentaCobranza() {
         isOpen={manualPaymentDialog}
         onClose={() => setManualPaymentDialog(false)}
         cuentaCobranzaId={cuentaId}
-        cuentaCobranzaLabel={`CC-${String(cuentaDetalle.id).padStart(6, '0')}`}
+        cuentaCobranzaLabel={`CC-${String(cuentaId).padStart(6, '0')}`}
+        tipoCuenta={cuentaDetalle?.tipo_cuenta}
       />
 
       <TransferirEntreComisionesDialog
