@@ -1901,18 +1901,20 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         </PopoverContent>
                       </Popover>
                     </div>
-                    <div>
-                      <h4 className="font-medium text-foreground mb-1">Valor de la UMA</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {cuentaDetalle?.valor_uma ? 
-                          new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.valor_uma) : 
-                          'No definido'
-                        }
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Unidad de Medida y Actualización vigente
-                      </p>
-                    </div>
+                    {tipoCuenta === 'Propiedad' && (
+                      <div>
+                        <h4 className="font-medium text-foreground mb-1">Valor de la UMA</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {cuentaDetalle?.valor_uma ? 
+                            new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.valor_uma) : 
+                            'No definido'
+                          }
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Unidad de Medida y Actualización vigente
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
