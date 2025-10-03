@@ -2609,14 +2609,12 @@ const Propiedades = () => {
                         <TableCell>
                           <Button
                             variant="outline"
-                            size="sm"
+                            size="icon"
+                            disabled={downloadingOfferId === offer.id}
                             onClick={async () => {
                               try {
-                                toast({
-                                  title: "Generando PDF",
-                                  description: "Por favor espera mientras se genera la oferta...",
-                                });
-
+                                setDownloadingOfferId(offer.id);
+                                
                                 const { generateOfferPDF } = await import('@/services/htmlToPdfService');
                                 
                                 await generateOfferPDF({
@@ -2642,11 +2640,16 @@ const Propiedades = () => {
                                   description: "No se pudo generar el PDF de la oferta",
                                   variant: "destructive",
                                 });
+                              } finally {
+                                setDownloadingOfferId(null);
                               }
                             }}
                           >
-                            <Download className="h-4 w-4 mr-1" />
-                            PDF
+                            {downloadingOfferId === offer.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
                           </Button>
                         </TableCell>
                       </TableRow>
