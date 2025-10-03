@@ -165,6 +165,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [acuerdoToDelete, setAcuerdoToDelete] = useState<{ id: number; concepto: string; monto: number } | null>(null);
   const [tipoCuenta, setTipoCuenta] = useState<'Propiedad' | 'Producto' | 'Servicio'>('Propiedad');
   const [productoServicioInfo, setProductoServicioInfo] = useState<any>(null);
+  const [fechaCompra, setFechaCompra] = useState<Date | undefined>(undefined);
 
   const handleNavigateToCompradores = (rfc?: string) => {
     if (rfc) {
@@ -543,6 +544,33 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       setSelectedNotario(cuentaDetalle.id_notario.toString());
     }
   }, [cuentaDetalle]);
+
+  // Initialize fechaCompra from cuentaDetalle
+  useEffect(() => {
+    if (cuentaDetalle?.fecha_compra) {
+      setFechaCompra(new Date(cuentaDetalle.fecha_compra));
+    }
+  }, [cuentaDetalle]);
+
+  // Mutation to update fecha_compra
+  const updateFechaCompraMutation = useMutation({
+    mutationFn: async (newDate: Date) => {
+      const { error } = await supabase
+        .from('cuentas_cobranza')
+        .update({ fecha_compra: newDate.toISOString().split('T')[0] })
+        .eq('id', cuenta.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Fecha de compra actualizada exitosamente");
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+    },
+    onError: (error) => {
+      console.error("Error updating fecha_compra:", error);
+      toast.error("Error al actualizar la fecha de compra");
+    }
+  });
 
   const totalPorcentajes = compradoresExistentes?.reduce((sum, c) => sum + (c.porcentaje_copropiedad || 0), 0) || 0;
   const porcentajeDisponible = 100 - totalPorcentajes;
@@ -1837,13 +1865,32 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 <div className="mb-6 p-4 bg-muted/30 rounded-lg">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <h4 className="font-medium text-foreground mb-1">Fecha de Compra</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {cuentaDetalle?.fecha_compra ? 
-                          format(new Date(cuentaDetalle.fecha_compra), 'dd/MM/yyyy', { locale: es }) : 
-                          'No definida'
-                        }
-                      </p>
+                      <Label htmlFor="fecha-compra" className="font-medium text-foreground mb-2 block">Fecha de Compra</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {fechaCompra ? format(fechaCompra, 'dd/MM/yyyy', { locale: es }) : "Seleccionar fecha"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={fechaCompra}
+                            onSelect={(date) => {
+                              if (date) {
+                                setFechaCompra(date);
+                                updateFechaCompraMutation.mutate(date);
+                              }
+                            }}
+                            initialFocus
+                            locale={es}
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div>
                       <h4 className="font-medium text-foreground mb-1">Valor de la UMA</h4>
