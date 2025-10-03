@@ -2449,7 +2449,27 @@ const Propiedades = () => {
                                     return;
                                   }
                                   
-                                  // Si no tiene cuenta pero tiene esquema, ofrecer generarla
+                                  // Si no tiene esquema, mostrar mensaje
+                                  if (!offer.id_esquema_pago_seleccionado) {
+                                    toast({
+                                      title: "Sin esquema de pago",
+                                      description: "Esta oferta no tiene un esquema de pago asignado",
+                                      variant: "default",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  // Si hay otra cuenta activa con esquema, no permitir generar
+                                  if (hasActiveAccountWithScheme && !isAccountActive) {
+                                    toast({
+                                      title: "No disponible",
+                                      description: "Ya existe una cuenta de cobranza activa para otro producto. No se pueden generar más cuentas.",
+                                      variant: "default",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  // Si tiene esquema y no hay otra cuenta activa, ofrecer generarla
                                   if (!hasActiveAccountWithScheme && offer.id_esquema_pago_seleccionado) {
                                     // Load the specific scheme if not already loaded
                                     if (!availableSchemes.find(s => s.id === offer.id_esquema_pago_seleccionado)) {
@@ -2465,13 +2485,6 @@ const Propiedades = () => {
                                     }
                                     setSelectedOfferForAccount({ ...offer, propertyId: selectedPropertyForProductOffers!.id, isProductOffer: true });
                                     setConfirmGenerateAccountOpen(true);
-                                  } else {
-                                    // Si no tiene esquema, mostrar mensaje
-                                    toast({
-                                      title: "Sin esquema de pago",
-                                      description: "Esta oferta no tiene un esquema de pago asignado",
-                                      variant: "default",
-                                    });
                                   }
                                 }}
                                 className="p-0 h-auto font-semibold hover:underline"
@@ -2484,10 +2497,14 @@ const Propiedades = () => {
                                 {isAccountActive
                                   ? 'Cuenta de cobranza ya generada'
                                   : hasAccount 
-                                    ? 'Ver detalle de cuenta de cobranza' 
-                                    : !hasActiveAccountWithScheme && offer.id_esquema_pago_seleccionado
-                                      ? 'Generar cuenta de cobranza'
-                                      : 'Ver información de oferta'
+                                    ? 'Ver detalle de cuenta de cobranza'
+                                    : isAccountCancelled
+                                    ? 'Cuenta cancelada - No se puede generar nueva cuenta'
+                                    : !offer.id_esquema_pago_seleccionado
+                                    ? 'Sin esquema de pago - Selecciona uno primero'
+                                    : hasActiveAccountWithScheme
+                                    ? 'Ya existe cuenta activa para otro producto - No se pueden generar más cuentas'
+                                    : 'Generar cuenta de cobranza'
                                 }
                               </p>
                             </TooltipContent>
