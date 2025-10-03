@@ -1093,12 +1093,12 @@ export default function DetalleCuentaCobranza() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div>
-              <label className="text-sm font-medium">Dueño</label>
-              <p className="text-sm text-muted-foreground">{cuentaDetalle.dueno}</p>
-            </div>
-            <div>
               <label className="text-sm font-medium">Proyecto</label>
               <p className="text-sm text-muted-foreground">{cuentaDetalle.proyecto}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Modelo</label>
+              <p className="text-sm text-muted-foreground">{cuentaDetalle.modelo}</p>
             </div>
             <div>
               <label className="text-sm font-medium">Edificio</label>
@@ -1108,18 +1108,46 @@ export default function DetalleCuentaCobranza() {
               <label className="text-sm font-medium">No. Propiedad</label>
               <p className="text-sm text-muted-foreground">{cuentaDetalle.numero_propiedad}</p>
             </div>
-            <div>
-              <label className="text-sm font-medium">Modelo</label>
-              <p className="text-sm text-muted-foreground">{cuentaDetalle.modelo}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium">CLABE STP</label>
-              <p className="text-sm text-muted-foreground">{cuentaDetalle.clabe_stp || 'No asignada'}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Fecha Compra</label>
-              <p className="text-sm text-muted-foreground">{formatDate(cuentaDetalle.fecha_compra)}</p>
-            </div>
+            
+            {cuentaDetalle.tipo_cuenta === 'Propiedad' ? (
+              <>
+                <div>
+                  <label className="text-sm font-medium">Dueño</label>
+                  <p className="text-sm text-muted-foreground">{cuentaDetalle.dueno}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">CLABE STP</label>
+                  <p className="text-sm text-muted-foreground">{cuentaDetalle.clabe_stp || 'No asignada'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Fecha Compra</label>
+                  <p className="text-sm text-muted-foreground">{formatDate(cuentaDetalle.fecha_compra)}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="text-sm font-medium">Categoría</label>
+                  <p className="text-sm text-muted-foreground">
+                    {cuentaDetalle.tipo_cuenta === 'Producto' ? 'Productos' : 'Servicios'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">
+                    Nombre {cuentaDetalle.tipo_cuenta === 'Producto' ? 'Producto' : 'Servicio'}
+                  </label>
+                  <p className="text-sm text-muted-foreground">{cuentaDetalle.producto_servicio_nombre}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">CLABE STP</label>
+                  <p className="text-sm text-muted-foreground">{cuentaDetalle.clabe_stp || 'No asignada'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Fecha Compra</label>
+                  <p className="text-sm text-muted-foreground">{formatDate(cuentaDetalle.fecha_compra)}</p>
+                </div>
+              </>
+            )}
           </div>
           
           {cuentaDetalle?.compradores && cuentaDetalle.compradores.length > 0 && (

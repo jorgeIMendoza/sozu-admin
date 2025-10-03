@@ -1879,16 +1879,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           {/* Price Summary Section */}
                           <div className="mb-6 p-4 bg-muted/20 rounded-lg">
                             <div className={`grid grid-cols-1 gap-4 ${
-                              propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
-                              cuentaDetalle.precio_final !== propiedadDetalle.precio_lista 
+                              ((tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista)) && cuentaDetalle?.precio_final && 
+                              cuentaDetalle.precio_final !== (tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista)
                                 ? 'md:grid-cols-3' 
                                 : 'md:grid-cols-2'
                             }`}>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
                                 <p className="text-sm text-muted-foreground">
-                                  {propiedadDetalle?.precio_lista ? 
-                                    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(propiedadDetalle.precio_lista) : 
+                                  {(tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista) ? 
+                                    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                      tipoCuenta === 'Propiedad' ? propiedadDetalle.precio_lista : productoServicioInfo.precio_lista
+                                    ) : 
                                     'No definido'
                                   }
                                 </p>
@@ -1902,20 +1904,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                   }
                                 </p>
                               </div>
-                              {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
-                               cuentaDetalle.precio_final !== propiedadDetalle.precio_lista && (
-                                <div>
-                                  <h4 className="font-medium text-foreground mb-1">
-                                    {cuentaDetalle.precio_final < propiedadDetalle.precio_lista ? 'Ahorro' : 'Interés'}
-                                  </h4>
-                                  <p className={`text-sm font-semibold ${
-                                    cuentaDetalle.precio_final < propiedadDetalle.precio_lista 
-                                      ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
-                                      : 'text-orange-600'
-                                  }`}>
-                                    {(() => {
-                                      const difference = cuentaDetalle.precio_final - propiedadDetalle.precio_lista;
-                                      const percentage = (difference / propiedadDetalle.precio_lista) * 100;
+                              {(() => {
+                                const precioLista = tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista;
+                                return precioLista && cuentaDetalle?.precio_final && 
+                                  cuentaDetalle.precio_final !== precioLista && (
+                                  <div>
+                                    <h4 className="font-medium text-foreground mb-1">
+                                      {cuentaDetalle.precio_final < precioLista ? 'Ahorro' : 'Interés'}
+                                    </h4>
+                                    <p className={`text-sm font-semibold ${
+                                      cuentaDetalle.precio_final < precioLista 
+                                        ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
+                                        : 'text-orange-600'
+                                    }`}>
+                                      {(() => {
+                                        const difference = cuentaDetalle.precio_final - precioLista;
+                                        const percentage = (difference / precioLista) * 100;
                                       if (difference > 0) {
                                         return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
                                       } else if (difference < 0) {
@@ -1924,8 +1928,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                     })()}
                                   </p>
                                 </div>
-                              )}
-                            </div>
+                              );
+                            })()}
+                          </div>
                           </div>
 
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1976,16 +1981,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           {/* Price Summary Section */}
                           <div className="mb-4 p-4 bg-muted/20 rounded-lg">
                             <div className={`grid grid-cols-1 gap-4 ${
-                              propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
-                              cuentaDetalle.precio_final !== propiedadDetalle.precio_lista 
+                              ((tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista)) && cuentaDetalle?.precio_final && 
+                              cuentaDetalle.precio_final !== (tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista)
                                 ? 'md:grid-cols-3' 
                                 : 'md:grid-cols-2'
                             }`}>
                               <div>
                                 <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
                                 <p className="text-sm text-muted-foreground">
-                                  {propiedadDetalle?.precio_lista ? 
-                                    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(propiedadDetalle.precio_lista) : 
+                                  {(tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista) ? 
+                                    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                                      tipoCuenta === 'Propiedad' ? propiedadDetalle.precio_lista : productoServicioInfo.precio_lista
+                                    ) : 
                                     'No definido'
                                   }
                                 </p>
@@ -1999,20 +2006,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                   }
                                 </p>
                               </div>
-                              {propiedadDetalle?.precio_lista && cuentaDetalle?.precio_final && 
-                               cuentaDetalle.precio_final !== propiedadDetalle.precio_lista && (
-                                <div>
-                                  <h4 className="font-medium text-foreground mb-1">
-                                    {cuentaDetalle.precio_final < propiedadDetalle.precio_lista ? 'Ahorro' : 'Interés'}
-                                  </h4>
-                                  <p className={`text-sm font-semibold ${
-                                    cuentaDetalle.precio_final < propiedadDetalle.precio_lista 
-                                      ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
-                                      : 'text-orange-600'
-                                  }`}>
-                                    {(() => {
-                                      const difference = cuentaDetalle.precio_final - propiedadDetalle.precio_lista;
-                                      const percentage = (difference / propiedadDetalle.precio_lista) * 100;
+                              {(() => {
+                                const precioLista = tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista;
+                                return precioLista && cuentaDetalle?.precio_final && 
+                                  cuentaDetalle.precio_final !== precioLista && (
+                                  <div>
+                                    <h4 className="font-medium text-foreground mb-1">
+                                      {cuentaDetalle.precio_final < precioLista ? 'Ahorro' : 'Interés'}
+                                    </h4>
+                                    <p className={`text-sm font-semibold ${
+                                      cuentaDetalle.precio_final < precioLista 
+                                        ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
+                                        : 'text-orange-600'
+                                    }`}>
+                                      {(() => {
+                                        const difference = cuentaDetalle.precio_final - precioLista;
+                                        const percentage = (difference / precioLista) * 100;
                                       if (difference > 0) {
                                         return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
                                       } else if (difference < 0) {
@@ -2021,8 +2030,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                     })()}
                                   </p>
                                 </div>
-                              )}
-                            </div>
+                              );
+                            })()}
+                          </div>
                           </div>
 
                           {/* Original Plan - Disabled */}
