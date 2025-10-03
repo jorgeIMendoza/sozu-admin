@@ -27,6 +27,7 @@ import { BodegasDetailDialog } from "@/components/admin/BodegasDetailDialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 interface Property {
   id: number;
@@ -1600,7 +1601,7 @@ const Propiedades = () => {
                           onClick={() => navigate(`/admin/cuentas-cobranza/${property.cuenta_cobranza_id}/detalle`)}
                           className="h-6 px-2 text-xs font-semibold cursor-pointer hover:bg-accent"
                         >
-                          CC-{String(property.cuenta_cobranza_id).padStart(6, '0')}
+                          {formatCuentaCobranzaId(property.cuenta_cobranza_id, 'Propiedad')}
                         </Button>
                       ) : (
                         <Badge variant="outline">N/A</Badge>
@@ -2335,7 +2336,7 @@ const Propiedades = () => {
                                     }`}
                                     onClick={() => navigate(`/admin/cuentas-cobranza/${offer.cuenta_cobranza_id}/detalle`)}
                                   >
-                                    CC-{String(offer.cuenta_cobranza_id).padStart(6, '0')}
+                                    {formatCuentaCobranzaId(offer.cuenta_cobranza_id, 'Propiedad')}
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -2559,7 +2560,7 @@ const Propiedades = () => {
                                   }`}
                                   onClick={() => navigate(`/admin/cuentas-cobranza/${offer.cuenta_cobranza_id}/detalle`)}
                                 >
-                                  CC-{String(offer.cuenta_cobranza_id).padStart(6, '0')}
+                                  {formatCuentaCobranzaId(offer.cuenta_cobranza_id, 'Producto')}
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>

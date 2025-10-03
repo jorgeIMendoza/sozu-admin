@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 interface CuentaCobranza {
   id: number;
@@ -212,7 +213,7 @@ export function TransferMoneyDialog({
             <h4 className="font-medium mb-2">Cuenta de Origen</h4>
             <div className="space-y-2">
               <div>
-                <strong>ID:</strong> CC-{String(cuentaOrigen?.id || 0).padStart(6, '0')}
+                <strong>ID:</strong> {formatCuentaCobranzaId(cuentaOrigen?.id || 0, 'Propiedad')}
               </div>
               <div>
                 <strong>Proyecto:</strong> {cuentaOrigen?.proyecto}
@@ -248,7 +249,7 @@ export function TransferMoneyDialog({
                   <SelectItem key={cuenta.id} value={cuenta.id.toString()}>
                     <div className="flex flex-col">
                       <div className="font-medium">
-                        CC-{String(cuenta.id).padStart(6, '0')} - {cuenta.proyecto}
+                        {formatCuentaCobranzaId(cuenta.id, 'Propiedad')} - {cuenta.proyecto}
                       </div>
                       <div className="text-sm text-muted-foreground">
                         Propiedad: {cuenta.numero_propiedad} | 
