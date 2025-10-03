@@ -26,6 +26,7 @@ interface Comprador {
 
 interface CuentaCobranza {
   id: number;
+  tipo: 'Propiedad' | 'Producto' | 'Servicio';
   clabe_stp: string | null;
   precio_final: number;
   pagado: number;
@@ -115,12 +116,13 @@ export default function Pagos() {
       // Get offer IDs to fetch related data
       const ofertaIds = cuentas.map(c => c.id_oferta);
 
-      // Get ofertas with properties
+      // Get ofertas with properties and products
       const { data: ofertas, error: ofertasError } = await supabase
         .from('ofertas')
         .select(`
           id,
           id_propiedad,
+          id_producto,
           propiedades!ofertas_id_propiedad_fkey(
             id,
             numero_propiedad,
@@ -145,17 +147,21 @@ export default function Pagos() {
         `)
         .in('id_cuenta_cobranza', cuentas.map(c => c.id));
 
-      // Get entidades relacionadas, proyectos, edificios, modelos
+      // Get entidades relacionadas, proyectos, edificios, modelos, productos
       const entidadIds = ofertas?.map(o => o.propiedades?.id_entidad_relacionada_dueno).filter(Boolean) || [];
       const edificioModeloIds = ofertas?.map(o => o.propiedades?.id_edificio_modelo).filter(Boolean) || [];
+      const productoIds = ofertas?.map(o => o.id_producto).filter(Boolean) || [];
 
-      const [entidadesResult, edificiosModelosResult] = await Promise.all([
+      const [entidadesResult, edificiosModelosResult, productosResult] = await Promise.all([
         supabase
           .from('entidades_relacionadas')
           .select(`
             id,
             personas!fk_entrel_persona(nombre_legal),
-            proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
+            proyectos!entidades_relacionadas_id_proyecto_fkey(
+              nombre,
+              id_tipo_uso
+            )
           `)
           .in('id', entidadIds),
         supabase
@@ -165,7 +171,17 @@ export default function Pagos() {
             edificios!edificios_modelos_id_edificio_fkey(nombre),
             modelos!edificios_modelos_id_modelo_fkey(nombre)
           `)
-          .in('id', edificioModeloIds)
+          .in('id', edificioModeloIds),
+        productoIds.length > 0 ? supabase
+          .from('productos_servicios')
+          .select(`
+            id,
+            id_proyecto,
+            proyectos!productos_servicios_id_proyecto_fkey(
+              id_tipo_uso
+            )
+          `)
+          .in('id', productoIds) : Promise.resolve({ data: [] })
       ]);
 
       // Transform the data
@@ -175,6 +191,23 @@ export default function Pagos() {
         const entidad = entidadesResult.data?.find(e => e.id === propiedad?.id_entidad_relacionada_dueno);
         const edificioModelo = edificiosModelosResult.data?.find(em => em.id === propiedad?.id_edificio_modelo);
         const cuentaCompradores = compradores?.filter(c => c.id_cuenta_cobranza === cuenta.id) || [];
+        
+        // Determine tipo based on oferta
+        let tipo: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
+        if (oferta?.id_producto) {
+          const producto = productosResult.data?.find(p => p.id === oferta.id_producto);
+          if (producto && producto.proyectos) {
+            // id_tipo_uso: 9 = Productos, 10 = Servicios, 11 = Mantenimientos (also Servicios)
+            const tipoUso = producto.proyectos.id_tipo_uso;
+            if (tipoUso === 9) {
+              tipo = 'Producto';
+            } else if (tipoUso === 10 || tipoUso === 11) {
+              tipo = 'Servicio';
+            }
+          } else {
+            tipo = 'Producto'; // Default if we can't determine
+          }
+        }
 
         const pagado = pagadoPorCuenta[cuenta.id] || 0;
         const precio_final = cuenta.precio_final || 0;
@@ -182,6 +215,7 @@ export default function Pagos() {
 
         return {
           id: cuenta.id,
+          tipo,
           clabe_stp: cuenta.clabe_stp,
           precio_final,
           pagado,
@@ -389,6 +423,7 @@ export default function Pagos() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>ID Cuenta</TableHead>
+                      <TableHead>Tipo</TableHead>
                       <TableHead>Compradores</TableHead>
                       <TableHead>Dueño</TableHead>
                       <TableHead>CLABE</TableHead>
@@ -406,6 +441,11 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow key={cuenta.id}>
                         <TableCell className="font-semibold">CC-{String(cuenta.id).padStart(6, '0')}</TableCell>
+                        <TableCell>
+                          <Badge variant={cuenta.tipo === 'Propiedad' ? 'default' : cuenta.tipo === 'Producto' ? 'secondary' : 'outline'}>
+                            {cuenta.tipo}
+                          </Badge>
+                        </TableCell>
                          <TableCell>
                            {cuenta.compradores.length > 0 ? (
                              cuenta.compradores.length > 1 ? (
@@ -578,6 +618,7 @@ export default function Pagos() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>ID Cuenta</TableHead>
+                      <TableHead>Tipo</TableHead>
                       <TableHead>Compradores</TableHead>
                       <TableHead>Dueño</TableHead>
                       <TableHead>CLABE</TableHead>
@@ -596,6 +637,11 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow key={cuenta.id}>
                         <TableCell className="font-semibold">CC-{String(cuenta.id).padStart(6, '0')}</TableCell>
+                        <TableCell>
+                          <Badge variant={cuenta.tipo === 'Propiedad' ? 'default' : cuenta.tipo === 'Producto' ? 'secondary' : 'outline'}>
+                            {cuenta.tipo}
+                          </Badge>
+                        </TableCell>
                          <TableCell>
                            {cuenta.compradores.length > 0 ? (
                              cuenta.compradores.length > 1 ? (
