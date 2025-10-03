@@ -2034,19 +2034,32 @@ const Propiedades = () => {
                            className={rowClassName}
                          >
                            <TableCell className="font-medium">
-                             <Button
-                               variant="link"
-                               size="sm"
-                               onClick={() => {
-                                 if (!hasAccount && !hasActiveAccountWithScheme && offer.esquema_id) {
-                                   handleGenerateCollectionAccount(offer.id, selectedPropertyForOffers!.id);
-                                 }
-                               }}
-                               disabled={hasAccount || !offer.esquema_id || hasActiveAccountWithScheme}
-                               className="p-0 h-auto font-semibold"
-                             >
-                               O-{String(offer.id).padStart(6, '0')}
-                             </Button>
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                 <Button
+                                   variant="link"
+                                   size="sm"
+                                   onClick={() => {
+                                     const isCreditCardEnabled = !hasAccount && !hasActiveAccountWithScheme && selectedPropertyForOffers?.disponibilidad === 'Apartado' && offer.esquema_id;
+                                     if (!hasAccount && !hasActiveAccountWithScheme && offer.esquema_id && !isCreditCardEnabled) {
+                                       handleGenerateCollectionAccount(offer.id, selectedPropertyForOffers!.id);
+                                     }
+                                   }}
+                                   disabled={
+                                     hasAccount || 
+                                     !offer.esquema_id || 
+                                     hasActiveAccountWithScheme || 
+                                     (!hasAccount && !hasActiveAccountWithScheme && selectedPropertyForOffers?.disponibilidad === 'Apartado' && offer.esquema_id)
+                                   }
+                                   className="p-0 h-auto font-semibold"
+                                 >
+                                   O-{String(offer.id).padStart(6, '0')}
+                                 </Button>
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                 <p>Generar cuenta de cobranza manualmente</p>
+                               </TooltipContent>
+                             </Tooltip>
                            </TableCell>
                           <TableCell>
                             {(offer.agent_name || 'AGENTE POR DEFINIR').toUpperCase()}
@@ -2220,19 +2233,26 @@ const Propiedades = () => {
                       return (
                          <TableRow key={offer.id}>
                           <TableCell className="font-medium">
-                           <Button
-                             variant="link"
-                             size="sm"
-                             onClick={() => {
-                               if (!hasAccount && !hasActiveAccountWithScheme) {
-                                 handleGenerateCollectionAccount(offer.id, selectedPropertyForProductOffers!.id);
-                               }
-                             }}
-                             disabled={hasAccount || hasActiveAccountWithScheme}
-                             className="p-0 h-auto font-semibold"
-                           >
-                             OP-{String(offer.id).padStart(6, '0')}
-                           </Button>
+                           <Tooltip>
+                             <TooltipTrigger asChild>
+                               <Button
+                                 variant="link"
+                                 size="sm"
+                                 onClick={() => {
+                                   if (!hasAccount && !hasActiveAccountWithScheme) {
+                                     handleGenerateCollectionAccount(offer.id, selectedPropertyForProductOffers!.id);
+                                   }
+                                 }}
+                                 disabled={hasAccount || hasActiveAccountWithScheme}
+                                 className="p-0 h-auto font-semibold"
+                               >
+                                 OP-{String(offer.id).padStart(6, '0')}
+                               </Button>
+                             </TooltipTrigger>
+                             <TooltipContent>
+                               <p>Generar cuenta de cobranza manualmente</p>
+                             </TooltipContent>
+                           </Tooltip>
                          </TableCell>
                         <TableCell>
                           {(offer.product_name || 'N/A').toUpperCase()}
