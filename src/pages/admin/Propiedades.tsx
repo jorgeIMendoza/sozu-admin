@@ -2328,7 +2328,7 @@ const Propiedades = () => {
                   {(() => {
                     // Check if there's any active account WITH payment scheme among product offers
                     const hasActiveAccountWithScheme = selectedPropertyProductOffers.some((offer: any) => 
-                      offer.cuenta_cobranza_id && offer.cuenta_activo && offer.esquema_id
+                      offer.cuenta_cobranza_id && offer.cuenta_activo && offer.id_esquema_pago_seleccionado
                     );
                     
                     return selectedPropertyProductOffers.map((offer: any) => {
@@ -2403,7 +2403,7 @@ const Propiedades = () => {
                           {new Date(offer.fecha_generacion).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          {offer.esquema_id ? (
+                          {offer.id_esquema_pago_seleccionado ? (
                             <Badge 
                               variant="outline" 
                               className="font-medium bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700"
