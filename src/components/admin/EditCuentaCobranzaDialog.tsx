@@ -548,15 +548,21 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   // Initialize fechaCompra from cuentaDetalle
   useEffect(() => {
     if (cuentaDetalle?.fecha_compra) {
-      setFechaCompra(new Date(cuentaDetalle.fecha_compra));
+      // Parse date string as local date to avoid timezone issues
+      const [year, month, day] = cuentaDetalle.fecha_compra.split('-').map(Number);
+      setFechaCompra(new Date(year, month - 1, day));
     }
   }, [cuentaDetalle]);
 
   // Mutation to update fecha_compra
   const updateFechaCompraMutation = useMutation({
     mutationFn: async (newDate: Date) => {
-      // Format date locally to avoid timezone issues
-      const formattedDate = format(newDate, 'yyyy-MM-dd');
+      // Format date as YYYY-MM-DD using local timezone
+      const year = newDate.getFullYear();
+      const month = String(newDate.getMonth() + 1).padStart(2, '0');
+      const day = String(newDate.getDate()).padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
+      
       const { error } = await supabase
         .from('cuentas_cobranza')
         .update({ fecha_compra: formattedDate })
