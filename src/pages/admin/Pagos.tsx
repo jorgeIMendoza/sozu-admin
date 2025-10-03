@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2 } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -17,6 +17,9 @@ import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialo
 import { TransferMoneyDialog } from "@/components/admin/TransferMoneyDialog";
 import { CancelCuentaDialog } from "@/components/admin/CancelCuentaDialog";
 import { useToast } from "@/hooks/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface Comprador {
   nombre_legal: string;
@@ -45,6 +48,7 @@ interface CuentaCobranza {
 export default function Pagos() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("activas");
+  const [selectedTipos, setSelectedTipos] = useState<Array<'Propiedad' | 'Producto' | 'Servicio'>>(['Propiedad', 'Producto', 'Servicio']);
   const [cancelDialog, setCancelDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
     isOpen: false,
     cuenta: null
@@ -246,18 +250,34 @@ export default function Pagos() {
   
   const currentCuentas = activeTab === "activas" ? cuentasActivas : cuentasCanceladas;
   
-  const filteredCuentas = currentCuentas.filter(cuenta =>
-    cuenta.id.toString().includes(searchTerm) ||
-    cuenta.compradores.some(c => c.nombre_legal.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      c.rfc?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    cuenta.dueno.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cuenta.clabe_stp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cuenta.proyecto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cuenta.edificio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cuenta.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cuenta.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cuenta.precio_final.toString().includes(searchTerm)
-  );
+  const filteredCuentas = currentCuentas.filter(cuenta => {
+    // Filter by tipo
+    if (!selectedTipos.includes(cuenta.tipo)) {
+      return false;
+    }
+    
+    // Filter by search term
+    return (
+      cuenta.id.toString().includes(searchTerm) ||
+      cuenta.compradores.some(c => c.nombre_legal.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        c.rfc?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      cuenta.dueno.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cuenta.clabe_stp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cuenta.proyecto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cuenta.edificio.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cuenta.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cuenta.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cuenta.precio_final.toString().includes(searchTerm)
+    );
+  });
+
+  const handleTipoToggle = (tipo: 'Propiedad' | 'Producto' | 'Servicio') => {
+    setSelectedTipos(prev => 
+      prev.includes(tipo) 
+        ? prev.filter(t => t !== tipo)
+        : [...prev, tipo]
+    );
+  };
 
   const totalMonto = filteredCuentas.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
 
@@ -401,14 +421,61 @@ export default function Pagos() {
         <TabsContent value="activas" className="mt-6">
           <Card>
             <CardHeader>
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por ID, compradores, dueño, CLABE, proyecto, edificio, propiedad o modelo..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por ID, compradores, dueño, CLABE, proyecto, edificio, propiedad o modelo..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="gap-2">
+                      <Filter className="h-4 w-4" />
+                      Tipo ({selectedTipos.length})
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 bg-background z-50" align="end">
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm">Filtrar por Tipo</h4>
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="tipo-propiedad"
+                            checked={selectedTipos.includes('Propiedad')}
+                            onCheckedChange={() => handleTipoToggle('Propiedad')}
+                          />
+                          <Label htmlFor="tipo-propiedad" className="cursor-pointer">
+                            Propiedad
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="tipo-producto"
+                            checked={selectedTipos.includes('Producto')}
+                            onCheckedChange={() => handleTipoToggle('Producto')}
+                          />
+                          <Label htmlFor="tipo-producto" className="cursor-pointer">
+                            Producto
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="tipo-servicio"
+                            checked={selectedTipos.includes('Servicio')}
+                            onCheckedChange={() => handleTipoToggle('Servicio')}
+                          />
+                          <Label htmlFor="tipo-servicio" className="cursor-pointer">
+                            Servicio
+                          </Label>
+                        </div>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </CardHeader>
             <CardContent>
@@ -596,14 +663,61 @@ export default function Pagos() {
         <TabsContent value="canceladas" className="mt-6">
           <Card>
             <CardHeader>
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por ID, compradores, dueño, CLABE, proyecto, edificio, propiedad o modelo..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por ID, compradores, dueño, CLABE, proyecto, edificio, propiedad o modelo..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="gap-2">
+                      <Filter className="h-4 w-4" />
+                      Tipo ({selectedTipos.length})
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 bg-background z-50" align="end">
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm">Filtrar por Tipo</h4>
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="tipo-propiedad-canceladas"
+                            checked={selectedTipos.includes('Propiedad')}
+                            onCheckedChange={() => handleTipoToggle('Propiedad')}
+                          />
+                          <Label htmlFor="tipo-propiedad-canceladas" className="cursor-pointer">
+                            Propiedad
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="tipo-producto-canceladas"
+                            checked={selectedTipos.includes('Producto')}
+                            onCheckedChange={() => handleTipoToggle('Producto')}
+                          />
+                          <Label htmlFor="tipo-producto-canceladas" className="cursor-pointer">
+                            Producto
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="tipo-servicio-canceladas"
+                            checked={selectedTipos.includes('Servicio')}
+                            onCheckedChange={() => handleTipoToggle('Servicio')}
+                          />
+                          <Label htmlFor="tipo-servicio-canceladas" className="cursor-pointer">
+                            Servicio
+                          </Label>
+                        </div>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </CardHeader>
             <CardContent>
