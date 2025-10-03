@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, Wallet, HandCoins } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -2389,19 +2389,42 @@ const Propiedades = () => {
                         const scheme = availableSchemes.find(s => s.id === selectedOfferForAccount.esquema_id);
                         if (scheme) {
                           return (
-                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Wallet className="h-3 w-3" />
-                                {scheme.porcentaje_enganche}%
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {scheme.porcentaje_mensualidades}%
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <HandCoins className="h-3 w-3" />
-                                {scheme.porcentaje_entrega}%
-                              </span>
+                            <div className="flex flex-wrap gap-2 text-xs">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="flex items-center gap-1 text-muted-foreground">
+                                    <DollarSign className="h-3 w-3" />
+                                    {scheme.porcentaje_enganche}%
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Enganche</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="flex items-center gap-1 text-muted-foreground">
+                                    <Calendar className="h-3 w-3" />
+                                    {scheme.porcentaje_mensualidades}%
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Mensualidades</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="flex items-center gap-1 text-muted-foreground">
+                                    <Home className="h-3 w-3" />
+                                    {scheme.porcentaje_entrega}%
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Contra entrega</p>
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
                           );
                         }
