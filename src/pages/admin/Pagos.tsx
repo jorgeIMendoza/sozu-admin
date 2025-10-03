@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -32,6 +32,7 @@ interface CuentaCobranza {
   tipo: 'Propiedad' | 'Producto' | 'Servicio';
   clabe_stp: string | null;
   precio_final: number;
+  precio_lista: number | null;
   pagado: number;
   restante: number;
   compradores: Comprador[];
@@ -130,6 +131,7 @@ export default function Pagos() {
           propiedades!ofertas_id_propiedad_fkey(
             id,
             numero_propiedad,
+            precio_lista,
             id_entidad_relacionada_dueno,
             id_edificio_modelo
           )
@@ -222,6 +224,7 @@ export default function Pagos() {
           tipo,
           clabe_stp: cuenta.clabe_stp,
           precio_final,
+          precio_lista: propiedad?.precio_lista || null,
           pagado,
           restante,
           compradores: cuentaCompradores.map(c => ({
@@ -562,10 +565,46 @@ export default function Pagos() {
                               {cuenta.numero_propiedad}
                             </span>
                           </TableCell>
-                        <TableCell>{cuenta.modelo}</TableCell>
-                        <TableCell className="font-semibold text-green-600">
-                          {formatCurrency(Number(cuenta.precio_final))}
-                        </TableCell>
+                         <TableCell>{cuenta.modelo}</TableCell>
+                         <TableCell className="font-semibold text-green-600">
+                           <div className="flex items-center justify-end gap-2">
+                             <span>{formatCurrency(Number(cuenta.precio_final))}</span>
+                             {cuenta.precio_lista && cuenta.precio_final > cuenta.precio_lista ? (
+                               <TooltipProvider>
+                                 <Tooltip>
+                                   <TooltipTrigger>
+                                     <TrendingUp className="h-4 w-4 text-orange-600" />
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Precio final mayor a precio de lista</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               </TooltipProvider>
+                             ) : cuenta.precio_lista && cuenta.precio_final < cuenta.precio_lista ? (
+                               <TooltipProvider>
+                                 <Tooltip>
+                                   <TooltipTrigger>
+                                     <TrendingDown className="h-4 w-4 text-green-600" />
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Precio final menor a precio de lista</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               </TooltipProvider>
+                             ) : cuenta.precio_lista && cuenta.precio_final === cuenta.precio_lista ? (
+                               <TooltipProvider>
+                                 <Tooltip>
+                                   <TooltipTrigger>
+                                     <Equal className="h-4 w-4 text-blue-600" />
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Precio final igual a precio de lista</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               </TooltipProvider>
+                             ) : null}
+                           </div>
+                         </TableCell>
                         <TableCell className="font-semibold text-blue-600">
                           {formatCurrency(cuenta.pagado)}
                         </TableCell>
@@ -805,10 +844,46 @@ export default function Pagos() {
                               {cuenta.numero_propiedad}
                             </span>
                           </TableCell>
-                        <TableCell>{cuenta.modelo}</TableCell>
-                        <TableCell className="font-semibold text-green-600">
-                          {formatCurrency(Number(cuenta.precio_final))}
-                        </TableCell>
+                         <TableCell>{cuenta.modelo}</TableCell>
+                         <TableCell className="font-semibold text-green-600">
+                           <div className="flex items-center justify-end gap-2">
+                             <span>{formatCurrency(Number(cuenta.precio_final))}</span>
+                             {cuenta.precio_lista && cuenta.precio_final > cuenta.precio_lista ? (
+                               <TooltipProvider>
+                                 <Tooltip>
+                                   <TooltipTrigger>
+                                     <TrendingUp className="h-4 w-4 text-orange-600" />
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Precio final mayor a precio de lista</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               </TooltipProvider>
+                             ) : cuenta.precio_lista && cuenta.precio_final < cuenta.precio_lista ? (
+                               <TooltipProvider>
+                                 <Tooltip>
+                                   <TooltipTrigger>
+                                     <TrendingDown className="h-4 w-4 text-green-600" />
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Precio final menor a precio de lista</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               </TooltipProvider>
+                             ) : cuenta.precio_lista && cuenta.precio_final === cuenta.precio_lista ? (
+                               <TooltipProvider>
+                                 <Tooltip>
+                                   <TooltipTrigger>
+                                     <Equal className="h-4 w-4 text-blue-600" />
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Precio final igual a precio de lista</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               </TooltipProvider>
+                             ) : null}
+                           </div>
+                         </TableCell>
                         <TableCell className="font-semibold text-blue-600">
                           {formatCurrency(cuenta.pagado)}
                         </TableCell>
