@@ -2421,6 +2421,7 @@ const Propiedades = () => {
                     <TableHead>Esquema de Pago</TableHead>
                     <TableHead>CLABE</TableHead>
                     <TableHead>Cuenta de Cobranza</TableHead>
+                    <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2604,6 +2605,49 @@ const Propiedades = () => {
                           ) : (
                             <span className="text-muted-foreground text-sm">Sin cuenta</span>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                toast({
+                                  title: "Generando PDF",
+                                  description: "Por favor espera mientras se genera la oferta...",
+                                });
+
+                                const { generateOfferPDF } = await import('@/services/htmlToPdfService');
+                                
+                                await generateOfferPDF({
+                                  propertyId: selectedPropertyForProductOffers!.id,
+                                  offerId: offer.id,
+                                  propertyNumber: selectedPropertyForProductOffers!.numero_propiedad,
+                                  leadName: offer.lead_name || 'N/A',
+                                  leadEmail: offer.lead_email || 'N/A',
+                                  leadPhone: offer.lead_telefono || 'N/A',
+                                  creatorEmail: offer.email_creador || 'N/A',
+                                  isProductOffer: true,
+                                  productId: offer.id_producto
+                                });
+
+                                toast({
+                                  title: "PDF generado",
+                                  description: "La oferta se ha descargado exitosamente",
+                                });
+                              } catch (error) {
+                                console.error('Error generating PDF:', error);
+                                toast({
+                                  title: "Error",
+                                  description: "No se pudo generar el PDF de la oferta",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            PDF
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );

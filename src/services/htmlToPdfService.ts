@@ -5,6 +5,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { OfferPDFTemplate } from '@/components/admin/OfferPDFTemplate';
 import { OfferPDFTemplateSozu } from '@/components/admin/OfferPDFTemplateSozu';
+import { OfferPDFTemplateProducto } from '@/components/admin/OfferPDFTemplateProducto';
 
 interface OfferData {
   propertyId: number;
@@ -14,6 +15,8 @@ interface OfferData {
   leadEmail: string;
   leadPhone: string;
   creatorEmail: string;
+  isProductOffer?: boolean;
+  productId?: number;
 }
 
 interface PropertyDetails {
@@ -110,7 +113,13 @@ class HTMLToPDFService {
         throw new Error('Error fetching offer details');
       }
 
-      // Fetch all required data
+      // Check if this is a product offer
+      if (offerData.isProductOffer && offerData.productId) {
+        await this.generateProductOfferPDF(offerData, offerDetails);
+        return;
+      }
+
+      // Fetch all required data for property offers
       const [propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas] = await Promise.all([
         this.fetchPropertyDetails(offerData.propertyId),
         this.fetchPaymentSchemes(offerData.propertyId, offerData.offerId),
@@ -148,6 +157,61 @@ class HTMLToPDFService {
 
     } catch (error) {
       console.error('Error generating PDF:', error);
+      throw error;
+    }
+  }
+
+  private async generateProductOfferPDF(offerData: OfferData, offerDetails: any): Promise<void> {
+    try {
+      console.log('Generating product offer PDF');
+
+      // Fetch property details (simplified for products)
+      const propertyDetails = await this.fetchPropertyDetails(offerData.propertyId);
+      
+      // Fetch product details
+      const productDetails = await this.fetchProductDetails(offerData.productId!);
+      
+      // Fetch payment scheme if selected
+      let paymentScheme = null;
+      if (offerDetails.id_esquema_pago_seleccionado) {
+        const { data: schemeData } = await supabase
+          .from('esquemas_pago')
+          .select('*')
+          .eq('id', offerDetails.id_esquema_pago_seleccionado)
+          .single();
+        
+        paymentScheme = schemeData;
+      }
+
+      // Fetch creator and lead info
+      const [creatorInfo, leadInfo, legalNotices] = await Promise.all([
+        this.fetchCreatorInfo(offerDetails.email_creador),
+        this.fetchLeadInfo(offerDetails.id_persona_lead),
+        this.fetchLegalNotices(offerData.propertyId)
+      ]);
+
+      const templateOfferData = {
+        id: offerData.offerId,
+        fecha_generacion: offerDetails.fecha_generacion,
+        propertyNumber: offerData.propertyNumber,
+        leadName: offerData.leadName,
+        leadEmail: offerData.leadEmail,
+        email_creador: offerData.creatorEmail,
+        id_esquema_pago_seleccionado: offerDetails.id_esquema_pago_seleccionado,
+      };
+
+      await this.generateProductPDFFromHTML(
+        templateOfferData,
+        propertyDetails,
+        productDetails,
+        paymentScheme,
+        creatorInfo,
+        leadInfo,
+        legalNotices
+      );
+
+    } catch (error) {
+      console.error('Error generating product PDF:', error);
       throw error;
     }
   }
@@ -961,6 +1025,190 @@ class HTMLToPDFService {
     }
 
     return data || [];
+  }
+
+  private async fetchProductDetails(productId: number): Promise<any> {
+    console.log('Fetching product details for ID:', productId);
+    
+    const { data: product, error } = await supabase
+      .from('productos_servicios')
+      .select(`
+        id,
+        nombre,
+        precio_lista,
+        id_entidad_relacionada_dueno,
+        id_categoria
+      `)
+      .eq('id', productId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching product:', error);
+      throw error;
+    }
+
+    // Fetch category name separately
+    let categoria_nombre = null;
+    if (product.id_categoria) {
+      const { data: categoria } = await supabase
+        .from('categorias_producto')
+        .select('nombre')
+        .eq('id', product.id_categoria)
+        .single();
+      
+      categoria_nombre = categoria?.nombre;
+    }
+
+    // Fetch owner bank account data
+    let ownerStpBankAccount = null;
+    let ownerData = null;
+
+    if (product.id_entidad_relacionada_dueno) {
+      const { data: entidadRelacionada } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_persona')
+        .eq('id', product.id_entidad_relacionada_dueno)
+        .single();
+
+      if (entidadRelacionada?.id_persona) {
+        // Fetch owner data
+        const { data: persona } = await supabase
+          .from('personas')
+          .select('id, nombre_legal, email, telefono')
+          .eq('id', entidadRelacionada.id_persona)
+          .single();
+
+        ownerData = persona;
+
+        // Fetch STP bank account
+        const { data: stpAccount } = await supabase
+          .from('cuentas_bancarias')
+          .select(`
+            numero_cuenta,
+            cuenta_clabe,
+            cuenta_swift,
+            id_banco
+          `)
+          .eq('id_persona', entidadRelacionada.id_persona)
+          .eq('es_cuenta_fisica_para_stp', true)
+          .eq('activo', true)
+          .single();
+
+        if (stpAccount) {
+          // Fetch bank name
+          let banco_nombre = 'Banco desconocido';
+          if (stpAccount.id_banco) {
+            const { data: banco } = await supabase
+              .from('bancos')
+              .select('nombre')
+              .eq('id', stpAccount.id_banco)
+              .single();
+            
+            banco_nombre = banco?.nombre || banco_nombre;
+          }
+
+          ownerStpBankAccount = {
+            numero_cuenta: stpAccount.numero_cuenta,
+            cuenta_clabe: stpAccount.cuenta_clabe || '',
+            cuenta_swift: stpAccount.cuenta_swift || '',
+            banco_nombre
+          };
+        }
+      }
+    }
+
+    return {
+      id: product.id,
+      nombre: product.nombre,
+      precio_lista: product.precio_lista,
+      categoria_nombre,
+      ownerData,
+      ownerStpBankAccount
+    };
+  }
+
+  private async generateProductPDFFromHTML(
+    offerData: {
+      id: number;
+      fecha_generacion: string;
+      propertyNumber: string;
+      leadName: string;
+      leadEmail: string;
+      email_creador: string;
+      id_esquema_pago_seleccionado?: number | null;
+    },
+    propertyDetails: PropertyDetails,
+    productDetails: any,
+    paymentScheme: any,
+    creatorInfo: any,
+    leadInfo: any,
+    legalNotices: string[]
+  ): Promise<void> {
+    const container = this.createContainer();
+    container.style.width = '2550px';
+    container.style.minHeight = '3300px';
+    
+    try {
+      // Create Product template element
+      const templateElement = React.createElement(OfferPDFTemplateProducto, {
+        offerData,
+        propertyDetails,
+        productDetails,
+        paymentScheme,
+        creatorInfo,
+        leadInfo,
+        legalNotices
+      });
+      
+      const root = createRoot(container);
+      root.render(templateElement);
+      
+      // Wait for rendering
+      await new Promise<void>(resolve => setTimeout(resolve, 8000));
+      
+      // Capture as canvas
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width: 2550,
+        height: 3300,
+        imageTimeout: 0,
+        foreignObjectRendering: false
+      });
+      
+      // Create PDF with A4 dimensions
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [2550, 3300]
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      pdf.addImage(imgData, 'JPEG', 0, 0, 2550, 3300);
+      
+      // Generate filename for product offer
+      const projectName = propertyDetails.projectData?.nombre || 'Proyecto';
+      const propertyNumber = propertyDetails.numero_propiedad || 'N/A';
+      const productName = productDetails.nombre || 'Producto';
+      const offerNumber = offerData.id.toString().padStart(6, '0') || '000000';
+      
+      const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
+      const cleanPropertyNumber = propertyNumber.replace(/[^a-zA-Z0-9]/g, '_');
+      const cleanProductName = productName.replace(/[^a-zA-Z0-9]/g, '_');
+      
+      const filename = `OP_${offerNumber}_${cleanPropertyNumber}_${cleanProductName}_${cleanProjectName}.pdf`;
+
+      // Download the PDF
+      pdf.save(filename);
+      
+      console.log('Product PDF generated successfully:', filename);
+      
+    } finally {
+      document.body.removeChild(container);
+    }
   }
 
   private formatOfferNumber(offerId: number): string {
