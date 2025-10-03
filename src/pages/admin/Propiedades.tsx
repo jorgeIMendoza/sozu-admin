@@ -2433,6 +2433,15 @@ const Propiedades = () => {
                       const isAccountActive = hasAccount && offer.cuenta_activo;
                       const isAccountCancelled = hasAccount && !offer.cuenta_activo;
                       
+                      // Check if there's an active account for THIS SPECIFIC product (from another offer)
+                      const hasActiveAccountForThisProduct = selectedPropertyProductOffers.some((o: any) => 
+                        o.id_producto === offer.id_producto && 
+                        o.id !== offer.id && // Not the current offer
+                        o.cuenta_cobranza_id && 
+                        o.cuenta_activo && 
+                        o.id_esquema_pago_seleccionado
+                      );
+                      
                       return (
                          <TableRow key={offer.id}>
                          <TableCell className="font-medium">
@@ -2441,7 +2450,7 @@ const Propiedades = () => {
                               <Button
                                 variant="link"
                                 size="sm"
-                                disabled={isAccountActive}
+                                disabled={isAccountActive || hasActiveAccountForThisProduct}
                                 onClick={async () => {
                                   // Si tiene cuenta de cobranza, navegar a ella
                                   if (hasAccount) {
@@ -2459,18 +2468,18 @@ const Propiedades = () => {
                                     return;
                                   }
                                   
-                                  // Si hay otra cuenta activa con esquema, no permitir generar
-                                  if (hasActiveAccountWithScheme && !isAccountActive) {
+                                  // Si hay otra cuenta activa para este mismo producto, no permitir generar
+                                  if (hasActiveAccountForThisProduct) {
                                     toast({
                                       title: "No disponible",
-                                      description: "Ya existe una cuenta de cobranza activa para otro producto. No se pueden generar más cuentas.",
+                                      description: "Ya existe una cuenta de cobranza activa para este producto. No se pueden generar más cuentas para el mismo producto.",
                                       variant: "default",
                                     });
                                     return;
                                   }
                                   
-                                  // Si tiene esquema y no hay otra cuenta activa, ofrecer generarla
-                                  if (!hasActiveAccountWithScheme && offer.id_esquema_pago_seleccionado) {
+                                  // Si tiene esquema y no hay otra cuenta activa para este producto, ofrecer generarla
+                                  if (!hasActiveAccountForThisProduct && offer.id_esquema_pago_seleccionado) {
                                     // Load the specific scheme if not already loaded
                                     if (!availableSchemes.find(s => s.id === offer.id_esquema_pago_seleccionado)) {
                                       const { data: schemeData } = await supabase
@@ -2502,8 +2511,8 @@ const Propiedades = () => {
                                     ? 'Cuenta cancelada - No se puede generar nueva cuenta'
                                     : !offer.id_esquema_pago_seleccionado
                                     ? 'Sin esquema de pago - Selecciona uno primero'
-                                    : hasActiveAccountWithScheme
-                                    ? 'Ya existe cuenta activa para otro producto - No se pueden generar más cuentas'
+                                    : hasActiveAccountForThisProduct
+                                    ? 'Ya existe cuenta activa para este producto - No se pueden generar más cuentas'
                                     : 'Generar cuenta de cobranza'
                                 }
                               </p>
