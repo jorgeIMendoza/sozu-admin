@@ -2549,11 +2549,31 @@ const Propiedades = () => {
                         </TableCell>
                         <TableCell>
                           {hasAccount && offer.cuenta_clabe_stp ? (
-                            <div className="text-xs font-mono text-foreground">
+                            <div 
+                              className="text-xs font-mono text-foreground cursor-pointer hover:text-primary transition-colors"
+                              onClick={() => {
+                                navigator.clipboard.writeText(offer.cuenta_clabe_stp!);
+                                toast({
+                                  title: "CLABE copiada",
+                                  description: "La CLABE se ha copiado al portapapeles",
+                                });
+                              }}
+                              title="Click para copiar"
+                            >
                               {offer.cuenta_clabe_stp}
                             </div>
                           ) : offer.clabe_stp_tmp_producto ? (
-                            <div className="text-xs font-mono text-muted-foreground">
+                            <div 
+                              className="text-xs font-mono text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+                              onClick={() => {
+                                navigator.clipboard.writeText(offer.clabe_stp_tmp_producto!);
+                                toast({
+                                  title: "CLABE copiada",
+                                  description: "La CLABE se ha copiado al portapapeles",
+                                });
+                              }}
+                              title="Click para copiar"
+                            >
                               {offer.clabe_stp_tmp_producto}
                             </div>
                           ) : (
