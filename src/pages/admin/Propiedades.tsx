@@ -2216,42 +2216,52 @@ const Propiedades = () => {
                            <TableCell className="font-medium">
                              <Tooltip>
                                <TooltipTrigger asChild>
-                                 <Button
-                                   variant="link"
-                                   size="sm"
-                                    onClick={async () => {
-                                      const isCreditCardEnabled = !hasAccount && !hasActiveAccountWithScheme && selectedPropertyForOffers?.disponibilidad === 'Apartado' && offer.esquema_id;
-                                      if (!hasAccount && !hasActiveAccountWithScheme && offer.esquema_id && !isCreditCardEnabled) {
-                                        // Load the specific scheme if not already loaded
-                                        if (!availableSchemes.find(s => s.id === offer.esquema_id)) {
-                                          const { data: schemeData } = await supabase
-                                            .from('esquemas_pago')
-                                            .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
-                                            .eq('id', offer.esquema_id)
-                                            .single();
-                                          
-                                          if (schemeData) {
-                                            setAvailableSchemes([...availableSchemes, schemeData]);
-                                          }
-                                        }
-                                        setSelectedOfferForAccount({ ...offer, propertyId: selectedPropertyForOffers!.id, isProductOffer: false });
-                                        setConfirmGenerateAccountOpen(true);
-                                      }
-                                    }}
-                                   disabled={
-                                     hasAccount || 
-                                     !offer.esquema_id || 
-                                     hasActiveAccountWithScheme || 
-                                     (!hasAccount && !hasActiveAccountWithScheme && selectedPropertyForOffers?.disponibilidad === 'Apartado' && offer.esquema_id)
-                                   }
-                                   className="p-0 h-auto font-semibold"
-                                 >
-                                   O-{String(offer.id).padStart(6, '0')}
-                                 </Button>
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                     onClick={async () => {
+                                       const isCreditCardEnabled = !hasAccount && !hasActiveAccountWithScheme && selectedPropertyForOffers?.disponibilidad === 'Apartado' && offer.esquema_id;
+                                       if (!hasAccount && !hasActiveAccountWithScheme && offer.esquema_id && !isCreditCardEnabled) {
+                                         // Load the specific scheme if not already loaded
+                                         if (!availableSchemes.find(s => s.id === offer.esquema_id)) {
+                                           const { data: schemeData } = await supabase
+                                             .from('esquemas_pago')
+                                             .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+                                             .eq('id', offer.esquema_id)
+                                             .single();
+                                           
+                                           if (schemeData) {
+                                             setAvailableSchemes([...availableSchemes, schemeData]);
+                                           }
+                                         }
+                                         setSelectedOfferForAccount({ ...offer, propertyId: selectedPropertyForOffers!.id, isProductOffer: false });
+                                         setConfirmGenerateAccountOpen(true);
+                                       }
+                                     }}
+                                    disabled={
+                                      isAccountCancelled ||
+                                      hasAccount || 
+                                      !offer.esquema_id || 
+                                      hasActiveAccountWithScheme || 
+                                      (!hasAccount && !hasActiveAccountWithScheme && selectedPropertyForOffers?.disponibilidad === 'Apartado' && offer.esquema_id)
+                                    }
+                                    className="p-0 h-auto font-semibold"
+                                  >
+                                    O-{String(offer.id).padStart(6, '0')}
+                                  </Button>
                                </TooltipTrigger>
-                               <TooltipContent>
-                                 <p>Generar cuenta de cobranza manualmente</p>
-                               </TooltipContent>
+                                <TooltipContent>
+                                  <p>
+                                    {isAccountCancelled 
+                                      ? "Cuenta cancelada - No se puede generar nueva cuenta"
+                                      : hasAccount
+                                      ? "Esta oferta ya tiene cuenta de cobranza"
+                                      : hasActiveAccountWithScheme
+                                      ? "Ya existe cuenta activa con esquema - No se pueden generar más cuentas"
+                                      : "Generar cuenta de cobranza manualmente"
+                                    }
+                                  </p>
+                                </TooltipContent>
                              </Tooltip>
                            </TableCell>
                           <TableCell>
