@@ -63,16 +63,22 @@ export function AddManualPaymentDialog({
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch payment methods (exclude STP)
+  // Fetch payment methods (exclude STP and conditionally exclude "Cesión de derechos" for products/services)
   const { data: metodosPago } = useQuery({
-    queryKey: ["metodos_pago"],
+    queryKey: ["metodos_pago", tipoCuenta],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("metodos_pago")
         .select("id, nombre")
         .eq("activo", true)
-        .neq("nombre", "STP")
-        .order("nombre");
+        .neq("nombre", "STP");
+      
+      // Exclude "Cesión de derechos" for products and services
+      if (tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') {
+        query = query.neq("nombre", "Cesión de derechos");
+      }
+      
+      const { data, error } = await query.order("nombre");
       
       if (error) throw error;
       return data;
