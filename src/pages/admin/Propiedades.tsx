@@ -630,7 +630,7 @@ const Propiedades = () => {
         id_esquema_pago_seleccionado,
         id_producto,
         clabe_stp_tmp_producto,
-        productos_servicios!ofertas_id_producto_fkey(nombre)
+        productos_servicios!ofertas_id_producto_fkey(nombre, tipo)
       `)
       .eq('id_propiedad', propertyId)
       .not('id_producto', 'is', null)
@@ -647,6 +647,7 @@ const Propiedades = () => {
       let enrichedOffer = {
         ...offer,
         product_name: offer.productos_servicios?.nombre || 'N/A',
+        product_type: offer.productos_servicios?.tipo || 'Producto',
       };
       
       // Get cuenta_cobranza if available
@@ -2359,7 +2360,10 @@ const Propiedades = () => {
                     </div>
                     
                     <div className="font-medium text-foreground">
-                      {selectedOfferForAccount.isProductOffer ? 'Producto/Servicio:' : 'Agente:'}
+                      {selectedOfferForAccount.isProductOffer 
+                        ? (selectedOfferForAccount.product_type === 'Servicio' ? 'Servicio:' : 'Producto:')
+                        : 'Agente:'
+                      }
                     </div>
                     <div>
                       {selectedOfferForAccount.isProductOffer 
@@ -2368,7 +2372,7 @@ const Propiedades = () => {
                       }
                     </div>
                     
-                    <div className="font-medium text-foreground">Lead:</div>
+                    <div className="font-medium text-foreground">Comprador:</div>
                     <div>{(selectedOfferForAccount.lead_name || 'N/A').toUpperCase()}</div>
                     
                     <div className="font-medium text-foreground">Fecha:</div>
