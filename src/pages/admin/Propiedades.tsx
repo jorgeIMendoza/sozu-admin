@@ -2548,27 +2548,41 @@ const Propiedades = () => {
                         </TableCell>
                         <TableCell>
                           {hasAccount ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className={`font-mono text-xs ${
-                                    isAccountActive 
-                                      ? "text-green-700 bg-green-100 hover:bg-green-200 dark:text-green-300 dark:bg-green-900/50" 
-                                      : "text-orange-700 bg-orange-100 hover:bg-orange-200 dark:text-orange-300 dark:bg-orange-900/50"
-                                  }`}
-                                  onClick={() => navigate(`/admin/cuentas-cobranza/${offer.cuenta_cobranza_id}/detalle`)}
-                                >
-                                  {formatCuentaCobranzaId(offer.cuenta_cobranza_id, 'Producto')}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>{isAccountActive ? 'Activa' : 'Cancelada'} - Click para ver detalle</p>
-                              </TooltipContent>
-                            </Tooltip>
+                            <div className="space-y-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className={`font-mono text-xs ${
+                                      isAccountActive 
+                                        ? "text-green-700 bg-green-100 hover:bg-green-200 dark:text-green-300 dark:bg-green-900/50" 
+                                        : "text-orange-700 bg-orange-100 hover:bg-orange-200 dark:text-orange-300 dark:bg-orange-900/50"
+                                    }`}
+                                    onClick={() => navigate(`/admin/cuentas-cobranza/${offer.cuenta_cobranza_id}/detalle`)}
+                                  >
+                                    {formatCuentaCobranzaId(offer.cuenta_cobranza_id, 'Producto')}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{isAccountActive ? 'Activa' : 'Cancelada'} - Click para ver detalle</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              {offer.cuenta_clabe_stp && (
+                                <div className="text-xs font-mono text-muted-foreground">
+                                  {offer.cuenta_clabe_stp}
+                                </div>
+                              )}
+                            </div>
                           ) : (
-                            <span className="text-muted-foreground text-sm">Sin cuenta</span>
+                            <div className="space-y-1">
+                              <span className="text-muted-foreground text-sm">Sin cuenta</span>
+                              {offer.clabe_stp_tmp_producto && (
+                                <div className="text-xs font-mono text-muted-foreground">
+                                  {offer.clabe_stp_tmp_producto}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
