@@ -198,6 +198,7 @@ class HTMLToPDFService {
         leadEmail: offerData.leadEmail,
         email_creador: offerData.creatorEmail,
         id_esquema_pago_seleccionado: offerDetails.id_esquema_pago_seleccionado,
+        clabe_stp_tmp_producto: offerDetails.clabe_stp_tmp_producto,
       };
 
       await this.generateProductPDFFromHTML(

@@ -78,6 +78,7 @@ interface OfferPDFTemplateProductoProps {
     leadEmail: string;
     email_creador: string;
     id_esquema_pago_seleccionado?: number | null;
+    clabe_stp_tmp_producto?: string | null;
   };
   propertyDetails: PropertyDetails;
   productDetails: ProductDetails;
@@ -218,7 +219,7 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: '30% 70%', 
+            gridTemplateColumns: '1fr 1fr', 
             gap: '40px',
             alignItems: 'start'
           }}>
@@ -255,26 +256,34 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
 
             {/* Column 2: Product Information */}
             <div style={{ 
-              backgroundColor: '#FFFFFF',
+              backgroundColor: '#F5F5F5',
               padding: '40px',
               borderRadius: '8px',
               border: '2px solid #D0D0D0'
             }}>
+              <h3 style={{ 
+                fontSize: '40px', 
+                fontWeight: 'bold', 
+                color: '#000000',
+                marginBottom: '40px'
+              }}>
+                Datos del producto:
+              </h3>
               <div style={{ fontSize: '28px', lineHeight: '1.8' }}>
                 <div style={{ marginBottom: '20px' }}>
-                  <span style={{ fontWeight: 'normal', color: '#666' }}>Categoría: </span>
+                  <span style={{ fontWeight: 'normal' }}>Categoría: </span>
                   <span style={{ fontWeight: 'bold', color: '#000' }}>
                     {productDetails.categoria_nombre || 'N/A'}
                   </span>
                 </div>
                 <div style={{ marginBottom: '20px' }}>
-                  <span style={{ fontWeight: 'normal', color: '#666' }}>Producto: </span>
+                  <span style={{ fontWeight: 'normal' }}>Producto: </span>
                   <span style={{ fontWeight: 'bold', color: '#000', fontSize: '32px' }}>
                     {productDetails.nombre}
                   </span>
                 </div>
                 <div style={{ marginBottom: '0' }}>
-                  <span style={{ fontWeight: 'normal', color: '#666' }}>Precio de lista: </span>
+                  <span style={{ fontWeight: 'normal' }}>Precio de lista: </span>
                   <span style={{ fontWeight: 'bold', color: '#000', fontSize: '36px' }}>
                     {formatCurrency(productDetails.precio_lista)}
                   </span>
@@ -388,91 +397,100 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
             color: '#000000',
             marginBottom: '40px'
           }}>
-            Datos Bancarios:
+            Datos Bancarios
           </h2>
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: '1fr 1fr', 
-            gap: '40px'
+            gridTemplateColumns: (offerData.clabe_stp_tmp_producto && productDetails.ownerStpBankAccount) 
+              ? '1fr 1fr' 
+              : '1fr', 
+            gap: '40px',
+            backgroundColor: '#D3D3D3',
+            padding: '0',
+            borderRadius: '20px'
           }}>
-            {/* Pago por transferencia */}
-            <div style={{ 
-              backgroundColor: '#F5F5F5',
-              padding: '40px',
-              borderRadius: '8px',
-              border: '2px solid #D0D0D0'
-            }}>
-              <h3 style={{ 
-                fontSize: '32px', 
-                fontWeight: 'bold', 
-                marginBottom: '24px',
-                color: '#000'
+            {/* Pago por transferencia - Only shown if CLABE exists */}
+            {offerData.clabe_stp_tmp_producto && (
+              <div style={{ 
+                backgroundColor: '#D3D3D3',
+                padding: '32px',
+                borderRadius: '20px'
               }}>
-                Pago por transferencia
-              </h3>
-              {productDetails.ownerStpBankAccount ? (
-                <div style={{ fontSize: '24px', lineHeight: '1.8' }}>
-                  <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Banco: </span>
-                    <span style={{ fontWeight: 'bold' }}>Sistema de Transferencias y Pagos (STP)</span>
-                  </div>
-                  <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Titular: </span>
-                    <span style={{ fontWeight: 'bold' }}>{productDetails.ownerData?.nombre_legal || 'N/A'}</span>
-                  </div>
-                  <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Cuenta CLABE: </span>
-                    <span style={{ fontWeight: 'bold', fontFamily: 'monospace' }}>
+                <h3 style={{ 
+                  fontSize: '28px', 
+                  fontWeight: 'bold', 
+                  color: '#000000', 
+                  marginBottom: '24px',
+                  fontFamily: 'Arial, sans-serif'
+                }}>
+                  Pago por transferencia
+                </h3>
+                <div style={{ fontSize: '24px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
+                  <p style={{ color: '#000000', marginBottom: '12px' }}>
+                    <span style={{ fontWeight: '400' }}>Banco: </span>
+                    <span style={{ fontWeight: '400' }}>Sistema de Transferencias y Pagos (STP)</span>
+                  </p>
+                  <p style={{ color: '#000000', marginBottom: '12px' }}>
+                    <span style={{ fontWeight: '400' }}>Titular: </span>
+                    <span style={{ fontWeight: '400' }}>
+                      {productDetails.ownerData?.nombre_legal || 'N/A'}
+                    </span>
+                  </p>
+                  <p style={{ color: '#000000' }}>
+                    <span style={{ fontWeight: '400' }}>Cuenta CLABE: </span>
+                    <span style={{ fontWeight: '400' }}>
+                      {offerData.clabe_stp_tmp_producto}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {/* Pago en efectivo - Only shown if bank account exists */}
+            {productDetails.ownerStpBankAccount && (
+              <div style={{ 
+                backgroundColor: '#D3D3D3',
+                padding: '32px',
+                borderRadius: '20px'
+              }}>
+                <h3 style={{ 
+                  fontSize: '28px', 
+                  fontWeight: 'bold', 
+                  color: '#000000', 
+                  marginBottom: '24px',
+                  fontFamily: 'Arial, sans-serif'
+                }}>
+                  Pago en efectivo
+                </h3>
+                <div style={{ fontSize: '24px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
+                  <p style={{ color: '#000000', marginBottom: '12px' }}>
+                    <span style={{ fontWeight: '400' }}>Banco: </span>
+                    <span style={{ fontWeight: '400' }}>
+                      {productDetails.ownerStpBankAccount.banco_nombre}
+                    </span>
+                  </p>
+                  <p style={{ color: '#000000', marginBottom: '12px' }}>
+                    <span style={{ fontWeight: '400' }}>Titular: </span>
+                    <span style={{ fontWeight: '400' }}>
+                      {productDetails.ownerData?.nombre_legal || 'N/A'}
+                    </span>
+                  </p>
+                  <p style={{ color: '#000000', marginBottom: '12px' }}>
+                    <span style={{ fontWeight: '400' }}>Número de Cuenta: </span>
+                    <span style={{ fontWeight: '400' }}>
+                      {productDetails.ownerStpBankAccount.numero_cuenta}
+                    </span>
+                  </p>
+                  <p style={{ color: '#000000' }}>
+                    <span style={{ fontWeight: '400' }}>Cuenta CLABE: </span>
+                    <span style={{ fontWeight: '400' }}>
                       {productDetails.ownerStpBankAccount.cuenta_clabe}
                     </span>
-                  </div>
+                  </p>
                 </div>
-              ) : (
-                <p style={{ color: '#666', fontSize: '24px' }}>Información no disponible</p>
-              )}
-            </div>
-
-            {/* Pago en efectivo */}
-            <div style={{ 
-              backgroundColor: '#F5F5F5',
-              padding: '40px',
-              borderRadius: '8px',
-              border: '2px solid #D0D0D0'
-            }}>
-              <h3 style={{ 
-                fontSize: '32px', 
-                fontWeight: 'bold', 
-                marginBottom: '24px',
-                color: '#000'
-              }}>
-                Pago en efectivo
-              </h3>
-              {productDetails.ownerStpBankAccount ? (
-                <div style={{ fontSize: '24px', lineHeight: '1.8' }}>
-                  <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Banco: </span>
-                    <span style={{ fontWeight: 'bold' }}>{productDetails.ownerStpBankAccount.banco_nombre}</span>
-                  </div>
-                  <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Titular: </span>
-                    <span style={{ fontWeight: 'bold' }}>{productDetails.ownerData?.nombre_legal || 'N/A'}</span>
-                  </div>
-                  <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Número de Cuenta: </span>
-                    <span style={{ fontWeight: 'bold' }}>{productDetails.ownerStpBankAccount.numero_cuenta}</span>
-                  </div>
-                  <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Cuenta CLABE: </span>
-                    <span style={{ fontWeight: 'bold', fontFamily: 'monospace' }}>
-                      {productDetails.ownerStpBankAccount.cuenta_clabe}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ color: '#666', fontSize: '24px' }}>Información no disponible</p>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
