@@ -209,15 +209,6 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
 
         {/* Property Details Section (Simplified for Products) */}
         <div style={{ marginBottom: '60px' }}>
-          <h2 style={{ 
-            fontSize: '40px', 
-            fontWeight: 'bold', 
-            color: '#000000',
-            marginBottom: '40px'
-          }}>
-            Datos de la Propiedad:
-          </h2>
-          
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: '1fr 1fr', 
@@ -225,32 +216,42 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
             alignItems: 'start'
           }}>
             {/* Column 1: Property Data */}
-            <div style={{ 
-              backgroundColor: '#F5F5F5',
-              padding: '40px',
-              borderRadius: '8px',
-              border: '2px solid #D0D0D0'
-            }}>
-              <div style={{ fontSize: '28px', lineHeight: '1.8' }}>
-                <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontWeight: 'normal' }}>Proyecto: </span>
-                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.projectData?.nombre || 'N/A'}</span>
-                </div>
-                {propertyDetails.model && (
+            <div>
+              <h2 style={{ 
+                fontSize: '40px', 
+                fontWeight: 'bold', 
+                color: '#000000',
+                marginBottom: '40px'
+              }}>
+                Datos de la Propiedad:
+              </h2>
+              <div style={{ 
+                backgroundColor: '#F5F5F5',
+                padding: '40px',
+                borderRadius: '8px',
+                border: '2px solid #D0D0D0'
+              }}>
+                <div style={{ fontSize: '28px', lineHeight: '1.8' }}>
                   <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Modelo: </span>
-                    <span style={{ fontWeight: 'bold' }}>{propertyDetails.model.nombre}</span>
+                    <span style={{ fontWeight: 'normal' }}>Proyecto: </span>
+                    <span style={{ fontWeight: 'bold' }}>{propertyDetails.projectData?.nombre || 'N/A'}</span>
                   </div>
-                )}
-                {propertyDetails.building && (
+                  {propertyDetails.model && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <span style={{ fontWeight: 'normal' }}>Modelo: </span>
+                      <span style={{ fontWeight: 'bold' }}>{propertyDetails.model.nombre}</span>
+                    </div>
+                  )}
+                  {propertyDetails.building && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <span style={{ fontWeight: 'normal' }}>Edificio: </span>
+                      <span style={{ fontWeight: 'bold' }}>{propertyDetails.building.nombre}</span>
+                    </div>
+                  )}
                   <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Edificio: </span>
-                    <span style={{ fontWeight: 'bold' }}>{propertyDetails.building.nombre}</span>
+                    <span style={{ fontWeight: 'normal' }}>No° de propiedad: </span>
+                    <span style={{ fontWeight: 'bold' }}>{propertyDetails.numero_propiedad}</span>
                   </div>
-                )}
-                <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontWeight: 'normal' }}>No° de propiedad: </span>
-                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.numero_propiedad}</span>
                 </div>
               </div>
             </div>
