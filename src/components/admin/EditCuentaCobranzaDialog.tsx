@@ -1933,7 +1933,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           variant={isPaymentPlanModified ? "outline" : "secondary"}
                           className={isPaymentPlanModified ? "bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300" : ""}
                         >
-                          {formatOfertaId(cuentaDetalle.id_oferta)}
+                          {formatOfertaId(cuentaDetalle.id_oferta)} - {selectedPaymentScheme.nombre}
                           {isPaymentPlanModified && " modificado"}
                         </Badge>
                       </div>
