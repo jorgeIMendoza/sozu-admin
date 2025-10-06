@@ -546,8 +546,9 @@ export default function Clientes() {
                <TableHead className="font-semibold text-foreground">Nombre</TableHead>
                <TableHead className="font-semibold text-foreground">Tipo</TableHead>
                <TableHead className="font-semibold text-foreground">Email</TableHead>
+               <TableHead className="font-semibold text-foreground">RFC</TableHead>
                <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-               <TableHead className="font-semibold text-foreground">CURP/RFC</TableHead>
+               <TableHead className="font-semibold text-foreground">CURP</TableHead>
                <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
                <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
             </TableRow>
@@ -565,11 +566,14 @@ export default function Clientes() {
                   {cliente.email}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
+                  {cliente.rfc || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
                   {cliente.telefono || '-'}
                 </TableCell>
-                 <TableCell className="text-muted-foreground">
-                   {cliente.tipo_persona === 'pf' ? (cliente.curp || '-') : (cliente.rfc || '-')}
-                 </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {cliente.curp || '-'}
+                </TableCell>
                  <TableCell className="text-muted-foreground">
                    {cliente.tipo_persona === 'pm' ? (cliente.representante_legal_nombre || '-') : '-'}
                  </TableCell>

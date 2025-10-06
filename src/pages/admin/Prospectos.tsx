@@ -612,6 +612,7 @@ export default function Prospectos() {
             <TableRow className="bg-muted/30 hover:bg-muted/30">
               <TableHead className="font-semibold text-foreground">Nombre</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
+              <TableHead className="font-semibold text-foreground">RFC</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
               <TableHead className="font-semibold text-foreground w-40">Estatus</TableHead>
               <TableHead className="font-semibold text-foreground">Proyecto de Interés</TableHead>
@@ -627,6 +628,9 @@ export default function Prospectos() {
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {prospecto.email}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {prospecto.rfc || 'N/A'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {prospecto.telefono || 'N/A'}
