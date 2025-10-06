@@ -47,6 +47,7 @@ interface Property {
   activo: boolean;
   es_aprobado: boolean;
   apartado_pagado: boolean; // Nueva propiedad para saber si el apartado está pagado
+  cuenta_sin_esquema: boolean; // Nueva propiedad para saber si la cuenta existe pero sin esquema de pago
   // Relaciones
   propietario: string;
   proyecto: string;
@@ -506,6 +507,15 @@ const Propiedades = () => {
         ) : 0;
         const restante = precio_final - total_pagado;
         
+        // Determinar si la cuenta existe pero no tiene acuerdos (esquema no seleccionado)
+        const cuentaSinEsquema = cuentaCobranzaData?.id && (!paymentStatus || 
+          (paymentStatus.apartado?.total === 0 && 
+           paymentStatus.enganche?.total === 0 && 
+           paymentStatus.mensualidades?.total === 0 && 
+           paymentStatus.entrega?.total === 0 && 
+           paymentStatus.especial?.total === 0 && 
+           paymentStatus.cesion_derechos?.total === 0));
+
         return {
           id: property.id,
           numero_propiedad: property.numero_propiedad,
@@ -524,6 +534,7 @@ const Propiedades = () => {
           activo: property.activo,
           es_aprobado: property.es_aprobado,
           apartado_pagado: (paymentStatus?.apartado?.status === 'pagado') || (paymentStatus?.cesion_derechos?.monto_pagado > 0),
+          cuenta_sin_esquema: cuentaSinEsquema,
           propietario: property.entidades_relacionadas?.personas?.nombre_legal || 'Sin propietario',
           proyecto: property.edificios_modelos?.edificios?.proyectos?.nombre || 'Sin proyecto',
           proyecto_id: property.edificios_modelos?.edificios?.proyectos?.id || 0,
@@ -1617,6 +1628,21 @@ const Propiedades = () => {
                                 <TooltipContent className="max-w-xs">
                                   <p className="font-semibold">⚠️ Pago inicial pendiente</p>
                                   <p className="text-sm">Esta cuenta fue generada pero aún no ha recibido el pago inicial completo</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          {property.cuenta_sin_esquema && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 h-6 w-6 p-0 flex items-center justify-center">
+                                    <AlertCircle className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <p className="font-semibold">⚠️ Plan de pagos no seleccionado</p>
+                                  <p className="text-sm">La cuenta de cobranza fue generada pero falta seleccionar el esquema de pago para generar los acuerdos</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
