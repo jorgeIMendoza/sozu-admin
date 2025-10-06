@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -45,6 +45,7 @@ interface CuentaCobranza {
   activo: boolean;
   id_oferta: number;
   motivo_cancelacion?: string | null;
+  apartado_pagado: boolean;
 }
 
 export default function Pagos() {
@@ -118,6 +119,21 @@ export default function Pagos() {
       }, {});
       
       console.log('Pagado por cuenta:', pagadoPorCuenta);
+
+      // Get acuerdos_pago to check if "Apartado" is paid
+      const { data: acuerdosPago } = await supabase
+        .from('acuerdos_pago')
+        .select('id_cuenta_cobranza, id_concepto, pago_completado')
+        .in('id_cuenta_cobranza', cuentaIds)
+        .eq('id_concepto', 1) // Concepto "Apartado"
+        .eq('activo', true);
+
+      // Create a map of whether apartado is paid for each cuenta
+      const apartadoPagadoPorCuenta = cuentas.reduce((acc: Record<number, boolean>, cuenta) => {
+        const acuerdoApartado = acuerdosPago?.find(ap => ap.id_cuenta_cobranza === cuenta.id);
+        acc[cuenta.id] = acuerdoApartado?.pago_completado || false;
+        return acc;
+      }, {});
 
       // Get offer IDs to fetch related data
       const ofertaIds = cuentas.map(c => c.id_oferta);
@@ -240,7 +256,8 @@ export default function Pagos() {
           modelo: edificioModelo?.modelos?.nombre || 'Sin modelo',
           activo: cuenta.activo,
           id_oferta: cuenta.id_oferta,
-          motivo_cancelacion: (cuenta as any).tipos_cancelacion?.nombre || null
+          motivo_cancelacion: (cuenta as any).tipos_cancelacion?.nombre || null,
+          apartado_pagado: apartadoPagadoPorCuenta[cuenta.id]
         };
       });
 
@@ -510,8 +527,30 @@ export default function Pagos() {
                   </TableHeader>
                   <TableBody>
                     {filteredCuentas.map((cuenta) => (
-                      <TableRow key={cuenta.id}>
-                        <TableCell className="font-semibold">{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</TableCell>
+                      <TableRow 
+                        key={cuenta.id}
+                        className={!cuenta.apartado_pagado ? "bg-amber-50 dark:bg-amber-950/20" : ""}
+                      >
+                        <TableCell className="font-semibold">
+                          <div className="flex items-center gap-2">
+                            <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
+                            {!cuenta.apartado_pagado && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700">
+                                      <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="font-semibold">⚠️ Apartado pendiente de pago</p>
+                                    <p className="text-sm">Esta cuenta fue generada pero aún no ha recibido el pago inicial.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <Badge variant={cuenta.tipo === 'Propiedad' ? 'default' : cuenta.tipo === 'Producto' ? 'secondary' : 'outline'}>
                             {cuenta.tipo}
@@ -789,8 +828,30 @@ export default function Pagos() {
                   </TableHeader>
                   <TableBody>
                     {filteredCuentas.map((cuenta) => (
-                      <TableRow key={cuenta.id}>
-                        <TableCell className="font-semibold">{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</TableCell>
+                      <TableRow 
+                        key={cuenta.id}
+                        className={!cuenta.apartado_pagado ? "bg-amber-50 dark:bg-amber-950/20" : ""}
+                      >
+                        <TableCell className="font-semibold">
+                          <div className="flex items-center gap-2">
+                            <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
+                            {!cuenta.apartado_pagado && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700">
+                                      <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="font-semibold">⚠️ Apartado pendiente de pago</p>
+                                    <p className="text-sm">Esta cuenta fue generada pero aún no ha recibido el pago inicial.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <Badge variant={cuenta.tipo === 'Propiedad' ? 'default' : cuenta.tipo === 'Producto' ? 'secondary' : 'outline'}>
                             {cuenta.tipo}
