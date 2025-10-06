@@ -128,10 +128,13 @@ export default function Pagos() {
         .eq('id_concepto', 1) // Concepto "Apartado"
         .eq('activo', true);
 
+      console.log('🔍 Acuerdos de apartado:', acuerdosPago);
+
       // Create a map of whether apartado is paid for each cuenta
       const apartadoPagadoPorCuenta = cuentas.reduce((acc: Record<number, boolean>, cuenta) => {
         const acuerdoApartado = acuerdosPago?.find(ap => ap.id_cuenta_cobranza === cuenta.id);
         acc[cuenta.id] = acuerdoApartado?.pago_completado || false;
+        console.log(`💰 Cuenta ${cuenta.id}: apartado_pagado = ${acc[cuenta.id]}`);
         return acc;
       }, {});
 
