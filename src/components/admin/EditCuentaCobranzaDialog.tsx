@@ -1928,14 +1928,16 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                   <Card className="mb-6">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">Plan de pagos</CardTitle>
-                        <Badge 
-                          variant={isPaymentPlanModified ? "outline" : "secondary"}
-                          className={isPaymentPlanModified ? "bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300" : ""}
-                        >
-                          {formatOfertaId(cuentaDetalle.id_oferta)} - {selectedPaymentScheme.nombre}
-                          {isPaymentPlanModified && " modificado"}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-muted-foreground">Plan de pagos:</span>
+                          <Badge 
+                            variant={isPaymentPlanModified ? "outline" : "secondary"}
+                            className={isPaymentPlanModified ? "bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300" : ""}
+                          >
+                            {formatOfertaId(cuentaDetalle.id_oferta)} - {selectedPaymentScheme.nombre}
+                            {isPaymentPlanModified && " modificado"}
+                          </Badge>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
