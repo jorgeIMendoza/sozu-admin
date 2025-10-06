@@ -523,7 +523,7 @@ const Propiedades = () => {
           restante,
           activo: property.activo,
           es_aprobado: property.es_aprobado,
-          apartado_pagado: paymentStatus?.apartado?.status === 'pagado',
+          apartado_pagado: (paymentStatus?.apartado?.status === 'pagado') || (paymentStatus?.cesion_derechos?.monto_pagado > 0),
           propietario: property.entidades_relacionadas?.personas?.nombre_legal || 'Sin propietario',
           proyecto: property.edificios_modelos?.edificios?.proyectos?.nombre || 'Sin proyecto',
           proyecto_id: property.edificios_modelos?.edificios?.proyectos?.id || 0,

@@ -123,18 +123,47 @@ export default function Pagos() {
       // Get acuerdos_pago to check if "Apartado" is paid
       const { data: acuerdosPago } = await supabase
         .from('acuerdos_pago')
-        .select('id_cuenta_cobranza, id_concepto, pago_completado')
+        .select('id, id_cuenta_cobranza, id_concepto, pago_completado')
         .in('id_cuenta_cobranza', cuentaIds)
-        .eq('id_concepto', 1) // Concepto "Apartado"
         .eq('activo', true);
 
-      console.log('🔍 Acuerdos de apartado:', acuerdosPago);
+      console.log('🔍 Acuerdos de apartado y cesión:', acuerdosPago);
+
+      // Get aplicaciones_pago para verificar si hay pagos de cesión de derechos
+      const acuerdoIds = acuerdosPago?.map(a => a.id) || [];
+      let cesionDerechosMap: Record<number, boolean> = {};
+      
+      if (acuerdoIds.length > 0) {
+        const { data: aplicaciones } = await supabase
+          .from('aplicaciones_pago')
+          .select(`
+            id_acuerdo_pago,
+            monto,
+            acuerdos_pago!fk_aplicaciones_acuerdo_pago(id_cuenta_cobranza, id_concepto)
+          `)
+          .in('id_acuerdo_pago', acuerdoIds)
+          .eq('activo', true);
+
+        // Crear un mapa de cuentas que tienen cesión de derechos con pagos
+        aplicaciones?.forEach((app: any) => {
+          if (app.acuerdos_pago?.id_concepto === 6 && app.monto > 0) {
+            cesionDerechosMap[app.acuerdos_pago.id_cuenta_cobranza] = true;
+          }
+        });
+      }
 
       // Create a map of whether apartado is paid for each cuenta
       const apartadoPagadoPorCuenta = cuentas.reduce((acc: Record<number, boolean>, cuenta) => {
-        const acuerdoApartado = acuerdosPago?.find(ap => ap.id_cuenta_cobranza === cuenta.id);
-        acc[cuenta.id] = acuerdoApartado?.pago_completado || false;
-        console.log(`💰 Cuenta ${cuenta.id}: apartado_pagado = ${acc[cuenta.id]}`);
+        // Buscar acuerdo de apartado
+        const acuerdoApartado = acuerdosPago?.find(
+          ap => ap.id_cuenta_cobranza === cuenta.id && ap.id_concepto === 1
+        );
+        
+        // Considerar pagado si:
+        // 1. El acuerdo de apartado está marcado como completado, O
+        // 2. Hay pagos de cesión de derechos para esta cuenta
+        acc[cuenta.id] = (acuerdoApartado?.pago_completado || false) || (cesionDerechosMap[cuenta.id] || false);
+        console.log(`💰 Cuenta ${cuenta.id}: apartado_pagado = ${acc[cuenta.id]} (apartado: ${acuerdoApartado?.pago_completado}, cesión: ${cesionDerechosMap[cuenta.id]})`);
         return acc;
       }, {});
 
