@@ -1623,7 +1623,24 @@ const Propiedades = () => {
                           )}
                         </div>
                       ) : (
-                        <Badge variant="outline">N/A</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">N/A</Badge>
+                          {property.disponibilidad?.toLowerCase() === 'apartado' && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant="outline" className="bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700 h-6 w-6 p-0 flex items-center justify-center">
+                                    <AlertCircle className="h-3 w-3 text-orange-600 dark:text-orange-400" />
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <p className="font-semibold">⚠️ Cuenta no generada</p>
+                                  <p className="text-sm">Esta propiedad ya se apartó pero no se generó la cuenta porque el RFC de quien pagó no coincide con el registrado</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                       )}
                     </TableCell>
                    <TableCell className="font-mono text-sm">{property.clabe_stp || 'Sin CLABE'}</TableCell>
