@@ -19,7 +19,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
+import { formatCuentaCobranzaId, formatOfertaId } from "@/utils/cuentaCobranzaUtils";
 import {
   DndContext,
   closestCenter,
@@ -1924,7 +1924,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 </div>
 
                 {/* Selected Payment Scheme Information */}
-                {selectedPaymentScheme && (
+                {selectedPaymentScheme && cuentaDetalle?.id_oferta && (
                   <Card className="mb-6">
                     <CardHeader>
                       <div className="flex items-center justify-between">
@@ -1933,7 +1933,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           variant={isPaymentPlanModified ? "outline" : "secondary"}
                           className={isPaymentPlanModified ? "bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300" : ""}
                         >
-                          {selectedPaymentScheme.nombre}
+                          {formatOfertaId(cuentaDetalle.id_oferta)}
                           {isPaymentPlanModified && " modificado"}
                         </Badge>
                       </div>

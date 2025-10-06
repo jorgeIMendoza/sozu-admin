@@ -18,7 +18,7 @@ import { NewMultaDialog } from "@/components/admin/NewMultaDialog";
 import { AddCepDialog } from "@/components/admin/AddCepDialog";
 import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 import { TransferirEntreComisionesDialog } from "@/components/admin/TransferirEntreComisionesDialog";
-import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
+import { formatCuentaCobranzaId, formatOfertaId } from "@/utils/cuentaCobranzaUtils";
 
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -1236,7 +1236,7 @@ export default function DetalleCuentaCobranza() {
                   variant={isPaymentPlanModified ? "outline" : "secondary"}
                   className={isPaymentPlanModified ? "bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300" : ""}
                 >
-                  {offerData.esquema_nombre}
+                  {formatOfertaId(offerData.id)}
                   {isPaymentPlanModified && " modificado"}
                 </Badge>
               </div>

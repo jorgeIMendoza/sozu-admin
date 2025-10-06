@@ -18,3 +18,13 @@ export function formatCuentaCobranzaId(
   // Por defecto (propiedad), usar CC-
   return `CC-${paddedId}`;
 }
+
+/**
+ * Formatea el ID de una oferta
+ * @param id - ID numérico de la oferta
+ * @returns String formateado (ej: "OF-000123")
+ */
+export function formatOfertaId(id: number): string {
+  const paddedId = String(id).padStart(6, '0');
+  return `OF-${paddedId}`;
+}
