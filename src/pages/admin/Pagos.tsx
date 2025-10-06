@@ -136,20 +136,25 @@ export default function Pagos() {
       if (acuerdoIds.length > 0) {
         const { data: aplicaciones } = await supabase
           .from('aplicaciones_pago')
-          .select(`
-            id_acuerdo_pago,
-            monto,
-            acuerdos_pago!fk_aplicaciones_acuerdo_pago(id_cuenta_cobranza, id_concepto)
-          `)
+          .select('id_acuerdo_pago, monto')
           .in('id_acuerdo_pago', acuerdoIds)
           .eq('activo', true);
 
-        // Crear un mapa de cuentas que tienen cesión de derechos con pagos
+        // Crear mapeo de acuerdo_id a concepto_id y cuenta_id
+        const acuerdosMap = acuerdosPago?.reduce((acc: any, a) => {
+          acc[a.id] = { id_concepto: a.id_concepto, id_cuenta_cobranza: a.id_cuenta_cobranza };
+          return acc;
+        }, {});
+
+        // Crear un mapa de cuentas que tienen cesión de derechos con pagos (id_concepto = 6)
         aplicaciones?.forEach((app: any) => {
-          if (app.acuerdos_pago?.id_concepto === 6 && app.monto > 0) {
-            cesionDerechosMap[app.acuerdos_pago.id_cuenta_cobranza] = true;
+          const acuerdo = acuerdosMap[app.id_acuerdo_pago];
+          if (acuerdo && acuerdo.id_concepto === 6 && app.monto > 0) {
+            cesionDerechosMap[acuerdo.id_cuenta_cobranza] = true;
           }
         });
+        
+        console.log('🔍 Cuentas con cesión de derechos:', cesionDerechosMap);
       }
 
       // Create a map of whether apartado is paid for each cuenta
