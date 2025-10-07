@@ -319,7 +319,7 @@ export default function Pagos() {
 
         // Calculate cash payment data (only for properties)
         const valorUma = cuenta.valor_uma || 0;
-        const limiteEfectivo = valorUma * 825;
+        const limiteEfectivo = valorUma * 8025;
         const pagadoEfectivo = tipo === 'Propiedad' ? (pagadoEfectivoPorCuenta[cuenta.id] || 0) : 0;
         const restanteEfectivo = limiteEfectivo - pagadoEfectivo;
         const porcentajeEfectivo = limiteEfectivo > 0 ? (pagadoEfectivo / limiteEfectivo) * 100 : 0;

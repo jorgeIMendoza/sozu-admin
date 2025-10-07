@@ -785,7 +785,7 @@ export default function DetalleCuentaCobranza() {
       }
 
       const valorUma = cuentaDetalle.valor_uma || 0;
-      const limiteEfectivo = valorUma * 825;
+      const limiteEfectivo = valorUma * 8025;
       const pagadoEfectivo = pagosPropiedadEfectivo + pagosBodegasEfectivo + pagosEstacionamientosEfectivo;
       const restanteEfectivo = limiteEfectivo - pagadoEfectivo;
 
