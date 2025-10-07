@@ -4098,6 +4098,13 @@ export type Database = {
         }
         Returns: Json
       }
+      sync_conyuge_compradores: {
+        Args: { p_id_persona: number }
+        Returns: {
+          cuentas_procesadas: number
+          mensaje: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
