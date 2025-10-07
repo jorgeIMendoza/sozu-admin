@@ -757,8 +757,14 @@ export const ProjectLegalEntitiesSection = ({
                                     <div className="flex items-center gap-2 mt-1">
                                       <Input
                                         value={tempApiKeyName}
-                                        onChange={(e) => setTempApiKeyName(e.target.value)}
-                                        placeholder="Nombre de la API Key"
+                                        onChange={(e) => {
+                                          // Only allow uppercase letters, no spaces, no numbers, no special characters
+                                          const cleanValue = e.target.value
+                                            .replace(/[^a-zA-Z]/g, '') // Remove everything except letters
+                                            .toUpperCase(); // Convert to uppercase
+                                          setTempApiKeyName(cleanValue);
+                                        }}
+                                        placeholder="NOMBREDEAPIKEY"
                                         className="flex-1"
                                       />
                                       <Button
