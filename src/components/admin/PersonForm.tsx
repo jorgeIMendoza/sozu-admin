@@ -1318,8 +1318,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                               placeholder="Buscar cónyuge por nombre, RFC o CURP..."
                               value={searchConyuge}
                               onChange={(e) => setSearchConyuge(e.target.value)}
+                              disabled={!!initialData?.id_conyuge}
                             />
-                            <Select value={idConyuge} onValueChange={setIdConyuge}>
+                            <Select 
+                              value={idConyuge} 
+                              onValueChange={setIdConyuge}
+                              disabled={!!initialData?.id_conyuge}
+                            >
                               <SelectTrigger>
                                 <SelectValue placeholder="Selecciona el cónyuge" />
                               </SelectTrigger>
@@ -1338,9 +1343,15 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                                   ))}
                               </SelectContent>
                             </Select>
-                            <p className="text-sm text-muted-foreground">
-                              Al seleccionar un cónyuge, automáticamente se actualizará su estado civil a "Casado(a) bienes mancomunados" y se establecerá la relación recíproca.
-                            </p>
+                            {initialData?.id_conyuge ? (
+                              <p className="text-sm font-medium text-amber-600">
+                                ⚠️ El cónyuge ya está asignado y no puede ser modificado.
+                              </p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                Al seleccionar un cónyuge, automáticamente se actualizará su estado civil a "Casado(a) bienes mancomunados" y se establecerá la relación recíproca.
+                              </p>
+                            )}
                           </div>
                         </div>
                       )}
