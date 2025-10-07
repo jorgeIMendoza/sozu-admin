@@ -528,11 +528,13 @@ const Propiedades = () => {
         if (paymentStatus && paymentStatus.enganche && property.monto_apartado_pagando && property.monto_apartado_pagando > 0) {
           paymentStatus.enganche.monto_pagado += Number(property.monto_apartado_pagando) || 0;
           
-          // Recalculate enganche status considering apartado
-          if (paymentStatus.enganche.monto_pagado >= paymentStatus.enganche.monto && paymentStatus.enganche.monto > 0) {
-            paymentStatus.enganche.status = 'pagado';
-          } else if (paymentStatus.enganche.monto_pagado > 0) {
-            paymentStatus.enganche.status = 'en_proceso';
+          // Recalculate enganche status considering apartado ONLY if there are actual acuerdos
+          if (paymentStatus.enganche.total > 0) {
+            if (paymentStatus.enganche.monto_pagado >= paymentStatus.enganche.monto && paymentStatus.enganche.monto > 0) {
+              paymentStatus.enganche.status = 'pagado';
+            } else if (paymentStatus.enganche.monto_pagado > 0) {
+              paymentStatus.enganche.status = 'en_proceso';
+            }
           }
         }
         
