@@ -848,10 +848,102 @@ export default function DetalleCuentaCobranza() {
       const pagadoEfectivo = pagosPropiedadEfectivo + pagosBodegasEfectivo + pagosEstacionamientosEfectivo;
       const restanteEfectivo = limiteEfectivo - pagadoEfectivo;
 
+      // Return bodegas and estacionamientos for escrituracion value calculation
       return {
         limiteEfectivo,
         pagadoEfectivo,
         restanteEfectivo,
+        tieneEstacionamientos: estacionamientos && estacionamientos.length > 0,
+        tieneBodegas: bodegas && bodegas.length > 0,
+        bodegaProductIds: bodegas?.map(b => b.id_producto).filter(Boolean) || [],
+        estacionamientoProductIds: estacionamientos?.map(e => e.id_producto).filter(Boolean) || []
+      };
+    },
+    enabled: !!cuentaId && !!cuentaDetalle,
+  });
+
+  // Query for escrituracion value calculation (only for properties)
+  const { data: escrituracionData } = useQuery({
+    queryKey: ["escrituracion_value", cuentaId, cuentaDetalle?.id_propiedad],
+    queryFn: async () => {
+      if (!cuentaDetalle || cuentaDetalle.tipo_cuenta !== 'Propiedad' || !cuentaDetalle.id_propiedad) {
+        return null;
+      }
+
+      let totalEscrituracion = cuentaDetalle.precio_final || 0;
+
+      // Get bodegas (all, not just not included)
+      const { data: bodegas } = await supabase
+        .from('bodegas')
+        .select('id, id_producto')
+        .eq('id_propiedad', cuentaDetalle.id_propiedad)
+        .eq('activo', true);
+
+      // Get estacionamientos (all, not just not included)
+      const { data: estacionamientos } = await supabase
+        .from('estacionamientos')
+        .select('id, id_producto')
+        .eq('id_propiedad', cuentaDetalle.id_propiedad)
+        .eq('activo', true);
+
+      // Get precio_final for bodegas
+      if (bodegas && bodegas.length > 0) {
+        const bodegaProductIds = bodegas.map(b => b.id_producto).filter(Boolean);
+        
+        if (bodegaProductIds.length > 0) {
+          const { data: ofertasBodegas } = await supabase
+            .from('ofertas')
+            .select('id')
+            .in('id_producto', bodegaProductIds)
+            .eq('activo', true);
+
+          if (ofertasBodegas && ofertasBodegas.length > 0) {
+            const ofertaBodegaIds = ofertasBodegas.map(o => o.id);
+            
+            const { data: cuentasBodegas } = await supabase
+              .from('cuentas_cobranza')
+              .select('precio_final')
+              .in('id_oferta', ofertaBodegaIds)
+              .eq('activo', true);
+
+            if (cuentasBodegas && cuentasBodegas.length > 0) {
+              const precioBodegas = cuentasBodegas.reduce((sum, c) => sum + (c.precio_final || 0), 0);
+              totalEscrituracion += precioBodegas;
+            }
+          }
+        }
+      }
+
+      // Get precio_final for estacionamientos
+      if (estacionamientos && estacionamientos.length > 0) {
+        const estacionamientoProductIds = estacionamientos.map(e => e.id_producto).filter(Boolean);
+        
+        if (estacionamientoProductIds.length > 0) {
+          const { data: ofertasEstacionamientos } = await supabase
+            .from('ofertas')
+            .select('id')
+            .in('id_producto', estacionamientoProductIds)
+            .eq('activo', true);
+
+          if (ofertasEstacionamientos && ofertasEstacionamientos.length > 0) {
+            const ofertaEstacionamientoIds = ofertasEstacionamientos.map(o => o.id);
+            
+            const { data: cuentasEstacionamientos } = await supabase
+              .from('cuentas_cobranza')
+              .select('precio_final')
+              .in('id_oferta', ofertaEstacionamientoIds)
+              .eq('activo', true);
+
+            if (cuentasEstacionamientos && cuentasEstacionamientos.length > 0) {
+              const precioEstacionamientos = cuentasEstacionamientos.reduce((sum, c) => sum + (c.precio_final || 0), 0);
+              totalEscrituracion += precioEstacionamientos;
+            }
+          }
+        }
+      }
+
+      return {
+        totalEscrituracion,
         tieneBodegas: (bodegas?.length || 0) > 0,
         tieneEstacionamientos: (estacionamientos?.length || 0) > 0
       };
@@ -1349,6 +1441,60 @@ export default function DetalleCuentaCobranza() {
                 <span className="text-muted-foreground">Aún permitido:</span>
                 <span className="font-medium">{formatCurrency(cashPaymentsData.restanteEfectivo)}</span>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Escrituracion value card for property accounts only */}
+        {cuentaDetalle.tipo_cuenta === 'Propiedad' && escrituracionData && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm font-medium">Valor de escrituración</CardTitle>
+                <div className="flex items-center gap-1">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Home className="h-4 w-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Propiedad</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  {escrituracionData.tieneEstacionamientos && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Car className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Incluye estacionamiento</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {escrituracionData.tieneBodegas && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Warehouse className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Incluye bodega</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+              </div>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-purple-600">{formatCurrency(escrituracionData.totalEscrituracion)}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Suma de precio final de propiedad, bodegas y estacionamientos
+              </p>
             </CardContent>
           </Card>
         )}

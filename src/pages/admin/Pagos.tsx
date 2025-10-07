@@ -631,7 +631,6 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow 
                         key={cuenta.id}
-                        className={!cuenta.apartado_pagado ? "bg-amber-50 dark:bg-amber-950/20" : ""}
                       >
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
@@ -647,6 +646,21 @@ export default function Pagos() {
                                   <TooltipContent className="max-w-xs">
                                     <p className="font-semibold">⚠️ Pago inicial pendiente</p>
                                     <p className="text-sm">Esta cuenta fue generada pero aún no ha recibido el pago inicial completo</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            {!cuenta.tiene_acuerdos && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700">
+                                      <AlertCircle className="h-3 w-3 text-red-600 dark:text-red-400" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="font-semibold">⚠️ Sin acuerdo de pago</p>
+                                    <p className="text-sm">Esta cuenta no tiene acuerdos de pago asignados</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
