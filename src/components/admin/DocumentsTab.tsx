@@ -524,6 +524,7 @@ export function DocumentsTab({
                     <TableRow key={documento.numero}>
                       <TableCell className="font-medium">{documento.numero}</TableCell>
                       <TableCell>{documento.tipo_documento_nombre}</TableCell>
+                      <TableCell></TableCell>
                       <TableCell>
                         <Badge variant={documento.es_verificado ? "default" : "secondary"}>
                           {documento.es_verificado ? "Verificado" : "Pendiente"}
