@@ -791,9 +791,10 @@ export const ProjectLegalEntitiesSection = ({
                                           <p className="font-medium text-blue-900 dark:text-blue-100">Instrucciones para configurar el Secret:</p>
                                           <ol className="list-decimal list-inside space-y-1 text-blue-800 dark:text-blue-200">
                                             <li>Copia el nombre del secret mostrado arriba</li>
-                                            <li>Ve al Dashboard de Supabase → Edge Functions → Secrets</li>
-                                            <li>Crea un nuevo secret con el nombre copiado</li>
-                                            <li>Ingresa el valor de tu API key</li>
+                                            <li><strong>Contacta al administrador del proyecto de Supabase</strong></li>
+                                            <li>El administrador debe ir al Dashboard de Supabase → Edge Functions → Secrets</li>
+                                            <li>Crear un nuevo secret con el nombre copiado</li>
+                                            <li>Ingresar el valor de tu API key</li>
                                           </ol>
                                         </div>
                                       </div>
