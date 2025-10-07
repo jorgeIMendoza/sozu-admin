@@ -26,6 +26,7 @@ interface Comprador {
   nombre_legal: string;
   rfc: string | null;
   porcentaje_copropiedad: number;
+  id_persona?: number;
 }
 
 interface CuentaCobranza {
@@ -255,7 +256,8 @@ export default function Pagos() {
         .select(`
           id_cuenta_cobranza,
           porcentaje_copropiedad,
-          personas!compradores_id_persona_fkey(nombre_legal, rfc)
+          id_persona,
+          personas!compradores_id_persona_fkey(id, nombre_legal, rfc)
         `)
         .in('id_cuenta_cobranza', cuentas.map(c => c.id));
 
@@ -347,7 +349,8 @@ export default function Pagos() {
           compradores: cuentaCompradores.map(c => ({
             nombre_legal: c.personas?.nombre_legal || '',
             rfc: c.personas?.rfc || null,
-            porcentaje_copropiedad: c.porcentaje_copropiedad || 0
+            porcentaje_copropiedad: c.porcentaje_copropiedad || 0,
+            id_persona: c.id_persona
           })).filter(c => c.nombre_legal),
           dueno: entidad?.personas?.nombre_legal || 'Sin dueño',
           proyecto: entidad?.proyectos?.nombre || 'Sin proyecto',

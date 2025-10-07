@@ -5,11 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Users, ExternalLink } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Comprador {
   nombre_legal: string;
   rfc: string | null;
   porcentaje_copropiedad: number;
+  id_persona?: number;
 }
 
 interface CompradoresDetailDialogProps {
@@ -20,6 +24,29 @@ interface CompradoresDetailDialogProps {
 export function CompradoresDetailDialog({ compradores, trigger }: CompradoresDetailDialogProps) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+
+  // Fetch personas details to check for spouse relationships
+  const { data: personasDetails } = useQuery({
+    queryKey: ['compradores-personas', compradores.map(c => c.id_persona)],
+    queryFn: async () => {
+      const personaIds = compradores.map(c => c.id_persona).filter(Boolean);
+      if (personaIds.length === 0) return [];
+      
+      const { data } = await supabase
+        .from('personas')
+        .select('id, nombre_legal, id_conyuge')
+        .in('id', personaIds);
+      
+      return data || [];
+    },
+    enabled: open && compradores.some(c => c.id_persona),
+  });
+
+  // Check if any compradores are spouses
+  const areSpouses = personasDetails && personasDetails.length >= 2 && personasDetails.some((persona) => {
+    const spouseId = persona.id_conyuge;
+    return spouseId && personasDetails.some(p => p.id === spouseId);
+  });
 
   const handleNavigateToCompradores = (rfc?: string) => {
     if (rfc) {
@@ -54,6 +81,14 @@ export function CompradoresDetailDialog({ compradores, trigger }: CompradoresDet
           <div className="text-sm text-muted-foreground">
             Total de compradores: {compradores.length}
           </div>
+
+          {areSpouses && (
+            <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <AlertDescription className="text-sm text-blue-900 dark:text-blue-100">
+                Los compradores son cónyuges
+              </AlertDescription>
+            </Alert>
+          )}
           
           <Table>
             <TableHeader>
