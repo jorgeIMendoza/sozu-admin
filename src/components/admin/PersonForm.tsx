@@ -1288,14 +1288,18 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
                       <div>
                         <Label htmlFor="estadoCivil">Estado Civil</Label>
-                        <Select value={idEstadoCivil} onValueChange={(value) => {
-                          setIdEstadoCivil(value);
-                          // Si no es casado por bienes mancomunados, limpiar cónyuge
-                          if (value !== '2') {
-                            setIdConyuge('');
-                            setSearchConyuge('');
-                          }
-                        }}>
+                        <Select 
+                          value={idEstadoCivil} 
+                          onValueChange={(value) => {
+                            setIdEstadoCivil(value);
+                            // Si no es casado por bienes mancomunados, limpiar cónyuge
+                            if (value !== '2') {
+                              setIdConyuge('');
+                              setSearchConyuge('');
+                            }
+                          }}
+                          disabled={!!initialData?.id_conyuge}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona estado civil" />
                           </SelectTrigger>
@@ -1307,6 +1311,11 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                             ))}
                           </SelectContent>
                         </Select>
+                        {initialData?.id_conyuge && (
+                          <p className="text-sm font-medium text-amber-600 mt-1">
+                            ⚠️ El estado civil no puede modificarse cuando ya hay un cónyuge asignado.
+                          </p>
+                        )}
                       </div>
 
                       {/* Selector de cónyuge - solo visible cuando estado civil es "Casado(a) bienes mancomunados" */}
