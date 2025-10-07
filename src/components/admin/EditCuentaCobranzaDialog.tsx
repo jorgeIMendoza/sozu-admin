@@ -1679,13 +1679,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className={`grid w-full ${tipoCuenta === 'Propiedad' ? 'grid-cols-5' : 'grid-cols-6'}`}>
+          <TabsList className={`grid w-full ${tipoCuenta === 'Propiedad' ? 'grid-cols-6' : 'grid-cols-7'}`}>
             <TabsTrigger value="propiedad">Datos de la Propiedad</TabsTrigger>
             {(tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') && (
               <TabsTrigger value="producto">Detalles {tipoCuenta}</TabsTrigger>
             )}
             <TabsTrigger value="vendedor">Datos del Vendedor</TabsTrigger>
             <TabsTrigger value="compradores">Datos del Comprador</TabsTrigger>
+            <TabsTrigger value="escrituracion">Datos de escrituración</TabsTrigger>
             <TabsTrigger value="acuerdo">Acuerdo de Pago</TabsTrigger>
             <TabsTrigger value="comisiones">Comisiones</TabsTrigger>
           </TabsList>
@@ -1699,107 +1700,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 {propiedadDetalle ? (
                   <>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="col-span-2">
-                        <Label>Notario asignado</Label>
-                        <Select value={selectedNotario} onValueChange={handleNotarioChange} disabled={tipoCuenta === 'Producto'}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar notario" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {notarios?.map((notario) => (
-                              <SelectItem key={notario.id} value={notario.id.toString()}>
-                                {notario.nombre} - {notario.notaria}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Campos de escritura - solo visibles cuando hay notario seleccionado */}
-                      {selectedNotario && (
-                        <>
-                          <div>
-                            <Label>Clave Catastral</Label>
-                            <Input 
-                              value={claveCatastral} 
-                              onChange={(e) => setClaveCatastral(e.target.value)}
-                              onBlur={() => updateEscrituraMutation.mutate({ clave_catastral: claveCatastral })}
-                              placeholder="Ingrese clave catastral"
-                              disabled={tipoCuenta === 'Producto'}
-                            />
-                          </div>
-                          <div>
-                            <Label>Número de Escritura</Label>
-                            <Input 
-                              value={numeroEscritura} 
-                              onChange={(e) => setNumeroEscritura(e.target.value)}
-                              onBlur={() => updateEscrituraMutation.mutate({ numero_escritura: numeroEscritura })}
-                              placeholder="Ingrese número de escritura"
-                              disabled={tipoCuenta === 'Producto'}
-                            />
-                          </div>
-                          <div>
-                            <Label>Libro</Label>
-                            <Input 
-                              value={libro} 
-                              onChange={(e) => setLibro(e.target.value)}
-                              onBlur={() => updateEscrituraMutation.mutate({ libro: libro })}
-                              placeholder="Ingrese libro"
-                              disabled={tipoCuenta === 'Producto'}
-                            />
-                          </div>
-                          <div>
-                            <Label>Hoja</Label>
-                            <Input 
-                              value={hoja} 
-                              onChange={(e) => setHoja(e.target.value)}
-                              onBlur={() => updateEscrituraMutation.mutate({ hoja: hoja })}
-                              placeholder="Ingrese hoja"
-                              disabled={tipoCuenta === 'Producto'}
-                            />
-                          </div>
-                          <div>
-                            <Label>Fecha de Escritura</Label>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  className="w-full justify-start text-left font-normal"
-                                  disabled={tipoCuenta === 'Producto'}
-                                >
-                                  <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {fechaEscritura ? format(fechaEscritura, "PPP", { locale: es }) : "Seleccionar fecha"}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={fechaEscritura}
-                                  onSelect={(date) => {
-                                    setFechaEscritura(date);
-                                    updateEscrituraMutation.mutate({ 
-                                      fecha_escritura: date ? format(date, 'yyyy-MM-dd') : null 
-                                    });
-                                  }}
-                                  initialFocus
-                                  disabled={tipoCuenta === 'Producto'}
-                                />
-                              </PopoverContent>
-                            </Popover>
-                          </div>
-                          <div>
-                            <Label>Número de Unidad Privativa</Label>
-                            <Input 
-                              value={numeroUnidadPrivativa} 
-                              onChange={(e) => setNumeroUnidadPrivativa(e.target.value)}
-                              onBlur={() => updateEscrituraMutation.mutate({ numero_unidad_privativa: numeroUnidadPrivativa })}
-                              placeholder="Ingrese número de unidad privativa"
-                              disabled={tipoCuenta === 'Producto'}
-                            />
-                          </div>
-                        </>
-                      )}
-
                       <div>
                         <Label>Número de Propiedad</Label>
                         <Input value={propiedadDetalle.numero_propiedad || ''} readOnly />
@@ -2198,6 +2098,119 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         </Button>
                       </div>
                     </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="escrituracion" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Datos de escrituración</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <Label>Notario asignado</Label>
+                    <Select value={selectedNotario} onValueChange={handleNotarioChange} disabled={tipoCuenta === 'Producto'}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar notario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {notarios?.map((notario) => (
+                          <SelectItem key={notario.id} value={notario.id.toString()}>
+                            {notario.nombre} - {notario.notaria}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Campos de escritura - solo visibles cuando hay notario seleccionado */}
+                  {selectedNotario && (
+                    <>
+                      <div>
+                        <Label>Clave Catastral</Label>
+                        <Input 
+                          value={claveCatastral} 
+                          onChange={(e) => setClaveCatastral(e.target.value)}
+                          onBlur={() => updateEscrituraMutation.mutate({ clave_catastral: claveCatastral })}
+                          placeholder="Ingrese clave catastral"
+                          disabled={tipoCuenta === 'Producto'}
+                        />
+                      </div>
+                      <div>
+                        <Label>Número de Escritura</Label>
+                        <Input 
+                          value={numeroEscritura} 
+                          onChange={(e) => setNumeroEscritura(e.target.value)}
+                          onBlur={() => updateEscrituraMutation.mutate({ numero_escritura: numeroEscritura })}
+                          placeholder="Ingrese número de escritura"
+                          disabled={tipoCuenta === 'Producto'}
+                        />
+                      </div>
+                      <div>
+                        <Label>Libro</Label>
+                        <Input 
+                          value={libro} 
+                          onChange={(e) => setLibro(e.target.value)}
+                          onBlur={() => updateEscrituraMutation.mutate({ libro: libro })}
+                          placeholder="Ingrese libro"
+                          disabled={tipoCuenta === 'Producto'}
+                        />
+                      </div>
+                      <div>
+                        <Label>Hoja</Label>
+                        <Input 
+                          value={hoja} 
+                          onChange={(e) => setHoja(e.target.value)}
+                          onBlur={() => updateEscrituraMutation.mutate({ hoja: hoja })}
+                          placeholder="Ingrese hoja"
+                          disabled={tipoCuenta === 'Producto'}
+                        />
+                      </div>
+                      <div>
+                        <Label>Fecha de Escritura</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start text-left font-normal"
+                              disabled={tipoCuenta === 'Producto'}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {fechaEscritura ? format(fechaEscritura, "PPP", { locale: es }) : "Seleccionar fecha"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={fechaEscritura}
+                              onSelect={(date) => {
+                                setFechaEscritura(date);
+                                updateEscrituraMutation.mutate({ 
+                                  fecha_escritura: date ? format(date, 'yyyy-MM-dd') : null 
+                                });
+                              }}
+                              initialFocus
+                              disabled={tipoCuenta === 'Producto'}
+                              className="pointer-events-auto"
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div>
+                        <Label>Número de Unidad Privativa</Label>
+                        <Input 
+                          value={numeroUnidadPrivativa} 
+                          onChange={(e) => setNumeroUnidadPrivativa(e.target.value)}
+                          onBlur={() => updateEscrituraMutation.mutate({ numero_unidad_privativa: numeroUnidadPrivativa })}
+                          placeholder="Ingrese número de unidad privativa"
+                          disabled={tipoCuenta === 'Producto'}
+                        />
+                      </div>
+                    </>
                   )}
                 </div>
               </CardContent>
