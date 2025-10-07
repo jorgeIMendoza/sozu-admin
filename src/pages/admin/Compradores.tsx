@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, RotateCcw, CreditCard, UserX } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RotateCcw, CreditCard, UserX, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +28,8 @@ type Comprador = {
   id_estado_civil?: number;
   id_conyuge?: number;
   representante_legal_nombre?: string;
+  estado_civil_nombre?: string;
+  conyuge_nombre?: string;
 };
 
 export default function Compradores() {
@@ -81,6 +83,12 @@ export default function Compradores() {
               id,
               nombre_legal
             )
+          ),
+          estados_civil (
+            nombre
+          ),
+          conyuge:personas!personas_id_conyuge_fkey (
+            nombre_legal
           )
         `)
         .eq('activo', true)
@@ -106,6 +114,8 @@ export default function Compradores() {
         id_estado_civil: item.id_estado_civil,
         id_conyuge: item.id_conyuge,
         representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
+        estado_civil_nombre: item.estados_civil?.nombre,
+        conyuge_nombre: item.conyuge?.nombre_legal,
       })) as (Comprador & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
@@ -137,6 +147,12 @@ export default function Compradores() {
               id,
               nombre_legal
             )
+          ),
+          estados_civil (
+            nombre
+          ),
+          conyuge:personas!personas_id_conyuge_fkey (
+            nombre_legal
           )
         `)
         .eq('activo', false)
@@ -162,6 +178,8 @@ export default function Compradores() {
         id_estado_civil: item.id_estado_civil,
         id_conyuge: item.id_conyuge,
         representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
+        estado_civil_nombre: item.estados_civil?.nombre,
+        conyuge_nombre: item.conyuge?.nombre_legal,
       })) as (Comprador & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
@@ -413,6 +431,7 @@ export default function Compradores() {
               <TableHead className="font-semibold text-foreground">Tipo persona</TableHead>
               <TableHead className="font-semibold text-foreground">RFC</TableHead>
               <TableHead className="font-semibold text-foreground">CURP</TableHead>
+              <TableHead className="font-semibold text-foreground">Estado civil</TableHead>
               <TableHead className="font-semibold text-foreground">Representante legal</TableHead>
               <TableHead className="font-semibold text-foreground text-center">Acciones</TableHead>
             </TableRow>
@@ -443,6 +462,27 @@ export default function Compradores() {
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {comprador.curp || 'N/A'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {comprador.tipo_persona === 'pf' ? (
+                    <div className="flex items-center gap-2">
+                      <span>{comprador.estado_civil_nombre || 'N/A'}</span>
+                      {comprador.id_estado_civil === 2 && comprador.conyuge_nombre && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Bell className="h-4 w-4 text-amber-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="font-medium">Cónyuge: {comprador.conyuge_nombre}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground/50">N/A</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {comprador.representante_legal_nombre || 'N/A'}
