@@ -692,6 +692,9 @@ export default function DetalleCuentaCobranza() {
         a => a.acuerdos_pago?.id_cuenta_cobranza === cuentaId
       );
 
+      console.log('=== DEBUG PAGOS EFECTIVO ===');
+      console.log('Total aplicaciones de esta cuenta:', aplicacionesDeEstaCuenta?.length);
+
       // Get cash payments for property - sum from aplicaciones_pago to avoid duplicates
       let pagosPropiedadEfectivo = 0;
       
@@ -707,13 +710,18 @@ export default function DetalleCuentaCobranza() {
             .eq('id_metodos_pago', 1) // Efectivo only
             .eq('activo', true);
 
+          console.log('Pagos en efectivo encontrados:', pagosData);
+
           // Get the IDs of cash payments
           const pagoEfectivoIds = pagosData?.map(p => p.id) || [];
           
+          // Filter and log cash payment applications
+          const aplicacionesEfectivo = aplicacionesDeEstaCuenta.filter(app => pagoEfectivoIds.includes(app.id_pago));
+          console.log('Aplicaciones de efectivo:', aplicacionesEfectivo.map(a => ({ id_pago: a.id_pago, monto: a.monto })));
+          
           // Sum only the application amounts for cash payments
-          pagosPropiedadEfectivo = aplicacionesDeEstaCuenta
-            .filter(app => pagoEfectivoIds.includes(app.id_pago))
-            .reduce((sum, app) => sum + (app.monto || 0), 0);
+          pagosPropiedadEfectivo = aplicacionesEfectivo.reduce((sum, app) => sum + (app.monto || 0), 0);
+          console.log('Total pagado en efectivo (propiedad):', pagosPropiedadEfectivo);
         }
       }
 
