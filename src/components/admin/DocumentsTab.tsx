@@ -498,7 +498,7 @@ export function DocumentsTab({
                       <TableRow key={pendingDoc.tempId}>
                         <TableCell className="font-medium">Pendiente</TableCell>
                         <TableCell>{tipoDocumentoNombre}</TableCell>
-                        <TableCell>-</TableCell>
+                        <TableCell></TableCell>
                         <TableCell>
                           {pendingDoc.file.name}
                         </TableCell>
