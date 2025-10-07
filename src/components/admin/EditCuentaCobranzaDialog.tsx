@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Edit, Trash2, Plus, HeartHandshake } from 'lucide-react';
+import { CalendarIcon, Edit, Trash2, Plus, HeartHandshake, FileText } from 'lucide-react';
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from 'sonner';
@@ -41,6 +41,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { PersonForm } from './PersonForm';
+import { DocumentsTab } from './DocumentsTab';
 
 interface Comprador {
   porcentaje_copropiedad: number;
@@ -1711,7 +1712,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className={`grid w-full ${tipoCuenta === 'Propiedad' ? 'grid-cols-6' : 'grid-cols-7'}`}>
+          <TabsList className={`grid w-full ${tipoCuenta === 'Propiedad' ? 'grid-cols-7' : 'grid-cols-8'}`}>
             <TabsTrigger value="propiedad">Datos de la Propiedad</TabsTrigger>
             {(tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') && (
               <TabsTrigger value="producto">Detalles {tipoCuenta}</TabsTrigger>
@@ -1719,6 +1720,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             <TabsTrigger value="vendedor">Datos del Vendedor</TabsTrigger>
             <TabsTrigger value="compradores">Datos del Comprador</TabsTrigger>
             <TabsTrigger value="escrituracion">Datos de escrituración</TabsTrigger>
+            <TabsTrigger value="documentos">Documentos</TabsTrigger>
             <TabsTrigger value="acuerdo">Acuerdo de Pago</TabsTrigger>
             <TabsTrigger value="comisiones">Comisiones</TabsTrigger>
           </TabsList>
@@ -2276,6 +2278,33 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     </>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Documentos Tab */}
+          <TabsContent value="documentos" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Documentos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {propiedadDetalle?.id ? (
+                  <DocumentsTab
+                    entityId={propiedadDetalle.id}
+                    entityType="propiedad"
+                    onDocumentAdded={() => {
+                      toast.success("Documento agregado correctamente");
+                    }}
+                  />
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No se puede cargar la sección de documentos sin una propiedad asociada
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

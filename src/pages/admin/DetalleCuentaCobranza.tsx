@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20,7 +20,6 @@ import { AddCepDialog } from "@/components/admin/AddCepDialog";
 import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 import { TransferirEntreComisionesDialog } from "@/components/admin/TransferirEntreComisionesDialog";
 import { formatCuentaCobranzaId, formatOfertaId } from "@/utils/cuentaCobranzaUtils";
-import { DocumentsTab } from "@/components/admin/DocumentsTab";
 
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -114,6 +113,155 @@ interface Multa {
     metodo_pago: string;
     clave_rastreo: string | null;
   }[];
+}
+
+// Read-only documents view component
+function ReadOnlyDocumentsView({ propiedadId }: { propiedadId: number }) {
+  const { toast } = useToast();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const { data: documentos, isLoading } = useQuery({
+    queryKey: ["documentos_propiedad", propiedadId],
+    queryFn: async () => {
+      const { data: docs, error } = await supabase
+        .from('documentos')
+        .select(`
+          id,
+          numero,
+          url,
+          es_verificado,
+          fecha_creacion,
+          tipos_documento:id_tipo_documento(nombre)
+        `)
+        .eq('id_propiedad', propiedadId)
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false });
+
+      if (error) throw error;
+      return docs || [];
+    }
+  });
+
+  const handleDownloadAll = async () => {
+    if (!documentos || documentos.length === 0) {
+      toast({
+        title: "No hay documentos",
+        description: "No hay documentos para descargar",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      // Create a simple download of each document
+      // Note: For actual ZIP creation, you'd need a library like JSZip
+      for (const doc of documentos) {
+        const link = document.createElement('a');
+        link.href = doc.url;
+        link.download = `${doc.tipos_documento?.nombre}_${doc.numero}`;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      toast({
+        title: "Descarga iniciada",
+        description: "Los documentos se están descargando"
+      });
+    } catch (error) {
+      console.error('Error downloading documents:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron descargar los documentos",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <div className="text-center text-muted-foreground">Cargando documentos...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Documentos de la propiedad
+          </CardTitle>
+          {documentos && documentos.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadAll}
+              disabled={isDownloading}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {isDownloading ? "Descargando..." : "Descargar todos"}
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {documentos && documentos.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Número</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {documentos.map((doc: any) => (
+                <TableRow key={doc.id}>
+                  <TableCell className="font-medium">
+                    {doc.tipos_documento?.nombre || 'Sin tipo'}
+                  </TableCell>
+                  <TableCell>{doc.numero || 'N/A'}</TableCell>
+                  <TableCell>
+                    {new Date(doc.fecha_creacion).toLocaleDateString('es-MX')}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={doc.es_verificado ? "default" : "secondary"}>
+                      {doc.es_verificado ? "Verificado" : "Pendiente"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => window.open(doc.url, '_blank')}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            No hay documentos adjuntos
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function DetalleCuentaCobranza() {
@@ -2129,26 +2277,7 @@ export default function DetalleCuentaCobranza() {
         {/* Documentos Tab - only available for properties */}
         {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id_propiedad && (
           <TabsContent value="documentos" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Documentos de la Cuenta de Cobranza
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <DocumentsTab 
-                  entityId={cuentaDetalle.id_propiedad}
-                  entityType="propiedad"
-                  onDocumentAdded={() => {
-                    toast({
-                      title: "Documento agregado",
-                      description: "El documento se ha agregado correctamente."
-                    });
-                  }}
-                />
-              </CardContent>
-            </Card>
+            <ReadOnlyDocumentsView propiedadId={cuentaDetalle.id_propiedad} />
           </TabsContent>
         )}
       </Tabs>
