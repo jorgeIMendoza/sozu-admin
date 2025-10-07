@@ -51,6 +51,7 @@ interface Comprador {
     email: string;
     telefono?: string;
     tipo_persona: string;
+    id_estado_civil?: number;
   };
 }
 
@@ -167,6 +168,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [tipoCuenta, setTipoCuenta] = useState<'Propiedad' | 'Producto' | 'Servicio'>('Propiedad');
   const [productoServicioInfo, setProductoServicioInfo] = useState<any>(null);
   const [fechaCompra, setFechaCompra] = useState<Date | undefined>(undefined);
+  const [selectedConyugeForBuyer, setSelectedConyugeForBuyer] = useState<{ buyerPersonaId: number | null; conyugePersonaId: number | null }>({ buyerPersonaId: null, conyugePersonaId: null });
 
   const handleNavigateToCompradores = (rfc?: string) => {
     if (rfc) {
@@ -344,7 +346,16 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         .from('compradores')
         .select(`
           porcentaje_copropiedad,
-          personas!compradores_id_persona_fkey(*)
+          personas!compradores_id_persona_fkey(
+            id,
+            nombre_legal,
+            rfc,
+            curp,
+            email,
+            telefono,
+            tipo_persona,
+            id_estado_civil
+          )
         `)
         .eq('id_cuenta_cobranza', cuenta.id)
         .eq('activo', true);
@@ -688,12 +699,25 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     onClose();
   };
   const addCompradorMutation = useMutation({
-    mutationFn: async ({ personaId }: { personaId: number }) => {
+    mutationFn: async ({ personaId, updateEstadoCivilTo }: { personaId: number; updateEstadoCivilTo?: number }) => {
       console.log('Adding buyer with personaId:', personaId, typeof personaId);
       
       // Validate personaId
       if (!personaId || typeof personaId !== 'number' || isNaN(personaId)) {
         throw new Error('ID de persona inválido');
+      }
+
+      // Update estado civil if specified (for spouse)
+      if (updateEstadoCivilTo) {
+        const { error: updateEstadoCivilError } = await supabase
+          .from('personas')
+          .update({ id_estado_civil: updateEstadoCivilTo })
+          .eq('id', personaId);
+
+        if (updateEstadoCivilError) {
+          console.error("Error updating estado civil:", updateEstadoCivilError);
+          throw updateEstadoCivilError;
+        }
       }
 
       // Get the project ID from the entidad relacionada dueno
@@ -784,6 +808,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       refetchCompradores();
       // Don't call onUpdate() to prevent modal from closing
       setSelectedPersona(null);
+      setSelectedConyugeForBuyer({ buyerPersonaId: null, conyugePersonaId: null });
       // Ensure we stay in "compradores" tab after successful addition
       console.log('Current activeTab before setting:', activeTab);
       setActiveTab('compradores');
@@ -1757,45 +1782,162 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                         {compradoresExistentes.map((comprador, index) => (
-                           <TableRow key={index} className="hover:bg-muted/30 transition-colors">
-                             <TableCell className="font-medium">
-                               {comprador.personas?.nombre_legal}
+                          {compradoresExistentes.map((comprador, index) => {
+                            // Estado civil 2 = Casado(a) bienes mancomunados
+                            const esCasadoMancomunados = comprador.personas?.id_estado_civil === 2;
+                            
+                            return (
+                            <React.Fragment key={index}>
+                           <TableRow className="hover:bg-muted/30 transition-colors">
+                              <TableCell className="font-medium">
+                                <div className="flex flex-col gap-1">
+                                  <span>{comprador.personas?.nombre_legal}</span>
+                                  {esCasadoMancomunados && (
+                                    <Badge variant="outline" className="w-fit text-xs">
+                                      Casado(a) bienes mancomunados
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {comprador.personas?.rfc || 'N/A'}
+                              </TableCell>
+                             <TableCell className="text-muted-foreground">
+                               {comprador.personas?.email || 'N/A'}
                              </TableCell>
                              <TableCell className="text-muted-foreground">
-                               {comprador.personas?.rfc || 'N/A'}
+                               {getPersonTypeLabel(comprador.personas?.tipo_persona || '')}
                              </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {comprador.personas?.email || 'N/A'}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {getPersonTypeLabel(comprador.personas?.tipo_persona || '')}
-                            </TableCell>
-                             <TableCell>
-                               <Input
-                                 type="number"
-                                 min="0"
-                                 max="100"
-                                 step="0.01"
-                                 value={comprador.porcentaje_copropiedad.toFixed(2)}
-                                 onChange={(e) => handlePercentageChange(comprador.personas?.id || 0, e.target.value)}
-                                 className="w-20 h-8 text-sm"
-                                 disabled={updateBuyerPercentageMutation.isPending}
-                               />
-                             </TableCell>
-                             <TableCell className="text-right">
-                               <Button 
-                                 variant="outline" 
-                                 size="sm"
-                                 onClick={() => handleDeleteBuyer(comprador.personas?.id || 0, comprador.personas?.nombre_legal || '')}
-                                 disabled={deleteBuyerMutation.isPending}
-                                 className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
-                               >
-                                 <Trash2 className="w-4 h-4" />
-                               </Button>
-                             </TableCell>
-                          </TableRow>
-                        ))}
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.01"
+                                  value={comprador.porcentaje_copropiedad.toFixed(2)}
+                                  onChange={(e) => handlePercentageChange(comprador.personas?.id || 0, e.target.value)}
+                                  className="w-20 h-8 text-sm"
+                                  disabled={updateBuyerPercentageMutation.isPending}
+                                />
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleDeleteBuyer(comprador.personas?.id || 0, comprador.personas?.nombre_legal || '')}
+                                  disabled={deleteBuyerMutation.isPending}
+                                  className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </TableCell>
+                           </TableRow>
+                           
+                           {/* Selector de cónyuge para compradores casados por bienes mancomunados */}
+                           {esCasadoMancomunados && (
+                             <TableRow className="bg-blue-50 dark:bg-blue-950/20">
+                               <TableCell colSpan={6}>
+                                 <div className="p-3 space-y-3">
+                                   <div className="flex items-center gap-2">
+                                     <Label className="text-sm font-medium">Seleccionar cónyuge:</Label>
+                                     <Badge variant="secondary" className="text-xs">
+                                       Obligatorio para bienes mancomunados
+                                     </Badge>
+                                   </div>
+                                   
+                                   {selectedConyugeForBuyer.buyerPersonaId === comprador.personas?.id ? (
+                                     <div className="space-y-2">
+                                       <Input
+                                         placeholder="Buscar cónyuge por nombre, RFC, CURP o email..."
+                                         value={searchTerm}
+                                         onChange={(e) => setSearchTerm(e.target.value)}
+                                       />
+                                       
+                                       {personasBusqueda && personasBusqueda.length > 0 && (
+                                         <div className="border rounded max-h-40 overflow-y-auto">
+                                           {personasBusqueda.map((persona) => (
+                                             <div
+                                               key={persona.id}
+                                               className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"
+                                               onClick={() => {
+                                                 setSelectedConyugeForBuyer({ 
+                                                   buyerPersonaId: comprador.personas?.id || null, 
+                                                   conyugePersonaId: persona.id 
+                                                 });
+                                                 setSearchTerm('');
+                                               }}
+                                             >
+                                               <p className="font-medium text-sm">{persona.nombre_legal}</p>
+                                               <p className="text-xs text-muted-foreground">
+                                                 {persona.rfc && `RFC: ${persona.rfc}`}
+                                                 {persona.curp && `${persona.rfc ? ' | ' : ''}CURP: ${persona.curp}`}
+                                                 {` | Email: ${persona.email}`}
+                                               </p>
+                                             </div>
+                                           ))}
+                                         </div>
+                                       )}
+                                       
+                                       {selectedConyugeForBuyer.conyugePersonaId && (
+                                         <div className="bg-background p-3 rounded border">
+                                           <div className="flex justify-between items-start">
+                                             <div className="flex-1">
+                                               <p className="font-medium text-sm">
+                                                 {personasBusqueda?.find(p => p.id === selectedConyugeForBuyer.conyugePersonaId)?.nombre_legal}
+                                               </p>
+                                               <p className="text-xs text-muted-foreground">
+                                                 {personasBusqueda?.find(p => p.id === selectedConyugeForBuyer.conyugePersonaId)?.rfc}
+                                               </p>
+                                               <div className="mt-2 text-xs text-muted-foreground">
+                                                 <p>• Se agregará como comprador automáticamente</p>
+                                                 <p>• Estado civil se establecerá como "Casado(a) bienes mancomunados"</p>
+                                                 <p>• Los porcentajes se redistribuirán equitativamente</p>
+                                               </div>
+                                             </div>
+                                             <div className="flex gap-2">
+                                               <Button
+                                                 size="sm"
+                                                 onClick={() => {
+                                                   if (selectedConyugeForBuyer.conyugePersonaId) {
+                                                     addCompradorMutation.mutate({ 
+                                                       personaId: selectedConyugeForBuyer.conyugePersonaId,
+                                                       updateEstadoCivilTo: 2 // Casado por bienes mancomunados
+                                                     });
+                                                   }
+                                                 }}
+                                                 disabled={addCompradorMutation.isPending}
+                                               >
+                                                 Agregar Cónyuge
+                                               </Button>
+                                               <Button
+                                                 size="sm"
+                                                 variant="outline"
+                                                 onClick={() => setSelectedConyugeForBuyer({ buyerPersonaId: null, conyugePersonaId: null })}
+                                               >
+                                                 Cancelar
+                                               </Button>
+                                             </div>
+                                           </div>
+                                         </div>
+                                       )}
+                                     </div>
+                                   ) : (
+                                     <Button
+                                       size="sm"
+                                       variant="outline"
+                                       onClick={() => setSelectedConyugeForBuyer({ buyerPersonaId: comprador.personas?.id || null, conyugePersonaId: null })}
+                                     >
+                                       <Plus className="h-3 w-3 mr-1" />
+                                       Seleccionar cónyuge
+                                     </Button>
+                                   )}
+                                 </div>
+                               </TableCell>
+                             </TableRow>
+                           )}
+                           </React.Fragment>
+                           );
+                          })}
                       </TableBody>
                     </Table>
                   </div>
