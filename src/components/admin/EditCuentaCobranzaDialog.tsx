@@ -269,6 +269,46 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     enabled: !!cuentaDetalle?.id_oferta
   });
 
+  // Get property's cuenta cobranza data (notario and escritura fields) for product accounts
+  const { data: propiedadCuentaData } = useQuery({
+    queryKey: ["propiedad_cuenta_data", propiedadDetalle?.id, tipoCuenta],
+    queryFn: async () => {
+      if (!propiedadDetalle?.id || tipoCuenta !== 'Producto') return null;
+      
+      // First, get ofertas for this property
+      const { data: ofertasData } = await supabase
+        .from('ofertas')
+        .select('id')
+        .eq('id_propiedad', propiedadDetalle.id)
+        .is('id_producto', null); // Only property offers, not product offers
+      
+      if (!ofertasData || ofertasData.length === 0) return null;
+      
+      const ofertaIds = ofertasData.map(o => o.id);
+      
+      // Get cuenta_cobranza with notario and escritura data from the property
+      const { data } = await supabase
+        .from('cuentas_cobranza')
+        .select(`
+          id_notario,
+          clave_catastral,
+          numero_escritura,
+          libro,
+          hoja,
+          fecha_escritura,
+          numero_unidad_privativa
+        `)
+        .in('id_oferta', ofertaIds)
+        .not('id_notario', 'is', null)
+        .order('fecha_actualizacion', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      return data;
+    },
+    enabled: !!propiedadDetalle?.id && tipoCuenta === 'Producto'
+  });
+
   // Get seller details
   const { data: vendedorDetalle } = useQuery({
     queryKey: ["vendedor_detalle", propiedadDetalle?.id_entidad_relacionada_dueno],
@@ -574,24 +614,27 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     }
   }, [acuerdosPago]);
 
-  // Update selectedNotario and escritura fields when cuentaDetalle is loaded
+  // Update selectedNotario and escritura fields when cuentaDetalle or propiedadCuentaData is loaded
   useEffect(() => {
-    if (cuentaDetalle?.id_notario) {
-      setSelectedNotario(cuentaDetalle.id_notario.toString());
+    // For product accounts, use data from property's cuenta_cobranza if available
+    const sourceData = (tipoCuenta === 'Producto' && propiedadCuentaData) ? propiedadCuentaData : cuentaDetalle;
+    
+    if (sourceData?.id_notario) {
+      setSelectedNotario(sourceData.id_notario.toString());
     }
-    if (cuentaDetalle) {
-      setClaveCatastral(cuentaDetalle.clave_catastral || '');
-      setNumeroEscritura(cuentaDetalle.numero_escritura || '');
-      setLibro(cuentaDetalle.libro || '');
-      setHoja(cuentaDetalle.hoja || '');
-      setNumeroUnidadPrivativa(cuentaDetalle.numero_unidad_privativa || '');
-      if (cuentaDetalle.fecha_escritura) {
+    if (sourceData) {
+      setClaveCatastral(sourceData.clave_catastral || '');
+      setNumeroEscritura(sourceData.numero_escritura || '');
+      setLibro(sourceData.libro || '');
+      setHoja(sourceData.hoja || '');
+      setNumeroUnidadPrivativa(sourceData.numero_unidad_privativa || '');
+      if (sourceData.fecha_escritura) {
         // Parse date string as local date to avoid timezone issues
-        const [year, month, day] = cuentaDetalle.fecha_escritura.split('-').map(Number);
+        const [year, month, day] = sourceData.fecha_escritura.split('-').map(Number);
         setFechaEscritura(new Date(year, month - 1, day));
       }
     }
-  }, [cuentaDetalle]);
+  }, [cuentaDetalle, propiedadCuentaData, tipoCuenta]);
 
   // Initialize fechaCompra from cuentaDetalle
   useEffect(() => {
