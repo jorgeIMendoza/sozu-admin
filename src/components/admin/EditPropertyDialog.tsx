@@ -253,18 +253,28 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
       // Check if there's a cuenta_cobranza de PROPIEDAD associated
       let clabeStp = currentProperty.clabe_stp || '';
 
-      const { data: cuentaCobranza, error: cuentaError } = await supabase
-        .from('cuentas_cobranza')
-        .select('clabe_stp, ofertas!fk_cuentas_cobranza_oferta(id_propiedad, id_producto)')
-        .eq('ofertas.id_propiedad', property.id)
-        .eq('ofertas.activo', true)
-        .is('ofertas.id_producto', null)
+      // First, get the active property offer
+      const { data: oferta } = await supabase
+        .from('ofertas')
+        .select('id')
+        .eq('id_propiedad', property.id)
         .eq('activo', true)
-        .not('clabe_stp', 'is', null)
+        .is('id_producto', null)
         .maybeSingle();
 
-      if (cuentaCobranza?.clabe_stp) {
-        clabeStp = cuentaCobranza.clabe_stp;
+      // Then, get the cuenta_cobranza with CLABE for that offer
+      if (oferta) {
+        const { data: cuentaCobranza } = await supabase
+          .from('cuentas_cobranza')
+          .select('clabe_stp')
+          .eq('id_oferta', oferta.id)
+          .eq('activo', true)
+          .not('clabe_stp', 'is', null)
+          .maybeSingle();
+
+        if (cuentaCobranza?.clabe_stp) {
+          clabeStp = cuentaCobranza.clabe_stp;
+        }
       }
 
       setFormData({
