@@ -586,7 +586,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       setHoja(cuentaDetalle.hoja || '');
       setNumeroUnidadPrivativa(cuentaDetalle.numero_unidad_privativa || '');
       if (cuentaDetalle.fecha_escritura) {
-        setFechaEscritura(new Date(cuentaDetalle.fecha_escritura));
+        // Parse date string as local date to avoid timezone issues
+        const [year, month, day] = cuentaDetalle.fecha_escritura.split('-').map(Number);
+        setFechaEscritura(new Date(year, month - 1, day));
       }
     }
   }, [cuentaDetalle]);
