@@ -110,12 +110,12 @@ interface Property {
   bodegas_count: number;
   // Estado de pagos
   payment_status?: {
-    apartado: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; fecha: string | null };
-    enganche: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; fecha: string | null };
-    mensualidades: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; fecha: string | null };
-    entrega: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; fecha: string | null };
-    especial: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; fecha: string | null };
-    cesion_derechos: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; fecha: string | null };
+    apartado: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; total: number; fecha: string | null };
+    enganche: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; total: number; fecha: string | null };
+    mensualidades: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; total: number; fecha: string | null };
+    entrega: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; total: number; fecha: string | null };
+    especial: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; total: number; fecha: string | null };
+    cesion_derechos: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; total: number; fecha: string | null };
   } | null;
 }
 
@@ -1800,26 +1800,26 @@ const Propiedades = () => {
                                const paymentInfo = property.payment_status?.[type.key];
                                
                                return (
-                                 <Tooltip key={type.key}>
-                                   <TooltipTrigger asChild>
-                                     <div className={`p-1 rounded-md ${
-                                       paymentInfo?.status === 'pagado' 
-                                         ? 'bg-[hsl(var(--pago-pagado))]' 
-                                         : paymentInfo?.status === 'en_proceso'
-                                         ? 'bg-[hsl(var(--pago-en-proceso))]'
-                                         : (paymentInfo?.monto || 0) > 0
-                                         ? 'bg-[hsl(var(--pago-no-pagado))]'
-                                         : 'border-2 border-muted'
-                                     }`}>
-                                       <IconComponent className={`h-3 w-3 ${
-                                         (paymentInfo?.monto || 0) > 0 ? 'text-white' : 'text-muted-foreground'
-                                       }`} />
-                                     </div>
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <div className="text-sm">
-                                       <p className="font-semibold">{type.label}</p>
-                                       {(paymentInfo?.monto || 0) > 0 ? (
+                                  <Tooltip key={type.key}>
+                                    <TooltipTrigger asChild>
+                                      <div className={`p-1 rounded-md ${
+                                        paymentInfo?.status === 'pagado' 
+                                          ? 'bg-[hsl(var(--pago-pagado))]' 
+                                          : paymentInfo?.status === 'en_proceso'
+                                          ? 'bg-[hsl(var(--pago-en-proceso))]'
+                                          : (paymentInfo?.total || 0) > 0
+                                          ? 'bg-[hsl(var(--pago-no-pagado))]'
+                                          : 'border-2 border-muted'
+                                      }`}>
+                                        <IconComponent className={`h-3 w-3 ${
+                                          (paymentInfo?.total || 0) > 0 ? 'text-white' : 'text-muted-foreground'
+                                        }`} />
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <div className="text-sm">
+                                        <p className="font-semibold">{type.label}</p>
+                                        {(paymentInfo?.total || 0) > 0 ? (
                                          <>
                                            <p>Monto: ${(paymentInfo?.monto || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                            <p>Pagado: ${(paymentInfo?.monto_pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
