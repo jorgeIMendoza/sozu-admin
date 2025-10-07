@@ -86,9 +86,6 @@ export default function Compradores() {
           ),
           estados_civil (
             nombre
-          ),
-          conyuge:personas!personas_id_conyuge_fkey (
-            nombre_legal
           )
         `)
         .eq('activo', true)
@@ -98,6 +95,22 @@ export default function Compradores() {
         .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
+      
+      if (error) throw error;
+      
+      // Obtener nombres de cónyuges en una segunda consulta
+      const personasConConyuge = data?.filter((p: any) => p.id_conyuge) || [];
+      const idsConyuges = personasConConyuge.map((p: any) => p.id_conyuge);
+      
+      let conyugesMap = new Map();
+      if (idsConyuges.length > 0) {
+        const { data: conyugesData } = await supabase
+          .from('personas')
+          .select('id, nombre_legal')
+          .in('id', idsConyuges);
+        
+        conyugesMap = new Map(conyugesData?.map((c: any) => [c.id, c.nombre_legal]) || []);
+      }
       
       return (data || []).map((item: any) => ({
         id: item.id,
@@ -115,7 +128,7 @@ export default function Compradores() {
         id_conyuge: item.id_conyuge,
         representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
         estado_civil_nombre: item.estados_civil?.nombre,
-        conyuge_nombre: item.conyuge?.nombre_legal,
+        conyuge_nombre: item.id_conyuge ? conyugesMap.get(item.id_conyuge) : null,
       })) as (Comprador & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
@@ -150,9 +163,6 @@ export default function Compradores() {
           ),
           estados_civil (
             nombre
-          ),
-          conyuge:personas!personas_id_conyuge_fkey (
-            nombre_legal
           )
         `)
         .eq('activo', false)
@@ -162,6 +172,22 @@ export default function Compradores() {
         .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
+      
+      if (error) throw error;
+      
+      // Obtener nombres de cónyuges en una segunda consulta
+      const personasConConyuge = data?.filter((p: any) => p.id_conyuge) || [];
+      const idsConyuges = personasConConyuge.map((p: any) => p.id_conyuge);
+      
+      let conyugesMap = new Map();
+      if (idsConyuges.length > 0) {
+        const { data: conyugesData } = await supabase
+          .from('personas')
+          .select('id, nombre_legal')
+          .in('id', idsConyuges);
+        
+        conyugesMap = new Map(conyugesData?.map((c: any) => [c.id, c.nombre_legal]) || []);
+      }
       
       return (data || []).map((item: any) => ({
         id: item.id,
@@ -179,7 +205,7 @@ export default function Compradores() {
         id_conyuge: item.id_conyuge,
         representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
         estado_civil_nombre: item.estados_civil?.nombre,
-        conyuge_nombre: item.conyuge?.nombre_legal,
+        conyuge_nombre: item.id_conyuge ? conyugesMap.get(item.id_conyuge) : null,
       })) as (Comprador & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
