@@ -1250,6 +1250,7 @@ export type Database = {
         Row: {
           activo: boolean
           cuenta_madre_stp: string | null
+          facturar: boolean
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
@@ -1257,10 +1258,12 @@ export type Database = {
           id_persona: number | null
           id_proyecto: number | null
           id_tipo_entidad: number
+          nombre_api_key: string | null
         }
         Insert: {
           activo?: boolean
           cuenta_madre_stp?: string | null
+          facturar?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -1268,10 +1271,12 @@ export type Database = {
           id_persona?: number | null
           id_proyecto?: number | null
           id_tipo_entidad: number
+          nombre_api_key?: string | null
         }
         Update: {
           activo?: boolean
           cuenta_madre_stp?: string | null
+          facturar?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -1279,6 +1284,7 @@ export type Database = {
           id_persona?: number | null
           id_proyecto?: number | null
           id_tipo_entidad?: number
+          nombre_api_key?: string | null
         }
         Relationships: [
           {
