@@ -496,11 +496,14 @@ export function DocumentsTab({
                     const tipoDocumentoNombre = tiposDocumento.find(t => t.id.toString() === pendingDoc.tipoDocumento)?.nombre || 'Tipo desconocido';
                     return (
                       <TableRow key={pendingDoc.tempId}>
-                        <TableCell className="font-medium">Pendiente</TableCell>
+                        <TableCell className="font-medium">-</TableCell>
                         <TableCell>{tipoDocumentoNombre}</TableCell>
                         <TableCell></TableCell>
                         <TableCell>
-                          {pendingDoc.file.name}
+                          <Badge variant="secondary">Pendiente</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {new Date().toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
