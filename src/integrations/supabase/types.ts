@@ -2585,6 +2585,7 @@ export type Database = {
           fecha_registro: string | null
           folio_mercantil: string | null
           id: number
+          id_conyuge: number | null
           id_entidad_relacionada_rep_leg: number | null
           id_estado_civil: number | null
           id_estado_nacimiento: number | null
@@ -2629,6 +2630,7 @@ export type Database = {
           fecha_registro?: string | null
           folio_mercantil?: string | null
           id?: number
+          id_conyuge?: number | null
           id_entidad_relacionada_rep_leg?: number | null
           id_estado_civil?: number | null
           id_estado_nacimiento?: number | null
@@ -2673,6 +2675,7 @@ export type Database = {
           fecha_registro?: string | null
           folio_mercantil?: string | null
           id?: number
+          id_conyuge?: number | null
           id_entidad_relacionada_rep_leg?: number | null
           id_estado_civil?: number | null
           id_estado_nacimiento?: number | null
@@ -2783,6 +2786,13 @@ export type Database = {
             columns: ["clave_pais_telefono"]
             isOneToOne: false
             referencedRelation: "paises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personas_id_conyuge_fkey"
+            columns: ["id_conyuge"]
+            isOneToOne: false
+            referencedRelation: "personas"
             referencedColumns: ["id"]
           },
           {
@@ -3430,6 +3440,24 @@ export type Database = {
           fecha_creacion?: string | null
           id?: never
           nombre?: string
+        }
+        Relationships: []
+      }
+      servicios: {
+        Row: {
+          duracion: unknown | null
+          id: number
+          nombre: string | null
+        }
+        Insert: {
+          duracion?: unknown | null
+          id?: number
+          nombre?: string | null
+        }
+        Update: {
+          duracion?: unknown | null
+          id?: number
+          nombre?: string | null
         }
         Relationships: []
       }

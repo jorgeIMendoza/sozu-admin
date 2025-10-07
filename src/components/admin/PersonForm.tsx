@@ -63,6 +63,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [sexo, setSexo] = useState(initialData?.sexo || '');
   const [fechaNacimiento, setFechaNacimiento] = useState(initialData?.fecha_nacimiento ? new Date(initialData.fecha_nacimiento) : undefined);
   const [idEstadoCivil, setIdEstadoCivil] = useState(initialData?.id_estado_civil || '');
+  const [idConyuge, setIdConyuge] = useState(initialData?.id_conyuge || '');
+  const [searchConyuge, setSearchConyuge] = useState('');
   const [ocupacion, setOcupacion] = useState(initialData?.ocupacion || '');
   
   // Birth place
@@ -253,6 +255,38 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       if (error) throw error;
       return data || [];
     },
+  });
+
+  // Fetch potential spouses (only personas físicas que sean compradores)
+  const { data: personasDisponibles = [] } = useQuery({
+    queryKey: ['personas_disponibles_conyuge', initialData?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('personas')
+        .select(`
+          id,
+          nombre_legal,
+          email,
+          rfc,
+          curp,
+          id_estado_civil,
+          entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
+            id,
+            id_tipo_entidad
+          )
+        `)
+        .eq('activo', true)
+        .eq('tipo_persona', 'pf')
+        .eq('entidades_relacionadas.activo', true)
+        .eq('entidades_relacionadas.id_tipo_entidad', 2)
+        .is('entidades_relacionadas.id_proyecto', null)
+        .neq('id', initialData?.id || 0)
+        .order('nombre_legal');
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: idEstadoCivil === '2' || idEstadoCivil === 2,
   });
 
   const { data: notarios = [] } = useQuery({
@@ -473,7 +507,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     return entityType === 'client' && getDefaultTipoEntidad(entityType) === 7;
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Basic validation
@@ -550,6 +584,18 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       return;
     }
 
+    // Validation for spouse selection
+    if (idEstadoCivil === '2' || idEstadoCivil === 2) {
+      if (!idConyuge) {
+        toast({
+          title: "Error",
+          description: "Debes seleccionar un cónyuge cuando el estado civil es 'Casado(a) bienes mancomunados'.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const formData: any = {
       nombre_legal: nombre.trim(),
       nombre_comercial: nombreComercial.trim() || null,
@@ -565,6 +611,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       sexo: sexo || null,
       fecha_nacimiento: fechaNacimiento?.toISOString() || null,
       id_estado_civil: idEstadoCivil ? parseInt(idEstadoCivil) : null,
+      id_conyuge: idConyuge ? parseInt(idConyuge) : null,
       ocupacion: ocupacion.trim() || null,
       id_pais_nacimiento: idPaisNacimiento || null,
       id_estado_nacimiento: idEstadoNacimiento ? parseInt(idEstadoNacimiento) : null,
@@ -608,6 +655,37 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
     if (tempBeneficiaries.length > 0) {
       formData.tempBeneficiaries = tempBeneficiaries;
+    }
+
+    // Update spouse reciprocally if spouse is selected and this is an update
+    if (idConyuge && initialData?.id) {
+      try {
+        // Update the spouse's id_conyuge and id_estado_civil
+        const { error: spouseError } = await supabase
+          .from('personas')
+          .update({
+            id_conyuge: initialData.id,
+            id_estado_civil: 2, // Set to "Casado(a) bienes mancomunados"
+          })
+          .eq('id', parseInt(idConyuge));
+        
+        if (spouseError) {
+          toast({
+            title: "Error",
+            description: "Error al actualizar el cónyuge: " + spouseError.message,
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch (error) {
+        console.error('Error updating spouse:', error);
+        toast({
+          title: "Error",
+          description: "Error al actualizar el cónyuge.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     // For backwards compatibility with user form
@@ -1211,7 +1289,14 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
                       <div>
                         <Label htmlFor="estadoCivil">Estado Civil</Label>
-                        <Select value={idEstadoCivil} onValueChange={setIdEstadoCivil}>
+                        <Select value={idEstadoCivil} onValueChange={(value) => {
+                          setIdEstadoCivil(value);
+                          // Si no es casado por bienes mancomunados, limpiar cónyuge
+                          if (value !== '2') {
+                            setIdConyuge('');
+                            setSearchConyuge('');
+                          }
+                        }}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecciona estado civil" />
                           </SelectTrigger>
@@ -1224,6 +1309,42 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           </SelectContent>
                         </Select>
                       </div>
+
+                      {/* Selector de cónyuge - solo visible cuando estado civil es "Casado(a) bienes mancomunados" */}
+                      {(idEstadoCivil === '2' || idEstadoCivil === 2) && (
+                        <div className="col-span-1 md:col-span-2">
+                          <Label htmlFor="conyuge">Cónyuge *</Label>
+                          <div className="space-y-2">
+                            <Input
+                              placeholder="Buscar cónyuge por nombre, RFC o CURP..."
+                              value={searchConyuge}
+                              onChange={(e) => setSearchConyuge(e.target.value)}
+                            />
+                            <Select value={idConyuge} onValueChange={setIdConyuge}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecciona el cónyuge" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {personasDisponibles
+                                  .filter(persona => 
+                                    !searchConyuge || 
+                                    persona.nombre_legal.toLowerCase().includes(searchConyuge.toLowerCase()) ||
+                                    (persona.rfc && persona.rfc.toLowerCase().includes(searchConyuge.toLowerCase())) ||
+                                    (persona.curp && persona.curp.toLowerCase().includes(searchConyuge.toLowerCase()))
+                                  )
+                                  .map((persona) => (
+                                    <SelectItem key={persona.id} value={persona.id.toString()}>
+                                      {persona.nombre_legal} {persona.rfc ? `(RFC: ${persona.rfc})` : persona.curp ? `(CURP: ${persona.curp})` : ''}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-sm text-muted-foreground">
+                              Al seleccionar un cónyuge, automáticamente se actualizará su estado civil a "Casado(a) bienes mancomunados" y se establecerá la relación recíproca.
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       <div>
                         <Label htmlFor="tipoIdentificacion">Tipo de identificación</Label>

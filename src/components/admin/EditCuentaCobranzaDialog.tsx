@@ -52,6 +52,14 @@ interface Comprador {
     telefono?: string;
     tipo_persona: string;
     id_estado_civil?: number;
+    id_conyuge?: number;
+    conyuge?: {
+      id: number;
+      nombre_legal: string;
+      rfc?: string;
+      curp?: string;
+      email: string;
+    } | null;
   };
 }
 
@@ -354,7 +362,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             email,
             telefono,
             tipo_persona,
-            id_estado_civil
+            id_estado_civil,
+            id_conyuge,
+            conyuge:personas!personas_id_conyuge_fkey(
+              id,
+              nombre_legal,
+              rfc,
+              curp,
+              email
+            )
           )
         `)
         .eq('id_cuenta_cobranza', cuenta.id)
@@ -1833,109 +1849,81 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               </TableCell>
                            </TableRow>
                            
-                           {/* Selector de cónyuge para compradores casados por bienes mancomunados */}
-                           {esCasadoMancomunados && (
-                             <TableRow className="bg-blue-50 dark:bg-blue-950/20">
-                               <TableCell colSpan={6}>
-                                 <div className="p-3 space-y-3">
-                                   <div className="flex items-center gap-2">
-                                     <Label className="text-sm font-medium">Seleccionar cónyuge:</Label>
-                                     <Badge variant="secondary" className="text-xs">
-                                       Obligatorio para bienes mancomunados
-                                     </Badge>
-                                   </div>
-                                   
-                                   {selectedConyugeForBuyer.buyerPersonaId === comprador.personas?.id ? (
-                                     <div className="space-y-2">
-                                       <Input
-                                         placeholder="Buscar cónyuge por nombre, RFC, CURP o email..."
-                                         value={searchTerm}
-                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                       />
-                                       
-                                       {personasBusqueda && personasBusqueda.length > 0 && (
-                                         <div className="border rounded max-h-40 overflow-y-auto">
-                                           {personasBusqueda.map((persona) => (
-                                             <div
-                                               key={persona.id}
-                                               className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"
-                                               onClick={() => {
-                                                 setSelectedConyugeForBuyer({ 
-                                                   buyerPersonaId: comprador.personas?.id || null, 
-                                                   conyugePersonaId: persona.id 
-                                                 });
-                                                 setSearchTerm('');
-                                               }}
-                                             >
-                                               <p className="font-medium text-sm">{persona.nombre_legal}</p>
-                                               <p className="text-xs text-muted-foreground">
-                                                 {persona.rfc && `RFC: ${persona.rfc}`}
-                                                 {persona.curp && `${persona.rfc ? ' | ' : ''}CURP: ${persona.curp}`}
-                                                 {` | Email: ${persona.email}`}
-                                               </p>
-                                             </div>
-                                           ))}
-                                         </div>
-                                       )}
-                                       
-                                       {selectedConyugeForBuyer.conyugePersonaId && (
-                                         <div className="bg-background p-3 rounded border">
-                                           <div className="flex justify-between items-start">
-                                             <div className="flex-1">
-                                               <p className="font-medium text-sm">
-                                                 {personasBusqueda?.find(p => p.id === selectedConyugeForBuyer.conyugePersonaId)?.nombre_legal}
-                                               </p>
-                                               <p className="text-xs text-muted-foreground">
-                                                 {personasBusqueda?.find(p => p.id === selectedConyugeForBuyer.conyugePersonaId)?.rfc}
-                                               </p>
-                                               <div className="mt-2 text-xs text-muted-foreground">
-                                                 <p>• Se agregará como comprador automáticamente</p>
-                                                 <p>• Estado civil se establecerá como "Casado(a) bienes mancomunados"</p>
-                                                 <p>• Los porcentajes se redistribuirán equitativamente</p>
-                                               </div>
-                                             </div>
-                                             <div className="flex gap-2">
-                                               <Button
-                                                 size="sm"
-                                                 onClick={() => {
-                                                   if (selectedConyugeForBuyer.conyugePersonaId) {
-                                                     addCompradorMutation.mutate({ 
-                                                       personaId: selectedConyugeForBuyer.conyugePersonaId,
-                                                       updateEstadoCivilTo: 2 // Casado por bienes mancomunados
-                                                     });
-                                                   }
-                                                 }}
-                                                 disabled={addCompradorMutation.isPending}
-                                               >
-                                                 Agregar Cónyuge
-                                               </Button>
-                                               <Button
-                                                 size="sm"
-                                                 variant="outline"
-                                                 onClick={() => setSelectedConyugeForBuyer({ buyerPersonaId: null, conyugePersonaId: null })}
-                                               >
-                                                 Cancelar
-                                               </Button>
-                                             </div>
-                                           </div>
-                                         </div>
-                                       )}
-                                     </div>
-                                   ) : (
-                                     <Button
-                                       size="sm"
-                                       variant="outline"
-                                       onClick={() => setSelectedConyugeForBuyer({ buyerPersonaId: comprador.personas?.id || null, conyugePersonaId: null })}
-                                     >
-                                       <Plus className="h-3 w-3 mr-1" />
-                                       Seleccionar cónyuge
-                                     </Button>
-                                   )}
-                                 </div>
-                               </TableCell>
-                             </TableRow>
-                           )}
-                           </React.Fragment>
+                            {/* Selector de cónyuge para compradores casados por bienes mancomunados */}
+                            {esCasadoMancomunados && (
+                              <TableRow className="bg-blue-50 dark:bg-blue-950/20">
+                                <TableCell colSpan={6}>
+                                  <div className="p-3 space-y-3">
+                                    {/* Si ya tiene cónyuge asignado en la base de datos */}
+                                    {comprador.personas?.id_conyuge && comprador.personas?.conyuge && typeof comprador.personas.conyuge === 'object' && !Array.isArray(comprador.personas.conyuge) ? (
+                                      <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                          <Label className="text-sm font-medium">Cónyuge asignado:</Label>
+                                          <Badge variant="default" className="text-xs">
+                                            {comprador.personas.conyuge.nombre_legal}
+                                          </Badge>
+                                        </div>
+                                        
+                                        {/* Check if spouse is already added as comprador */}
+                                        {!compradoresExistentes?.some(c => c.personas?.id === comprador.personas?.id_conyuge) && (
+                                          <div className="bg-background p-3 rounded border">
+                                            <div className="flex justify-between items-start">
+                                              <div className="flex-1">
+                                                <p className="font-medium text-sm">
+                                                  {comprador.personas.conyuge.nombre_legal}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                  {comprador.personas.conyuge.rfc && `RFC: ${comprador.personas.conyuge.rfc} | `}
+                                                  {comprador.personas.conyuge.email}
+                                                </p>
+                                                <div className="mt-2 text-xs text-muted-foreground">
+                                                  <p>• Se agregará como comprador automáticamente</p>
+                                                  <p>• Los porcentajes se redistribuirán equitativamente</p>
+                                                </div>
+                                              </div>
+                                              <Button
+                                                size="sm"
+                                                onClick={() => {
+                                                  if (comprador.personas?.id_conyuge) {
+                                                    addCompradorMutation.mutate({ 
+                                                      personaId: comprador.personas.id_conyuge
+                                                    });
+                                                  }
+                                                }}
+                                                disabled={addCompradorMutation.isPending}
+                                              >
+                                                <Plus className="h-3 w-3 mr-1" />
+                                                Agregar Cónyuge
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {compradoresExistentes?.some(c => c.personas?.id === comprador.personas?.id_conyuge) && (
+                                          <p className="text-sm text-muted-foreground">
+                                            ✓ El cónyuge ya está agregado como comprador
+                                          </p>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      /* Si NO tiene cónyuge asignado, mostrar mensaje */
+                                      <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                          <Label className="text-sm font-medium">Cónyuge:</Label>
+                                          <Badge variant="secondary" className="text-xs">
+                                            Obligatorio para bienes mancomunados
+                                          </Badge>
+                                        </div>
+                                        <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                                          ⚠️ Este comprador no tiene un cónyuge asignado. Ve a la vista de Compradores para asignar el cónyuge.
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                            </React.Fragment>
                            );
                           })}
                       </TableBody>
