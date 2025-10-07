@@ -395,13 +395,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   });
 
   // Get existing buyers
-  const { data: compradoresExistentes, refetch: refetchCompradores } = useQuery({
+  const { data: compradoresExistentes, refetch: refetchCompradores, isLoading: isLoadingCompradores } = useQuery({
     queryKey: ["compradores_existentes", cuenta.id],
     queryFn: async () => {
-      const { data } = await supabase
+      // First get compradores with basic persona info
+      const { data: compradoresData, error: compradoresError } = await supabase
         .from('compradores')
         .select(`
           porcentaje_copropiedad,
+          id_persona,
           personas!compradores_id_persona_fkey(
             id,
             nombre_legal,
@@ -411,20 +413,57 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             telefono,
             tipo_persona,
             id_estado_civil,
-            id_conyuge,
-            conyuge:personas!personas_id_conyuge_fkey(
-              id,
-              nombre_legal,
-              rfc,
-              curp,
-              email
-            )
+            id_conyuge
           )
         `)
         .eq('id_cuenta_cobranza', cuenta.id)
         .eq('activo', true);
 
-      return data || [];
+      if (compradoresError) {
+        console.error('Error fetching compradores:', compradoresError);
+        return [];
+      }
+
+      console.log('Compradores fetched for cuenta', cuenta.id, ':', compradoresData);
+
+      // If no compradores, return empty array
+      if (!compradoresData || compradoresData.length === 0) {
+        return [];
+      }
+
+      // Now fetch conyuge data separately for those who have id_conyuge
+      const conyugeIds = compradoresData
+        .map(c => c.personas?.id_conyuge)
+        .filter((id): id is number => id != null);
+
+      let conyugesMap: Record<number, any> = {};
+      
+      if (conyugeIds.length > 0) {
+        const { data: conyugesData } = await supabase
+          .from('personas')
+          .select('id, nombre_legal, rfc, curp, email')
+          .in('id', conyugeIds);
+
+        if (conyugesData) {
+          conyugesMap = conyugesData.reduce((acc, conyuge) => {
+            acc[conyuge.id] = conyuge;
+            return acc;
+          }, {} as Record<number, any>);
+        }
+      }
+
+      // Combine the data
+      const compradoresWithConyuge = compradoresData.map(comprador => ({
+        ...comprador,
+        personas: comprador.personas ? {
+          ...comprador.personas,
+          conyuge: comprador.personas.id_conyuge ? conyugesMap[comprador.personas.id_conyuge] : null
+        } : undefined
+      }));
+
+      console.log('Compradores with conyuge data:', compradoresWithConyuge);
+      
+      return compradoresWithConyuge;
     }
   });
 
