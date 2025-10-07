@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -692,9 +692,6 @@ export default function DetalleCuentaCobranza() {
         a => a.acuerdos_pago?.id_cuenta_cobranza === cuentaId
       );
 
-      console.log('=== DEBUG PAGOS EFECTIVO ===');
-      console.log('Total aplicaciones de esta cuenta:', aplicacionesDeEstaCuenta?.length);
-
       // Get cash payments for property - sum from aplicaciones_pago to avoid duplicates
       let pagosPropiedadEfectivo = 0;
       
@@ -710,18 +707,13 @@ export default function DetalleCuentaCobranza() {
             .eq('id_metodos_pago', 1) // Efectivo only
             .eq('activo', true);
 
-          console.log('Pagos en efectivo encontrados:', pagosData);
-
           // Get the IDs of cash payments
           const pagoEfectivoIds = pagosData?.map(p => p.id) || [];
           
-          // Filter and log cash payment applications
-          const aplicacionesEfectivo = aplicacionesDeEstaCuenta.filter(app => pagoEfectivoIds.includes(app.id_pago));
-          console.log('Aplicaciones de efectivo:', aplicacionesEfectivo.map(a => ({ id_pago: a.id_pago, monto: a.monto })));
-          
           // Sum only the application amounts for cash payments
-          pagosPropiedadEfectivo = aplicacionesEfectivo.reduce((sum, app) => sum + (app.monto || 0), 0);
-          console.log('Total pagado en efectivo (propiedad):', pagosPropiedadEfectivo);
+          pagosPropiedadEfectivo = aplicacionesDeEstaCuenta
+            .filter(app => pagoEfectivoIds.includes(app.id_pago))
+            .reduce((sum, app) => sum + (app.monto || 0), 0);
         }
       }
 
@@ -1676,6 +1668,11 @@ export default function DetalleCuentaCobranza() {
                   ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2)
                   : '0.00';
                 
+                // Check if has cash payments (id_metodos_pago = 1)
+                const tienePagosEfectivo = (acuerdo.aplicaciones || []).some(
+                  app => app.pago.id_metodos_pago === 1
+                );
+                
                 return (
                   <Collapsible key={acuerdo.id} open={isOpen} onOpenChange={() => toggleAcuerdo(acuerdo.id)}>
                     <div className="border rounded-lg">
@@ -1686,7 +1683,21 @@ export default function DetalleCuentaCobranza() {
                               <div className="flex-shrink-0 w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-semibold">
                                 {acuerdo.orden}
                               </div>
-                              <span className="text-sm font-medium">{conceptoDisplay}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{conceptoDisplay}</span>
+                                {tienePagosEfectivo && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Banknote className="h-4 w-4 text-green-600" />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Incluye pago(s) en efectivo</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                              </div>
                             </div>
                             <Badge variant="outline" className="text-xs">
                               {(acuerdo.aplicaciones || []).length} aplicación(es)
