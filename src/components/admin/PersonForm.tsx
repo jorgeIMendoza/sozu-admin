@@ -289,6 +289,24 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     enabled: idEstadoCivil === '2' || idEstadoCivil === 2,
   });
 
+  // Fetch spouse name if already assigned
+  const { data: conyugeData } = useQuery({
+    queryKey: ['conyuge_info', initialData?.id_conyuge],
+    queryFn: async () => {
+      if (!initialData?.id_conyuge) return null;
+      
+      const { data, error } = await supabase
+        .from('personas')
+        .select('id, nombre_legal, rfc, curp, email')
+        .eq('id', initialData.id_conyuge)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!initialData?.id_conyuge,
+  });
+
   const { data: notarios = [] } = useQuery({
     queryKey: ['notarios'],
     queryFn: async () => {
@@ -1322,46 +1340,51 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       {(idEstadoCivil === '2' || idEstadoCivil === 2) && (
                         <div className="col-span-1 md:col-span-2">
                           <Label htmlFor="conyuge">Cónyuge *</Label>
-                          <div className="space-y-2">
-                            <Input
-                              placeholder="Buscar cónyuge por nombre, RFC o CURP..."
-                              value={searchConyuge}
-                              onChange={(e) => setSearchConyuge(e.target.value)}
-                              disabled={!!initialData?.id_conyuge}
-                            />
-                            <Select 
-                              value={idConyuge} 
-                              onValueChange={setIdConyuge}
-                              disabled={!!initialData?.id_conyuge}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecciona el cónyuge" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {personasDisponibles
-                                  .filter(persona => 
-                                    !searchConyuge || 
-                                    persona.nombre_legal.toLowerCase().includes(searchConyuge.toLowerCase()) ||
-                                    (persona.rfc && persona.rfc.toLowerCase().includes(searchConyuge.toLowerCase())) ||
-                                    (persona.curp && persona.curp.toLowerCase().includes(searchConyuge.toLowerCase()))
-                                  )
-                                  .map((persona) => (
-                                    <SelectItem key={persona.id} value={persona.id.toString()}>
-                                      {persona.nombre_legal} {persona.rfc ? `(RFC: ${persona.rfc})` : persona.curp ? `(CURP: ${persona.curp})` : ''}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                            {initialData?.id_conyuge ? (
+                          {initialData?.id_conyuge && conyugeData ? (
+                            <div className="space-y-2">
+                              <div className="p-3 border rounded-md bg-muted/50">
+                                <p className="font-medium">{conyugeData.nombre_legal}</p>
+                                <div className="text-sm text-muted-foreground space-y-1 mt-1">
+                                  {conyugeData.rfc && <p>RFC: {conyugeData.rfc}</p>}
+                                  {conyugeData.curp && <p>CURP: {conyugeData.curp}</p>}
+                                  {conyugeData.email && <p>Email: {conyugeData.email}</p>}
+                                </div>
+                              </div>
                               <p className="text-sm font-medium text-amber-600">
                                 ⚠️ El cónyuge ya está asignado y no puede ser modificado.
                               </p>
-                            ) : (
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <Input
+                                placeholder="Buscar cónyuge por nombre, RFC o CURP..."
+                                value={searchConyuge}
+                                onChange={(e) => setSearchConyuge(e.target.value)}
+                              />
+                              <Select value={idConyuge} onValueChange={setIdConyuge}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecciona el cónyuge" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {personasDisponibles
+                                    .filter(persona => 
+                                      !searchConyuge || 
+                                      persona.nombre_legal.toLowerCase().includes(searchConyuge.toLowerCase()) ||
+                                      (persona.rfc && persona.rfc.toLowerCase().includes(searchConyuge.toLowerCase())) ||
+                                      (persona.curp && persona.curp.toLowerCase().includes(searchConyuge.toLowerCase()))
+                                    )
+                                    .map((persona) => (
+                                      <SelectItem key={persona.id} value={persona.id.toString()}>
+                                        {persona.nombre_legal} {persona.rfc ? `(RFC: ${persona.rfc})` : persona.curp ? `(CURP: ${persona.curp})` : ''}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
                               <p className="text-sm text-muted-foreground">
                                 Al seleccionar un cónyuge, automáticamente se actualizará su estado civil a "Casado(a) bienes mancomunados" y se establecerá la relación recíproca.
                               </p>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
