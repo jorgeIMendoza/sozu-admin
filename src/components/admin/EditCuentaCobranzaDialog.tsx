@@ -1914,7 +1914,25 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <div>
-                    <CardTitle>Compradores</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle>Compradores</CardTitle>
+                      {/* Check if any compradores are spouses */}
+                      {compradoresExistentes && compradoresExistentes.length >= 2 && compradoresExistentes.some((comprador) => {
+                        const spouseId = comprador.personas?.id_conyuge;
+                        return spouseId && compradoresExistentes.some(c => c.personas?.id === spouseId);
+                      }) && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HeartHandshake className="h-5 w-5 text-pink-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Hay compradores cónyuges</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground mt-1">
                       Total asignado: {totalPorcentajes.toFixed(2)}%
                       {!isValidTotal && (
