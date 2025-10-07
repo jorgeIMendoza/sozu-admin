@@ -167,6 +167,10 @@ export const ProjectLegalEntitiesSection = ({
           tipos_entidad!entidades_relacionadas_id_tipo_entidad_fkey (
             id,
             nombre
+          ),
+          proyectos!entidades_relacionadas_id_proyecto_fkey (
+            id,
+            nombre
           )
         `)
         .eq("id_proyecto", projectId)
@@ -435,17 +439,46 @@ export const ProjectLegalEntitiesSection = ({
     },
   });
 
+  // Generate API key name from project and entity names
+  const generateApiKeyName = (projectName: string, entityName: string): string => {
+    const cleanName = (name: string) => {
+      return name
+        .trim()
+        .toUpperCase()
+        .replace(/\./g, '') // Remove dots
+        .replace(/[^A-Z0-9\s]/g, '') // Remove special characters except spaces
+        .replace(/\s+/g, '_'); // Replace spaces with underscores
+    };
+    
+    const cleanProject = cleanName(projectName);
+    const cleanEntity = cleanName(entityName);
+    
+    return `${cleanProject}_${cleanEntity}_API_KEY`;
+  };
+
   // Update facturar mutation
   const updateFacturarMutation = useMutation({
     mutationFn: async ({ entityId, facturar, entity }: { entityId: number; facturar: boolean; entity: any }) => {
-      // If trying to enable facturar, validate that API key name exists
-      if (facturar && !entity.nombre_api_key) {
-        throw new Error("Debes asignar un nombre de API Key antes de habilitar facturación");
+      let apiKeyName = entity.nombre_api_key;
+      
+      // Generate API key name if not exists and facturar is being enabled
+      if (facturar && !apiKeyName && entity.proyectos && entity.personas) {
+        apiKeyName = generateApiKeyName(entity.proyectos.nombre, entity.personas.nombre_legal);
+      }
+      
+      // If trying to enable facturar, ensure API key name exists
+      if (facturar && !apiKeyName) {
+        throw new Error("No se pudo generar el nombre de la API Key");
+      }
+
+      const updateData: any = { facturar };
+      if (facturar && apiKeyName) {
+        updateData.nombre_api_key = apiKeyName;
       }
 
       const { error } = await supabase
         .from("entidades_relacionadas")
-        .update({ facturar })
+        .update(updateData)
         .eq("id", entityId);
 
       if (error) throw error;
@@ -471,42 +504,33 @@ export const ProjectLegalEntitiesSection = ({
     },
   });
 
-  // Update API key name mutation
+  // Update API key value mutation
   const updateApiKeyMutation = useMutation({
-    mutationFn: async ({ entityId, apiKeyName, apiKeyValue }: { entityId: number; apiKeyName: string; apiKeyValue?: string }) => {
-      if (!apiKeyName || apiKeyName.trim() === "") {
-        throw new Error("El nombre de la API Key es obligatorio");
+    mutationFn: async ({ apiKeyName, apiKeyValue }: { apiKeyName: string; apiKeyValue: string }) => {
+      if (!apiKeyValue || apiKeyValue.trim() === "") {
+        throw new Error("El valor de la API Key es obligatorio");
       }
 
-      const { error } = await supabase
-        .from("entidades_relacionadas")
-        .update({ nombre_api_key: apiKeyName })
-        .eq("id", entityId);
+      // Call edge function to store API key value in Supabase secrets
+      const { data, error } = await supabase.functions.invoke('manage-api-key-secret', {
+        body: { 
+          action: 'set',
+          secretName: apiKeyName,
+          secretValue: apiKeyValue 
+        }
+      });
 
       if (error) throw error;
-
-      // If API key value is provided, save it to Supabase secrets
-      // Note: This would typically be done through an edge function for security
-      if (apiKeyValue) {
-        // TODO: Call edge function to store API key value in Supabase secrets
-        // For now, just log it (in production, this should call an edge function)
-        console.log(`API Key value for ${apiKeyName} should be stored in secrets`);
-      }
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: async () => {
       toast({
         title: "API Key actualizada",
-        description: "El nombre de la API Key se actualizó exitosamente.",
+        description: "El valor de la API Key se guardó exitosamente en Secrets.",
       });
       setEditingApiKey(null);
       setTempApiKeyName("");
       setTempApiKeyValue("");
-      
-      // Refetch solo la query de entidades legales sin afectar otras queries
-      await queryClient.refetchQueries({ 
-        queryKey: ["project-legal-entities", projectId],
-        exact: true
-      });
     },
     onError: (error: any) => {
       toast({
@@ -772,40 +796,35 @@ export const ProjectLegalEntitiesSection = ({
                               {/* API Key Name and Value fields - shown only when facturar is checked */}
                               {entity.facturar && (
                                 <div className="space-y-3">
-                                  {/* API Key Name */}
+                                  {/* API Key Name - Auto-generated, read-only */}
                                   <div>
                                     <label className="text-sm font-medium">
-                                      Nombre de API Key: <span className="text-destructive">*</span>
+                                      Nombre de API Key:
+                                    </label>
+                                    <div className="mt-1 p-2 bg-muted rounded-md">
+                                      <span className="text-sm font-mono">
+                                        {entity.nombre_api_key || generateApiKeyName(
+                                          entity.proyectos?.nombre || '',
+                                          entity.personas?.nombre_legal || ''
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* API Key Value - Only field that can be edited */}
+                                  <div>
+                                    <label className="text-sm font-medium">
+                                      Valor de API Key: <span className="text-destructive">*</span>
                                     </label>
                                     {editingApiKey === entity.id ? (
                                       <div className="space-y-2 mt-1">
                                         <Input
-                                          value={tempApiKeyName}
-                                          onChange={(e) => {
-                                            // Only allow uppercase letters, no spaces, no numbers, no special characters
-                                            const cleanValue = e.target.value
-                                              .replace(/[^a-zA-Z]/g, '') // Remove everything except letters
-                                              .toUpperCase(); // Convert to uppercase
-                                            setTempApiKeyName(cleanValue);
-                                          }}
-                                          placeholder="NOMBREDEAPIKEY"
+                                          type="password"
+                                          value={tempApiKeyValue}
+                                          onChange={(e) => setTempApiKeyValue(e.target.value)}
+                                          placeholder="Ingresa el valor de la API Key"
                                           className="w-full"
                                         />
-                                        
-                                        {/* API Key Value */}
-                                        <div>
-                                          <label className="text-sm font-medium">
-                                            Valor de API Key: <span className="text-destructive">*</span>
-                                          </label>
-                                          <Input
-                                            type="password"
-                                            value={tempApiKeyValue}
-                                            onChange={(e) => setTempApiKeyValue(e.target.value)}
-                                            placeholder="Ingresa el valor de la API Key"
-                                            className="w-full mt-1"
-                                          />
-                                        </div>
-
                                         <div className="flex gap-2">
                                           <Button
                                             type="button"
@@ -813,13 +832,16 @@ export const ProjectLegalEntitiesSection = ({
                                             onClick={(e) => {
                                               e.preventDefault();
                                               e.stopPropagation();
+                                              const apiKeyName = entity.nombre_api_key || generateApiKeyName(
+                                                entity.proyectos?.nombre || '',
+                                                entity.personas?.nombre_legal || ''
+                                              );
                                               updateApiKeyMutation.mutate({
-                                                entityId: entity.id,
-                                                apiKeyName: tempApiKeyName,
+                                                apiKeyName,
                                                 apiKeyValue: tempApiKeyValue
                                               });
                                             }}
-                                            disabled={updateApiKeyMutation.isPending || !tempApiKeyName || !tempApiKeyValue}
+                                            disabled={updateApiKeyMutation.isPending || !tempApiKeyValue}
                                           >
                                             <Save className="h-4 w-4 mr-1" />
                                             Guardar
@@ -832,7 +854,6 @@ export const ProjectLegalEntitiesSection = ({
                                               e.preventDefault();
                                               e.stopPropagation();
                                               setEditingApiKey(null);
-                                              setTempApiKeyName("");
                                               setTempApiKeyValue("");
                                             }}
                                           >
@@ -843,20 +864,9 @@ export const ProjectLegalEntitiesSection = ({
                                       </div>
                                     ) : (
                                       <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-sm flex-1">
-                                          {entity.nombre_api_key ? (
-                                            <>
-                                              <span className="font-mono">{entity.nombre_api_key}</span>
-                                              <Badge variant="secondary" className="ml-2 text-xs">
-                                                Configurada
-                                              </Badge>
-                                            </>
-                                          ) : (
-                                            <span className="text-destructive italic">
-                                              No asignada (requerida)
-                                            </span>
-                                          )}
-                                        </span>
+                                        <Badge variant="secondary" className="text-xs">
+                                          ••••••••
+                                        </Badge>
                                         <Button
                                           type="button"
                                           size="sm"
@@ -865,7 +875,6 @@ export const ProjectLegalEntitiesSection = ({
                                             e.preventDefault();
                                             e.stopPropagation();
                                             setEditingApiKey(entity.id);
-                                            setTempApiKeyName(entity.nombre_api_key || "");
                                             setTempApiKeyValue("");
                                           }}
                                         >
