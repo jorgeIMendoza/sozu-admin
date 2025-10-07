@@ -625,7 +625,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       rfc: rfc.trim() || null,
       uso_cfdi: usoCfdi.trim() || null,
       regimen: regimen ? parseInt(regimen) : null,
-      id_tipo_identificacion: idTipoIdentificacion ? parseInt(idTipoIdentificacion) : null,
+      id_tipo_identificacion: tipoPersona === 'pf' && idTipoIdentificacion ? parseInt(idTipoIdentificacion) : null,
       sexo: sexo || null,
       fecha_nacimiento: tipoPersona === 'pf' && fechaNacimiento ? fechaNacimiento.toISOString() : null,
       id_estado_civil: tipoPersona === 'pf' && idEstadoCivil ? parseInt(idEstadoCivil) : null,
@@ -1393,86 +1393,91 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         </>
                       )}
 
-                      <div>
-                        <Label htmlFor="tipoIdentificacion">Tipo de identificación</Label>
-                        <Select value={idTipoIdentificacion} onValueChange={setIdTipoIdentificacion}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona tipo de identificación" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="1">INE</SelectItem>
-                            <SelectItem value="2">Pasaporte</SelectItem>
-                            <SelectItem value="3">Licencia de Conducir</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {/* Tipo de identificación - solo para personas físicas */}
+                      {tipoPersona === 'pf' && (
+                        <>
+                          <div>
+                            <Label htmlFor="tipoIdentificacion">Tipo de identificación</Label>
+                            <Select value={idTipoIdentificacion} onValueChange={setIdTipoIdentificacion}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecciona tipo de identificación" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">INE</SelectItem>
+                                <SelectItem value="2">Pasaporte</SelectItem>
+                                <SelectItem value="3">Licencia de Conducir</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
 
-                      <div className="col-span-1 md:col-span-2">
-                        <ImageUploadField
-                          label="Documento de identificación"
-                          value={documentImageUrl}
-                          onChange={setDocumentImageUrl}
-                          accept="image/*,.pdf"
-                        />
-                      </div>
-
-                      <div>
-                        <Label>Fecha de Nacimiento</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-start text-left font-normal"
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {fechaNacimiento ? format(fechaNacimiento, "dd/MM/yyyy") : "Selecciona fecha"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={fechaNacimiento}
-                              onSelect={setFechaNacimiento}
-                              initialFocus
-                              className="pointer-events-auto"
+                          <div className="col-span-1 md:col-span-2">
+                            <ImageUploadField
+                              label="Documento de identificación"
+                              value={documentImageUrl}
+                              onChange={setDocumentImageUrl}
+                              accept="image/*,.pdf"
                             />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
+                          </div>
 
-                      <div>
-                        <Label htmlFor="estadoNacimiento">Estado de Nacimiento</Label>
-                        <Select value={idEstadoNacimiento} onValueChange={setIdEstadoNacimiento}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona estado" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {estados.map((estado) => (
-                              <SelectItem key={estado.id} value={estado.id.toString()}>
-                                {estado.nombre}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                          <div>
+                            <Label>Fecha de Nacimiento</Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  className="w-full justify-start text-left font-normal"
+                                >
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {fechaNacimiento ? format(fechaNacimiento, "dd/MM/yyyy") : "Selecciona fecha"}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={fechaNacimiento}
+                                  onSelect={setFechaNacimiento}
+                                  initialFocus
+                                  className="pointer-events-auto"
+                                />
+                              </PopoverContent>
+                            </Popover>
+                          </div>
 
-                      <div>
-                        <Label htmlFor="municipioNacimiento">Ciudad de Nacimiento</Label>
-                        <Select value={idMunicipioNacimiento} onValueChange={setIdMunicipioNacimiento}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona ciudad" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {municipios
-                              .filter(m => m.id_estado === parseInt(idEstadoNacimiento))
-                              .map((municipio) => (
-                                <SelectItem key={municipio.id} value={municipio.id.toString()}>
-                                  {municipio.nombre}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                          <div>
+                            <Label htmlFor="estadoNacimiento">Estado de Nacimiento</Label>
+                            <Select value={idEstadoNacimiento} onValueChange={setIdEstadoNacimiento}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecciona estado" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {estados.map((estado) => (
+                                  <SelectItem key={estado.id} value={estado.id.toString()}>
+                                    {estado.nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label htmlFor="municipioNacimiento">Ciudad de Nacimiento</Label>
+                            <Select value={idMunicipioNacimiento} onValueChange={setIdMunicipioNacimiento}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecciona ciudad" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {municipios
+                                  .filter(m => m.id_estado === parseInt(idEstadoNacimiento))
+                                  .map((municipio) => (
+                                    <SelectItem key={municipio.id} value={municipio.id.toString()}>
+                                      {municipio.nombre}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Fiscal Address Section */}
