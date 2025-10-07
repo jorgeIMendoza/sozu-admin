@@ -16,7 +16,6 @@ import { PropertyClassificationSection } from "./PropertyClassificationSection";
 import { PropertyDescriptionSection } from "./PropertyDescriptionSection";
 import { PropertyMultimediaSection } from "./PropertyMultimediaSection";
 import { PropertyCharacteristicsSelectionSection } from "./PropertyCharacteristicsSelectionSection";
-import { PropertyDocumentsSection } from "./PropertyDocumentsSection";
 
 const formSchema = z.object({
   id_proyecto: z.string().min(1, "El proyecto es requerido"),
@@ -52,7 +51,6 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
   const [selectedCharacteristics, setSelectedCharacteristics] = useState<number[]>([]);
   const [multimediaItems, setMultimediaItems] = useState<any[]>([]);
   const [youtubeVideos, setYoutubeVideos] = useState<any[]>([]);
-  const [tempDocuments, setTempDocuments] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -218,52 +216,11 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
         }
       }
 
-      // Paso 5: Insertar documentos si hay
-      if (tempDocuments.length > 0 && createdPropertyId) {
-        let documentNumber = 1;
-        
-        for (const tempDoc of tempDocuments) {
-          try {
-            // Subir archivo al storage
-            const fileExt = tempDoc.file.name.split('.').pop();
-            const fileName = `propiedad_${createdPropertyId}_${Date.now()}.${fileExt}`;
-            const filePath = `documentos/${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
-              .from('documentos')
-              .upload(filePath, tempDoc.file);
-
-            if (uploadError) throw uploadError;
-
-            // Obtener URL pública
-            const { data: urlData } = supabase.storage
-              .from('documentos')
-              .getPublicUrl(filePath);
-
-            // Insertar registro del documento
-            const { error: docError } = await supabase
-              .from('documentos')
-              .insert({
-                numero: documentNumber++,
-                url: urlData.publicUrl,
-                es_verificado: false,
-                activo: true,
-                id_tipo_documento: tempDoc.tipoDocumentoId,
-                id_propiedad: createdPropertyId
-              });
-
-            if (docError) throw docError;
-          } catch (error) {
-            console.error("Error al subir documento:", error);
-          }
-        }
-      }
-
       onPropertyAdded();
 
       toast({
         title: "Propiedad creada exitosamente",
-        description: `Se creó la propiedad con ${multimediaItems.length} archivos multimedia, ${youtubeVideos.length} videos de YouTube y ${tempDocuments.length} documentos`,
+        description: `Se creó la propiedad con ${multimediaItems.length} archivos multimedia y ${youtubeVideos.length} videos de YouTube`,
       });
 
       // Reset form and close modal
@@ -290,7 +247,6 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
       setSelectedCharacteristics([]);
       setMultimediaItems([]);
       setYoutubeVideos([]);
-      setTempDocuments([]);
     }
     setOpen(newOpen);
   };
@@ -313,11 +269,10 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
           <DialogTitle>Nueva Propiedad</DialogTitle>
         </DialogHeader>
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="general">Características Generales</TabsTrigger>
             <TabsTrigger value="descripcion">Descripción</TabsTrigger>
             <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
-            <TabsTrigger value="documentos">Documentos</TabsTrigger>
           </TabsList>
           
           <Form {...form}>
@@ -375,30 +330,12 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                 )}
               </TabsContent>
               
-              <TabsContent value="documentos" className="space-y-6">
-                {selectedOwnerId && selectedOwnerId !== "no-owners" ? (
-                  <PropertyDocumentsSection 
-                    onDocumentsChange={setTempDocuments}
-                    initialDocuments={tempDocuments}
-                  />
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Selecciona un propietario para continuar con los documentos
-                  </div>
-                )}
-              </TabsContent>
-              
               {/* Botón de crear - visible en todas las pestañas cuando hay propietario */}
               {selectedOwnerId && selectedOwnerId !== "no-owners" && (
                 <div className="flex justify-end pt-4">
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? "Creando..." : "Crear Propiedad"}
                   </Button>
-                  {(multimediaItems.length > 0 || youtubeVideos.length > 0) && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Se crearán {multimediaItems.length} archivos multimedia, {youtubeVideos.length} videos de YouTube y {tempDocuments.length} documentos
-                    </p>
-                  )}
                 </div>
               )}
             </form>

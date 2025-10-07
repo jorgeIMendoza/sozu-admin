@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -1612,8 +1613,18 @@ export default function DetalleCuentaCobranza() {
         </CardContent>
       </Card>
 
-      {/* Acuerdos de pago */}
-      <Card className={esCuentaCancelada ? 'opacity-60' : ''}>
+      {/* Main Content with Tabs */}
+      <Tabs defaultValue="acuerdos" className="w-full">
+        <TabsList>
+          <TabsTrigger value="acuerdos">Acuerdos de Pago</TabsTrigger>
+          {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id_propiedad && (
+            <TabsTrigger value="documentos">Documentos</TabsTrigger>
+          )}
+        </TabsList>
+
+        <TabsContent value="acuerdos" className="mt-6">
+          {/* Acuerdos de pago */}
+          <Card className={esCuentaCancelada ? 'opacity-60' : ''}>
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle>Acuerdos de Pago y Aplicaciones</CardTitle>
@@ -2113,30 +2124,34 @@ export default function DetalleCuentaCobranza() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
 
-      {/* Documentos Section - only show for properties with id_propiedad */}
-      {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id_propiedad && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Documentos de la Propiedad
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DocumentsTab 
-              entityId={cuentaDetalle.id_propiedad} 
-              entityType="propiedad"
-              onDocumentAdded={() => {
-                toast({
-                  title: "Documento agregado",
-                  description: "El documento se ha agregado correctamente."
-                });
-              }}
-            />
-          </CardContent>
-        </Card>
-      )}
+        {/* Documentos Tab - only available for properties */}
+        {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id_propiedad && (
+          <TabsContent value="documentos" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Documentos de la Cuenta de Cobranza
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DocumentsTab 
+                  entityId={cuentaDetalle.id_propiedad}
+                  entityType="propiedad"
+                  onDocumentAdded={() => {
+                    toast({
+                      title: "Documento agregado",
+                      description: "El documento se ha agregado correctamente."
+                    });
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+      </Tabs>
 
       <DeleteConfirmationDialog
         open={deleteDialog.isOpen}
