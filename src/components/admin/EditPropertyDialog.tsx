@@ -258,6 +258,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
         .select('id')
         .eq('id_propiedad', property.id)
         .eq('activo', true)
+        .is('id_producto', null)
         .maybeSingle();
       
       if (ofertaData) {
