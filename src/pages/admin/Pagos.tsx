@@ -635,11 +635,25 @@ export default function Pagos() {
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
                             <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
-                            {!cuenta.apartado_pagado && (
+                            {!cuenta.tiene_acuerdos ? (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
-                                    <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700">
+                                    <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 h-6 w-6 p-0 flex items-center justify-center">
+                                      <AlertCircle className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="font-semibold">⚠️ Plan de pagos no seleccionado</p>
+                                    <p className="text-sm">La cuenta de cobranza fue generada pero falta seleccionar el esquema de pago para generar los acuerdos</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : !cuenta.apartado_pagado ? (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 h-6 w-6 p-0 flex items-center justify-center">
                                       <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
                                     </Badge>
                                   </TooltipTrigger>
@@ -649,22 +663,7 @@ export default function Pagos() {
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            )}
-                            {!cuenta.tiene_acuerdos && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <Badge variant="outline" className="bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700">
-                                      <AlertCircle className="h-3 w-3 text-red-600 dark:text-red-400" />
-                                    </Badge>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs">
-                                    <p className="font-semibold">⚠️ Sin acuerdo de pago</p>
-                                    <p className="text-sm">Esta cuenta no tiene acuerdos de pago asignados</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -993,16 +992,29 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow 
                         key={cuenta.id}
-                        className={!cuenta.apartado_pagado ? "bg-amber-50 dark:bg-amber-950/20" : ""}
                       >
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
                             <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
-                            {!cuenta.apartado_pagado && (
+                            {!cuenta.tiene_acuerdos ? (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
-                                    <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700">
+                                    <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 h-6 w-6 p-0 flex items-center justify-center">
+                                      <AlertCircle className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="font-semibold">⚠️ Plan de pagos no seleccionado</p>
+                                    <p className="text-sm">La cuenta de cobranza fue generada pero falta seleccionar el esquema de pago para generar los acuerdos</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : !cuenta.apartado_pagado ? (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 h-6 w-6 p-0 flex items-center justify-center">
                                       <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
                                     </Badge>
                                   </TooltipTrigger>
@@ -1012,7 +1024,7 @@ export default function Pagos() {
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            )}
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell>
