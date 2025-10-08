@@ -397,8 +397,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       
       // Filter based on entity type
       if (entityType === 'legal') {
-        // Exclude Desarrollador and Inmobiliaria from legal entities form
-        query = query.not('nombre', 'in', '(Desarrollador,Inmobiliaria)');
+        // Exclude Desarrollador, Inmobiliaria and Administradora from legal entities form
+        query = query.not('nombre', 'in', '(Desarrollador,Inmobiliaria,Administradora)');
       } else if (entityType === 'desarrollador') {
         query = query.eq('nombre', 'Desarrollador');
       } else if (entityType === 'inmobiliaria') {
