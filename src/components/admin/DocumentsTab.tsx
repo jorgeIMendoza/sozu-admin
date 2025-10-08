@@ -233,8 +233,9 @@ export function DocumentsTab({
           : 1;
       }
 
-      // Get cuenta_cobranza if entity is propiedad
+      // Get cuenta_cobranza and propiedad based on entity type
       let idCuentaCobranza = null;
+      let idPropiedad = null;
       if (entityType === 'propiedad') {
         // First get the ofertas for this property
         const { data: ofertasData } = await supabase
@@ -258,8 +259,26 @@ export function DocumentsTab({
           idCuentaCobranza = cuentaData?.id || null;
         }
       } else if (entityType === 'cuenta_cobranza') {
-        // If entity is cuenta_cobranza, use it directly
+        // If entity is cuenta_cobranza, get both cuenta_cobranza and propiedad
         idCuentaCobranza = entityId;
+        
+        // Get id_oferta from cuenta_cobranza
+        const { data: cuentaData } = await supabase
+          .from('cuentas_cobranza')
+          .select('id_oferta')
+          .eq('id', entityId)
+          .maybeSingle();
+        
+        // Then get id_propiedad from oferta
+        if (cuentaData?.id_oferta) {
+          const { data: ofertaData } = await supabase
+            .from('ofertas')
+            .select('id_propiedad')
+            .eq('id', cuentaData.id_oferta)
+            .maybeSingle();
+          
+          idPropiedad = ofertaData?.id_propiedad || null;
+        }
       }
 
       // Save document record
@@ -272,7 +291,7 @@ export function DocumentsTab({
         ...(entityType === 'persona' 
           ? { id_persona: entityId } 
           : entityType === 'cuenta_cobranza'
-          ? { id_cuenta_cobranza: idCuentaCobranza }
+          ? { id_cuenta_cobranza: idCuentaCobranza, id_propiedad: idPropiedad }
           : { id_propiedad: entityId, id_cuenta_cobranza: idCuentaCobranza })
       };
 
