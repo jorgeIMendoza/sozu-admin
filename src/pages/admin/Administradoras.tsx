@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
-import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
+import { StandardizedBankAccountsButton } from "@/components/admin/StandardizedBankAccountsButton";
 
 type Administradora = {
   id: number;
@@ -41,8 +41,6 @@ export default function Administradoras() {
   const [entityToDelete, setEntityToDelete] = useState<Administradora | null>(null);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [entityToRestore, setEntityToRestore] = useState<Administradora | null>(null);
-  const [selectedEntityForBankAccounts, setSelectedEntityForBankAccounts] = useState<Administradora | null>(null);
-  const [isBankAccountsDialogOpen, setIsBankAccountsDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -426,6 +424,11 @@ export default function Administradoras() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
+                        <StandardizedBankAccountsButton
+                          personId={administradora.id}
+                          personName={administradora.nombre_comercial || administradora.nombre_legal}
+                          showStpCheckbox={true}
+                        />
                         <Button
                           variant="ghost"
                           size="sm"
@@ -433,18 +436,6 @@ export default function Administradoras() {
                           className="hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedEntityForBankAccounts(administradora);
-                            setIsBankAccountsDialogOpen(true);
-                          }}
-                          className="hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700"
-                          title="Gestionar cuentas bancarias"
-                        >
-                          Cuentas
                         </Button>
                       </>
                     ) : (
@@ -640,22 +631,6 @@ export default function Administradoras() {
         isLoading={restoreMutation.isPending}
         actionType="restore"
       />
-
-      <Dialog open={isBankAccountsDialogOpen} onOpenChange={setIsBankAccountsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Cuentas Bancarias - {selectedEntityForBankAccounts?.nombre_comercial || selectedEntityForBankAccounts?.nombre_legal}
-            </DialogTitle>
-          </DialogHeader>
-          {selectedEntityForBankAccounts && (
-            <BankAccountsSection 
-              personId={selectedEntityForBankAccounts.id}
-              showStpCheckbox={true}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
