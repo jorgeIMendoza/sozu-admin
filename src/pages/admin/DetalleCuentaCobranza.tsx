@@ -80,9 +80,16 @@ interface CuentaDetalle {
   tipo_cuenta: 'Propiedad' | 'Producto' | 'Servicio';
   producto_servicio_nombre?: string;
   producto_servicio_id?: number;
+  categoria_producto_nombre?: string;
   estatus_disponibilidad?: string;
   valor_uma?: number;
   id_propiedad?: number;
+  detalles_producto?: {
+    nombre?: string;
+    ubicacion?: string;
+    m2?: number;
+    tipo?: string;
+  };
 }
 
 interface OfferData {
@@ -493,12 +500,54 @@ export default function DetalleCuentaCobranza() {
       let tipoCuenta: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
       let productoServicioNombre: string | undefined;
       let productoServicioId: number | undefined;
+      let categoriaProductoNombre: string | undefined;
+      let detallesProducto: { nombre?: string; ubicacion?: string; m2?: number; tipo?: string } | undefined;
       
       if (oferta?.id_producto && oferta?.productos_servicios) {
         productoServicioId = oferta.productos_servicios.id;
         productoServicioNombre = oferta.productos_servicios.nombre;
-        const categoriaNombre = oferta.productos_servicios.categorias_producto?.nombre?.toLowerCase();
+        categoriaProductoNombre = oferta.productos_servicios.categorias_producto?.nombre;
+        const categoriaNombre = categoriaProductoNombre?.toLowerCase();
         tipoCuenta = categoriaNombre === 'servicios' ? 'Servicio' : 'Producto';
+
+        // Get specific details for estacionamientos or bodegas
+        if (categoriaProductoNombre?.toLowerCase() === 'estacionamientos') {
+          const { data: estacionamiento } = await supabase
+            .from('estacionamientos')
+            .select(`
+              nombre,
+              ubicacion,
+              m2,
+              tipos_estacionamiento:id_tipo(nombre)
+            `)
+            .eq('id_producto', productoServicioId)
+            .eq('activo', true)
+            .maybeSingle();
+
+          if (estacionamiento) {
+            detallesProducto = {
+              nombre: estacionamiento.nombre,
+              ubicacion: estacionamiento.ubicacion || undefined,
+              m2: estacionamiento.m2 ? Number(estacionamiento.m2) : undefined,
+              tipo: estacionamiento.tipos_estacionamiento?.nombre
+            };
+          }
+        } else if (categoriaProductoNombre?.toLowerCase() === 'bodegas') {
+          const { data: bodega } = await supabase
+            .from('bodegas')
+            .select('nombre, ubicacion, m2')
+            .eq('id_producto', productoServicioId)
+            .eq('activo', true)
+            .maybeSingle();
+
+          if (bodega) {
+            detallesProducto = {
+              nombre: bodega.nombre,
+              ubicacion: bodega.ubicacion || undefined,
+              m2: bodega.m2 ? Number(bodega.m2) : undefined
+            };
+          }
+        }
       }
 
       const detalle: CuentaDetalle = {
@@ -525,9 +574,11 @@ export default function DetalleCuentaCobranza() {
         tipo_cuenta: tipoCuenta,
         producto_servicio_nombre: productoServicioNombre,
         producto_servicio_id: productoServicioId,
+        categoria_producto_nombre: categoriaProductoNombre,
         estatus_disponibilidad: estatusResult.data?.nombre || undefined,
         valor_uma: cuenta.valor_uma || undefined,
-        id_propiedad: oferta?.propiedades?.id || undefined
+        id_propiedad: oferta?.propiedades?.id || undefined,
+        detalles_producto: detallesProducto
       };
 
       return detalle;
@@ -1796,15 +1847,42 @@ export default function DetalleCuentaCobranza() {
                 <div>
                   <label className="text-sm font-medium">Categoría</label>
                   <p className="text-sm text-muted-foreground">
-                    {cuentaDetalle.tipo_cuenta === 'Producto' ? 'Productos' : 'Servicios'}
+                    {cuentaDetalle.categoria_producto_nombre || 
+                     (cuentaDetalle.tipo_cuenta === 'Producto' ? 'Productos' : 'Servicios')}
                   </p>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">
-                    Nombre {cuentaDetalle.tipo_cuenta === 'Producto' ? 'Producto' : 'Servicio'}
-                  </label>
-                  <p className="text-sm text-muted-foreground">{cuentaDetalle.producto_servicio_nombre}</p>
-                </div>
+                {cuentaDetalle.detalles_producto?.nombre && (
+                  <div>
+                    <label className="text-sm font-medium">Nombre</label>
+                    <p className="text-sm text-muted-foreground">{cuentaDetalle.detalles_producto.nombre}</p>
+                  </div>
+                )}
+                {cuentaDetalle.detalles_producto?.tipo && (
+                  <div>
+                    <label className="text-sm font-medium">Tipo</label>
+                    <p className="text-sm text-muted-foreground">{cuentaDetalle.detalles_producto.tipo}</p>
+                  </div>
+                )}
+                {cuentaDetalle.detalles_producto?.ubicacion && (
+                  <div>
+                    <label className="text-sm font-medium">Ubicación</label>
+                    <p className="text-sm text-muted-foreground">{cuentaDetalle.detalles_producto.ubicacion}</p>
+                  </div>
+                )}
+                {cuentaDetalle.detalles_producto?.m2 && (
+                  <div>
+                    <label className="text-sm font-medium">Metraje (m²)</label>
+                    <p className="text-sm text-muted-foreground">{cuentaDetalle.detalles_producto.m2.toFixed(2)} m²</p>
+                  </div>
+                )}
+                {!cuentaDetalle.detalles_producto?.nombre && (
+                  <div>
+                    <label className="text-sm font-medium">
+                      Nombre {cuentaDetalle.tipo_cuenta === 'Producto' ? 'Producto' : 'Servicio'}
+                    </label>
+                    <p className="text-sm text-muted-foreground">{cuentaDetalle.producto_servicio_nombre}</p>
+                  </div>
+                )}
                 <div>
                   <label className="text-sm font-medium">CLABE STP</label>
                   <p className="text-sm text-muted-foreground">{cuentaDetalle.clabe_stp || 'No asignada'}</p>
