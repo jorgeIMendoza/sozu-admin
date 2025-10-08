@@ -333,7 +333,7 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId }: { cuentaCobranzaId: number 
           </DialogHeader>
           <div className="flex-1 h-full">
             <iframe
-              src={viewerDialog.url}
+              src={`${viewerDialog.url}#page=1&view=FitH`}
               className="w-full h-full border-0"
               title={viewerDialog.title}
             />
