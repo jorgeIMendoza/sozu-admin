@@ -534,11 +534,11 @@ export function DocumentsTab({
                   })}
                   
                   {/* Saved documents */}
-                  {documentos.map((documento) => (
-                    <TableRow key={documento.numero}>
-                      <TableCell className="font-medium">{documento.numero}</TableCell>
+                  {documentos.map((documento, index) => (
+                    <TableRow key={`${documento.numero}-${index}`}>
+                      <TableCell className="font-medium">{index + 1}</TableCell>
                       <TableCell>{documento.tipo_documento_nombre}</TableCell>
-                      <TableCell></TableCell>
+                      <TableCell>{documento.numero || ''}</TableCell>
                       <TableCell>
                         <Badge variant={documento.es_verificado ? "default" : "secondary"}>
                           {documento.es_verificado ? "Verificado" : "Pendiente"}
