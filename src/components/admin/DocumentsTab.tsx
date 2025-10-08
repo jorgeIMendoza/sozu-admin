@@ -62,6 +62,11 @@ export function DocumentsTab({
   const [tiposDocumento, setTiposDocumento] = useState<TipoDocumento[]>([]);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [viewerDialog, setViewerDialog] = useState<{ isOpen: boolean; url: string; title: string }>({
+    isOpen: false,
+    url: '',
+    title: ''
+  });
   const { toast } = useToast();
 
   // Load document types based on entity type and person type
@@ -556,7 +561,13 @@ export function DocumentsTab({
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => window.open(documento.url, '_blank')}
+                                  onClick={() => {
+                                    setViewerDialog({
+                                      isOpen: true,
+                                      url: documento.url,
+                                      title: documento.tipo_documento_nombre || 'Documento'
+                                    });
+                                  }}
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
@@ -614,6 +625,22 @@ export function DocumentsTab({
           )}
         </CardContent>
       </Card>
+
+      {/* Document Viewer Dialog */}
+      <Dialog open={viewerDialog.isOpen} onOpenChange={(open) => setViewerDialog({ ...viewerDialog, isOpen: open })}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 py-3 border-b shrink-0">
+            <DialogTitle>{viewerDialog.title}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <iframe
+              src={`${viewerDialog.url}#page=1&view=FitH`}
+              className="w-full h-full border-0"
+              title={viewerDialog.title}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Upload Dialog */}
       <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>

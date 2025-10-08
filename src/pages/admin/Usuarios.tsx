@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -19,6 +20,11 @@ type Persona = {
 export default function Usuarios() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewerDialog, setViewerDialog] = useState<{ isOpen: boolean; url: string; title: string }>({
+    isOpen: false,
+    url: '',
+    title: ''
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -162,7 +168,13 @@ export default function Usuarios() {
                             src={persona.url_documento_identificacion} 
                             alt="Documento de identificación"
                             className="w-12 h-8 object-cover rounded border hover:scale-110 transition-transform cursor-pointer"
-                            onClick={() => window.open(persona.url_documento_identificacion, '_blank')}
+                            onClick={() => {
+                              setViewerDialog({
+                                isOpen: true,
+                                url: persona.url_documento_identificacion || '',
+                                title: `Documento de ${persona.nombre || 'Usuario'}`
+                              });
+                            }}
                           />
                         ) : (
                           <span className="text-muted-foreground">Sin documento</span>
@@ -195,6 +207,22 @@ export default function Usuarios() {
           )}
         </CardContent>
       </Card>
+
+      {/* Document Viewer Dialog */}
+      <Dialog open={viewerDialog.isOpen} onOpenChange={(open) => setViewerDialog({ ...viewerDialog, isOpen: open })}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 py-3 border-b shrink-0">
+            <DialogTitle>{viewerDialog.title}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <iframe
+              src={`${viewerDialog.url}#page=1&view=FitH`}
+              className="w-full h-full border-0"
+              title={viewerDialog.title}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
