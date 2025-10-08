@@ -16,6 +16,7 @@ import { EditCuentaCobranzaDialog } from "@/components/admin/EditCuentaCobranzaD
 import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 import { TransferMoneyDialog } from "@/components/admin/TransferMoneyDialog";
 import { CancelCuentaDialog } from "@/components/admin/CancelCuentaDialog";
+import { CashPaymentDetailDialog } from "@/components/admin/CashPaymentDetailDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -73,6 +74,10 @@ export default function Pagos() {
     cuenta: null
   });
   const [transferDialog, setTransferDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
+    isOpen: false,
+    cuenta: null
+  });
+  const [cashDialog, setCashDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
     isOpen: false,
     cuenta: null
   });
@@ -846,41 +851,23 @@ export default function Pagos() {
                              <TooltipProvider>
                                <Tooltip>
                                  <TooltipTrigger asChild>
-                                   <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                     <Button variant="ghost" size="icon">
-                                       <DollarSign className={`h-4 w-4 ${
-                                         cuenta.cash_percentage >= 85 ? 'text-red-600' :
-                                         cuenta.cash_percentage >= 75 ? 'text-yellow-600' :
-                                         'text-green-600'
-                                       }`} />
-                                     </Button>
-                                   </Link>
+                                   <Button 
+                                     variant="ghost" 
+                                     size="icon"
+                                     onClick={() => setCashDialog({ isOpen: true, cuenta })}
+                                   >
+                                     <DollarSign className={`h-4 w-4 ${
+                                       cuenta.cash_percentage >= 85 ? 'text-red-600' :
+                                       cuenta.cash_percentage >= 75 ? 'text-yellow-600' :
+                                       'text-green-600'
+                                     }`} />
+                                   </Button>
                                  </TooltipTrigger>
                                   <TooltipContent>
                                     <p>Límite: {formatCurrency(cuenta.cash_limit || 0)}</p>
                                     <p>Pagado: {formatCurrency(cuenta.cash_paid || 0)}</p>
                                     <p>Aún permitido: {formatCurrency(cuenta.cash_remaining || 0)}</p>
                                   </TooltipContent>
-                               </Tooltip>
-                             </TooltipProvider>
-                           ) : (
-                             <span className="text-muted-foreground text-xs">N/A</span>
-                           )}
-                         </TableCell>
-                         <TableCell>
-                           {cuenta.tipo === 'Propiedad' ? (
-                             <TooltipProvider>
-                               <Tooltip>
-                                 <TooltipTrigger asChild>
-                                   <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                     <Button variant="ghost" size="icon">
-                                       <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                     </Button>
-                                   </Link>
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p>Ver detalle de pagos en efectivo</p>
-                                 </TooltipContent>
                                </Tooltip>
                              </TooltipProvider>
                            ) : (
@@ -1227,41 +1214,23 @@ export default function Pagos() {
                              <TooltipProvider>
                                <Tooltip>
                                  <TooltipTrigger asChild>
-                                   <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                     <Button variant="ghost" size="icon">
-                                       <DollarSign className={`h-4 w-4 ${
-                                         cuenta.cash_percentage >= 85 ? 'text-red-600' :
-                                         cuenta.cash_percentage >= 75 ? 'text-yellow-600' :
-                                         'text-green-600'
-                                       }`} />
-                                     </Button>
-                                   </Link>
+                                   <Button 
+                                     variant="ghost" 
+                                     size="icon"
+                                     onClick={() => setCashDialog({ isOpen: true, cuenta })}
+                                   >
+                                     <DollarSign className={`h-4 w-4 ${
+                                       cuenta.cash_percentage >= 85 ? 'text-red-600' :
+                                       cuenta.cash_percentage >= 75 ? 'text-yellow-600' :
+                                       'text-green-600'
+                                     }`} />
+                                   </Button>
                                  </TooltipTrigger>
                                   <TooltipContent>
                                     <p>Límite: {formatCurrency(cuenta.cash_limit || 0)}</p>
                                     <p>Pagado: {formatCurrency(cuenta.cash_paid || 0)}</p>
                                     <p>Aún permitido: {formatCurrency(cuenta.cash_remaining || 0)}</p>
                                   </TooltipContent>
-                               </Tooltip>
-                             </TooltipProvider>
-                           ) : (
-                             <span className="text-muted-foreground text-xs">N/A</span>
-                           )}
-                         </TableCell>
-                         <TableCell>
-                           {cuenta.tipo === 'Propiedad' ? (
-                             <TooltipProvider>
-                               <Tooltip>
-                                 <TooltipTrigger asChild>
-                                   <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                     <Button variant="ghost" size="icon">
-                                       <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                     </Button>
-                                   </Link>
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p>Ver detalle de pagos en efectivo</p>
-                                 </TooltipContent>
                                </Tooltip>
                              </TooltipProvider>
                            ) : (
@@ -1354,6 +1323,17 @@ export default function Pagos() {
           cuentaCobranzaLabel={formatCuentaCobranzaId(paymentDialog.cuenta.id, paymentDialog.cuenta.tipo)}
           onClose={() => setPaymentDialog({ isOpen: false, cuenta: null })}
           tipoCuenta={paymentDialog.cuenta.tipo}
+        />
+      )}
+
+      {cashDialog.cuenta && (
+        <CashPaymentDetailDialog
+          isOpen={cashDialog.isOpen}
+          onClose={() => setCashDialog({ isOpen: false, cuenta: null })}
+          cashLimit={cashDialog.cuenta.cash_limit || 0}
+          cashPaid={cashDialog.cuenta.cash_paid || 0}
+          cashRemaining={cashDialog.cuenta.cash_remaining || 0}
+          cashPercentage={cashDialog.cuenta.cash_percentage || 0}
         />
       )}
     </div>
