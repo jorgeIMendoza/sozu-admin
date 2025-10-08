@@ -159,12 +159,19 @@ export default function Administradoras() {
 
   const createMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { representativeId, ...cleanPersonData } = personData;
+      const { 
+        representativeId, 
+        entityType, 
+        pendingDocuments, 
+        tempBankAccounts, 
+        tempBeneficiaries,
+        ...cleanPersonData 
+      } = personData;
       
       const { data: personResult, error: personError } = await supabase
         .from('personas')
-        .insert([{ ...cleanPersonData, tipo_persona: 'pm' }])
-        .select()
+        .insert({ ...cleanPersonData, tipo_persona: 'pm' })
+        .select('*')
         .single();
       
       if (personError) throw personError;
@@ -216,7 +223,14 @@ export default function Administradoras() {
 
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { representativeId, ...cleanPersonData } = personData;
+      const { 
+        representativeId, 
+        entityType, 
+        pendingDocuments, 
+        tempBankAccounts, 
+        tempBeneficiaries,
+        ...cleanPersonData 
+      } = personData;
       
       const { error: updateError } = await supabase
         .from('personas')
