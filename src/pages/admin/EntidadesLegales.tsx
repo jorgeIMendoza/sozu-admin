@@ -91,8 +91,7 @@ export default function EntidadesLegales() {
         .eq('tipo_persona', 'pm')
         .eq('entidades_relacionadas.activo', true)
         .neq('entidades_relacionadas.tipos_entidad.padre', 'c')
-        .neq('entidades_relacionadas.id_tipo_entidad', 6)
-        .not('entidades_relacionadas.tipos_entidad.nombre', 'in', '("Inmobiliaria","Desarrollador")')
+        .not('entidades_relacionadas.id_tipo_entidad', 'in', '(3,5,6)') // Excluir: Desarrollador, Inmobiliaria, Administradora
         .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
@@ -150,8 +149,7 @@ export default function EntidadesLegales() {
         .eq('tipo_persona', 'pm')
         .eq('entidades_relacionadas.activo', true)
         .neq('entidades_relacionadas.tipos_entidad.padre', 'c')
-        .neq('entidades_relacionadas.id_tipo_entidad', 6)
-        .not('entidades_relacionadas.tipos_entidad.nombre', 'in', '("Inmobiliaria","Desarrollador")')
+        .not('entidades_relacionadas.id_tipo_entidad', 'in', '(3,5,6)') // Excluir: Desarrollador, Inmobiliaria, Administradora
         .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
