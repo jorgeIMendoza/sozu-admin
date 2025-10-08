@@ -1258,7 +1258,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 {!restrictToBasicTab && (
                   <TabsContent value="fiscal" className="space-y-4 mt-6">
                   <div className="space-y-6">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
                       <h3 className="text-lg font-medium">Información Fiscal</h3>
                       <Badge variant={isFiscalDataComplete({
                         rfc,
