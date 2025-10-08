@@ -118,12 +118,12 @@ interface Multa {
 import JSZip from 'jszip';
 
 // Read-only documents view component
-function ReadOnlyDocumentsView({ propiedadId }: { propiedadId: number }) {
+function ReadOnlyDocumentsView({ cuentaCobranzaId }: { cuentaCobranzaId: number }) {
   const { toast } = useToast();
   const [isDownloading, setIsDownloading] = useState(false);
 
   const { data: documentos, isLoading } = useQuery({
-    queryKey: ["documentos_propiedad", propiedadId],
+    queryKey: ["documentos_cuenta_cobranza", cuentaCobranzaId],
     queryFn: async () => {
       const { data: docs, error } = await supabase
         .from('documentos')
@@ -135,7 +135,7 @@ function ReadOnlyDocumentsView({ propiedadId }: { propiedadId: number }) {
           fecha_creacion,
           tipos_documento:id_tipo_documento(nombre)
         `)
-        .eq('id_propiedad', propiedadId)
+        .eq('id_cuenta_cobranza', cuentaCobranzaId)
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
 
@@ -212,7 +212,7 @@ function ReadOnlyDocumentsView({ propiedadId }: { propiedadId: number }) {
       // Descargar el ZIP
       const link = document.createElement('a');
       link.href = URL.createObjectURL(zipBlob);
-      link.download = `documentos_propiedad_${propiedadId}.zip`;
+      link.download = `documentos_cuenta_cobranza_${cuentaCobranzaId}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -2332,9 +2332,9 @@ export default function DetalleCuentaCobranza() {
         </TabsContent>
 
         {/* Documentos Tab - only available for properties */}
-        {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id_propiedad && (
+        {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id && (
           <TabsContent value="documentos" className="mt-6">
-            <ReadOnlyDocumentsView propiedadId={cuentaDetalle.id_propiedad} />
+            <ReadOnlyDocumentsView cuentaCobranzaId={cuentaDetalle.id} />
           </TabsContent>
         )}
       </Tabs>

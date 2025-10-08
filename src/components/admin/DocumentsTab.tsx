@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface DocumentsTabProps {
   entityId?: number;
-  entityType: 'persona' | 'propiedad';
+  entityType: 'persona' | 'propiedad' | 'cuenta_cobranza';
   tipoPersona?: 'pf' | 'pm'; // Tipo de persona para filtrar documentos
   pendingDocuments?: Array<{
     file: File;
@@ -102,7 +102,11 @@ export function DocumentsTab({
     if (!entityId) return;
     
     setIsLoading(true);
-    const column = entityType === 'persona' ? 'id_persona' : 'id_propiedad';
+    const column = entityType === 'persona' 
+      ? 'id_persona' 
+      : entityType === 'cuenta_cobranza'
+      ? 'id_cuenta_cobranza'
+      : 'id_propiedad';
     
     try {
       const { data: docsData, error: docsError } = await supabase
@@ -211,7 +215,11 @@ export function DocumentsTab({
         nextNumero = parseInt(numeroDocumento);
       } else {
         // Generate next numero automatically
-        const column = entityType === 'persona' ? 'id_persona' : 'id_propiedad';
+        const column = entityType === 'persona' 
+          ? 'id_persona' 
+          : entityType === 'cuenta_cobranza'
+          ? 'id_cuenta_cobranza'
+          : 'id_propiedad';
         const { data: existingDocs } = await supabase
           .from('documentos')
           .select('numero')
@@ -248,6 +256,9 @@ export function DocumentsTab({
           
           idCuentaCobranza = cuentaData?.id || null;
         }
+      } else if (entityType === 'cuenta_cobranza') {
+        // If entity is cuenta_cobranza, use it directly
+        idCuentaCobranza = entityId;
       }
 
       // Save document record
@@ -259,6 +270,8 @@ export function DocumentsTab({
         id_tipo_documento: parseInt(selectedTipoDocumento),
         ...(entityType === 'persona' 
           ? { id_persona: entityId } 
+          : entityType === 'cuenta_cobranza'
+          ? { id_cuenta_cobranza: idCuentaCobranza }
           : { id_propiedad: entityId, id_cuenta_cobranza: idCuentaCobranza })
       };
 

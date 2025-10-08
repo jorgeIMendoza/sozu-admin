@@ -2295,17 +2295,17 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {propiedadDetalle?.id ? (
+                  {cuenta?.id ? (
                     <DocumentsTab
-                      entityId={propiedadDetalle.id}
-                      entityType="propiedad"
+                      entityId={cuenta.id}
+                      entityType="cuenta_cobranza"
                       onDocumentAdded={() => {
                         toast.success("Documento agregado correctamente");
                       }}
                     />
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">
-                      No se puede cargar la sección de documentos sin una propiedad asociada
+                      No se puede cargar la sección de documentos sin una cuenta de cobranza
                     </div>
                   )}
                 </CardContent>
