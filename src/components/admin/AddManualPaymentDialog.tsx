@@ -63,9 +63,9 @@ export function AddManualPaymentDialog({
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch payment methods (exclude STP and conditionally exclude "Cesión de derechos" for products/services)
+  // Fetch payment methods (exclude STP and "Cesión de derechos" for all manual payments)
   const { data: metodosPago } = useQuery({
-    queryKey: ["metodos_pago", tipoCuenta],
+    queryKey: ["metodos_pago"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("metodos_pago")
@@ -76,12 +76,8 @@ export function AddManualPaymentDialog({
       
       if (error) throw error;
       
-      // Filter out "Cesión de derechos" for products and services
-      if (tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') {
-        return data?.filter(metodo => metodo.nombre !== "Cesión de derechos") || [];
-      }
-      
-      return data || [];
+      // Filter out "Cesión de derechos" for ALL manual payments
+      return data?.filter(metodo => metodo.nombre !== "Cesión de derechos") || [];
     },
   });
 
