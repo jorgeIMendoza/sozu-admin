@@ -283,7 +283,7 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId }: { cuentaCobranzaId: number 
                   <TableCell className="font-medium">
                     {doc.tipos_documento?.nombre || 'Sin tipo'}
                   </TableCell>
-                  <TableCell>{doc.numero || 'N/A'}</TableCell>
+                  <TableCell>{doc.numero || ''}</TableCell>
                   <TableCell>
                     {new Date(doc.fecha_creacion).toLocaleDateString('es-MX')}
                   </TableCell>
