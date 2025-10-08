@@ -2020,7 +2020,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           <TableHead className="font-semibold">RFC</TableHead>
                           <TableHead className="font-semibold">Email</TableHead>
                           <TableHead className="font-semibold">Tipo</TableHead>
-                          <TableHead className="font-semibold">Estado Fiscal</TableHead>
+                          <TableHead className="font-semibold">Datos Fiscales</TableHead>
                           <TableHead className="font-semibold">Porcentaje (%)</TableHead>
                           <TableHead className="font-semibold text-right">Acciones</TableHead>
                         </TableRow>
