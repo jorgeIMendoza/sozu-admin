@@ -41,24 +41,14 @@ export const ProjectLegalEntitiesSection = ({
   const { data: legalEntityTypes = [] } = useQuery({
     queryKey: ["legal-entity-types"],
     queryFn: async () => {
-      const allowedEntityTypes = [
-        "Administrador",
-        "Aportante", 
-        "Contratista",
-        "Desarrollador",
-        "Dueño Vendedor",
-        "Inmobiliaria",
-        "Inversionista",
-        "Proveedor",
-        "Socio"
-      ];
+      const allowedEntityTypeIds = [3, 4, 5, 6, 8, 9, 10, 13, 15]; // Desarrollador, Dueño Vendedor, Inmobiliaria, Administradora, Proveedor, Socio, Inversionista, Contratista, Aportante
 
       const { data, error } = await supabase
         .from("tipos_entidad")
         .select("id, nombre")
         .eq("padre", "p")
         .eq("activo", true)
-        .in("nombre", allowedEntityTypes)
+        .in("id", allowedEntityTypeIds)
         .order("nombre");
       
       if (error) throw error;
@@ -70,17 +60,7 @@ export const ProjectLegalEntitiesSection = ({
   const { data: availableLegalEntities = [] } = useQuery({
     queryKey: ["available-legal-entities"],
     queryFn: async () => {
-      const allowedEntityTypes = [
-        "Administrador",
-        "Aportante", 
-        "Contratista",
-        "Desarrollador",
-        "Dueño Vendedor",
-        "Inmobiliaria",
-        "Inversionista",
-        "Proveedor",
-        "Socio"
-      ];
+      const allowedEntityTypeIds = [3, 4, 5, 6, 8, 9, 10, 13, 15]; // Desarrollador, Dueño Vendedor, Inmobiliaria, Administradora, Proveedor, Socio, Inversionista, Contratista, Aportante
 
       const { data, error } = await supabase
         .from("personas")
@@ -102,7 +82,7 @@ export const ProjectLegalEntitiesSection = ({
         .eq("tipo_persona", "pm")
         .eq("entidades_relacionadas.activo", true)
         .eq("entidades_relacionadas.tipos_entidad.padre", "p")
-        .in("entidades_relacionadas.tipos_entidad.nombre", allowedEntityTypes);
+        .in("entidades_relacionadas.id_tipo_entidad", allowedEntityTypeIds);
       
       if (error) throw error;
       
@@ -110,7 +90,7 @@ export const ProjectLegalEntitiesSection = ({
       const entityMap = new Map();
       (data || []).forEach((item: any) => {
         item.entidades_relacionadas.forEach((rel: any) => {
-          if (allowedEntityTypes.includes(rel.tipos_entidad?.nombre)) {
+          if (allowedEntityTypeIds.includes(rel.id_tipo_entidad)) {
             const key = `${item.id}-${rel.id_tipo_entidad}`;
             if (!entityMap.has(key)) {
               entityMap.set(key, {
@@ -136,17 +116,7 @@ export const ProjectLegalEntitiesSection = ({
     queryFn: async () => {
       if (!projectId) return [];
       
-      const allowedEntityTypes = [
-        "Administrador",
-        "Aportante", 
-        "Contratista",
-        "Desarrollador",
-        "Dueño Vendedor",
-        "Inmobiliaria",
-        "Inversionista",
-        "Proveedor",
-        "Socio"
-      ];
+      const allowedEntityTypeIds = [3, 4, 5, 6, 8, 9, 10, 13, 15]; // Desarrollador, Dueño Vendedor, Inmobiliaria, Administradora, Proveedor, Socio, Inversionista, Contratista, Aportante
       
       const { data, error } = await supabase
         .from("entidades_relacionadas")
@@ -171,7 +141,7 @@ export const ProjectLegalEntitiesSection = ({
         .eq("activo", true)
         .eq("tipos_entidad.padre", "p")
         .eq("tipos_entidad.activo", true)
-        .in("tipos_entidad.nombre", allowedEntityTypes);
+        .in("tipos_entidad.id", allowedEntityTypeIds);
       
       if (error) throw error;
       
