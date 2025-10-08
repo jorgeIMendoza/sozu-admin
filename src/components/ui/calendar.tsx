@@ -5,24 +5,139 @@ import { es } from "date-fns/locale";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
+type CalendarView = "days" | "months" | "years";
+
 function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
   const [month, setMonth] = React.useState<Date>(props.month || new Date());
+  const [view, setView] = React.useState<CalendarView>("days");
+  const [yearRangeStart, setYearRangeStart] = React.useState<number>(
+    Math.floor(new Date().getFullYear() / 10) * 10
+  );
 
   const handleMonthChange = (newMonth: Date) => {
     setMonth(newMonth);
     props.onMonthChange?.(newMonth);
   };
 
+  const months = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+
+  const currentYear = month.getFullYear();
+  const currentMonth = month.getMonth();
+
+  // Vista de años
+  if (view === "years") {
+    const years = Array.from({ length: 12 }, (_, i) => yearRangeStart + i);
+    
+    return (
+      <div className={cn("p-3 pointer-events-auto", className)}>
+        <div className="flex justify-between items-center mb-4">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setYearRangeStart(yearRangeStart - 10)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="text-sm font-medium">
+            {yearRangeStart} - {yearRangeStart + 11}
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setYearRangeStart(yearRangeStart + 10)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {years.map((year) => (
+            <Button
+              key={year}
+              variant={year === currentYear ? "default" : "ghost"}
+              className="h-14 text-sm"
+              onClick={() => {
+                const newDate = new Date(month);
+                newDate.setFullYear(year);
+                handleMonthChange(newDate);
+                setView("months");
+              }}
+            >
+              {year}
+            </Button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Vista de meses
+  if (view === "months") {
+    return (
+      <div className={cn("p-3 pointer-events-auto", className)}>
+        <div className="flex justify-between items-center mb-4">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => {
+              const newDate = new Date(month);
+              newDate.setFullYear(currentYear - 1);
+              handleMonthChange(newDate);
+            }}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            className="text-sm font-medium hover:bg-accent"
+            onClick={() => setView("years")}
+          >
+            {currentYear}
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => {
+              const newDate = new Date(month);
+              newDate.setFullYear(currentYear + 1);
+              handleMonthChange(newDate);
+            }}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {months.map((monthName, index) => (
+            <Button
+              key={index}
+              variant={index === currentMonth ? "default" : "ghost"}
+              className="h-14 text-sm"
+              onClick={() => {
+                const newDate = new Date(month);
+                newDate.setMonth(index);
+                handleMonthChange(newDate);
+                setView("days");
+              }}
+            >
+              {monthName}
+            </Button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Vista de días (DayPicker normal)
   return (
     <DayPicker
       locale={es}
@@ -63,57 +178,14 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         IconLeft: ({ ..._props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ..._props }) => <ChevronRight className="h-4 w-4" />,
         Caption: ({ displayMonth }) => {
-          const currentYear = displayMonth.getFullYear();
-          const currentMonth = displayMonth.getMonth();
-          
-          const years = Array.from({ length: 100 }, (_, i) => currentYear - 50 + i);
-          const months = [
-            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-          ];
-
           return (
-            <div className="flex justify-center gap-2 mb-2">
-              <Select
-                value={currentMonth.toString()}
-                onValueChange={(value) => {
-                  const newDate = new Date(displayMonth);
-                  newDate.setMonth(parseInt(value));
-                  handleMonthChange(newDate);
-                }}
-              >
-                <SelectTrigger className="h-7 w-[110px] text-sm">
-                  <SelectValue>{months[currentMonth]}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {months.map((monthName, index) => (
-                    <SelectItem key={index} value={index.toString()}>
-                      {monthName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={currentYear.toString()}
-                onValueChange={(value) => {
-                  const newDate = new Date(displayMonth);
-                  newDate.setFullYear(parseInt(value));
-                  handleMonthChange(newDate);
-                }}
-              >
-                <SelectTrigger className="h-7 w-[80px] text-sm">
-                  <SelectValue>{currentYear}</SelectValue>
-                </SelectTrigger>
-                <SelectContent className="max-h-[200px]">
-                  {years.map((year) => (
-                    <SelectItem key={year} value={year.toString()}>
-                      {year}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Button
+              variant="ghost"
+              className="text-sm font-medium hover:bg-accent mx-auto"
+              onClick={() => setView("months")}
+            >
+              {months[displayMonth.getMonth()]} {displayMonth.getFullYear()}
+            </Button>
           );
         },
       }}
