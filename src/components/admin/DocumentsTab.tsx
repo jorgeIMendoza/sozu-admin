@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { FileText, Upload, Eye, Trash2, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { ConfirmMantenimientoDialog } from "./ConfirmMantenimientoDialog";
 
 interface DocumentsTabProps {
   entityId?: number;
@@ -69,6 +70,7 @@ export function DocumentsTab({
     url: '',
     title: ''
   });
+  const [showMantenimientoDialog, setShowMantenimientoDialog] = useState(false);
   const { toast } = useToast();
 
   // Load document types based on entity type and person type
@@ -347,29 +349,22 @@ export function DocumentsTab({
     }
   };
 
+  const checkAndShowMantenimientoDialog = () => {
+    if (entityType === 'cuenta_cobranza' && entityId) {
+      setShowMantenimientoDialog(true);
+    }
+  };
+
   const handleToggleVerification = async (documento: Documento) => {
-    const column = entityType === 'persona' ? 'id_persona' : 'id_propiedad';
+    const column = entityType === 'persona' ? 'id_persona' : entityType === 'cuenta_cobranza' ? 'id_cuenta_cobranza' : 'id_propiedad';
     
     try {
-      const { error } = await supabase
-        .from('documentos')
-        .update({ es_verificado: !documento.es_verificado })
-        .eq('numero', documento.numero as any)
-        .eq(column, entityId);
-
+      const { error } = await supabase.from('documentos').update({ es_verificado: !documento.es_verificado }).eq('numero', documento.numero as any).eq(column, entityId);
       if (error) throw error;
-      
       await loadDocumentos();
-      toast({
-        title: "Éxito",
-        description: "Estado de verificación actualizado",
-      });
+      toast({ title: "Éxito", description: "Estado de verificación actualizado" });
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: `Error al actualizar la verificación: ${error.message}`,
-      });
+      toast({ variant: "destructive", title: "Error", description: `Error: ${error.message}` });
     }
   };
 
@@ -744,6 +739,19 @@ export function DocumentsTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Mantenimiento Confirmation Dialog */}
+      {entityType === 'cuenta_cobranza' && entityId && (
+        <ConfirmMantenimientoDialog
+          isOpen={showMantenimientoDialog}
+          onClose={() => setShowMantenimientoDialog(false)}
+          cuentaCobranzaId={entityId}
+          onSuccess={() => {
+            setShowMantenimientoDialog(false);
+            loadDocumentos();
+          }}
+        />
+      )}
     </div>
   );
 }
