@@ -150,12 +150,20 @@ export default function AdministradoresPersonas() {
 
   const createMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { entityType, representativeId, ...cleanPersonData } = personData;
+      // Remove fields that don't belong to personas table
+      const { 
+        entityType, 
+        representativeId, 
+        pendingDocuments, 
+        tempBankAccounts, 
+        tempBeneficiaries,
+        ...cleanPersonData 
+      } = personData;
       
       const { data: personResult, error: personError } = await supabase
         .from('personas')
-        .insert([cleanPersonData])
-        .select()
+        .insert(cleanPersonData)
+        .select('*')
         .single();
       
       if (personError) throw personError;
@@ -199,7 +207,15 @@ export default function AdministradoresPersonas() {
 
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { entityType, representativeId, ...cleanPersonData } = personData;
+      // Remove fields that don't belong to personas table
+      const { 
+        entityType, 
+        representativeId, 
+        pendingDocuments, 
+        tempBankAccounts, 
+        tempBeneficiaries,
+        ...cleanPersonData 
+      } = personData;
       
       const { error: updateError } = await supabase
         .from('personas')
