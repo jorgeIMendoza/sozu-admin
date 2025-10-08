@@ -785,6 +785,14 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         disabled
                         className="bg-muted"
                       />
+                    ) : (entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || entityType === 'administradora') ? (
+                      <Input
+                        id="tipoPersona"
+                        type="text"
+                        value="Persona Moral"
+                        disabled
+                        className="bg-muted"
+                      />
                     ) : (
                       <Select value={tipoPersona} onValueChange={setTipoPersona}>
                         <SelectTrigger>
@@ -917,7 +925,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 
                 <div>
                   <Label htmlFor="tipoPersona">Tipo de Persona *</Label>
-                  {entityType === 'legal' ? (
+                  {(entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || entityType === 'administradora') ? (
                     <Input
                       id="tipoPersona"
                       type="text"
