@@ -115,6 +115,8 @@ interface Multa {
   }[];
 }
 
+import JSZip from 'jszip';
+
 // Read-only documents view component
 function ReadOnlyDocumentsView({ propiedadId }: { propiedadId: number }) {
   const { toast } = useToast();
@@ -143,11 +145,16 @@ function ReadOnlyDocumentsView({ propiedadId }: { propiedadId: number }) {
       const docsWithCorrectedUrls = (docs || []).map(doc => {
         let correctedUrl = doc.url;
         
+        // Si la URL contiene path duplicado, corregirlo
+        if (correctedUrl && correctedUrl.includes('/documentos/documentos/')) {
+          correctedUrl = correctedUrl.replace('/documentos/documentos/', '/documentos/');
+        }
+        
         // Si la URL no es completa (no empieza con https://), construir la URL pública
         if (correctedUrl && !correctedUrl.startsWith('https://')) {
-          // Extraer solo el nombre del archivo si tiene path
-          const fileName = correctedUrl.includes('/') 
-            ? correctedUrl.split('/').pop() 
+          // Remover el prefijo "documentos/" si existe para evitar duplicación
+          const fileName = correctedUrl.startsWith('documentos/') 
+            ? correctedUrl.replace('documentos/', '') 
             : correctedUrl;
           
           // Construir la URL pública correcta
@@ -180,25 +187,43 @@ function ReadOnlyDocumentsView({ propiedadId }: { propiedadId: number }) {
 
     setIsDownloading(true);
     try {
-      // Create a simple download of each document
-      // Note: For actual ZIP creation, you'd need a library like JSZip
+      const zip = new JSZip();
+      
+      // Descargar cada documento y agregarlo al ZIP
       for (const doc of documentos) {
-        const link = document.createElement('a');
-        link.href = doc.url;
-        link.download = `${doc.tipos_documento?.nombre}_${doc.numero}`;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+          const response = await fetch(doc.url);
+          if (!response.ok) {
+            console.error(`Error descargando documento ${doc.id}:`, response.statusText);
+            continue;
+          }
+          
+          const blob = await response.blob();
+          const fileName = `${doc.tipos_documento?.nombre || 'Documento'}_${doc.numero || doc.id}.pdf`;
+          zip.file(fileName, blob);
+        } catch (error) {
+          console.error(`Error procesando documento ${doc.id}:`, error);
+        }
       }
 
+      // Generar el archivo ZIP
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      
+      // Descargar el ZIP
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(zipBlob);
+      link.download = `documentos_propiedad_${propiedadId}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+
       toast({
-        title: "Descarga iniciada",
-        description: "Los documentos se están descargando"
+        title: "Descarga completada",
+        description: "Los documentos se han descargado en un archivo ZIP"
       });
     } catch (error) {
-      console.error('Error downloading documents:', error);
+      console.error('Error al descargar documentos:', error);
       toast({
         title: "Error",
         description: "No se pudieron descargar los documentos",
