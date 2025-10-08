@@ -267,30 +267,47 @@ export default function Pagos() {
       const edificioModeloIds = ofertas?.map(o => o.propiedades?.id_edificio_modelo).filter(Boolean) || [];
       const productoIds = ofertas?.map(o => o.id_producto).filter(Boolean) || [];
 
-      // Get productos_servicios and proyectos data separately
+      // Get productos_servicios data 
       let productosData: any[] = [];
+      let entidadesProductosMap: Map<number, number> = new Map(); // id_entidad -> id_proyecto
       let proyectosProductosData: any[] = [];
       
       if (productoIds.length > 0) {
         const { data: productos } = await supabase
           .from('productos_servicios')
-          .select('id, nombre, id_proyecto')
+          .select('id, nombre, id_entidad_relacionada_dueno')
           .in('id', productoIds);
         
         productosData = productos || [];
         
         if (productosData.length > 0) {
-          const proyectoIdsProductos = productosData
-            .map(p => p.id_proyecto)
+          const entidadIdsProductos = productosData
+            .map(p => p.id_entidad_relacionada_dueno)
             .filter(Boolean);
           
-          if (proyectoIdsProductos.length > 0) {
-            const { data: proyectos } = await supabase
-              .from('proyectos')
-              .select('id, id_tipo_uso')
-              .in('id', proyectoIdsProductos);
+          if (entidadIdsProductos.length > 0) {
+            const { data: entidadesProductos } = await supabase
+              .from('entidades_relacionadas')
+              .select('id, id_proyecto')
+              .in('id', entidadIdsProductos);
             
-            proyectosProductosData = proyectos || [];
+            // Create a map for quick lookup
+            entidadesProductos?.forEach(e => {
+              entidadesProductosMap.set(e.id, e.id_proyecto);
+            });
+            
+            const proyectoIdsProductos = entidadesProductos
+              ?.map(e => e.id_proyecto)
+              .filter(Boolean) || [];
+              
+            if (proyectoIdsProductos.length > 0) {
+              const { data: proyectos } = await supabase
+                .from('proyectos')
+                .select('id, id_tipo_uso')
+                .in('id', proyectoIdsProductos);
+              
+              proyectosProductosData = proyectos || [];
+            }
           }
         }
       }
@@ -331,15 +348,22 @@ export default function Pagos() {
         if (oferta?.id_producto) {
           const producto = productosData?.find((p: any) => p.id === oferta.id_producto);
           productoNombre = producto?.nombre;
-          if (producto && producto.id_proyecto) {
-            const proyecto = proyectosProductosData?.find((pr: any) => pr.id === producto.id_proyecto);
-            if (proyecto) {
-              // id_tipo_uso: 9 = Productos, 10 = Servicios, 11 = Mantenimientos (also Servicios)
-              const tipoUso = proyecto.id_tipo_uso;
-              if (tipoUso === 9) {
-                tipo = 'Producto';
-              } else if (tipoUso === 10 || tipoUso === 11) {
-                tipo = 'Servicio';
+          if (producto && producto.id_entidad_relacionada_dueno) {
+            // Get proyecto id from the map
+            const idProyecto = entidadesProductosMap.get(producto.id_entidad_relacionada_dueno);
+            
+            if (idProyecto) {
+              const proyecto = proyectosProductosData?.find((pr: any) => pr.id === idProyecto);
+              if (proyecto) {
+                // id_tipo_uso: 9 = Productos, 10 = Servicios, 11 = Mantenimientos (also Servicios)
+                const tipoUso = proyecto.id_tipo_uso;
+                if (tipoUso === 9) {
+                  tipo = 'Producto';
+                } else if (tipoUso === 10 || tipoUso === 11) {
+                  tipo = 'Servicio';
+                }
+              } else {
+                tipo = 'Producto'; // Default if we can't determine
               }
             } else {
               tipo = 'Producto'; // Default if we can't determine
