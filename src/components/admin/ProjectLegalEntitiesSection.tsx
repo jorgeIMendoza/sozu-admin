@@ -472,11 +472,17 @@ export const ProjectLegalEntitiesSection = ({
       }
 
       const updateData: any = { facturar };
+      
       if (facturar && apiKeyName) {
+        // Si se habilita facturar, agregar los API keys
         updateData.nombre_api_key = apiKeyName;
         if (apiKeyNameDraft) {
           updateData.nombre_api_key_draft = apiKeyNameDraft;
         }
+      } else if (!facturar) {
+        // Si se deshabilita facturar, poner los API keys en null
+        updateData.nombre_api_key = null;
+        updateData.nombre_api_key_draft = null;
       }
 
       const { error } = await supabase
