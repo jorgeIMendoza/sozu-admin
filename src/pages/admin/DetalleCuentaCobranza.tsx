@@ -273,7 +273,7 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId }: { cuentaCobranzaId: number 
                 <TableHead>Tipo</TableHead>
                 <TableHead>Número</TableHead>
                 <TableHead>Fecha</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead>Verificado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
