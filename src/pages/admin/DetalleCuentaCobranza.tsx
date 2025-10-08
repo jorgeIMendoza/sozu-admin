@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -51,6 +51,7 @@ interface AplicacionPago {
     clave_rastreo: string | null;
     url_cep: string | null;
     url_recibo: string | null;
+    descripcion?: string | null;
   };
 }
 
@@ -798,7 +799,7 @@ export default function DetalleCuentaCobranza() {
         const [pagosResult, metodosResult] = await Promise.all([
         supabase
           .from('pagos')
-          .select('id, fecha_pago, monto, clave_rastreo, id_metodos_pago, url_cep, url_recibo')
+          .select('id, fecha_pago, monto, clave_rastreo, id_metodos_pago, url_cep, url_recibo, descripcion')
           .in('id', pagoIds),
           supabase
             .from('metodos_pago')
@@ -2304,57 +2305,81 @@ export default function DetalleCuentaCobranza() {
                                            <span className="text-muted-foreground text-xs">N/A</span>
                                          )}
                                        </TableCell>
-                                        <TableCell>
-                                         <TooltipProvider>
-                                           <div className="flex gap-2">
-                                             {/* CEP Button - Only for STP and STP-manual payments */}
-                                             {(aplicacion.pago.id_metodos_pago === 6 || aplicacion.pago.id_metodos_pago === 7) && (
-                                               <Tooltip>
-                                                 <TooltipTrigger asChild>
-                                                   <Button
-                                                     variant="outline"
-                                                     size="icon"
-                                                     className="h-6 w-6"
-                                                    onClick={() => {
-                                                         setCepDialog({
-                                                           isOpen: true,
-                                                           paymentId: aplicacion.pago.id
-                                                         });
-                                                       }}
-                                                      disabled={esCuentaCancelada}
-                                                   >
-                                                     <FileText className="h-3 w-3" />
-                                                   </Button>
-                                                 </TooltipTrigger>
-                                                 <TooltipContent>
-                                                   <p>Agregar CEP</p>
-                                                 </TooltipContent>
-                                               </Tooltip>
-                                             )}
-                                             
-                                             <Tooltip>
-                                               <TooltipTrigger asChild>
-                                                 <Button
-                                                   variant="destructive"
-                                                   size="icon"
-                                                   className="h-6 w-6"
-                                                   onClick={() => handleDeletePayment({
-                                                     id: aplicacion.id,
-                                                     monto: aplicacion.monto,
-                                                     conceptoNombre: conceptoDisplay
-                                                   })}
-                                                   disabled={deletePaymentMutation.isPending || isStpPayment || esCuentaCancelada}
-                                                 >
-                                                   <Trash2 className="h-3 w-3" />
-                                                 </Button>
-                                               </TooltipTrigger>
-                                               <TooltipContent>
-                                                 <p>{isStpPayment ? "No se pueden eliminar pagos STP" : "Eliminar Pago"}</p>
-                                               </TooltipContent>
-                                             </Tooltip>
-                                           </div>
-                                         </TooltipProvider>
-                                       </TableCell>
+                                         <TableCell>
+                                          <TooltipProvider>
+                                            <div className="flex gap-2">
+                                              {/* Description Button - Show if payment has a description */}
+                                              {aplicacion.pago.descripcion && (
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      variant="outline"
+                                                      size="icon"
+                                                      className="h-6 w-6"
+                                                      onClick={() => {
+                                                        toast({
+                                                          title: "Descripción del pago",
+                                                          description: aplicacion.pago.descripcion || "",
+                                                        });
+                                                      }}
+                                                    >
+                                                      <MessageSquare className="h-3 w-3" />
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>Ver descripción</p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              )}
+                                              
+                                              {/* CEP Button - Only for STP and STP-manual payments */}
+                                              {(aplicacion.pago.id_metodos_pago === 6 || aplicacion.pago.id_metodos_pago === 7) && (
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      variant="outline"
+                                                      size="icon"
+                                                      className="h-6 w-6"
+                                                     onClick={() => {
+                                                          setCepDialog({
+                                                            isOpen: true,
+                                                            paymentId: aplicacion.pago.id
+                                                          });
+                                                        }}
+                                                       disabled={esCuentaCancelada}
+                                                    >
+                                                      <FileText className="h-3 w-3" />
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>Agregar CEP</p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              )}
+                                              
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <Button
+                                                    variant="destructive"
+                                                    size="icon"
+                                                    className="h-6 w-6"
+                                                    onClick={() => handleDeletePayment({
+                                                      id: aplicacion.id,
+                                                      monto: aplicacion.monto,
+                                                      conceptoNombre: conceptoDisplay
+                                                    })}
+                                                    disabled={deletePaymentMutation.isPending || isStpPayment || esCuentaCancelada}
+                                                  >
+                                                    <Trash2 className="h-3 w-3" />
+                                                  </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <p>{isStpPayment ? "No se pueden eliminar pagos STP" : "Eliminar Pago"}</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            </div>
+                                          </TooltipProvider>
+                                        </TableCell>
                                     </TableRow>
                                   );
                                 })}
