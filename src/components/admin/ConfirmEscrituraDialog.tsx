@@ -10,23 +10,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ExternalLink } from 'lucide-react';
+import { isFiscalDataComplete, type FiscalData } from '@/utils/fiscalDataValidation';
 
 interface ConfirmEscrituraDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
-  vendedorData: {
-    rfc?: string;
-    regimen?: string;
-    uso_cfdi?: string;
-    direccion_fiscal_calle_numero?: string;
-    direccion_fiscal_colonia?: string;
-    direccion_fiscal_codigo_postal?: string;
-    direccion_fiscal_id_pais?: string;
-    direccion_fiscal_id_estado?: number;
-    direccion_fiscal_id_municipio?: number;
-  } | null;
+  vendedorData: FiscalData | null;
+  compradoresData?: FiscalData[];
   escrituraData: {
     clave_catastral?: string;
     libro?: string;
@@ -36,6 +28,7 @@ interface ConfirmEscrituraDialogProps {
   };
   shouldGenerateInvoice: boolean;
   isCuentaFullyPaid: boolean;
+  onGoToCompradores?: () => void;
 }
 
 export function ConfirmEscrituraDialog({
@@ -43,34 +36,34 @@ export function ConfirmEscrituraDialog({
   onOpenChange,
   onConfirm,
   vendedorData,
+  compradoresData = [],
   escrituraData,
   shouldGenerateInvoice,
   isCuentaFullyPaid,
+  onGoToCompradores,
 }: ConfirmEscrituraDialogProps) {
-  const [datosFiscalesCompletos, setDatosFiscalesCompletos] = useState(false);
+  const [datosFiscalesVendedorCompletos, setDatosFiscalesVendedorCompletos] = useState(false);
+  const [datosFiscalesCompradoresCompletos, setDatosFiscalesCompradoresCompletos] = useState(false);
+  const [compradoresIncompletos, setCompradoresIncompletos] = useState(0);
   const [datosEscrituracionCompletos, setDatosEscrituracionCompletos] = useState(false);
 
-  // Validar datos fiscales
+  // Validar datos fiscales del vendedor
   useEffect(() => {
-    if (!vendedorData) {
-      setDatosFiscalesCompletos(false);
+    setDatosFiscalesVendedorCompletos(isFiscalDataComplete(vendedorData));
+  }, [vendedorData]);
+
+  // Validar datos fiscales de TODOS los compradores
+  useEffect(() => {
+    if (!compradoresData || compradoresData.length === 0) {
+      setDatosFiscalesCompradoresCompletos(false);
+      setCompradoresIncompletos(0);
       return;
     }
 
-    const isComplete = !!(
-      vendedorData.rfc &&
-      vendedorData.regimen &&
-      vendedorData.uso_cfdi &&
-      vendedorData.direccion_fiscal_calle_numero &&
-      vendedorData.direccion_fiscal_colonia &&
-      vendedorData.direccion_fiscal_codigo_postal &&
-      vendedorData.direccion_fiscal_id_pais &&
-      vendedorData.direccion_fiscal_id_estado &&
-      vendedorData.direccion_fiscal_id_municipio
-    );
-
-    setDatosFiscalesCompletos(isComplete);
-  }, [vendedorData]);
+    const incompletos = compradoresData.filter((data) => !isFiscalDataComplete(data)).length;
+    setCompradoresIncompletos(incompletos);
+    setDatosFiscalesCompradoresCompletos(incompletos === 0);
+  }, [compradoresData]);
 
   // Validar datos de escrituración
   useEffect(() => {
@@ -85,7 +78,7 @@ export function ConfirmEscrituraDialog({
     setDatosEscrituracionCompletos(isComplete);
   }, [escrituraData]);
 
-  const canSave = isCuentaFullyPaid && datosFiscalesCompletos && datosEscrituracionCompletos;
+  const canSave = isCuentaFullyPaid && datosFiscalesVendedorCompletos && datosFiscalesCompradoresCompletos && datosEscrituracionCompletos;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -136,23 +129,60 @@ export function ConfirmEscrituraDialog({
               </div>
             </div>
 
-            {/* Datos Fiscales Check */}
+            {/* Datos Fiscales Vendedor Check */}
             <div className="flex items-start space-x-3">
               <Checkbox
-                checked={datosFiscalesCompletos}
+                checked={datosFiscalesVendedorCompletos}
                 disabled
                 className="mt-1"
               />
               <div className="flex-1">
-                <Label className={`${datosFiscalesCompletos ? 'text-foreground' : 'text-destructive'} font-medium`}>
-                  Datos fiscales completos
+                <Label className={`${datosFiscalesVendedorCompletos ? 'text-foreground' : 'text-destructive'} font-medium`}>
+                  Datos fiscales del vendedor completos
                 </Label>
                 <p className="text-sm text-muted-foreground mt-1">
                   RFC, régimen, uso del CFDI y dirección fiscal completa del vendedor
                 </p>
-                {!datosFiscalesCompletos && (
+                {!datosFiscalesVendedorCompletos && (
                   <p className="text-xs text-destructive mt-1">
-                    ⚠ Falta información fiscal. Revise la pestaña "Datos del Vendedor".
+                    ⚠ Falta información fiscal del vendedor. Revise la pestaña "Datos del Vendedor".
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Datos Fiscales Compradores Check */}
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                checked={datosFiscalesCompradoresCompletos}
+                disabled
+                className="mt-1"
+              />
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <Label className={`${datosFiscalesCompradoresCompletos ? 'text-foreground' : 'text-destructive'} font-medium`}>
+                    Datos fiscales de todos los compradores completos
+                  </Label>
+                  {onGoToCompradores && !datosFiscalesCompradoresCompletos && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs"
+                      onClick={() => {
+                        onGoToCompradores();
+                        onOpenChange(false);
+                      }}
+                    >
+                      Ir a Datos del Comprador <ExternalLink className="h-3 w-3 ml-1" />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  RFC, régimen, uso del CFDI y dirección fiscal completa de todos los compradores
+                </p>
+                {!datosFiscalesCompradoresCompletos && (
+                  <p className="text-xs text-destructive mt-1">
+                    ⚠ {compradoresIncompletos} de {compradoresData.length} comprador{compradoresData.length > 1 ? 'es' : ''} {compradoresIncompletos > 1 ? 'tienen' : 'tiene'} información fiscal incompleta.
                   </p>
                 )}
               </div>

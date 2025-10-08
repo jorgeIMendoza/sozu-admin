@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Upload, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +21,7 @@ import { TempBankAccountsSection } from "./TempBankAccountsSection";
 import { TempBeneficiariosSection } from "./TempBeneficiariosSection";
 import { ImageUploadField } from "./ImageUploadField";
 import { DocumentsTab } from "./DocumentsTab";
+import { isFiscalDataComplete } from '@/utils/fiscalDataValidation';
 
 interface PersonFormProps {
   onSubmit: (data: any) => void;
@@ -1252,11 +1254,36 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                   </TabsContent>
                 )}
 
-                {/* Fiscal Information Tab */}
+                 {/* Fiscal Information Tab */}
                 {!restrictToBasicTab && (
                   <TabsContent value="fiscal" className="space-y-4 mt-6">
                   <div className="space-y-6">
-                    <h3 className="text-lg font-medium">Información Fiscal</h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-medium">Información Fiscal</h3>
+                      <Badge variant={isFiscalDataComplete({
+                        rfc,
+                        regimen,
+                        uso_cfdi: usoCfdi,
+                        direccion_fiscal_calle_numero: direccionFiscalCalle,
+                        direccion_fiscal_colonia: direccionFiscalColonia,
+                        direccion_fiscal_codigo_postal: direccionFiscalCp,
+                        direccion_fiscal_id_pais: idPaisFiscal,
+                        direccion_fiscal_id_estado: idEstadoFiscal ? parseInt(idEstadoFiscal) : null,
+                        direccion_fiscal_id_municipio: idMunicipioFiscal ? parseInt(idMunicipioFiscal) : null,
+                      }) ? "default" : "destructive"}>
+                        {isFiscalDataComplete({
+                          rfc,
+                          regimen,
+                          uso_cfdi: usoCfdi,
+                          direccion_fiscal_calle_numero: direccionFiscalCalle,
+                          direccion_fiscal_colonia: direccionFiscalColonia,
+                          direccion_fiscal_codigo_postal: direccionFiscalCp,
+                          direccion_fiscal_id_pais: idPaisFiscal,
+                          direccion_fiscal_id_estado: idEstadoFiscal ? parseInt(idEstadoFiscal) : null,
+                          direccion_fiscal_id_municipio: idMunicipioFiscal ? parseInt(idMunicipioFiscal) : null,
+                        }) ? "Completa" : "Incompleta"}
+                      </Badge>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="nacionalidad">Nacionalidad</Label>

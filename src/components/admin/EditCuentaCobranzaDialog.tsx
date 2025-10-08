@@ -14,7 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Edit, Trash2, Plus, HeartHandshake, FileText } from 'lucide-react';
+import { CalendarIcon, Edit, Trash2, Plus, HeartHandshake, FileText, ExternalLink } from 'lucide-react';
+import { isFiscalDataComplete } from '@/utils/fiscalDataValidation';
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from 'sonner';
@@ -437,7 +438,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const { data: compradoresExistentes, refetch: refetchCompradores, isLoading: isLoadingCompradores } = useQuery({
     queryKey: ["compradores_existentes", cuenta.id],
     queryFn: async () => {
-      // First get compradores with basic persona info
+      // First get compradores with fiscal data
       const { data: compradoresData, error: compradoresError } = await supabase
         .from('compradores')
         .select(`
@@ -452,7 +453,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             telefono,
             tipo_persona,
             id_estado_civil,
-            id_conyuge
+            id_conyuge,
+            regimen,
+            uso_cfdi,
+            direccion_fiscal_calle_numero,
+            direccion_fiscal_colonia,
+            direccion_fiscal_codigo_postal,
+            direccion_fiscal_id_pais,
+            direccion_fiscal_id_estado,
+            direccion_fiscal_id_municipio
           )
         `)
         .eq('id_cuenta_cobranza', cuenta.id)
@@ -2011,6 +2020,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           <TableHead className="font-semibold">RFC</TableHead>
                           <TableHead className="font-semibold">Email</TableHead>
                           <TableHead className="font-semibold">Tipo</TableHead>
+                          <TableHead className="font-semibold">Estado Fiscal</TableHead>
                           <TableHead className="font-semibold">Porcentaje (%)</TableHead>
                           <TableHead className="font-semibold text-right">Acciones</TableHead>
                         </TableRow>
@@ -2019,13 +2029,20 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           {compradoresExistentes.map((comprador, index) => {
                             // Estado civil 2 = Casado(a) bienes mancomunados
                             const esCasadoMancomunados = comprador.personas?.id_estado_civil === 2;
+                            const datosFiscalesCompletos = isFiscalDataComplete(comprador.personas);
                             
                             return (
                             <React.Fragment key={index}>
                            <TableRow className="hover:bg-muted/30 transition-colors">
                               <TableCell className="font-medium">
                                 <div className="flex items-center gap-2">
-                                  <span>{comprador.personas?.nombre_legal}</span>
+                                  <Button
+                                    variant="link"
+                                    className="p-0 h-auto font-medium hover:underline"
+                                    onClick={() => handleNavigateToCompradores(comprador.personas?.rfc || undefined)}
+                                  >
+                                    {comprador.personas?.nombre_legal}
+                                  </Button>
                                   {esCasadoMancomunados && comprador.personas?.id_conyuge && (
                                     <TooltipProvider>
                                       <Tooltip>
@@ -2052,6 +2069,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                              </TableCell>
                              <TableCell className="text-muted-foreground">
                                {getPersonTypeLabel(comprador.personas?.tipo_persona || '')}
+                             </TableCell>
+                             <TableCell>
+                               <Badge variant={datosFiscalesCompletos ? "default" : "destructive"} className="text-xs">
+                                 {datosFiscalesCompletos ? "Completa" : "Incompleta"}
+                               </Badge>
                              </TableCell>
                               <TableCell>
                                 <Input
@@ -3095,6 +3117,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             updateEscrituraMutation.mutate({ numero_escritura: pendingNumeroEscritura });
           }}
           vendedorData={vendedorDetalle?.personas || null}
+          compradoresData={compradoresExistentes?.map(c => c.personas).filter(Boolean) || []}
           escrituraData={{
             clave_catastral: claveCatastral,
             libro: libro,
@@ -3104,6 +3127,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
           }}
           shouldGenerateInvoice={shouldGenerateInvoice}
           isCuentaFullyPaid={isCuentaFullyPaid}
+          onGoToCompradores={() => setActiveTab('compradores')}
         />
 
         {showPersonForm && (
