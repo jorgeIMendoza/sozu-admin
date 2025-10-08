@@ -71,6 +71,7 @@ export function DocumentsTab({
     title: ''
   });
   const [showMantenimientoDialog, setShowMantenimientoDialog] = useState(false);
+  const [dialogAlreadyShown, setDialogAlreadyShown] = useState(false);
   const { toast } = useToast();
 
   // Load document types based on entity type and person type
@@ -164,6 +165,35 @@ export function DocumentsTab({
     loadTiposDocumento();
     loadDocumentos();
   }, [entityId, entityType, tipoPersona]);
+
+  // Check category 7 documents
+  useEffect(() => {
+    if (entityType !== 'cuenta_cobranza' || !entityId || dialogAlreadyShown || documentos.length === 0) {
+      return;
+    }
+
+    let mounted = true;
+
+    supabase
+      .from<'tipos_documento', { id: number }>('tipos_documento')
+      .select('id')
+      .eq('id_categoria_tipo_documento', 7)
+      .eq('activo', true)
+      .then((tiposResult: any) => {
+        if (!mounted || !tiposResult.data) return;
+        
+        const ids: number[] = tiposResult.data.map((t: any) => t.id);
+        const cat7 = documentos.filter(d => ids.includes(d.id_tipo_documento) && d.activo);
+        
+        if (cat7.length > 0 && cat7.every(d => d.es_verificado)) {
+          setShowMantenimientoDialog(true);
+          setDialogAlreadyShown(true);
+        }
+      })
+      .catch((err: any) => console.error('Error:', err));
+
+    return () => { mounted = false; };
+  }, [documentos, entityType, entityId, dialogAlreadyShown]);
 
   const handleUpload = async () => {
     if (!selectedFile || !selectedTipoDocumento) {
@@ -346,12 +376,6 @@ export function DocumentsTab({
         title: "Error",
         description: `Error al eliminar el documento: ${error.message}`,
       });
-    }
-  };
-
-  const checkAndShowMantenimientoDialog = () => {
-    if (entityType === 'cuenta_cobranza' && entityId) {
-      setShowMantenimientoDialog(true);
     }
   };
 
