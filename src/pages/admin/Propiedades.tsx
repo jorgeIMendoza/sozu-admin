@@ -1713,7 +1713,20 @@ const Propiedades = () => {
                         </div>
                       )}
                     </TableCell>
-                   <TableCell className="font-mono text-sm">{property.clabe_stp || 'Sin CLABE'}</TableCell>
+                   <TableCell 
+                      className="font-mono text-sm cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => {
+                        if (property.clabe_stp) {
+                          navigator.clipboard.writeText(property.clabe_stp);
+                          toast({
+                            title: "CLABE copiada",
+                            description: "La cuenta CLABE se copió al portapapeles",
+                          });
+                        }
+                      }}
+                    >
+                      {property.clabe_stp || 'Sin CLABE'}
+                    </TableCell>
                    <TableCell className="text-right font-semibold">
                      {property.precio_final ? (
                        <div className="flex items-center justify-end gap-2">

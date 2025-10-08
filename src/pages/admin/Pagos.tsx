@@ -766,13 +766,25 @@ export default function Pagos() {
                              {cuenta.dueno}
                            </span>
                          </TableCell>
-                         <TableCell>
-                           {cuenta.clabe_stp ? (
-                             <Badge variant="outline">{cuenta.clabe_stp}</Badge>
-                           ) : (
-                             <span className="text-muted-foreground">Sin CLABE</span>
-                           )}
-                         </TableCell>
+                          <TableCell>
+                            {cuenta.clabe_stp ? (
+                              <Badge 
+                                variant="outline" 
+                                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(cuenta.clabe_stp!);
+                                  toast({
+                                    title: "CLABE copiada",
+                                    description: "La cuenta CLABE se copió al portapapeles",
+                                  });
+                                }}
+                              >
+                                {cuenta.clabe_stp}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">Sin CLABE</span>
+                            )}
+                          </TableCell>
                          <TableCell>{cuenta.proyecto}</TableCell>
                          <TableCell>{cuenta.edificio}</TableCell>
                           <TableCell>
@@ -1135,13 +1147,25 @@ export default function Pagos() {
                              {cuenta.dueno}
                            </span>
                          </TableCell>
-                         <TableCell>
-                           {cuenta.clabe_stp ? (
-                             <Badge variant="outline">{cuenta.clabe_stp}</Badge>
-                           ) : (
-                             <span className="text-muted-foreground">Sin CLABE</span>
-                           )}
-                         </TableCell>
+                          <TableCell>
+                            {cuenta.clabe_stp ? (
+                              <Badge 
+                                variant="outline" 
+                                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(cuenta.clabe_stp!);
+                                  toast({
+                                    title: "CLABE copiada",
+                                    description: "La cuenta CLABE se copió al portapapeles",
+                                  });
+                                }}
+                              >
+                                {cuenta.clabe_stp}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">Sin CLABE</span>
+                            )}
+                          </TableCell>
                          <TableCell>{cuenta.proyecto}</TableCell>
                          <TableCell>{cuenta.edificio}</TableCell>
                           <TableCell>
