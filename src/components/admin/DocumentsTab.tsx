@@ -166,34 +166,61 @@ export function DocumentsTab({
     loadDocumentos();
   }, [entityId, entityType, tipoPersona]);
 
-  // Check category 7 documents
+  // Check category 7 documents - simplified to avoid TS deep instantiation errors
   useEffect(() => {
     if (entityType !== 'cuenta_cobranza' || !entityId || dialogAlreadyShown || documentos.length === 0) {
       return;
     }
 
-    let mounted = true;
-
-    supabase
-      .from<'tipos_documento', { id: number }>('tipos_documento')
-      .select('id')
-      .eq('id_categoria_tipo_documento', 7)
-      .eq('activo', true)
-      .then((tiposResult: any) => {
-        if (!mounted || !tiposResult.data) return;
+    const checkCategory7 = async () => {
+      try {
+        // Using type assertion to avoid deep type inference issues
+        const supabaseClient = supabase as any;
+        const response = await supabaseClient
+          .from('tipos_documento')
+          .select('id')
+          .eq('id_categoria_tipo_documento', 7)
+          .eq('activo', true);
         
-        const ids: number[] = tiposResult.data.map((t: any) => t.id);
-        const cat7 = documentos.filter(d => ids.includes(d.id_tipo_documento) && d.activo);
+        if (!response.data || response.data.length === 0) return;
         
-        if (cat7.length > 0 && cat7.every(d => d.es_verificado)) {
-          setShowMantenimientoDialog(true);
-          setDialogAlreadyShown(true);
+        // Extract IDs
+        const categoria7Ids: number[] = [];
+        for (let i = 0; i < response.data.length; i++) {
+          categoria7Ids.push(response.data[i].id);
         }
-      })
-      .catch((err: any) => console.error('Error:', err));
+        
+        // Filter documents of category 7
+        const categoria7Docs: Documento[] = [];
+        for (let i = 0; i < documentos.length; i++) {
+          const doc = documentos[i];
+          if (categoria7Ids.indexOf(doc.id_tipo_documento) !== -1 && doc.activo) {
+            categoria7Docs.push(doc);
+          }
+        }
+        
+        // Check if all are verified
+        if (categoria7Docs.length > 0) {
+          let allVerified = true;
+          for (let i = 0; i < categoria7Docs.length; i++) {
+            if (!categoria7Docs[i].es_verificado) {
+              allVerified = false;
+              break;
+            }
+          }
+          
+          if (allVerified) {
+            setShowMantenimientoDialog(true);
+            setDialogAlreadyShown(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking category 7:', error);
+      }
+    };
 
-    return () => { mounted = false; };
-  }, [documentos, entityType, entityId, dialogAlreadyShown]);
+    checkCategory7();
+  }, [documentos.length, entityType, entityId, dialogAlreadyShown]);
 
   const handleUpload = async () => {
     if (!selectedFile || !selectedTipoDocumento) {
