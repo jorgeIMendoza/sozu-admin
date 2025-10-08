@@ -17,7 +17,6 @@ interface ConfirmEscrituraDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
-  vendedorData: FiscalData | null;
   compradoresData?: FiscalData[];
   escrituraData: {
     clave_catastral?: string;
@@ -35,22 +34,15 @@ export function ConfirmEscrituraDialog({
   open,
   onOpenChange,
   onConfirm,
-  vendedorData,
   compradoresData = [],
   escrituraData,
   shouldGenerateInvoice,
   isCuentaFullyPaid,
   onGoToCompradores,
 }: ConfirmEscrituraDialogProps) {
-  const [datosFiscalesVendedorCompletos, setDatosFiscalesVendedorCompletos] = useState(false);
   const [datosFiscalesCompradoresCompletos, setDatosFiscalesCompradoresCompletos] = useState(false);
   const [compradoresIncompletos, setCompradoresIncompletos] = useState(0);
   const [datosEscrituracionCompletos, setDatosEscrituracionCompletos] = useState(false);
-
-  // Validar datos fiscales del vendedor
-  useEffect(() => {
-    setDatosFiscalesVendedorCompletos(isFiscalDataComplete(vendedorData));
-  }, [vendedorData]);
 
   // Validar datos fiscales de TODOS los compradores
   useEffect(() => {
@@ -78,7 +70,7 @@ export function ConfirmEscrituraDialog({
     setDatosEscrituracionCompletos(isComplete);
   }, [escrituraData]);
 
-  const canSave = isCuentaFullyPaid && datosFiscalesVendedorCompletos && datosFiscalesCompradoresCompletos && datosEscrituracionCompletos;
+  const canSave = isCuentaFullyPaid && datosFiscalesCompradoresCompletos && datosEscrituracionCompletos;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -124,28 +116,6 @@ export function ConfirmEscrituraDialog({
                 {!isCuentaFullyPaid && (
                   <p className="text-xs text-destructive mt-1">
                     ⚠ La cuenta de cobranza no está completamente pagada. Complete los pagos pendientes.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Datos Fiscales Vendedor Check */}
-            <div className="flex items-start space-x-3">
-              <Checkbox
-                checked={datosFiscalesVendedorCompletos}
-                disabled
-                className="mt-1"
-              />
-              <div className="flex-1">
-                <Label className={`${datosFiscalesVendedorCompletos ? 'text-foreground' : 'text-destructive'} font-medium`}>
-                  Datos fiscales del vendedor completos
-                </Label>
-                <p className="text-sm text-muted-foreground mt-1">
-                  RFC, régimen, uso del CFDI y dirección fiscal completa del vendedor
-                </p>
-                {!datosFiscalesVendedorCompletos && (
-                  <p className="text-xs text-destructive mt-1">
-                    ⚠ Falta información fiscal del vendedor. Revise la pestaña "Datos del Vendedor".
                   </p>
                 )}
               </div>

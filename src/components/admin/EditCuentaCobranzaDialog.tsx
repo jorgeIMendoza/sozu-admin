@@ -3116,7 +3116,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             setNumeroEscritura(pendingNumeroEscritura);
             updateEscrituraMutation.mutate({ numero_escritura: pendingNumeroEscritura });
           }}
-          vendedorData={vendedorDetalle?.personas || null}
           compradoresData={compradoresExistentes?.map(c => c.personas).filter(Boolean) || []}
           escrituraData={{
             clave_catastral: claveCatastral,
