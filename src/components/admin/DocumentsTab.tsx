@@ -101,7 +101,11 @@ export function DocumentsTab({
       if (error) {
         console.error('Error loading document types:', error);
       } else {
-        setTiposDocumento(data || []);
+        // Sort alphabetically by nombre
+        const sortedData = (data || []).sort((a, b) => 
+          a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
+        );
+        setTiposDocumento(sortedData);
       }
     } catch (err) {
       console.error('Error loading document types:', err);
