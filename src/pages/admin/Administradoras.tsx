@@ -181,9 +181,13 @@ export default function Administradoras() {
         .from('tipos_entidad')
         .select('id')
         .eq('nombre', 'Administradora')
-        .single();
+        .maybeSingle();
       
       if (tipoError) throw tipoError;
+      
+      if (!tipoEntidad) {
+        throw new Error('No se encontró el tipo de entidad "Administradora". Por favor, verifica la configuración de tipos de entidad.');
+      }
       
       const { error: entidadError } = await supabase
         .from('entidades_relacionadas')
