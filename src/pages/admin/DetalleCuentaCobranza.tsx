@@ -359,9 +359,14 @@ export default function DetalleCuentaCobranza() {
   const cuentaId = parseInt(id || '0');
   const [openAcuerdos, setOpenAcuerdos] = useState<{ [key: number]: boolean }>({});
   const [compradoresOpen, setCompradoresOpen] = useState(false);
-  const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; aplicacion: AplicacionToDelete | null }>({
+  const [deleteDialog, setDeleteDialog] = useState<{ 
+    isOpen: boolean; 
+    aplicacion: AplicacionToDelete | null;
+    warningMessage?: string;
+  }>({
     isOpen: false,
-    aplicacion: null
+    aplicacion: null,
+    warningMessage: ""
   });
   const [multaDialog, setMultaDialog] = useState<{ 
     isOpen: boolean; 
@@ -1390,51 +1395,66 @@ export default function DetalleCuentaCobranza() {
   // Mutation to delete payment application
   const deletePaymentMutation = useMutation({
     mutationFn: async (aplicacionId: number) => {
-      // First get the application to find its acuerdo_pago and amount
-      const { data: aplicacion, error: getError } = await supabase
+      // Get the application to find its payment
+      const { data: aplicacion, error: aplicacionError } = await supabase
         .from('aplicaciones_pago')
-        .select('id_acuerdo_pago, monto')
+        .select('id_pago, id_acuerdo_pago, monto')
         .eq('id', aplicacionId)
         .single();
-      
-      if (getError) throw getError;
 
-      // Get the last payment agreement (highest orden)
-      const { data: lastAcuerdo, error: lastError } = await supabase
-        .from('acuerdos_pago')
-        .select('id, monto, orden')
-        .eq('id_cuenta_cobranza', cuentaId)
-        .eq('activo', true)
-        .order('orden', { ascending: false })
-        .limit(1)
+      if (aplicacionError) throw aplicacionError;
+      if (!aplicacion) throw new Error("Aplicación no encontrada");
+
+      // Get the payment to verify it's not STP
+      const { data: pago, error: pagoError } = await supabase
+        .from('pagos')
+        .select('id_metodos_pago')
+        .eq('id', aplicacion.id_pago)
         .single();
 
-      if (lastError) throw lastError;
+      if (pagoError) throw pagoError;
+      if (!pago) throw new Error("Pago no encontrado");
 
-      // Delete the application
-      const { error: deleteError } = await supabase
+      // Prevent deletion of STP payments (id_metodos_pago = 6)
+      if (pago.id_metodos_pago === 6) {
+        throw new Error("No se pueden eliminar pagos realizados por STP");
+      }
+
+      // Get all active applications for this payment
+      const { data: todasAplicaciones, error: aplicacionesError } = await supabase
+        .from('aplicaciones_pago')
+        .select('id, id_acuerdo_pago')
+        .eq('id_pago', aplicacion.id_pago)
+        .eq('activo', true);
+
+      if (aplicacionesError) throw aplicacionesError;
+
+      // Inactivate the payment
+      const { error: inactivarPagoError } = await supabase
+        .from('pagos')
+        .update({ activo: false })
+        .eq('id', aplicacion.id_pago);
+
+      if (inactivarPagoError) throw inactivarPagoError;
+
+      // Inactivate ALL applications for this payment
+      const { error: inactivarAplicacionesError } = await supabase
         .from('aplicaciones_pago')
         .update({ activo: false })
-        .eq('id', aplicacionId);
-      
-      if (deleteError) throw deleteError;
+        .eq('id_pago', aplicacion.id_pago);
 
-      // Update the payment agreement to mark as not completed
-      const { error: updateError } = await supabase
-        .from('acuerdos_pago')
-        .update({ pago_completado: false } as any)
-        .eq('id', aplicacion.id_acuerdo_pago);
-      
-      if (updateError) throw updateError;
+      if (inactivarAplicacionesError) throw inactivarAplicacionesError;
 
-      // Add the deleted amount to the last payment agreement
-      if (lastAcuerdo) {
-        const { error: updateLastError } = await supabase
-          .from('acuerdos_pago')
-          .update({ monto: lastAcuerdo.monto + aplicacion.monto } as any)
-          .eq('id', lastAcuerdo.id);
+      // Mark all affected payment agreements as incomplete
+      if (todasAplicaciones && todasAplicaciones.length > 0) {
+        const acuerdosIds = [...new Set(todasAplicaciones.map(a => a.id_acuerdo_pago))];
         
-        if (updateLastError) throw updateLastError;
+        const { error: acuerdosError } = await supabase
+          .from('acuerdos_pago')
+          .update({ pago_completado: false })
+          .in('id', acuerdosIds);
+
+        if (acuerdosError) throw acuerdosError;
       }
     },
     onSuccess: () => {
@@ -1453,7 +1473,7 @@ export default function DetalleCuentaCobranza() {
     },
   });
 
-  const handleDeletePayment = (aplicacion: AplicacionToDelete) => {
+  const handleDeletePayment = async (aplicacion: AplicacionToDelete) => {
     // Check if payment method is STP
     const acuerdo = acuerdosPago?.find(a => 
       (a.aplicaciones || []).some(app => app.id === aplicacion.id)
@@ -1468,15 +1488,33 @@ export default function DetalleCuentaCobranza() {
       });
       return;
     }
-    
-    setDeleteDialog({ isOpen: true, aplicacion });
+
+    // Get the number of applications for this payment
+    if (aplicacionData) {
+      const { data: todasAplicaciones } = await supabase
+        .from('aplicaciones_pago')
+        .select('id')
+        .eq('id_pago', aplicacionData.pago.id)
+        .eq('activo', true);
+      
+      const numAplicaciones = todasAplicaciones?.length || 0;
+      let warningMessage = "";
+      
+      if (numAplicaciones > 1) {
+        warningMessage = `Este pago tiene ${numAplicaciones} aplicaciones. Al eliminarlo, se eliminarán todas sus aplicaciones y los acuerdos de pago relacionados quedarán como Pendientes.`;
+      }
+      
+      setDeleteDialog({ isOpen: true, aplicacion, warningMessage });
+    } else {
+      setDeleteDialog({ isOpen: true, aplicacion, warningMessage: "" });
+    }
   };
 
   const confirmDeletePayment = () => {
     if (deleteDialog.aplicacion) {
       deletePaymentMutation.mutate(deleteDialog.aplicacion.id);
     }
-    setDeleteDialog({ isOpen: false, aplicacion: null });
+    setDeleteDialog({ isOpen: false, aplicacion: null, warningMessage: "" });
   };
 
   const handleEditPayment = (aplicacionId: number) => {
@@ -2530,14 +2568,19 @@ export default function DetalleCuentaCobranza() {
 
       <DeleteConfirmationDialog
         open={deleteDialog.isOpen}
-        onOpenChange={(open) => setDeleteDialog({ isOpen: open, aplicacion: open ? deleteDialog.aplicacion : null })}
+        onOpenChange={(open) => setDeleteDialog({ 
+          isOpen: open, 
+          aplicacion: open ? deleteDialog.aplicacion : null,
+          warningMessage: open ? deleteDialog.warningMessage : ""
+        })}
         onConfirm={confirmDeletePayment}
-        title="Eliminar Aplicación de Pago"
+        title="Eliminar Pago y sus Aplicaciones"
         description={
           deleteDialog.aplicacion
-            ? `¿Está seguro de que desea eliminar la aplicación de pago de ${formatCurrency(deleteDialog.aplicacion.monto)} para el concepto "${deleteDialog.aplicacion.conceptoNombre}"? Esta acción no se puede deshacer.`
+            ? `Al eliminar esta aplicación de pago de ${formatCurrency(deleteDialog.aplicacion.monto)} para el concepto "${deleteDialog.aplicacion.conceptoNombre}", se eliminará el pago completo y todas sus aplicaciones asociadas. Esta acción no se puede deshacer.`
             : ""
         }
+        warningMessage={deleteDialog.warningMessage}
         isLoading={deletePaymentMutation.isPending}
       />
 

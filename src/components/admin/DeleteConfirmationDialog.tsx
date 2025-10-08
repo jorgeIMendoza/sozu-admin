@@ -17,6 +17,7 @@ interface DeleteConfirmationDialogProps {
   description: string;
   isLoading?: boolean;
   actionType?: 'delete' | 'restore';
+  warningMessage?: string;
 }
 
 export function DeleteConfirmationDialog({
@@ -27,6 +28,7 @@ export function DeleteConfirmationDialog({
   description,
   isLoading = false,
   actionType = 'delete',
+  warningMessage,
 }: DeleteConfirmationDialogProps) {
   const isRestore = actionType === 'restore';
   const buttonText = isRestore ? 'Confirmar' : 'Eliminar';
@@ -42,6 +44,13 @@ export function DeleteConfirmationDialog({
           <AlertDialogDescription>
             {description}
           </AlertDialogDescription>
+          {warningMessage && (
+            <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">
+                ⚠️ {warningMessage}
+              </p>
+            </div>
+          )}
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
