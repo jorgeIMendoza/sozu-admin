@@ -68,7 +68,8 @@ export function DocumentsTab({
   const loadTiposDocumento = async () => {
     try {
       // Filter by asignado_a based on entity type
-      const asignadoA = entityType === 'propiedad' ? 'prop' : 'per';
+      // For cuenta_cobranza, use 'prop' since documents are property-related
+      const asignadoA = (entityType === 'propiedad' || entityType === 'cuenta_cobranza') ? 'prop' : 'per';
       
       // Build query
       let query = supabase
