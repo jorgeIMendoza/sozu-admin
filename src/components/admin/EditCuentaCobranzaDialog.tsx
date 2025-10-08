@@ -2346,19 +2346,35 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>RFC</Label>
-                      <Input value={primerComprador.personas.rfc || 'No registrado'} readOnly className="bg-muted" />
+                      <Input 
+                        value={primerComprador.personas.rfc || 'No registrado'} 
+                        readOnly 
+                        className={`${!primerComprador.personas.rfc ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                      />
                     </div>
                     <div>
                       <Label>Régimen Fiscal</Label>
-                      <Input value={primerComprador.personas.regimen || 'No registrado'} readOnly className="bg-muted" />
+                      <Input 
+                        value={primerComprador.personas.regimen || 'No registrado'} 
+                        readOnly 
+                        className={`${!primerComprador.personas.regimen ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                      />
                     </div>
                     <div>
                       <Label>Uso del CFDI</Label>
-                      <Input value={primerComprador.personas.uso_cfdi || 'No registrado'} readOnly className="bg-muted" />
+                      <Input 
+                        value={primerComprador.personas.uso_cfdi || 'No registrado'} 
+                        readOnly 
+                        className={`${!primerComprador.personas.uso_cfdi ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                      />
                     </div>
                     <div>
                       <Label>Razón Social / Nombre Legal</Label>
-                      <Input value={primerComprador.personas.nombre_legal || 'No registrado'} readOnly className="bg-muted" />
+                      <Input 
+                        value={primerComprador.personas.nombre_legal || 'No registrado'} 
+                        readOnly 
+                        className={`${!primerComprador.personas.nombre_legal ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                      />
                     </div>
                     
                     <div className="col-span-2">
@@ -2370,7 +2386,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_calle_numero || 'No registrado'} 
                         readOnly 
-                        className="bg-muted" 
+                        className={`${!primerComprador.personas.direccion_fiscal_calle_numero ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
@@ -2378,7 +2394,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_colonia || 'No registrado'} 
                         readOnly 
-                        className="bg-muted" 
+                        className={`${!primerComprador.personas.direccion_fiscal_colonia ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
@@ -2386,7 +2402,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_codigo_postal || 'No registrado'} 
                         readOnly 
-                        className="bg-muted" 
+                        className={`${!primerComprador.personas.direccion_fiscal_codigo_postal ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
@@ -2394,7 +2410,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_id_estado ? 'Ver en sistema' : 'No registrado'} 
                         readOnly 
-                        className="bg-muted" 
+                        className={`${!primerComprador.personas.direccion_fiscal_id_estado ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
@@ -2402,7 +2418,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_id_municipio ? 'Ver en sistema' : 'No registrado'} 
                         readOnly 
-                        className="bg-muted" 
+                        className={`${!primerComprador.personas.direccion_fiscal_id_municipio ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
@@ -2410,7 +2426,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_id_pais || 'No registrado'} 
                         readOnly 
-                        className="bg-muted" 
+                        className={`${!primerComprador.personas.direccion_fiscal_id_pais ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
 
