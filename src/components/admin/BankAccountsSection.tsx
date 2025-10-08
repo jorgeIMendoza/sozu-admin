@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Trash2, Plus, Edit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
+import { Badge } from "@/components/ui/badge";
 
 interface BankAccountsSectionProps {
   personId: number;
@@ -525,7 +526,7 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
                   {account.cuenta_swift && (
                     <p><strong>SWIFT:</strong> {account.cuenta_swift}</p>
                   )}
-                  {account.url_evidencia && (
+                   {account.url_evidencia && (
                     <p>
                       <strong>Evidencia:</strong>{" "}
                       <a 
@@ -539,7 +540,9 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
                     </p>
                   )}
                    {shouldShowStpCheckbox && account.es_cuenta_fisica_para_stp && (
-                    <p className="text-sm text-green-600 font-medium">✓ Cuenta física para STP</p>
+                    <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+                      Cuenta física para STP
+                    </Badge>
                   )}
                 </div>
                 <div className="flex gap-2">
