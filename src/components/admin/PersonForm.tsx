@@ -1591,19 +1591,19 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                    <TabsContent value="documents" className="space-y-4 mt-6">
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Documentos</h3>
-                    <DocumentsTab 
-                      entityId={initialData?.id || undefined} 
-                      entityType="persona"
-                      tipoPersona="pf"
-                      pendingDocuments={pendingDocuments}
-                      onPendingDocumentsChange={setPendingDocuments}
-                      onDocumentAdded={() => {
-                        toast({
-                          title: "Documento agregado",
-                          description: "El documento se ha agregado correctamente."
-                        });
-                      }}
-                    />
+                <DocumentsTab 
+                  entityId={initialData?.id || undefined} 
+                  entityType="persona"
+                  tipoPersona={tipoPersona}
+                  pendingDocuments={pendingDocuments}
+                  onPendingDocumentsChange={setPendingDocuments}
+                  onDocumentAdded={() => {
+                    toast({
+                      title: "Documento agregado",
+                      description: "El documento se ha agregado correctamente."
+                    });
+                  }}
+                />
                    </div>
                  </TabsContent>
                  )}
