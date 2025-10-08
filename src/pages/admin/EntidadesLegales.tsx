@@ -586,7 +586,7 @@ export default function EntidadesLegales() {
                 Entidades Legales
               </CardTitle>
               <p className="text-muted-foreground mt-1">
-                Gestiona la información de las entidades legales (personas morales)
+                Gestiona la información de las entidades legales
               </p>
             </div>
             <Button 
