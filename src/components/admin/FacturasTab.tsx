@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileText, FileCheck, Eye, RefreshCw } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { FileText, FileCheck, Eye, RefreshCw, FilePlus2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,6 +57,11 @@ export function FacturasTab({
     title: ''
   });
   const [generatingForPersona, setGeneratingForPersona] = useState<number | null>(null);
+  const [confirmFinalDialog, setConfirmFinalDialog] = useState<{ isOpen: boolean; idPersona: number | null; idDocumento: number | null }>({
+    isOpen: false,
+    idPersona: null,
+    idDocumento: null
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -122,14 +128,14 @@ export function FacturasTab({
     loadFacturas();
   }, [cuentaCobranzaId, compradores]);
 
-  // Mutation para regenerar factura
+  // Mutation para regenerar factura draft
   const regenerarFacturaMutation = useMutation({
-    mutationFn: async (idPersona: number) => {
+    mutationFn: async ({ idPersona, idDocumento }: { idPersona: number; idDocumento: number }) => {
       if (!apiKeyDraft) {
         throw new Error('No hay API key configurada para generar facturas');
       }
 
-      const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/regenerar-factura-draft`;
+      const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/generarFactura`;
       
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -139,7 +145,8 @@ export function FacturasTab({
         body: JSON.stringify({
           id_cuenta_cobranza: cuentaCobranzaId,
           id_persona: idPersona,
-          api_key_draft: apiKeyDraft
+          id_documento: idDocumento,
+          api_key: apiKeyDraft
         }),
       });
 
@@ -153,7 +160,7 @@ export function FacturasTab({
     onSuccess: (data) => {
       toast({
         title: "Éxito",
-        description: "Factura regenerada correctamente"
+        description: "Factura draft generada correctamente"
       });
       loadFacturas();
     },
@@ -170,9 +177,92 @@ export function FacturasTab({
     }
   });
 
-  const handleRegenerar = (idPersona: number) => {
+  // Mutation para generar factura definitiva
+  const generarFacturaFinalMutation = useMutation({
+    mutationFn: async ({ idPersona, idDocumento }: { idPersona: number; idDocumento: number }) => {
+      if (!propiedadId) {
+        throw new Error('No se encontró el ID de la propiedad');
+      }
+
+      // Obtener la API key de la entidad dueña
+      const { data: propiedadData, error: propError } = await supabase
+        .from('propiedades')
+        .select('id_entidad_relacionada_dueno')
+        .eq('id', propiedadId)
+        .single();
+
+      if (propError || !propiedadData) {
+        throw new Error('No se encontró la propiedad');
+      }
+
+      const { data: entidadData, error: entidadError } = await supabase
+        .from('entidades_relacionadas')
+        .select('nombre_api_key')
+        .eq('id', propiedadData.id_entidad_relacionada_dueno)
+        .single();
+
+      if (entidadError || !entidadData?.nombre_api_key) {
+        throw new Error('No se encontró la API key del dueño');
+      }
+
+      const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/generarFactura`;
+      
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id_cuenta_cobranza: cuentaCobranzaId,
+          id_persona: idPersona,
+          id_documento: idDocumento,
+          api_key: entidadData.nombre_api_key,
+          es_draft: false
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al generar la factura definitiva');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Éxito",
+        description: "Factura definitiva generada correctamente"
+      });
+      loadFacturas();
+      setConfirmFinalDialog({ isOpen: false, idPersona: null, idDocumento: null });
+    },
+    onError: (error: Error) => {
+      console.error('Error generando factura final:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al generar la factura definitiva"
+      });
+      setConfirmFinalDialog({ isOpen: false, idPersona: null, idDocumento: null });
+    },
+    onSettled: () => {
+      setGeneratingForPersona(null);
+    }
+  });
+
+  const handleRegenerarDraft = (idPersona: number, idDocumento: number) => {
     setGeneratingForPersona(idPersona);
-    regenerarFacturaMutation.mutate(idPersona);
+    regenerarFacturaMutation.mutate({ idPersona, idDocumento });
+  };
+
+  const handleGenerarFinal = () => {
+    if (confirmFinalDialog.idPersona && confirmFinalDialog.idDocumento) {
+      setGeneratingForPersona(confirmFinalDialog.idPersona);
+      generarFacturaFinalMutation.mutate({ 
+        idPersona: confirmFinalDialog.idPersona, 
+        idDocumento: confirmFinalDialog.idDocumento 
+      });
+    }
   };
 
   if (isLoading) {
@@ -200,7 +290,6 @@ export function FacturasTab({
                   <TableHead>Comprador</TableHead>
                   <TableHead>RFC</TableHead>
                   <TableHead>Factura PDF</TableHead>
-                  <TableHead>Factura XML</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -208,8 +297,7 @@ export function FacturasTab({
               <TableBody>
                 {facturas.map((factura) => {
                   const tienePdf = !!factura.factura_pdf;
-                  const tieneXml = !!factura.factura_xml;
-                  const isDraft = factura.factura_pdf?.es_draft || factura.factura_xml?.es_draft;
+                  const isDraft = factura.factura_pdf?.es_draft;
                   
                   return (
                     <TableRow key={factura.id_persona}>
@@ -236,21 +324,7 @@ export function FacturasTab({
                         )}
                       </TableCell>
                       <TableCell>
-                        {tieneXml ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => window.open(factura.factura_xml!.url, '_blank')}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver XML
-                          </Button>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">Sin factura</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {tienePdf || tieneXml ? (
+                        {tienePdf ? (
                           <Badge variant={isDraft ? "secondary" : "default"}>
                             {isDraft ? "Draft" : "Final"}
                           </Badge>
@@ -260,40 +334,50 @@ export function FacturasTab({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {/* Botón para generar factura definitiva desde Draft */}
-                          {(tienePdf || tieneXml) && isDraft && onGenerateFinalInvoice && factura.factura_pdf && (
+                          {/* Botón para regenerar draft */}
+                          {tienePdf && isDraft && factura.factura_pdf && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRegenerarDraft(factura.id_persona, factura.factura_pdf!.id)}
+                                    disabled={generatingForPersona === factura.id_persona}
+                                  >
+                                    <FilePlus2 className={`h-4 w-4 ${generatingForPersona === factura.id_persona ? 'animate-pulse' : ''}`} />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Generar Draft de nuevo</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          
+                          {/* Botón para generar factura definitiva */}
+                          {tienePdf && isDraft && factura.factura_pdf && (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
                                     variant="default"
                                     size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onGenerateFinalInvoice(factura.id_persona, factura.factura_pdf!.id);
-                                    }}
+                                    onClick={() => setConfirmFinalDialog({ 
+                                      isOpen: true, 
+                                      idPersona: factura.id_persona, 
+                                      idDocumento: factura.factura_pdf!.id 
+                                    })}
+                                    disabled={generatingForPersona === factura.id_persona}
                                   >
                                     <FileCheck className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Generar nuevamente</p>
+                                  <p>Generar Factura definitiva</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                          )}
-                          
-                          {/* Botón para regenerar factura final */}
-                          {(tienePdf || tieneXml) && !isDraft && apiKeyDraft && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleRegenerar(factura.id_persona)}
-                              disabled={generatingForPersona === factura.id_persona}
-                            >
-                              <RefreshCw className={`h-4 w-4 mr-2 ${generatingForPersona === factura.id_persona ? 'animate-spin' : ''}`} />
-                              {generatingForPersona === factura.id_persona ? 'Generando...' : 'Regenerar'}
-                            </Button>
                           )}
                         </div>
                       </TableCell>
@@ -321,6 +405,25 @@ export function FacturasTab({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmation Dialog for Final Invoice */}
+      <AlertDialog open={confirmFinalDialog.isOpen} onOpenChange={(open) => !open && setConfirmFinalDialog({ isOpen: false, idPersona: null, idDocumento: null })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Generar Factura Definitiva?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción es <strong>irrevocable</strong>. Se generará la factura definitiva y no podrá modificarse posteriormente. 
+              ¿Está seguro de continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleGenerarFinal}>
+              Generar Factura Definitiva
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
