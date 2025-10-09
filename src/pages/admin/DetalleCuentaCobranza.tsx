@@ -1375,7 +1375,11 @@ export default function DetalleCuentaCobranza() {
     sum + (acuerdo.aplicaciones || []).reduce((appSum, app) => appSum + (app?.monto || 0), 0), 0
   ) || 0;
 
-  const totalPendiente = (cuentaDetalle?.precio_final || 0) - totalPagado;
+  // Calcular diferencia real y detectar sobrepagos
+  const diferenciaReal = (cuentaDetalle?.precio_final || 0) - totalPagado;
+  const haySobrepago = diferenciaReal < -0.01; // Tolerancia para errores de punto flotante
+  const montoSobrepago = haySobrepago ? Math.abs(diferenciaReal) : 0;
+  const totalPendiente = Math.max(0, diferenciaReal);
 
   // Find last payment and check if it's STP
   const pagosAplicados = acuerdosPago?.flatMap(acuerdo => 
@@ -1704,16 +1708,43 @@ export default function DetalleCuentaCobranza() {
         </Card>
 
         {cuentaDetalle.precio_final > 0 && (
-          <Card>
+          <Card className={haySobrepago ? "border-orange-500" : ""}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Saldo Pendiente</CardTitle>
-              <DollarSign className="h-4 w-4 text-warning" />
+              <CardTitle className="text-sm font-medium">
+                {haySobrepago ? "Sobrepago detectado" : "Saldo Pendiente"}
+              </CardTitle>
+              {haySobrepago ? (
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+              ) : (
+                <DollarSign className="h-4 w-4 text-warning" />
+              )}
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-warning">{formatCurrency(totalPendiente)}</div>
-              <p className="text-xs text-muted-foreground">
-                {((totalPendiente / (cuentaDetalle.precio_final || 1)) * 100).toFixed(1)}% restante
-              </p>
+              <div className={`text-2xl font-bold ${haySobrepago ? "text-orange-500" : "text-warning"}`}>
+                {formatCurrency(haySobrepago ? montoSobrepago : totalPendiente)}
+              </div>
+              
+              {haySobrepago ? (
+                <>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Hay un excedente de pagos
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full"
+                    onClick={() => setTransferDialog({ isOpen: true })}
+                    disabled={!ultimoPagoSTP || !cuentaDetalle.activo}
+                  >
+                    <ArrowRight className="h-4 w-4 mr-2" />
+                    Transferir sobrepago
+                  </Button>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {((totalPendiente / (cuentaDetalle.precio_final || 1)) * 100).toFixed(1)}% restante
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
