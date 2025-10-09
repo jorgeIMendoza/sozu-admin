@@ -473,7 +473,7 @@ export function FacturasTab({
                         {tienePdf ? (
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
                             onClick={() => {
                               setViewerDialog({
                                 isOpen: true,
@@ -482,11 +482,10 @@ export function FacturasTab({
                               });
                             }}
                           >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver PDF
+                            <Eye className="h-4 w-4" />
                           </Button>
                         ) : (
-                          <span className="text-muted-foreground text-sm">Sin factura</span>
+                          <span className="text-muted-foreground text-sm">-</span>
                         )}
                       </TableCell>
                       <TableCell>
