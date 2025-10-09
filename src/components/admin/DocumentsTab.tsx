@@ -176,13 +176,19 @@ export function DocumentsTab({
         }
       }
       
-      // Combine the data - map numero to string as it's text in database
-      const docs = (docsData || []).map((doc) => ({
-        ...doc,
-        numero: doc.numero != null ? String(doc.numero) : null,
-        tipo_documento_nombre: tiposMap.get(doc.id_tipo_documento) || 'Tipo desconocido',
-        comprador_nombre: doc.id_persona ? personasMap.get(doc.id_persona) : undefined
-      }));
+      // Combine the data and filter out invoices (Facturas PDF/XML)
+      const docs = (docsData || [])
+        .filter((doc) => {
+          const tipoNombre = tiposMap.get(doc.id_tipo_documento)?.toLowerCase() || '';
+          // Excluir facturas PDF y XML
+          return !(tipoNombre.includes('factura') && (tipoNombre.includes('pdf') || tipoNombre.includes('xml')));
+        })
+        .map((doc) => ({
+          ...doc,
+          numero: doc.numero != null ? String(doc.numero) : null,
+          tipo_documento_nombre: tiposMap.get(doc.id_tipo_documento) || 'Tipo desconocido',
+          comprador_nombre: doc.id_persona ? personasMap.get(doc.id_persona) : undefined
+        }));
       
       setDocumentos(docs);
     } catch (error) {
@@ -651,12 +657,6 @@ export function DocumentsTab({
                    <TableHead>Número</TableHead>
                    <TableHead>Verificado</TableHead>
                    <TableHead>Fecha</TableHead>
-                   {entityType === 'cuenta_cobranza' && (
-                     <>
-                       <TableHead>Comprador</TableHead>
-                       <TableHead>Estado</TableHead>
-                     </>
-                   )}
                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -664,7 +664,6 @@ export function DocumentsTab({
                   {/* Pending documents */}
                   {pendingDocuments.map((pendingDoc) => {
                     const tipoDocumentoNombre = tiposDocumento.find(t => t.id.toString() === pendingDoc.tipoDocumento)?.nombre || 'Tipo desconocido';
-                    const isFactura = tipoDocumentoNombre.toLowerCase().includes('factura');
                     return (
                       <TableRow key={pendingDoc.tempId}>
                         <TableCell className="font-medium">-</TableCell>
@@ -676,12 +675,6 @@ export function DocumentsTab({
                         <TableCell>
                           {new Date().toLocaleDateString()}
                         </TableCell>
-                        {entityType === 'cuenta_cobranza' && (
-                          <>
-                            <TableCell>{isFactura ? '-' : ''}</TableCell>
-                            <TableCell>{isFactura ? '-' : ''}</TableCell>
-                          </>
-                        )}
                         <TableCell className="text-right">
                           <Button
                             type="button"
@@ -698,7 +691,6 @@ export function DocumentsTab({
                   
                   {/* Saved documents */}
                   {documentos.map((documento, index) => {
-                    const isFactura = documento.tipo_documento_nombre?.toLowerCase().includes('factura');
                     return (
                       <TableRow key={`${documento.numero}-${index}`}>
                         <TableCell className="font-medium">{index + 1}</TableCell>
@@ -712,20 +704,6 @@ export function DocumentsTab({
                         <TableCell>
                           {new Date(documento.fecha_creacion).toLocaleDateString()}
                         </TableCell>
-                        {entityType === 'cuenta_cobranza' && (
-                          <>
-                            <TableCell>
-                              {isFactura ? (documento.comprador_nombre || '-') : ''}
-                            </TableCell>
-                            <TableCell>
-                              {isFactura && (
-                                <Badge variant={documento.es_draft ? "outline" : "default"}>
-                                  {documento.es_draft ? "Draft" : "Final"}
-                                </Badge>
-                              )}
-                            </TableCell>
-                          </>
-                        )}
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end space-x-2">
                             <TooltipProvider>
@@ -751,30 +729,6 @@ export function DocumentsTab({
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                            
-                            {/* Botón para generar factura final desde Draft */}
-                            {isFactura && documento.es_draft && documento.id_persona && onGenerateFinalInvoice && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      type="button"
-                                      variant="default"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onGenerateFinalInvoice(documento.id_persona!, documento.id);
-                                      }}
-                                    >
-                                      <FileCheck className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Generar nuevamente</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
                             
                             <TooltipProvider>
                               <Tooltip>

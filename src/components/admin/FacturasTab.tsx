@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FileText, FileCheck, Eye, RefreshCw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL } from '@/lib/config';
@@ -19,6 +20,7 @@ interface FacturasTabProps {
   }>;
   propiedadId?: number;
   apiKeyDraft?: string;
+  onGenerateFinalInvoice?: (idPersona: number, idDocumento: number) => Promise<void>;
 }
 
 interface FacturaInfo {
@@ -43,7 +45,8 @@ export function FacturasTab({
   cuentaCobranzaId, 
   compradores,
   propiedadId,
-  apiKeyDraft
+  apiKeyDraft,
+  onGenerateFinalInvoice
 }: FacturasTabProps) {
   const [facturas, setFacturas] = useState<FacturaInfo[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -256,20 +259,43 @@ export function FacturasTab({
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {(tienePdf || tieneXml) && !isDraft && apiKeyDraft && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleRegenerar(factura.id_persona)}
-                            disabled={generatingForPersona === factura.id_persona}
-                          >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${generatingForPersona === factura.id_persona ? 'animate-spin' : ''}`} />
-                            {generatingForPersona === factura.id_persona ? 'Generando...' : 'Regenerar'}
-                          </Button>
-                        )}
-                        {(tienePdf || tieneXml) && isDraft && (
-                          <span className="text-sm text-muted-foreground">Factura editable</span>
-                        )}
+                        <div className="flex items-center justify-end gap-2">
+                          {/* Botón para generar factura definitiva desde Draft */}
+                          {(tienePdf || tieneXml) && isDraft && onGenerateFinalInvoice && factura.factura_pdf && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onGenerateFinalInvoice(factura.id_persona, factura.factura_pdf!.id);
+                                    }}
+                                  >
+                                    <FileCheck className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Generar nuevamente</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          
+                          {/* Botón para regenerar factura final */}
+                          {(tienePdf || tieneXml) && !isDraft && apiKeyDraft && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRegenerar(factura.id_persona)}
+                              disabled={generatingForPersona === factura.id_persona}
+                            >
+                              <RefreshCw className={`h-4 w-4 mr-2 ${generatingForPersona === factura.id_persona ? 'animate-spin' : ''}`} />
+                              {generatingForPersona === factura.id_persona ? 'Generando...' : 'Regenerar'}
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
