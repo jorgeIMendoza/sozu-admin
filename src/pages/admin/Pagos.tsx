@@ -898,7 +898,7 @@ export default function Pagos() {
                          <TableCell className="font-semibold text-orange-600">
                            <div className="flex items-center gap-2">
                              {formatCurrency(cuenta.restante)}
-                             {cuenta.restante === 0 && !cuenta.motivo_cancelacion && !cuenta.tiene_multas_pendientes && (
+                             {cuenta.restante === 0 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 && (
                                <TooltipProvider>
                                  <Tooltip>
                                    <TooltipTrigger>
@@ -1277,7 +1277,7 @@ export default function Pagos() {
                          <TableCell className="font-semibold text-orange-600">
                            <div className="flex items-center gap-2">
                              {formatCurrency(cuenta.restante)}
-                             {cuenta.restante === 0 && !cuenta.motivo_cancelacion && !cuenta.tiene_multas_pendientes && (
+                             {cuenta.restante === 0 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 && (
                                <TooltipProvider>
                                  <Tooltip>
                                    <TooltipTrigger>
