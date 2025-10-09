@@ -71,8 +71,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   
   // Birth place
   const [idPaisNacimiento, setIdPaisNacimiento] = useState(initialData?.id_pais_nacimiento || '');
-  const [idEstadoNacimiento, setIdEstadoNacimiento] = useState(initialData?.id_estado_nacimiento || '');
-  const [idMunicipioNacimiento, setIdMunicipioNacimiento] = useState(initialData?.id_municipio_nacimiento || '');
+  const [idEstadoNacimiento, setIdEstadoNacimiento] = useState(initialData?.id_estado_nacimiento ? initialData.id_estado_nacimiento.toString() : '');
+  const [idMunicipioNacimiento, setIdMunicipioNacimiento] = useState(initialData?.id_municipio_nacimiento ? initialData.id_municipio_nacimiento.toString() : '');
   
   // Address
   const [direccionCalle, setDireccionCalle] = useState(initialData?.direccion_calle || '');
@@ -81,8 +81,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [direccionColonia, setDireccionColonia] = useState(initialData?.direccion_colonia || '');
   const [direccionCp, setDireccionCp] = useState(initialData?.direccion_codigo_postal || '');
   const [idPaisDireccion, setIdPaisDireccion] = useState(initialData?.direccion_id_pais || '');
-  const [idEstadoDireccion, setIdEstadoDireccion] = useState(initialData?.direccion_id_estado || '');
-  const [idMunicipioDireccion, setIdMunicipioDireccion] = useState(initialData?.direccion_id_municipio || '');
+  const [idEstadoDireccion, setIdEstadoDireccion] = useState(initialData?.direccion_id_estado ? initialData.direccion_id_estado.toString() : '');
+  const [idMunicipioDireccion, setIdMunicipioDireccion] = useState(initialData?.direccion_id_municipio ? initialData.direccion_id_municipio.toString() : '');
   
   // Fiscal address
   const [direccionFiscalCalle, setDireccionFiscalCalle] = useState(initialData?.direccion_fiscal_calle || '');
@@ -91,8 +91,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [direccionFiscalColonia, setDireccionFiscalColonia] = useState(initialData?.direccion_fiscal_colonia || '');
   const [direccionFiscalCp, setDireccionFiscalCp] = useState(initialData?.direccion_fiscal_codigo_postal || '');
   const [idPaisFiscal, setIdPaisFiscal] = useState(initialData?.direccion_fiscal_id_pais || '');
-  const [idEstadoFiscal, setIdEstadoFiscal] = useState(initialData?.direccion_fiscal_id_estado || '');
-  const [idMunicipioFiscal, setIdMunicipioFiscal] = useState(initialData?.direccion_fiscal_id_municipio || '');
+  const [idEstadoFiscal, setIdEstadoFiscal] = useState(initialData?.direccion_fiscal_id_estado ? initialData.direccion_fiscal_id_estado.toString() : '');
+  const [idMunicipioFiscal, setIdMunicipioFiscal] = useState(initialData?.direccion_fiscal_id_municipio ? initialData.direccion_fiscal_id_municipio.toString() : '');
   
   // Copy address checkbox
   const [copiarDireccionFiscal, setCopiarDireccionFiscal] = useState(false);
