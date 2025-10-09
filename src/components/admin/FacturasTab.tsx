@@ -10,7 +10,8 @@ import { FileText, FileCheck, Eye, RefreshCw, FilePlus2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { N8N_WEBHOOK_BASE_URL } from '@/lib/config';
+import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from '@/lib/config';
+import { format } from 'date-fns';
 
 interface FacturasTabProps {
   cuentaCobranzaId: number;
@@ -128,6 +129,159 @@ export function FacturasTab({
     loadFacturas();
   }, [cuentaCobranzaId, compradores]);
 
+  // Helper function to build complete payload
+  const buildInvoicePayload = async (idPersona: number, idDocumento: number, apiKey: string) => {
+    if (!propiedadId) {
+      throw new Error('No se encontró el ID de la propiedad');
+    }
+
+    // 1. Obtener datos completos del comprador
+    const { data: compradorData, error: compradorError } = await supabase
+      .from('personas')
+      .select(`
+        *,
+        pais_direccion_fiscal:paises!personas_direccion_fiscal_id_pais_fkey(nombre),
+        estado_direccion_fiscal:estados_mx!personas_direccion_fiscal_id_estado_fkey(nombre),
+        municipio_direccion_fiscal:municipios_mx!personas_direccion_fiscal_id_municipio_fkey(nombre)
+      `)
+      .eq('id', idPersona)
+      .single();
+
+    if (compradorError || !compradorData) {
+      throw new Error('No se encontraron los datos del comprador');
+    }
+
+    // 2. Obtener datos de la propiedad
+    const { data: propiedadData, error: propError } = await supabase
+      .from('propiedades')
+      .select(`
+        *,
+        entidades_relacionadas!propiedades_id_entidad_relacionada_dueno_fkey(
+          id_proyecto
+        )
+      `)
+      .eq('id', propiedadId)
+      .single();
+
+    if (propError || !propiedadData) {
+      throw new Error('No se encontraron los datos de la propiedad');
+    }
+
+    // Obtener datos del proyecto
+    const idProyecto = (propiedadData.entidades_relacionadas as any)?.id_proyecto;
+    let proyectoData = null;
+    
+    if (idProyecto) {
+      const { data: proyecto } = await supabase
+        .from('proyectos')
+        .select(`
+          nombre,
+          direccion_calle,
+          direccion_colonia,
+          direccion_codigo_postal,
+          estados_mx!proyectos_direccion_id_estado_fkey(nombre),
+          municipios_mx!proyectos_direccion_id_municipio_fkey(nombre)
+        `)
+        .eq('id', idProyecto)
+        .single();
+      
+      proyectoData = proyecto;
+    }
+
+    // 3. Obtener estacionamientos
+    const { data: estacionamientosData } = await supabase
+      .from('estacionamientos')
+      .select(`
+        *,
+        tipos_estacionamiento!estacionamientos_id_tipo_fkey(nombre)
+      `)
+      .eq('id_propiedad', propiedadId)
+      .eq('activo', true);
+
+    // 4. Obtener bodegas
+    const { data: bodegasData } = await supabase
+      .from('bodegas')
+      .select('*')
+      .eq('id_propiedad', propiedadId)
+      .eq('activo', true);
+
+    // 5. Obtener datos de escrituración
+    const { data: cuentaData, error: cuentaError } = await supabase
+      .from('cuentas_cobranza')
+      .select('*')
+      .eq('id', cuentaCobranzaId)
+      .single();
+
+    if (cuentaError || !cuentaData) {
+      throw new Error('No se encontraron los datos de la cuenta');
+    }
+
+    // Construir dirección de la propiedad
+    const direccionPropiedad = proyectoData ? 
+      `${proyectoData.direccion_calle || ''} ${proyectoData.direccion_colonia || ''}, ${(proyectoData.municipios_mx as any)?.nombre || ''}, ${(proyectoData.estados_mx as any)?.nombre || ''}, CP ${proyectoData.direccion_codigo_postal || ''}`.trim() : 
+      '';
+
+    // Construir payload
+    return {
+      api_key: apiKey,
+      environment: ENVIRONMENT,
+      tipo_factura: "propiedad",
+      id_propiedad: propiedadId,
+      id_cuenta_cobranza: cuentaCobranzaId,
+      id_documento: idDocumento,
+      propiedad: {
+        numero_propiedad: propiedadData.numero_propiedad,
+        metraje_escriturable: propiedadData.m2_escriturables,
+        direccion: direccionPropiedad,
+        precio_final: cuentaData.precio_final,
+        piso: propiedadData.numero_piso
+      },
+      estacionamientos: (estacionamientosData || []).map(e => ({
+        nombre: e.nombre,
+        tipo: e.tipos_estacionamiento?.nombre || '',
+        m2: e.m2,
+        ubicacion: e.ubicacion || '',
+        es_incluido: e.es_incluido
+      })),
+      bodegas: (bodegasData || []).map(b => ({
+        nombre: b.nombre,
+        m2: b.m2,
+        ubicacion: b.ubicacion || '',
+        es_incluido: b.es_incluido
+      })),
+      escrituracion: {
+        numero_escritura: cuentaData.numero_escritura || '',
+        fecha_escritura: cuentaData.fecha_escritura ? format(new Date(cuentaData.fecha_escritura), 'yyyy-MM-dd') : '',
+        libro: cuentaData.libro || '',
+        hoja: cuentaData.hoja || '',
+        clave_catastral: cuentaData.clave_catastral || '',
+        numero_unidad_privativa: cuentaData.numero_unidad_privativa || ''
+      },
+      compradores: [
+        {
+          id_persona: compradorData.id,
+          nombre_legal: compradorData.nombre_legal,
+          email: compradorData.email,
+          telefono: compradorData.telefono || '',
+          rfc: compradorData.rfc || '',
+          curp: compradorData.curp || '',
+          regimen: compradorData.regimen || '',
+          uso_cfdi: compradorData.uso_cfdi || '',
+          direccion_fiscal: {
+            calle: compradorData.direccion_fiscal_calle || '',
+            num_ext: compradorData.direccion_fiscal_num_ext || '',
+            num_int: compradorData.direccion_fiscal_num_int || '',
+            colonia: compradorData.direccion_fiscal_colonia || '',
+            codigo_postal: compradorData.direccion_fiscal_codigo_postal || '',
+            municipio: (compradorData.municipio_direccion_fiscal as any)?.nombre || '',
+            estado: (compradorData.estado_direccion_fiscal as any)?.nombre || '',
+            pais: (compradorData.pais_direccion_fiscal as any)?.nombre || ''
+          }
+        }
+      ]
+    };
+  };
+
   // Mutation para regenerar factura draft
   const regenerarFacturaMutation = useMutation({
     mutationFn: async ({ idPersona, idDocumento }: { idPersona: number; idDocumento: number }) => {
@@ -135,19 +289,17 @@ export function FacturasTab({
         throw new Error('No hay API key configurada para generar facturas');
       }
 
-      const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/generarFactura`;
+      // Construir payload completo
+      const payload = await buildInvoicePayload(idPersona, idDocumento, apiKeyDraft);
+
+      const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/generaFactura`;
       
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          id_cuenta_cobranza: cuentaCobranzaId,
-          id_persona: idPersona,
-          id_documento: idDocumento,
-          api_key: apiKeyDraft
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -184,7 +336,7 @@ export function FacturasTab({
         throw new Error('No se encontró el ID de la propiedad');
       }
 
-      // Obtener la API key de la entidad dueña
+      // Obtener la API key de la entidad dueña (nombre_api_key, NO draft)
       const { data: propiedadData, error: propError } = await supabase
         .from('propiedades')
         .select('id_entidad_relacionada_dueno')
@@ -205,20 +357,17 @@ export function FacturasTab({
         throw new Error('No se encontró la API key del dueño');
       }
 
-      const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/generarFactura`;
+      // Construir payload completo (igual que draft pero con api_key diferente)
+      const payload = await buildInvoicePayload(idPersona, idDocumento, entidadData.nombre_api_key);
+
+      const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/generaFactura`;
       
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          id_cuenta_cobranza: cuentaCobranzaId,
-          id_persona: idPersona,
-          id_documento: idDocumento,
-          api_key: entidadData.nombre_api_key,
-          es_draft: false
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
