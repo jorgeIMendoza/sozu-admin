@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { FileText, FileCheck, Eye, RefreshCw, FilePlus2 } from "lucide-react";
+import { FileText, FileCheck, Eye, RefreshCw, FilePlus2, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -516,7 +516,11 @@ export function FacturasTab({
                                     onClick={() => handleRegenerarDraft(factura.id_persona, factura.factura_pdf!.id)}
                                     disabled={generatingForPersona === factura.id_persona}
                                   >
-                                    <FilePlus2 className={`h-4 w-4 ${generatingForPersona === factura.id_persona ? 'animate-pulse' : ''}`} />
+                                    {generatingForPersona === factura.id_persona ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <FilePlus2 className="h-4 w-4" />
+                                    )}
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -541,7 +545,11 @@ export function FacturasTab({
                                     })}
                                     disabled={generatingForPersona === factura.id_persona}
                                   >
-                                    <FileCheck className="h-4 w-4" />
+                                    {generatingForPersona === factura.id_persona ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <FileCheck className="h-4 w-4" />
+                                    )}
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
