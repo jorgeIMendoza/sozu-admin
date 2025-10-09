@@ -181,12 +181,7 @@ export function FacturasTab({
     // 2. Obtener datos de la propiedad
     const { data: propiedadData, error: propError } = await supabase
       .from('propiedades')
-      .select(`
-        *,
-        entidades_relacionadas!propiedades_id_entidad_relacionada_dueno_fkey(
-          id_proyecto
-        )
-      `)
+      .select('*')
       .eq('id', propiedadId)
       .single();
 
@@ -194,8 +189,19 @@ export function FacturasTab({
       throw new Error('No se encontraron los datos de la propiedad');
     }
 
+    // Obtener el id_proyecto desde entidades_relacionadas
+    let idProyecto = null;
+    if (propiedadData.id_entidad_relacionada_dueno) {
+      const { data: entidadData } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_proyecto')
+        .eq('id', propiedadData.id_entidad_relacionada_dueno)
+        .single();
+      
+      idProyecto = entidadData?.id_proyecto;
+    }
+
     // Obtener datos del proyecto
-    const idProyecto = (propiedadData.entidades_relacionadas as any)?.id_proyecto;
     let direccionProyecto = '';
     
     if (idProyecto) {
