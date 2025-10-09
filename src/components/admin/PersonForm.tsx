@@ -197,13 +197,15 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   useEffect(() => {
     if (copiarDireccionFiscal) {
       setDireccionFiscalCalle(direccionCalle);
+      setDireccionFiscalNumExt(direccionNumExt);
+      setDireccionFiscalNumInt(direccionNumInt);
       setDireccionFiscalColonia(direccionColonia);
       setDireccionFiscalCp(direccionCp);
       setIdPaisFiscal(idPaisDireccion);
       setIdEstadoFiscal(idEstadoDireccion);
       setIdMunicipioFiscal(idMunicipioDireccion);
     }
-  }, [copiarDireccionFiscal, direccionCalle, direccionColonia, direccionCp, idPaisDireccion, idEstadoDireccion, idMunicipioDireccion]);
+  }, [copiarDireccionFiscal, direccionCalle, direccionNumExt, direccionNumInt, direccionColonia, direccionCp, idPaisDireccion, idEstadoDireccion, idMunicipioDireccion]);
 
   // Fetch lookup data
   const { data: paises = [] } = useQuery({
@@ -225,7 +227,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     queryFn: async () => {
       const { data, error } = await supabase
         .from('estados_mx')
-        .select('id, nombre')
+        .select('id, nombre, id_pais')
         .eq('activo', true)
         .order('nombre');
       
@@ -1226,11 +1228,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                             <SelectValue placeholder="Selecciona un estado" />
                           </SelectTrigger>
                           <SelectContent>
-                            {estados.map((estado) => (
-                              <SelectItem key={estado.id} value={estado.id.toString()}>
-                                {estado.nombre}
-                              </SelectItem>
-                            ))}
+                            {estados
+                              .filter(e => !idPaisDireccion || e.id_pais === idPaisDireccion)
+                              .map((estado) => (
+                                <SelectItem key={estado.id} value={estado.id.toString()}>
+                                  {estado.nombre}
+                                </SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1242,11 +1246,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                             <SelectValue placeholder="Selecciona un municipio" />
                           </SelectTrigger>
                           <SelectContent>
-                            {municipios.map((municipio) => (
-                              <SelectItem key={municipio.id} value={municipio.id.toString()}>
-                                {municipio.nombre}
-                              </SelectItem>
-                            ))}
+                            {municipios
+                              .filter(m => m.id_estado === parseInt(idEstadoDireccion))
+                              .map((municipio) => (
+                                <SelectItem key={municipio.id} value={municipio.id.toString()}>
+                                  {municipio.nombre}
+                                </SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1508,11 +1514,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                                 <SelectValue placeholder="Selecciona estado" />
                               </SelectTrigger>
                               <SelectContent>
-                                {estados.map((estado) => (
-                                  <SelectItem key={estado.id} value={estado.id.toString()}>
-                                    {estado.nombre}
-                                  </SelectItem>
-                                ))}
+                                {estados
+                                  .filter(e => !idPaisNacimiento || e.id_pais === idPaisNacimiento)
+                                  .map((estado) => (
+                                    <SelectItem key={estado.id} value={estado.id.toString()}>
+                                      {estado.nombre}
+                                    </SelectItem>
+                                  ))}
                               </SelectContent>
                             </Select>
                           </div>
@@ -1617,21 +1625,23 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           </Select>
                         </div>
 
-                        <div>
-                          <Label htmlFor="estadoFiscal">Estado</Label>
-                          <Select value={idEstadoFiscal} onValueChange={setIdEstadoFiscal} disabled={copiarDireccionFiscal}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona un estado" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {estados.map((estado) => (
-                                <SelectItem key={estado.id} value={estado.id.toString()}>
-                                  {estado.nombre}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                          <div>
+                            <Label htmlFor="estadoFiscal">Estado</Label>
+                            <Select value={idEstadoFiscal} onValueChange={setIdEstadoFiscal} disabled={copiarDireccionFiscal}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecciona un estado" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {estados
+                                  .filter(e => !idPaisFiscal || e.id_pais === idPaisFiscal)
+                                  .map((estado) => (
+                                    <SelectItem key={estado.id} value={estado.id.toString()}>
+                                      {estado.nombre}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
 
                         <div>
                           <Label htmlFor="municipioFiscal">Municipio</Label>

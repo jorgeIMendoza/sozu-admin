@@ -388,8 +388,24 @@ export default function Compradores() {
     comprador.curp?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleEdit = (comprador: Comprador) => {
-    setEditingComprador(comprador);
+  const handleEdit = async (comprador: Comprador) => {
+    // Fetch full persona data including address fields
+    const { data: fullPersonaData, error } = await supabase
+      .from('personas')
+      .select('*')
+      .eq('id', comprador.id)
+      .single();
+    
+    if (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo cargar la información completa del comprador",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setEditingComprador(fullPersonaData);
     setIsEditDialogOpen(true);
   };
 
