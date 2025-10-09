@@ -754,7 +754,7 @@ export function DocumentsTab({
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>{documento.es_verificado ? 'Verificado' : 'Verificar'}</p>
+                                  <p>{documento.es_verificado ? 'Anular Verificación' : 'Verificar'}</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
