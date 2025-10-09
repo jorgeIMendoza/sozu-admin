@@ -31,7 +31,7 @@ interface DocumentsTabProps {
   shouldAutoGenerateInvoice?: boolean; // Flag to disable invoice options when auto-generated
   compradores?: Array<{ id_persona: number; nombre_legal: string }>; // Lista de compradores
   propiedadId?: number; // ID de la propiedad asociada
-  onGenerateFinalInvoice?: (idPersona: number) => Promise<void>; // Callback para generar factura final
+  onGenerateFinalInvoice?: (idPersona: number, idDocumento: number) => Promise<void>; // Callback para generar factura final
 }
 
 interface TipoDocumento {
@@ -40,6 +40,7 @@ interface TipoDocumento {
 }
 
 interface Documento {
+  id: number;
   numero: string | null;
   url: string;
   es_verificado: boolean;
@@ -760,7 +761,7 @@ export function DocumentsTab({
                                       type="button"
                                       variant="default"
                                       size="sm"
-                                      onClick={() => onGenerateFinalInvoice(documento.id_persona!)}
+                                      onClick={() => onGenerateFinalInvoice(documento.id_persona!, documento.id)}
                                     >
                                       <FileCheck className="h-4 w-4" />
                                     </Button>

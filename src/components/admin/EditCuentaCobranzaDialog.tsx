@@ -2611,7 +2611,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       onDocumentAdded={() => {
                         toast.success("Documento agregado correctamente");
                       }}
-                      onGenerateFinalInvoice={async (idPersona: number) => {
+                      onGenerateFinalInvoice={async (idPersona: number, idDocumento: number) => {
                         try {
                           // Obtener api_key del dueño
                           const apiKey = vendedorDetalle?.nombre_api_key_draft;
@@ -2702,6 +2702,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                             tipo_factura: "propiedad",
                             id_propiedad: propiedadDetalle?.id,
                             id_cuenta_cobranza: cuentaDetalle?.id,
+                            id_documento: idDocumento,
                             propiedad: propiedadDetalle ? {
                               numero_propiedad: propiedadDetalle.numero_propiedad,
                               metraje_escriturable: propiedadDetalle.m2_reales,
