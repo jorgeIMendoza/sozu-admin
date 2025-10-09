@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -712,6 +712,7 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow 
                         key={cuenta.id}
+                        className={cuenta.restante === 0 ? "bg-green-50 dark:bg-green-950/20" : ""}
                       >
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
@@ -864,7 +865,21 @@ export default function Pagos() {
                           {formatCurrency(cuenta.pagado)}
                         </TableCell>
                          <TableCell className="font-semibold text-orange-600">
-                           {formatCurrency(cuenta.restante)}
+                           <div className="flex items-center gap-2">
+                             {formatCurrency(cuenta.restante)}
+                             {cuenta.restante === 0 && (
+                               <TooltipProvider>
+                                 <Tooltip>
+                                   <TooltipTrigger>
+                                     <CheckCircle className="h-4 w-4 text-green-500" />
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Cuenta completamente pagada</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               </TooltipProvider>
+                             )}
+                           </div>
                          </TableCell>
                          <TableCell>
                            {cuenta.tipo === 'Propiedad' ? (
@@ -1076,6 +1091,7 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow 
                         key={cuenta.id}
+                        className={cuenta.restante === 0 ? "bg-green-50 dark:bg-green-950/20" : ""}
                       >
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
@@ -1228,7 +1244,21 @@ export default function Pagos() {
                           {formatCurrency(cuenta.pagado)}
                         </TableCell>
                          <TableCell className="font-semibold text-orange-600">
-                           {formatCurrency(cuenta.restante)}
+                           <div className="flex items-center gap-2">
+                             {formatCurrency(cuenta.restante)}
+                             {cuenta.restante === 0 && (
+                               <TooltipProvider>
+                                 <Tooltip>
+                                   <TooltipTrigger>
+                                     <CheckCircle className="h-4 w-4 text-green-500" />
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Cuenta completamente pagada</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               </TooltipProvider>
+                             )}
+                           </div>
                          </TableCell>
                          <TableCell>
                            {cuenta.tipo === 'Propiedad' ? (
