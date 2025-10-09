@@ -1050,6 +1050,7 @@ export type Database = {
       documentos: {
         Row: {
           activo: boolean
+          es_draft: boolean
           es_verificado: boolean
           fecha_actualizacion: string
           fecha_creacion: string
@@ -1064,6 +1065,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          es_draft?: boolean
           es_verificado?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -1078,6 +1080,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          es_draft?: boolean
           es_verificado?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -3043,6 +3046,13 @@ export type Database = {
             columns: ["id_vista"]
             isOneToOne: false
             referencedRelation: "vistas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_id_edificio_modelo_fkey"
+            columns: ["id_edificio_modelo"]
+            isOneToOne: false
+            referencedRelation: "edificios_modelos"
             referencedColumns: ["id"]
           },
         ]
