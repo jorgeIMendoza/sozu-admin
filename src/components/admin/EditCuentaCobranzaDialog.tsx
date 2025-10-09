@@ -3285,6 +3285,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       regimen: c.personas?.regimen?.trim() || '',
                       uso_cfdi: c.personas?.uso_cfdi?.trim() || '',
                       email: c.personas?.email?.trim() || '',
+                      telefono: c.personas?.telefono?.trim() || '',
                       porcentaje_propiedad: c.porcentaje_copropiedad,
                       direccion_calle: c.personas?.direccion_calle?.trim() || '',
                       direccion_num_ext: c.personas?.direccion_num_ext?.trim() || '',
