@@ -351,10 +351,25 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
   // Check if vendedor should generate invoice
   useEffect(() => {
+    console.log('🔍 [EditCuentaCobranzaDialog] vendedorDetalle:', vendedorDetalle);
+    console.log('🔍 [EditCuentaCobranzaDialog] facturar:', vendedorDetalle?.facturar);
+    
     if (vendedorDetalle) {
-      setShouldGenerateInvoice(vendedorDetalle.facturar === true);
+      const shouldGenerate = vendedorDetalle.facturar === true;
+      console.log('🔍 [EditCuentaCobranzaDialog] Actualizando shouldGenerateInvoice a:', shouldGenerate);
+      setShouldGenerateInvoice(shouldGenerate);
+    } else {
+      console.log('⚠️ [EditCuentaCobranzaDialog] vendedorDetalle es undefined/null');
     }
   }, [vendedorDetalle]);
+
+  // Log when dialog opens
+  useEffect(() => {
+    if (cuenta) {
+      console.log('🚀 [EditCuentaCobranzaDialog] Diálogo abierto para cuenta:', cuenta.id);
+      console.log('🚀 [EditCuentaCobranzaDialog] shouldGenerateInvoice inicial:', shouldGenerateInvoice);
+    }
+  }, [cuenta?.id]);
 
   // Get legal representative details for persona moral
   const { data: representanteLegal } = useQuery({
@@ -2355,10 +2370,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               value={numeroEscritura} 
                               onChange={(e) => setNumeroEscritura(e.target.value)}
                               onBlur={() => {
-                                const newValue = numeroEscritura;
+                                const newValue = numeroEscritura?.trim();
+                                const shouldGenerate = shouldGenerateInvoice || vendedorDetalle?.facturar === true;
+                                
+                                console.log('📝 [onBlur numero_escritura] newValue:', newValue);
+                                console.log('📝 [onBlur numero_escritura] currentValue:', cuentaDetalle?.numero_escritura);
+                                console.log('📝 [onBlur numero_escritura] shouldGenerate:', shouldGenerate);
+                                console.log('📝 [onBlur numero_escritura] shouldGenerateInvoice:', shouldGenerateInvoice);
+                                console.log('📝 [onBlur numero_escritura] vendedorDetalle?.facturar:', vendedorDetalle?.facturar);
+                                
                                 if (newValue && newValue !== cuentaDetalle?.numero_escritura) {
                                   // Si el vendedor NO factura, solo guardar sin confirmación
-                                  if (!shouldGenerateInvoice) {
+                                  if (!shouldGenerate) {
                                     setNumeroEscritura(newValue);
                                     updateEscrituraMutation.mutate({ numero_escritura: newValue });
                                   } else {
@@ -2369,15 +2392,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 }
                               }}
                               placeholder="Ingrese número de escritura"
-                              className={shouldGenerateInvoice ? "border-amber-500 focus:border-amber-600 focus:ring-amber-600" : ""}
+                              className={(shouldGenerateInvoice || vendedorDetalle?.facturar === true) ? "border-amber-500 focus:border-amber-600 focus:ring-amber-600" : ""}
                             />
-                            {shouldGenerateInvoice && (
+                            {(shouldGenerateInvoice || vendedorDetalle?.facturar === true) && (
                               <div className="absolute -top-2 -right-2 h-4 w-4 bg-amber-500 rounded-full flex items-center justify-center">
                                 <span className="text-white text-xs font-bold">!</span>
                               </div>
                             )}
                           </div>
-                          {shouldGenerateInvoice && (
+                          {(shouldGenerateInvoice || vendedorDetalle?.facturar === true) && (
                             <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                               Para guardar click aquí
                             </p>
