@@ -761,13 +761,16 @@ export function DocumentsTab({
                                       type="button"
                                       variant="default"
                                       size="sm"
-                                      onClick={() => onGenerateFinalInvoice(documento.id_persona!, documento.id)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onGenerateFinalInvoice(documento.id_persona!, documento.id);
+                                      }}
                                     >
                                       <FileCheck className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Generar factura definitiva</p>
+                                    <p>Generar nuevamente</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
