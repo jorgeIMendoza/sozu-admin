@@ -251,6 +251,69 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     enabled: !!(idEstadoDireccion || idEstadoNacimiento || idEstadoFiscal)
   });
 
+  // Clear estado/municipio when país changes for direccion
+  useEffect(() => {
+    if (idPaisDireccion && idEstadoDireccion) {
+      const estadoValido = estados.find(e => e.id.toString() === idEstadoDireccion.toString() && e.id_pais === idPaisDireccion);
+      if (!estadoValido) {
+        setIdEstadoDireccion('');
+        setIdMunicipioDireccion('');
+      }
+    }
+  }, [idPaisDireccion, estados, idEstadoDireccion]);
+
+  // Clear municipio when estado changes for direccion
+  useEffect(() => {
+    if (idEstadoDireccion && idMunicipioDireccion) {
+      const municipioValido = municipios.find(m => m.id.toString() === idMunicipioDireccion.toString() && m.id_estado === parseInt(idEstadoDireccion));
+      if (!municipioValido) {
+        setIdMunicipioDireccion('');
+      }
+    }
+  }, [idEstadoDireccion, municipios, idMunicipioDireccion]);
+
+  // Clear estado/municipio when país changes for nacimiento
+  useEffect(() => {
+    if (idPaisNacimiento && idEstadoNacimiento) {
+      const estadoValido = estados.find(e => e.id.toString() === idEstadoNacimiento.toString() && e.id_pais === idPaisNacimiento);
+      if (!estadoValido) {
+        setIdEstadoNacimiento('');
+        setIdMunicipioNacimiento('');
+      }
+    }
+  }, [idPaisNacimiento, estados, idEstadoNacimiento]);
+
+  // Clear municipio when estado changes for nacimiento
+  useEffect(() => {
+    if (idEstadoNacimiento && idMunicipioNacimiento) {
+      const municipioValido = municipios.find(m => m.id.toString() === idMunicipioNacimiento.toString() && m.id_estado === parseInt(idEstadoNacimiento));
+      if (!municipioValido) {
+        setIdMunicipioNacimiento('');
+      }
+    }
+  }, [idEstadoNacimiento, municipios, idMunicipioNacimiento]);
+
+  // Clear estado/municipio when país changes for fiscal
+  useEffect(() => {
+    if (idPaisFiscal && idEstadoFiscal) {
+      const estadoValido = estados.find(e => e.id.toString() === idEstadoFiscal.toString() && e.id_pais === idPaisFiscal);
+      if (!estadoValido) {
+        setIdEstadoFiscal('');
+        setIdMunicipioFiscal('');
+      }
+    }
+  }, [idPaisFiscal, estados, idEstadoFiscal]);
+
+  // Clear municipio when estado changes for fiscal
+  useEffect(() => {
+    if (idEstadoFiscal && idMunicipioFiscal) {
+      const municipioValido = municipios.find(m => m.id.toString() === idMunicipioFiscal.toString() && m.id_estado === parseInt(idEstadoFiscal));
+      if (!municipioValido) {
+        setIdMunicipioFiscal('');
+      }
+    }
+  }, [idEstadoFiscal, municipios, idMunicipioFiscal]);
+
   const { data: estadosCivil = [] } = useQuery({
     queryKey: ['estados_civil'],
     queryFn: async () => {
@@ -1223,9 +1286,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
                       <div>
                         <Label htmlFor="estado">Estado</Label>
-                        <Select value={idEstadoDireccion} onValueChange={setIdEstadoDireccion}>
+                        <Select 
+                          value={idEstadoDireccion ? idEstadoDireccion.toString() : ""} 
+                          onValueChange={setIdEstadoDireccion}
+                          disabled={!idPaisDireccion}
+                        >
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecciona un estado" />
+                            <SelectValue placeholder={!idPaisDireccion ? "Primero selecciona un país" : "Selecciona un estado"} />
                           </SelectTrigger>
                           <SelectContent>
                             {estados
@@ -1241,9 +1308,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
                       <div>
                         <Label htmlFor="municipio">Municipio</Label>
-                        <Select value={idMunicipioDireccion} onValueChange={setIdMunicipioDireccion}>
+                        <Select 
+                          value={idMunicipioDireccion ? idMunicipioDireccion.toString() : ""} 
+                          onValueChange={setIdMunicipioDireccion}
+                          disabled={!idEstadoDireccion}
+                        >
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecciona un municipio" />
+                            <SelectValue placeholder={!idEstadoDireccion ? "Primero selecciona un estado" : "Selecciona un municipio"} />
                           </SelectTrigger>
                           <SelectContent>
                             {municipios
@@ -1509,9 +1580,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
                           <div>
                             <Label htmlFor="estadoNacimiento">Estado de Nacimiento</Label>
-                            <Select value={idEstadoNacimiento} onValueChange={setIdEstadoNacimiento}>
+                            <Select 
+                              value={idEstadoNacimiento ? idEstadoNacimiento.toString() : ""} 
+                              onValueChange={setIdEstadoNacimiento}
+                              disabled={!idPaisNacimiento}
+                            >
                               <SelectTrigger>
-                                <SelectValue placeholder="Selecciona estado" />
+                                <SelectValue placeholder={!idPaisNacimiento ? "Primero selecciona un país" : "Selecciona estado"} />
                               </SelectTrigger>
                               <SelectContent>
                                 {estados
@@ -1527,9 +1602,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
                           <div>
                             <Label htmlFor="municipioNacimiento">Ciudad de Nacimiento</Label>
-                            <Select value={idMunicipioNacimiento} onValueChange={setIdMunicipioNacimiento}>
+                            <Select 
+                              value={idMunicipioNacimiento ? idMunicipioNacimiento.toString() : ""} 
+                              onValueChange={setIdMunicipioNacimiento}
+                              disabled={!idEstadoNacimiento}
+                            >
                               <SelectTrigger>
-                                <SelectValue placeholder="Selecciona ciudad" />
+                                <SelectValue placeholder={!idEstadoNacimiento ? "Primero selecciona un estado" : "Selecciona ciudad"} />
                               </SelectTrigger>
                               <SelectContent>
                                 {municipios
@@ -1627,9 +1706,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
                           <div>
                             <Label htmlFor="estadoFiscal">Estado</Label>
-                            <Select value={idEstadoFiscal} onValueChange={setIdEstadoFiscal} disabled={copiarDireccionFiscal}>
+                            <Select 
+                              value={idEstadoFiscal ? idEstadoFiscal.toString() : ""} 
+                              onValueChange={setIdEstadoFiscal} 
+                              disabled={copiarDireccionFiscal || !idPaisFiscal}
+                            >
                               <SelectTrigger>
-                                <SelectValue placeholder="Selecciona un estado" />
+                                <SelectValue placeholder={!idPaisFiscal ? "Primero selecciona un país" : "Selecciona un estado"} />
                               </SelectTrigger>
                               <SelectContent>
                                 {estados
@@ -1643,23 +1726,27 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                             </Select>
                           </div>
 
-                        <div>
-                          <Label htmlFor="municipioFiscal">Municipio</Label>
-                          <Select value={idMunicipioFiscal} onValueChange={setIdMunicipioFiscal} disabled={copiarDireccionFiscal}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona un municipio" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {municipios
-                                .filter(m => m.id_estado === parseInt(idEstadoFiscal))
-                                .map((municipio) => (
-                                  <SelectItem key={municipio.id} value={municipio.id.toString()}>
-                                    {municipio.nombre}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                          <div>
+                            <Label htmlFor="municipioFiscal">Municipio</Label>
+                            <Select 
+                              value={idMunicipioFiscal ? idMunicipioFiscal.toString() : ""} 
+                              onValueChange={setIdMunicipioFiscal} 
+                              disabled={copiarDireccionFiscal || !idEstadoFiscal}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={!idEstadoFiscal ? "Primero selecciona un estado" : "Selecciona un municipio"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {municipios
+                                  .filter(m => m.id_estado === parseInt(idEstadoFiscal))
+                                  .map((municipio) => (
+                                    <SelectItem key={municipio.id} value={municipio.id.toString()}>
+                                      {municipio.nombre}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
 
                         <div>
                           <Label htmlFor="coloniaFiscal">Colonia/Barrio</Label>
