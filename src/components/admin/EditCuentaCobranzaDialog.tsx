@@ -3297,7 +3297,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     numero_propiedad: propiedadDetalle.numero_propiedad,
                     metraje_escriturable: propiedadDetalle.m2_reales,
                     direccion: direccionProyecto,
-                    precio_final: cuentaDetalle?.precio_final
+                    precio_final: cuentaDetalle?.precio_final,
+                    piso: propiedadDetalle.numero_piso
                   } : null,
                   estacionamientos: estacionamientosDetalle?.map(est => ({
                     nombre: est.nombre,
