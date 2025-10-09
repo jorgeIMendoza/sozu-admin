@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { FileText, Upload, Eye, Trash2, Check, X } from "lucide-react";
+import { FileText, Upload, Eye, Trash2, Check, X, FileCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ConfirmMantenimientoDialog } from "./ConfirmMantenimientoDialog";
@@ -31,6 +31,7 @@ interface DocumentsTabProps {
   shouldAutoGenerateInvoice?: boolean; // Flag to disable invoice options when auto-generated
   compradores?: Array<{ id_persona: number; nombre_legal: string }>; // Lista de compradores
   propiedadId?: number; // ID de la propiedad asociada
+  onGenerateFinalInvoice?: (idPersona: number) => Promise<void>; // Callback para generar factura final
 }
 
 interface TipoDocumento {
@@ -61,7 +62,8 @@ export function DocumentsTab({
   onDocumentAdded,
   shouldAutoGenerateInvoice = false,
   compradores = [],
-  propiedadId
+  propiedadId,
+  onGenerateFinalInvoice
 }: DocumentsTabProps) {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -748,6 +750,28 @@ export function DocumentsTab({
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
+                            
+                            {/* Botón para generar factura final desde Draft */}
+                            {isFactura && documento.es_draft && documento.id_persona && onGenerateFinalInvoice && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="default"
+                                      size="sm"
+                                      onClick={() => onGenerateFinalInvoice(documento.id_persona!)}
+                                    >
+                                      <FileCheck className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Generar factura definitiva</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>

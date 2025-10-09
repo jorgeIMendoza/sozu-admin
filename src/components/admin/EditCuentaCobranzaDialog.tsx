@@ -2606,6 +2606,157 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       onDocumentAdded={() => {
                         toast.success("Documento agregado correctamente");
                       }}
+                      onGenerateFinalInvoice={async (idPersona: number) => {
+                        try {
+                          // Obtener api_key del dueño
+                          const apiKey = vendedorDetalle?.nombre_api_key_draft;
+                          
+                          // Filtrar solo el comprador seleccionado
+                          const compradorSeleccionado = compradoresExistentes?.find(c => c.personas?.id === idPersona);
+                          
+                          if (!compradorSeleccionado) {
+                            throw new Error('Comprador no encontrado');
+                          }
+                          
+                          // Obtener nombres de país, estado y municipio
+                          let paisNombre = '';
+                          let estadoNombre = '';
+                          let municipioNombre = '';
+
+                          if (compradorSeleccionado.personas?.direccion_fiscal_id_pais) {
+                            const { data: paisData } = await supabase
+                              .from('paises')
+                              .select('nombre')
+                              .eq('id', compradorSeleccionado.personas.direccion_fiscal_id_pais)
+                              .single();
+                            paisNombre = paisData?.nombre || '';
+                          }
+
+                          if (compradorSeleccionado.personas?.direccion_fiscal_id_estado) {
+                            const { data: estadoData } = await supabase
+                              .from('estados_mx')
+                              .select('nombre')
+                              .eq('id', compradorSeleccionado.personas.direccion_fiscal_id_estado)
+                              .single();
+                            estadoNombre = estadoData?.nombre || '';
+                          }
+
+                          if (compradorSeleccionado.personas?.direccion_fiscal_id_municipio) {
+                            const { data: municipioData } = await supabase
+                              .from('municipios_mx')
+                              .select('nombre')
+                              .eq('id', compradorSeleccionado.personas.direccion_fiscal_id_municipio)
+                              .single();
+                            municipioNombre = municipioData?.nombre || '';
+                          }
+
+                          const compradorData = {
+                            id_persona: compradorSeleccionado.personas?.id,
+                            nombre_completo: compradorSeleccionado.personas?.nombre_legal?.trim() || '',
+                            rfc: compradorSeleccionado.personas?.rfc?.trim() || '',
+                            regimen: compradorSeleccionado.personas?.regimen?.trim() || '',
+                            uso_cfdi: compradorSeleccionado.personas?.uso_cfdi?.trim() || '',
+                            email: compradorSeleccionado.personas?.email?.trim() || '',
+                            telefono: compradorSeleccionado.personas?.telefono?.trim() || '',
+                            porcentaje_propiedad: compradorSeleccionado.porcentaje_copropiedad,
+                            direccion_calle: compradorSeleccionado.personas?.direccion_calle?.trim() || '',
+                            direccion_num_ext: compradorSeleccionado.personas?.direccion_num_ext?.trim() || '',
+                            direccion_num_int: compradorSeleccionado.personas?.direccion_num_int?.trim() || '',
+                            direccion_fiscal: {
+                              calle: compradorSeleccionado.personas?.direccion_fiscal_calle?.trim() || '',
+                              numero_exterior: compradorSeleccionado.personas?.direccion_fiscal_num_ext?.trim() || '',
+                              numero_interior: compradorSeleccionado.personas?.direccion_fiscal_num_int?.trim() || '',
+                              colonia: compradorSeleccionado.personas?.direccion_fiscal_colonia?.trim() || '',
+                              codigo_postal: compradorSeleccionado.personas?.direccion_fiscal_codigo_postal?.trim() || '',
+                              municipio: municipioNombre.trim(),
+                              estado: estadoNombre.trim(),
+                              pais: paisNombre.trim()
+                            }
+                          };
+                          
+                          // Obtener dirección del proyecto
+                          let direccionProyecto = '';
+                          if (propiedadDetalle?.id_edificio_modelo) {
+                            const { data: edificioModelo } = await supabase
+                              .from('edificios_modelos')
+                              .select(`
+                                edificios!edificios_modelos_id_edificio_fkey(
+                                  proyectos!edificios_id_proyecto_fkey(direccion)
+                                )
+                              `)
+                              .eq('id', propiedadDetalle.id_edificio_modelo)
+                              .single();
+                            
+                            direccionProyecto = (edificioModelo as any)?.edificios?.proyectos?.direccion || '';
+                          }
+                          
+                          // Construir payload
+                          const payload = {
+                            api_key: apiKey,
+                            environment: ENVIRONMENT,
+                            tipo_factura: "propiedad",
+                            id_propiedad: propiedadDetalle?.id,
+                            id_cuenta_cobranza: cuentaDetalle?.id,
+                            propiedad: propiedadDetalle ? {
+                              numero_propiedad: propiedadDetalle.numero_propiedad,
+                              metraje_escriturable: propiedadDetalle.m2_reales,
+                              direccion: direccionProyecto,
+                              precio_final: cuentaDetalle?.precio_final,
+                              piso: propiedadDetalle.numero_piso
+                            } : null,
+                            estacionamientos: estacionamientosDetalle?.map(est => ({
+                              nombre: est.nombre,
+                              m2: est.m2,
+                              ubicacion: est.ubicacion,
+                              es_incluido: est.es_incluido,
+                              tipo_estacionamiento: est.tipos_estacionamiento?.nombre || ''
+                            })) || [],
+                            bodegas: bodegasDetalle?.map(bod => ({
+                              nombre: bod.nombre,
+                              m2: bod.m2,
+                              ubicacion: bod.ubicacion,
+                              es_incluido: bod.es_incluido
+                            })) || [],
+                            escrituracion: {
+                              clave_catastral: claveCatastral,
+                              libro,
+                              hoja,
+                              fecha_escritura: fechaEscritura ? format(fechaEscritura, 'yyyy-MM-dd') : null,
+                              numero_unidad_privativa: numeroUnidadPrivativa,
+                              numero_escritura: numeroEscritura,
+                              notario: (() => {
+                                const notario = notarios?.find(n => n.id.toString() === selectedNotario);
+                                return notario ? {
+                                  nombre: notario.nombre?.trim() || '',
+                                  notaria: notario.notaria?.trim() || '',
+                                  direccion: notario.direccion?.trim() || '',
+                                  email: notario.email?.trim() || '',
+                                  telefono: notario.telefono?.trim() || ''
+                                } : null;
+                              })()
+                            },
+                            compradores: [compradorData]
+                          };
+                          
+                          // Llamar al endpoint
+                          const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/generaFactura`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(payload)
+                          });
+                          
+                          if (!response.ok) {
+                            throw new Error('Error al generar factura');
+                          }
+                          
+                          toast.success('Factura definitiva generada exitosamente');
+                        } catch (error) {
+                          console.error('Error generando factura:', error);
+                          toast.error('Error al generar la factura definitiva');
+                        }
+                      }}
                     />
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">
