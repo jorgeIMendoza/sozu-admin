@@ -260,7 +260,7 @@ const Propiedades = () => {
             id_entidad_relacionada_dueno,
             activo,
             es_aprobado,
-            edificios_modelos!inner(
+            edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(
               edificios!edificios_modelos_id_edificio_fkey!inner(
                 nombre,
                 proyectos!edificios_id_proyecto_fkey!inner(id, nombre)
