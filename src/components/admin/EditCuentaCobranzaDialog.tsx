@@ -483,7 +483,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             id_conyuge,
             regimen,
             uso_cfdi,
-            direccion_fiscal_calle_numero,
+            direccion_fiscal_calle,
+            direccion_fiscal_num_ext,
+            direccion_fiscal_num_int,
             direccion_fiscal_colonia,
             direccion_fiscal_codigo_postal,
             direccion_fiscal_id_pais,
@@ -2491,11 +2493,27 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     </div>
                     
                     <div>
-                      <Label>Calle y Número</Label>
+                      <Label>Calle</Label>
                       <Input 
-                        value={primerComprador.personas.direccion_fiscal_calle_numero || 'No registrado'} 
+                        value={primerComprador.personas.direccion_fiscal_calle || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.direccion_fiscal_calle_numero ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`${!primerComprador.personas.direccion_fiscal_calle ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                      />
+                    </div>
+                    <div>
+                      <Label>Número Exterior</Label>
+                      <Input 
+                        value={primerComprador.personas.direccion_fiscal_num_ext || 'No registrado'} 
+                        readOnly 
+                        className={`${!primerComprador.personas.direccion_fiscal_num_ext ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                      />
+                    </div>
+                    <div>
+                      <Label>Número Interior</Label>
+                      <Input 
+                        value={primerComprador.personas.direccion_fiscal_num_int || 'Opcional'} 
+                        readOnly 
+                        className="bg-muted" 
                       />
                     </div>
                     <div>
@@ -3260,7 +3278,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       uso_cfdi: c.personas?.uso_cfdi?.trim() || '',
                       porcentaje_propiedad: c.porcentaje_copropiedad,
                       direccion_fiscal: {
-                        calle_numero: c.personas?.direccion_fiscal_calle_numero?.trim() || '',
+                        calle: c.personas?.direccion_fiscal_calle?.trim() || '',
+                        numero_exterior: c.personas?.direccion_fiscal_num_ext?.trim() || '',
+                        numero_interior: c.personas?.direccion_fiscal_num_int?.trim() || '',
                         colonia: c.personas?.direccion_fiscal_colonia?.trim() || '',
                         codigo_postal: c.personas?.direccion_fiscal_codigo_postal?.trim() || '',
                         municipio: municipioNombre.trim(),

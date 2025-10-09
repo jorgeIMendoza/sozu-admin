@@ -2598,18 +2598,22 @@ export type Database = {
           activo: boolean
           clave_pais_telefono: string | null
           curp: string | null
-          direccion_calle_numero: string | null
+          direccion_calle: string | null
           direccion_codigo_postal: string | null
           direccion_colonia: string | null
-          direccion_fiscal_calle_numero: string | null
+          direccion_fiscal_calle: string | null
           direccion_fiscal_codigo_postal: string | null
           direccion_fiscal_colonia: string | null
           direccion_fiscal_id_estado: number | null
           direccion_fiscal_id_municipio: number | null
           direccion_fiscal_id_pais: string | null
+          direccion_fiscal_num_ext: string | null
+          direccion_fiscal_num_int: string | null
           direccion_id_estado: number | null
           direccion_id_municipio: number | null
           direccion_id_pais: string | null
+          direccion_num_ext: string | null
+          direccion_num_int: string | null
           email: string
           fecha_actualizacion: string
           fecha_creacion: string
@@ -2643,18 +2647,22 @@ export type Database = {
           activo?: boolean
           clave_pais_telefono?: string | null
           curp?: string | null
-          direccion_calle_numero?: string | null
+          direccion_calle?: string | null
           direccion_codigo_postal?: string | null
           direccion_colonia?: string | null
-          direccion_fiscal_calle_numero?: string | null
+          direccion_fiscal_calle?: string | null
           direccion_fiscal_codigo_postal?: string | null
           direccion_fiscal_colonia?: string | null
           direccion_fiscal_id_estado?: number | null
           direccion_fiscal_id_municipio?: number | null
           direccion_fiscal_id_pais?: string | null
+          direccion_fiscal_num_ext?: string | null
+          direccion_fiscal_num_int?: string | null
           direccion_id_estado?: number | null
           direccion_id_municipio?: number | null
           direccion_id_pais?: string | null
+          direccion_num_ext?: string | null
+          direccion_num_int?: string | null
           email: string
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -2688,18 +2696,22 @@ export type Database = {
           activo?: boolean
           clave_pais_telefono?: string | null
           curp?: string | null
-          direccion_calle_numero?: string | null
+          direccion_calle?: string | null
           direccion_codigo_postal?: string | null
           direccion_colonia?: string | null
-          direccion_fiscal_calle_numero?: string | null
+          direccion_fiscal_calle?: string | null
           direccion_fiscal_codigo_postal?: string | null
           direccion_fiscal_colonia?: string | null
           direccion_fiscal_id_estado?: number | null
           direccion_fiscal_id_municipio?: number | null
           direccion_fiscal_id_pais?: string | null
+          direccion_fiscal_num_ext?: string | null
+          direccion_fiscal_num_int?: string | null
           direccion_id_estado?: number | null
           direccion_id_municipio?: number | null
           direccion_id_pais?: string | null
+          direccion_num_ext?: string | null
+          direccion_num_int?: string | null
           email?: string
           fecha_actualizacion?: string
           fecha_creacion?: string

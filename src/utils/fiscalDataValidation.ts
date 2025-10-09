@@ -6,7 +6,9 @@ export interface FiscalData {
   rfc?: string | null;
   regimen?: string | null;
   uso_cfdi?: string | null;
-  direccion_fiscal_calle_numero?: string | null;
+  direccion_fiscal_calle?: string | null;
+  direccion_fiscal_num_ext?: string | null;
+  direccion_fiscal_num_int?: string | null;
   direccion_fiscal_colonia?: string | null;
   direccion_fiscal_codigo_postal?: string | null;
   direccion_fiscal_id_pais?: string | null;
@@ -24,7 +26,7 @@ export function isFiscalDataComplete(data: FiscalData | null | undefined): boole
     data.rfc &&
     data.regimen &&
     data.uso_cfdi &&
-    data.direccion_fiscal_calle_numero &&
+    data.direccion_fiscal_calle &&
     data.direccion_fiscal_colonia &&
     data.direccion_fiscal_codigo_postal &&
     data.direccion_fiscal_id_pais &&

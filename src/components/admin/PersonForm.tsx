@@ -75,7 +75,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [idMunicipioNacimiento, setIdMunicipioNacimiento] = useState(initialData?.id_municipio_nacimiento || '');
   
   // Address
-  const [direccionCalle, setDireccionCalle] = useState(initialData?.direccion_calle_numero || '');
+  const [direccionCalle, setDireccionCalle] = useState(initialData?.direccion_calle || '');
+  const [direccionNumExt, setDireccionNumExt] = useState(initialData?.direccion_num_ext || '');
+  const [direccionNumInt, setDireccionNumInt] = useState(initialData?.direccion_num_int || '');
   const [direccionColonia, setDireccionColonia] = useState(initialData?.direccion_colonia || '');
   const [direccionCp, setDireccionCp] = useState(initialData?.direccion_codigo_postal || '');
   const [idPaisDireccion, setIdPaisDireccion] = useState(initialData?.direccion_id_pais || '');
@@ -83,7 +85,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [idMunicipioDireccion, setIdMunicipioDireccion] = useState(initialData?.direccion_id_municipio || '');
   
   // Fiscal address
-  const [direccionFiscalCalle, setDireccionFiscalCalle] = useState(initialData?.direccion_fiscal_calle_numero || '');
+  const [direccionFiscalCalle, setDireccionFiscalCalle] = useState(initialData?.direccion_fiscal_calle || '');
+  const [direccionFiscalNumExt, setDireccionFiscalNumExt] = useState(initialData?.direccion_fiscal_num_ext || '');
+  const [direccionFiscalNumInt, setDireccionFiscalNumInt] = useState(initialData?.direccion_fiscal_num_int || '');
   const [direccionFiscalColonia, setDireccionFiscalColonia] = useState(initialData?.direccion_fiscal_colonia || '');
   const [direccionFiscalCp, setDireccionFiscalCp] = useState(initialData?.direccion_fiscal_codigo_postal || '');
   const [idPaisFiscal, setIdPaisFiscal] = useState(initialData?.direccion_fiscal_id_pais || '');
@@ -639,13 +643,17 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       id_pais_nacimiento: tipoPersona === 'pf' && idPaisNacimiento ? idPaisNacimiento : null,
       id_estado_nacimiento: tipoPersona === 'pf' && idEstadoNacimiento ? parseInt(idEstadoNacimiento) : null,
       id_municipio_nacimiento: tipoPersona === 'pf' && idMunicipioNacimiento ? parseInt(idMunicipioNacimiento) : null,
-      direccion_calle_numero: direccionCalle.trim() || null,
+      direccion_calle: direccionCalle.trim() || null,
+      direccion_num_ext: direccionNumExt.trim() || null,
+      direccion_num_int: direccionNumInt.trim() || null,
       direccion_colonia: direccionColonia.trim() || null,
       direccion_codigo_postal: direccionCp.trim() || null,
       direccion_id_pais: idPaisDireccion || null,
       direccion_id_estado: idEstadoDireccion ? parseInt(idEstadoDireccion) : null,
       direccion_id_municipio: idMunicipioDireccion ? parseInt(idMunicipioDireccion) : null,
-      direccion_fiscal_calle_numero: direccionFiscalCalle.trim() || null,
+      direccion_fiscal_calle: direccionFiscalCalle.trim() || null,
+      direccion_fiscal_num_ext: direccionFiscalNumExt.trim() || null,
+      direccion_fiscal_num_int: direccionFiscalNumInt.trim() || null,
       direccion_fiscal_colonia: direccionFiscalColonia.trim() || null,
       direccion_fiscal_codigo_postal: direccionFiscalCp.trim() || null,
       direccion_fiscal_id_pais: idPaisFiscal || null,
@@ -1158,25 +1166,29 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           type="text"
                           value={direccionCalle}
                           onChange={(e) => setDireccionCalle(e.target.value)}
-                          placeholder="Ingresa la calle y número"
+                          placeholder="Ingresa la calle"
                         />
                       </div>
 
                       <div>
-                        <Label htmlFor="numeroExterno">Número Externo</Label>
+                        <Label htmlFor="numeroExterno">Número Exterior</Label>
                         <Input
                           id="numeroExterno"
                           type="text"
-                          placeholder="Número externo"
+                          value={direccionNumExt}
+                          onChange={(e) => setDireccionNumExt(e.target.value)}
+                          placeholder="Número exterior"
                         />
                       </div>
 
                       <div>
-                        <Label htmlFor="numeroInterno">Número Interno</Label>
+                        <Label htmlFor="numeroInterno">Número Interior</Label>
                         <Input
                           id="numeroInterno"
                           type="text"
-                          placeholder="Número interno"
+                          value={direccionNumInt}
+                          onChange={(e) => setDireccionNumInt(e.target.value)}
+                          placeholder="Número interior (opcional)"
                         />
                       </div>
 
@@ -1264,7 +1276,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         rfc,
                         regimen,
                         uso_cfdi: usoCfdi,
-                        direccion_fiscal_calle_numero: direccionFiscalCalle,
+                        direccion_fiscal_calle: direccionFiscalCalle,
+                        direccion_fiscal_num_ext: direccionFiscalNumExt,
+                        direccion_fiscal_num_int: direccionFiscalNumInt,
                         direccion_fiscal_colonia: direccionFiscalColonia,
                         direccion_fiscal_codigo_postal: direccionFiscalCp,
                         direccion_fiscal_id_pais: idPaisFiscal,
@@ -1275,7 +1289,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           rfc,
                           regimen,
                           uso_cfdi: usoCfdi,
-                          direccion_fiscal_calle_numero: direccionFiscalCalle,
+                          direccion_fiscal_calle: direccionFiscalCalle,
+                          direccion_fiscal_num_ext: direccionFiscalNumExt,
+                          direccion_fiscal_num_int: direccionFiscalNumInt,
                           direccion_fiscal_colonia: direccionFiscalColonia,
                           direccion_fiscal_codigo_postal: direccionFiscalCp,
                           direccion_fiscal_id_pais: idPaisFiscal,
@@ -1544,7 +1560,31 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                             type="text"
                             value={direccionFiscalCalle}
                             onChange={(e) => setDireccionFiscalCalle(e.target.value)}
-                            placeholder="Ingresa la calle y número fiscal"
+                            placeholder="Ingresa la calle fiscal"
+                            disabled={copiarDireccionFiscal}
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="numExtFiscal">Número Exterior</Label>
+                          <Input
+                            id="numExtFiscal"
+                            type="text"
+                            value={direccionFiscalNumExt}
+                            onChange={(e) => setDireccionFiscalNumExt(e.target.value)}
+                            placeholder="Ingresa el número exterior fiscal"
+                            disabled={copiarDireccionFiscal}
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="numIntFiscal">Número Interior</Label>
+                          <Input
+                            id="numIntFiscal"
+                            type="text"
+                            value={direccionFiscalNumInt}
+                            onChange={(e) => setDireccionFiscalNumInt(e.target.value)}
+                            placeholder="Ingresa el número interior fiscal (opcional)"
                             disabled={copiarDireccionFiscal}
                           />
                         </div>
