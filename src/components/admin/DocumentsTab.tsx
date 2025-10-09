@@ -470,14 +470,11 @@ export function DocumentsTab({
   };
 
   const handleDelete = async (documento: Documento) => {
-    const column = entityType === 'persona' ? 'id_persona' : 'id_propiedad';
-    
     try {
       const { error } = await supabase
         .from('documentos')
         .update({ activo: false })
-        .eq('numero', documento.numero as any)
-        .eq(column, entityId);
+        .eq('id', documento.id);
 
       if (error) throw error;
       
@@ -496,15 +493,25 @@ export function DocumentsTab({
   };
 
   const handleToggleVerification = async (documento: Documento) => {
-    const column = entityType === 'persona' ? 'id_persona' : entityType === 'cuenta_cobranza' ? 'id_cuenta_cobranza' : 'id_propiedad';
-    
     try {
-      const { error } = await supabase.from('documentos').update({ es_verificado: !documento.es_verificado }).eq('numero', documento.numero as any).eq(column, entityId);
+      const { error } = await supabase
+        .from('documentos')
+        .update({ es_verificado: !documento.es_verificado })
+        .eq('id', documento.id);
+        
       if (error) throw error;
+      
       await loadDocumentos();
-      toast({ title: "Éxito", description: "Estado de verificación actualizado" });
+      toast({ 
+        title: "Éxito", 
+        description: documento.es_verificado ? "Documento marcado como no verificado" : "Documento verificado correctamente"
+      });
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: `Error: ${error.message}` });
+      toast({ 
+        variant: "destructive", 
+        title: "Error", 
+        description: `Error al actualizar verificación: ${error.message}` 
+      });
     }
   };
 
