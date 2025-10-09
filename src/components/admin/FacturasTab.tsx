@@ -244,6 +244,26 @@ export function FacturasTab({
       throw new Error('No se encontraron los datos de la cuenta');
     }
 
+    // 6. Obtener datos del notario si existe
+    let notarioData = null;
+    if (cuentaData.id_notario) {
+      const { data: notario } = await supabase
+        .from('notarios')
+        .select('nombre, notaria, direccion, email, telefono')
+        .eq('id', cuentaData.id_notario)
+        .single();
+      
+      if (notario) {
+        notarioData = {
+          nombre: notario.nombre?.trim() || '',
+          notaria: notario.notaria?.trim() || '',
+          direccion: notario.direccion?.trim() || '',
+          email: notario.email?.trim() || '',
+          telefono: notario.telefono?.trim() || ''
+        };
+      }
+    }
+
     // Construir payload
     return {
       api_key: apiKey,
@@ -278,7 +298,8 @@ export function FacturasTab({
         libro: cuentaData.libro || '',
         hoja: cuentaData.hoja || '',
         clave_catastral: cuentaData.clave_catastral || '',
-        numero_unidad_privativa: cuentaData.numero_unidad_privativa || ''
+        numero_unidad_privativa: cuentaData.numero_unidad_privativa || '',
+        notario: notarioData
       },
       compradores: [
         {
