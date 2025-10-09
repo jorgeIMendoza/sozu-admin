@@ -270,7 +270,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
           precio_lista,
           descripcion,
           id_entidad_relacionada_dueno,
-          id_edificio_modelo
+          id_edificio_modelo,
+          edificios_modelos!propiedades_id_edificio_modelo_fkey(
+            edificios!edificios_modelos_id_edificio_fkey(
+              proyectos!edificios_id_proyecto_fkey(
+                nombre,
+                direccion
+              )
+            )
+          )
         `)
         .eq('id', ofertaData.id_propiedad)
         .single();
@@ -403,7 +411,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
           m2,
           ubicacion,
           es_incluido,
-          tipos_estacionamiento:id_tipo(nombre)
+          id_tipo,
+          tipos_estacionamiento!estacionamientos_id_tipo_fkey(nombre)
         `)
         .eq('id_propiedad', propiedadDetalle.id)
         .eq('activo', true);
@@ -461,6 +470,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             direccion_fiscal_calle_numero,
             direccion_fiscal_colonia,
             direccion_fiscal_codigo_postal,
+            direccion_fiscal_id_pais,
+            direccion_fiscal_id_estado,
+            direccion_fiscal_id_municipio,
             direccion_fiscal_id_pais,
             direccion_fiscal_id_estado,
             direccion_fiscal_id_municipio
@@ -667,7 +679,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     queryFn: async () => {
       const { data } = await supabase
         .from('notarios')
-        .select('id, nombre, notaria')
+        .select('id, nombre, notaria, direccion, email, telefono')
         .eq('activo', true)
         .order('nombre', { ascending: true });
 
@@ -3133,18 +3145,97 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 // Obtener api_key_draft del dueño
                 const apiKeyDraft = vendedorDetalle.nombre_api_key_draft;
                 
+                // Obtener nombres de país, estado y municipio para compradores
+                const compradoresConDirecciones = await Promise.all(
+                  (compradoresExistentes || []).map(async (c) => {
+                    let paisNombre = '';
+                    let estadoNombre = '';
+                    let municipioNombre = '';
+
+                    if (c.personas?.direccion_fiscal_id_pais) {
+                      const { data: paisData } = await supabase
+                        .from('paises')
+                        .select('nombre')
+                        .eq('id', c.personas.direccion_fiscal_id_pais)
+                        .single();
+                      paisNombre = paisData?.nombre || '';
+                    }
+
+                    if (c.personas?.direccion_fiscal_id_estado) {
+                      const { data: estadoData } = await supabase
+                        .from('estados_mx')
+                        .select('nombre')
+                        .eq('id', c.personas.direccion_fiscal_id_estado)
+                        .single();
+                      estadoNombre = estadoData?.nombre || '';
+                    }
+
+                    if (c.personas?.direccion_fiscal_id_municipio) {
+                      const { data: municipioData } = await supabase
+                        .from('municipios_mx')
+                        .select('nombre')
+                        .eq('id', c.personas.direccion_fiscal_id_municipio)
+                        .single();
+                      municipioNombre = municipioData?.nombre || '';
+                    }
+
+                    return {
+                      nombre_completo: c.personas?.nombre_legal?.trim() || '',
+                      rfc: c.personas?.rfc?.trim() || '',
+                      regimen: c.personas?.regimen?.trim() || '',
+                      uso_cfdi: c.personas?.uso_cfdi?.trim() || '',
+                      porcentaje_propiedad: c.porcentaje_copropiedad,
+                      direccion_fiscal: {
+                        calle_numero: c.personas?.direccion_fiscal_calle_numero?.trim() || '',
+                        colonia: c.personas?.direccion_fiscal_colonia?.trim() || '',
+                        codigo_postal: c.personas?.direccion_fiscal_codigo_postal?.trim() || '',
+                        municipio: municipioNombre.trim(),
+                        estado: estadoNombre.trim(),
+                        pais: paisNombre.trim()
+                      }
+                    };
+                  })
+                );
+
+                // Obtener dirección del proyecto
+                let direccionProyecto = '';
+                if (propiedadDetalle?.id_edificio_modelo) {
+                  const { data: edificioModelo } = await supabase
+                    .from('edificios_modelos')
+                    .select(`
+                      edificios!edificios_modelos_id_edificio_fkey(
+                        proyectos!edificios_id_proyecto_fkey(direccion)
+                      )
+                    `)
+                    .eq('id', propiedadDetalle.id_edificio_modelo)
+                    .single();
+                  
+                  direccionProyecto = (edificioModelo as any)?.edificios?.proyectos?.direccion || '';
+                }
+                
                 // Recopilar todos los datos necesarios
                 const payload = {
                   api_key_draft: apiKeyDraft,
                   tipo_factura: "propiedad",
                   propiedad: propiedadDetalle ? {
                     numero_propiedad: propiedadDetalle.numero_propiedad,
-                    metraje_escriturable: propiedadDetalle.m2_reales, // Usando m2_reales
-                    direccion: propiedadDetalle.descripcion, // Usando descripción como dirección
+                    metraje_escriturable: propiedadDetalle.m2_reales,
+                    direccion: direccionProyecto,
                     precio_final: cuentaDetalle?.precio_final
                   } : null,
-                  estacionamientos: estacionamientosDetalle || [],
-                  bodegas: bodegasDetalle || [],
+                  estacionamientos: estacionamientosDetalle?.map(est => ({
+                    nombre: est.nombre,
+                    m2: est.m2,
+                    ubicacion: est.ubicacion,
+                    es_incluido: est.es_incluido,
+                    tipo_estacionamiento: est.tipos_estacionamiento?.nombre || ''
+                  })) || [],
+                  bodegas: bodegasDetalle?.map(bod => ({
+                    nombre: bod.nombre,
+                    m2: bod.m2,
+                    ubicacion: bod.ubicacion,
+                    es_incluido: bod.es_incluido
+                  })) || [],
                   escrituracion: {
                     clave_catastral: claveCatastral,
                     libro,
@@ -3152,23 +3243,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     fecha_escritura: fechaEscritura ? format(fechaEscritura, 'yyyy-MM-dd') : null,
                     numero_unidad_privativa: numeroUnidadPrivativa,
                     numero_escritura: pendingNumeroEscritura,
-                    notario: notarios?.find(n => n.id.toString() === selectedNotario)
+                    notario: (() => {
+                      const notario = notarios?.find(n => n.id.toString() === selectedNotario);
+                      return notario ? {
+                        nombre: notario.nombre?.trim() || '',
+                        notaria: notario.notaria?.trim() || '',
+                        direccion: notario.direccion?.trim() || '',
+                        email: notario.email?.trim() || '',
+                        telefono: notario.telefono?.trim() || ''
+                      } : null;
+                    })()
                   },
-                  compradores: compradoresExistentes?.map(c => ({
-                    nombre_completo: c.personas?.nombre_legal,
-                    rfc: c.personas?.rfc,
-                    regimen: c.personas?.regimen,
-                    uso_cfdi: c.personas?.uso_cfdi,
-                    direccion_fiscal: {
-                      calle_numero: c.personas?.direccion_fiscal_calle_numero,
-                      colonia: c.personas?.direccion_fiscal_colonia,
-                      codigo_postal: c.personas?.direccion_fiscal_codigo_postal,
-                      id_pais: c.personas?.direccion_fiscal_id_pais,
-                      id_estado: c.personas?.direccion_fiscal_id_estado,
-                      id_municipio: c.personas?.direccion_fiscal_id_municipio
-                    },
-                    porcentaje_copropiedad: c.porcentaje_copropiedad
-                  }))
+                  compradores: compradoresConDirecciones
                 };
                 
                 // Llamar al endpoint
