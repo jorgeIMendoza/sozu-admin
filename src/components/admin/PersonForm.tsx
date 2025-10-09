@@ -306,13 +306,13 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
   // Clear municipio when estado changes for fiscal
   useEffect(() => {
-    if (idEstadoFiscal && idMunicipioFiscal && municipios.length > 0) {
+    if (idEstadoFiscal && idMunicipioFiscal && municipios.length > 0 && !copiarDireccionFiscal) {
       const municipioValido = municipios.find(m => m.id.toString() === idMunicipioFiscal.toString() && m.id_estado === parseInt(idEstadoFiscal));
       if (!municipioValido) {
         setIdMunicipioFiscal('');
       }
     }
-  }, [idEstadoFiscal, municipios, idMunicipioFiscal]);
+  }, [idEstadoFiscal, municipios, idMunicipioFiscal, copiarDireccionFiscal]);
 
   const { data: estadosCivil = [] } = useQuery({
     queryKey: ['estados_civil'],
