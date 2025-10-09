@@ -45,6 +45,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { PersonForm } from './PersonForm';
 import { DocumentsTab } from './DocumentsTab';
 import { ConfirmEscrituraDialog } from './ConfirmEscrituraDialog';
+import { FacturasTab } from './FacturasTab';
 
 interface Comprador {
   porcentaje_copropiedad: number;
@@ -700,6 +701,31 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
       return data || [];
     }
+  });
+
+  // Check if there are any facturas for this cuenta
+  const { data: hasFacturas } = useQuery({
+    queryKey: ["has_facturas", cuenta.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('documentos')
+        .select('id, tipos_documento!documentos_id_tipo_documento_fkey(nombre)')
+        .eq('id_cuenta_cobranza', cuenta.id)
+        .eq('activo', true);
+
+      if (error) {
+        console.error('Error checking facturas:', error);
+        return false;
+      }
+
+      // Check if any document is a factura
+      const hasInvoice = data?.some(doc => 
+        doc.tipos_documento?.nombre?.toLowerCase().includes('factura')
+      );
+
+      return hasInvoice || false;
+    },
+    enabled: !!cuenta.id
   });
 
   // Search for persons (buyers/leads) - search by name, RFC, CURP, email
@@ -1798,7 +1824,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className={`grid w-full ${tipoCuenta === 'Propiedad' ? 'grid-cols-7' : 'grid-cols-6'}`}>
+          <TabsList className={`grid w-full ${tipoCuenta === 'Propiedad' ? (hasFacturas ? 'grid-cols-8' : 'grid-cols-7') : 'grid-cols-6'}`}>
             <TabsTrigger value="propiedad">Datos de la Propiedad</TabsTrigger>
             {(tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') && (
               <TabsTrigger value="producto">Detalles {tipoCuenta}</TabsTrigger>
@@ -1810,6 +1836,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             )}
             {tipoCuenta === 'Propiedad' && (
               <TabsTrigger value="documentos">Documentos</TabsTrigger>
+            )}
+            {tipoCuenta === 'Propiedad' && hasFacturas && (
+              <TabsTrigger value="facturas">Facturas</TabsTrigger>
             )}
             <TabsTrigger value="acuerdo">Acuerdo de Pago</TabsTrigger>
             <TabsTrigger value="comisiones">Comisiones</TabsTrigger>
@@ -2543,6 +2572,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       entityId={cuenta.id}
                       entityType="cuenta_cobranza"
                       shouldAutoGenerateInvoice={shouldGenerateInvoice}
+                      compradores={compradoresExistentes?.map(c => ({ 
+                        id_persona: c.personas?.id || 0, 
+                        nombre_legal: c.personas?.nombre_legal || '' 
+                      })) || []}
+                      propiedadId={propiedadDetalle?.id}
                       onDocumentAdded={() => {
                         toast.success("Documento agregado correctamente");
                       }}
@@ -2554,6 +2588,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+          )}
+
+          {/* Facturas Tab - Only for properties with facturas */}
+          {tipoCuenta === 'Propiedad' && hasFacturas && (
+            <TabsContent value="facturas" className="space-y-4">
+              <FacturasTab
+                cuentaCobranzaId={cuenta.id}
+                compradores={compradoresExistentes?.map(c => ({ 
+                  id_persona: c.personas?.id || 0, 
+                  nombre_legal: c.personas?.nombre_legal || '',
+                  rfc: c.personas?.rfc
+                })) || []}
+                propiedadId={propiedadDetalle?.id}
+                apiKeyDraft={vendedorDetalle?.nombre_api_key_draft || undefined}
+              />
             </TabsContent>
           )}
 

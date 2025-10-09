@@ -1,0 +1,300 @@
+import React, { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FileText, FileCheck, Eye, RefreshCw } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { N8N_WEBHOOK_BASE_URL } from '@/lib/config';
+
+interface FacturasTabProps {
+  cuentaCobranzaId: number;
+  compradores: Array<{ 
+    id_persona: number; 
+    nombre_legal: string;
+    rfc?: string;
+  }>;
+  propiedadId?: number;
+  apiKeyDraft?: string;
+}
+
+interface FacturaInfo {
+  id_persona: number;
+  nombre_legal: string;
+  rfc?: string;
+  factura_pdf?: {
+    id: number;
+    url: string;
+    es_draft: boolean;
+    numero: string | null;
+  } | null;
+  factura_xml?: {
+    id: number;
+    url: string;
+    es_draft: boolean;
+    numero: string | null;
+  } | null;
+}
+
+export function FacturasTab({ 
+  cuentaCobranzaId, 
+  compradores,
+  propiedadId,
+  apiKeyDraft
+}: FacturasTabProps) {
+  const [facturas, setFacturas] = useState<FacturaInfo[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [viewerDialog, setViewerDialog] = useState<{ isOpen: boolean; url: string; title: string }>({
+    isOpen: false,
+    url: '',
+    title: ''
+  });
+  const [generatingForPersona, setGeneratingForPersona] = useState<number | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Load facturas para cada comprador
+  const loadFacturas = async () => {
+    setIsLoading(true);
+    try {
+      // Get all documents for this cuenta_cobranza
+      const { data: documentos, error } = await supabase
+        .from('documentos')
+        .select('id, url, es_draft, numero, id_persona, id_tipo_documento, tipos_documento!documentos_id_tipo_documento_fkey(nombre)')
+        .eq('id_cuenta_cobranza', cuentaCobranzaId)
+        .eq('activo', true);
+
+      if (error) throw error;
+
+      // Map compradores to their facturas
+      const facturasInfo: FacturaInfo[] = compradores.map(comprador => {
+        const facturaPdf = documentos?.find(
+          doc => doc.id_persona === comprador.id_persona && 
+                 doc.tipos_documento?.nombre?.toLowerCase().includes('factura') &&
+                 doc.tipos_documento?.nombre?.toLowerCase().includes('pdf')
+        );
+        
+        const facturaXml = documentos?.find(
+          doc => doc.id_persona === comprador.id_persona && 
+                 doc.tipos_documento?.nombre?.toLowerCase().includes('factura') &&
+                 doc.tipos_documento?.nombre?.toLowerCase().includes('xml')
+        );
+
+        return {
+          id_persona: comprador.id_persona,
+          nombre_legal: comprador.nombre_legal,
+          rfc: comprador.rfc,
+          factura_pdf: facturaPdf ? {
+            id: facturaPdf.id,
+            url: facturaPdf.url,
+            es_draft: facturaPdf.es_draft,
+            numero: facturaPdf.numero
+          } : null,
+          factura_xml: facturaXml ? {
+            id: facturaXml.id,
+            url: facturaXml.url,
+            es_draft: facturaXml.es_draft,
+            numero: facturaXml.numero
+          } : null
+        };
+      });
+
+      setFacturas(facturasInfo);
+    } catch (error) {
+      console.error('Error loading facturas:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al cargar las facturas"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFacturas();
+  }, [cuentaCobranzaId, compradores]);
+
+  // Mutation para regenerar factura
+  const regenerarFacturaMutation = useMutation({
+    mutationFn: async (idPersona: number) => {
+      if (!apiKeyDraft) {
+        throw new Error('No hay API key configurada para generar facturas');
+      }
+
+      const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/regenerar-factura-draft`;
+      
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id_cuenta_cobranza: cuentaCobranzaId,
+          id_persona: idPersona,
+          api_key_draft: apiKeyDraft
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al regenerar la factura');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Éxito",
+        description: "Factura regenerada correctamente"
+      });
+      loadFacturas();
+    },
+    onError: (error: Error) => {
+      console.error('Error regenerando factura:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al regenerar la factura"
+      });
+    },
+    onSettled: () => {
+      setGeneratingForPersona(null);
+    }
+  });
+
+  const handleRegenerar = (idPersona: number) => {
+    setGeneratingForPersona(idPersona);
+    regenerarFacturaMutation.mutate(idPersona);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-muted-foreground">Cargando facturas...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Facturas por Comprador
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Comprador</TableHead>
+                  <TableHead>RFC</TableHead>
+                  <TableHead>Factura PDF</TableHead>
+                  <TableHead>Factura XML</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {facturas.map((factura) => {
+                  const tienePdf = !!factura.factura_pdf;
+                  const tieneXml = !!factura.factura_xml;
+                  const isDraft = factura.factura_pdf?.es_draft || factura.factura_xml?.es_draft;
+                  
+                  return (
+                    <TableRow key={factura.id_persona}>
+                      <TableCell className="font-medium">{factura.nombre_legal}</TableCell>
+                      <TableCell>{factura.rfc || '-'}</TableCell>
+                      <TableCell>
+                        {tienePdf ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setViewerDialog({
+                                isOpen: true,
+                                url: factura.factura_pdf!.url,
+                                title: `Factura PDF - ${factura.nombre_legal}`
+                              });
+                            }}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            Ver PDF
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Sin factura</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {tieneXml ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(factura.factura_xml!.url, '_blank')}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            Ver XML
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Sin factura</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {tienePdf || tieneXml ? (
+                          <Badge variant={isDraft ? "secondary" : "default"}>
+                            {isDraft ? "Draft" : "Final"}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">Sin factura</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {(tienePdf || tieneXml) && !isDraft && apiKeyDraft && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRegenerar(factura.id_persona)}
+                            disabled={generatingForPersona === factura.id_persona}
+                          >
+                            <RefreshCw className={`h-4 w-4 mr-2 ${generatingForPersona === factura.id_persona ? 'animate-spin' : ''}`} />
+                            {generatingForPersona === factura.id_persona ? 'Generando...' : 'Regenerar'}
+                          </Button>
+                        )}
+                        {(tienePdf || tieneXml) && isDraft && (
+                          <span className="text-sm text-muted-foreground">Factura editable</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Document Viewer Dialog */}
+      <Dialog open={viewerDialog.isOpen} onOpenChange={(open) => setViewerDialog({ ...viewerDialog, isOpen: open })}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 py-3 border-b shrink-0">
+            <DialogTitle>{viewerDialog.title}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <iframe
+              src={`${viewerDialog.url}#page=1&view=FitH`}
+              className="w-full h-full border-0"
+              title={viewerDialog.title}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
