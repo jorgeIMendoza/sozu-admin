@@ -1287,7 +1287,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       <div>
                         <Label htmlFor="estado">Estado</Label>
                         <Select 
-                          value={idEstadoDireccion ? idEstadoDireccion.toString() : ""} 
+                          value={idEstadoDireccion} 
                           onValueChange={setIdEstadoDireccion}
                           disabled={!idPaisDireccion}
                         >
@@ -1309,7 +1309,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       <div>
                         <Label htmlFor="municipio">Municipio</Label>
                         <Select 
-                          value={idMunicipioDireccion ? idMunicipioDireccion.toString() : ""} 
+                          value={idMunicipioDireccion} 
                           onValueChange={setIdMunicipioDireccion}
                           disabled={!idEstadoDireccion}
                         >
@@ -1581,7 +1581,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           <div>
                             <Label htmlFor="estadoNacimiento">Estado de Nacimiento</Label>
                             <Select 
-                              value={idEstadoNacimiento ? idEstadoNacimiento.toString() : ""} 
+                              value={idEstadoNacimiento} 
                               onValueChange={setIdEstadoNacimiento}
                               disabled={!idPaisNacimiento}
                             >
@@ -1603,7 +1603,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           <div>
                             <Label htmlFor="municipioNacimiento">Ciudad de Nacimiento</Label>
                             <Select 
-                              value={idMunicipioNacimiento ? idMunicipioNacimiento.toString() : ""} 
+                              value={idMunicipioNacimiento} 
                               onValueChange={setIdMunicipioNacimiento}
                               disabled={!idEstadoNacimiento}
                             >
@@ -1707,7 +1707,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           <div>
                             <Label htmlFor="estadoFiscal">Estado</Label>
                             <Select 
-                              value={idEstadoFiscal ? idEstadoFiscal.toString() : ""} 
+                              value={idEstadoFiscal} 
                               onValueChange={setIdEstadoFiscal} 
                               disabled={copiarDireccionFiscal || !idPaisFiscal}
                             >
@@ -1729,7 +1729,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                           <div>
                             <Label htmlFor="municipioFiscal">Municipio</Label>
                             <Select 
-                              value={idMunicipioFiscal ? idMunicipioFiscal.toString() : ""} 
+                              value={idMunicipioFiscal} 
                               onValueChange={setIdMunicipioFiscal} 
                               disabled={copiarDireccionFiscal || !idEstadoFiscal}
                             >
