@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { FileText, FileCheck, Eye, RefreshCw, FilePlus2, Loader2 } from "lucide-react";
+import { FileText, FileCheck, Eye, RefreshCw, FileEdit, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -562,7 +562,7 @@ export function FacturasTab({
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
-                                      variant="default"
+                                      variant="outline"
                                       size="sm"
                                       onClick={() => handleRegenerarDraft(factura.id_persona, null)}
                                       disabled={generatingForPersona === factura.id_persona}
@@ -570,12 +570,12 @@ export function FacturasTab({
                                       {generatingForPersona === factura.id_persona ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                       ) : (
-                                        <FilePlus2 className="h-4 w-4" />
+                                        <FileEdit className="h-4 w-4" />
                                       )}
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Generar Draft</p>
+                                    <p>Generar borrador de factura</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -595,12 +595,12 @@ export function FacturasTab({
                                       {generatingForPersona === factura.id_persona ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                       ) : (
-                                        <FilePlus2 className="h-4 w-4" />
+                                        <RefreshCw className="h-4 w-4" />
                                       )}
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Generar Draft de nuevo</p>
+                                    <p>Regenerar borrador de factura</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -629,7 +629,7 @@ export function FacturasTab({
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Generar Factura definitiva</p>
+                                    <p>Timbrar factura (acción definitiva)</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
