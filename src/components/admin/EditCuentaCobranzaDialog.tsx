@@ -3038,6 +3038,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           <Button
                             variant="outline"
                             className="w-full justify-start text-left font-normal"
+                            disabled={isReadOnly}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {fechaCompra ? format(fechaCompra, 'dd/MM/yyyy', { locale: es }) : "Seleccionar fecha"}
@@ -3437,20 +3438,20 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                              return `${day}/${month}/${year}`;
                                            })() : 'Sin fecha'}
                                          </span>
-                                         <Button
-                                           variant="ghost"
-                                           size="sm"
-                                           className="h-6 w-6 p-0"
-                                           onClick={(e) => {
-                                             e.preventDefault();
-                                             e.stopPropagation();
-                                             console.log('Date edit button clicked for acuerdo:', acuerdo.id, 'pago_completado:', acuerdo.pago_completado);
-                                             setEditingAcuerdo(acuerdo.id);
-                                             // Create date from the stored date string to avoid timezone issues
-                                             setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago + 'T00:00:00') : undefined);
-                                           }}
-                                          disabled={acuerdo.pago_completado}
-                                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              console.log('Date edit button clicked for acuerdo:', acuerdo.id, 'pago_completado:', acuerdo.pago_completado);
+                              setEditingAcuerdo(acuerdo.id);
+                              // Create date from the stored date string to avoid timezone issues
+                              setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago + 'T00:00:00') : undefined);
+                            }}
+                           disabled={acuerdo.pago_completado || isReadOnly}
+                         >
                                           <Edit className="h-3 w-3" />
                                         </Button>
                                       </div>
@@ -3509,7 +3510,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                           setEditingAmount(acuerdo.id);
                                           setEditingMonto(acuerdo.monto.toString());
                                         }}
-                                        disabled={acuerdo.pago_completado}
+                                        disabled={acuerdo.pago_completado || isReadOnly}
                                       >
                                         <Edit className="h-3 w-3" />
                                       </Button>
@@ -3543,7 +3544,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                           e.stopPropagation();
                                           handleDeleteAcuerdo(acuerdo.id, acuerdo.concepto_nombre, acuerdo.monto);
                                         }}
-                                        disabled={deleteAcuerdoMutation.isPending || (acuerdo.monto_pagado > 0)}
+                                        disabled={deleteAcuerdoMutation.isPending || (acuerdo.monto_pagado > 0) || isReadOnly}
                                         className="h-8 w-8 p-0 hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
                                       >
                                         <Trash2 className="w-4 h-4" />
@@ -3562,7 +3563,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                     
                     <div className="space-y-2">
                       <Label>Seleccionar Plan de Pago</Label>
-                      <Select value={selectedEsquema} onValueChange={setSelectedEsquema}>
+                      <Select value={selectedEsquema} onValueChange={setSelectedEsquema} disabled={isReadOnly}>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecciona un plan de pago" />
                         </SelectTrigger>
@@ -3579,7 +3580,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       
                       <Button 
                         onClick={handleCreateAcuerdo} 
-                        disabled={!selectedEsquema || createAcuerdoMutation.isPending}
+                        disabled={!selectedEsquema || createAcuerdoMutation.isPending || isReadOnly}
                       >
                         Crear Acuerdo de Pago
                       </Button>
@@ -3591,6 +3592,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
           </TabsContent>
 
           <TabsContent value="comisiones" className="space-y-4">
+            {isReadOnly && <ReadOnlyBanner />}
             <Card>
               <CardHeader>
                 <CardTitle>Información de Comisiones</CardTitle>
