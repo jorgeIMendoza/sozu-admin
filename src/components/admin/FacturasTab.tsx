@@ -489,11 +489,12 @@ export function FacturasTab({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Comprador</TableHead>
-                  <TableHead>RFC</TableHead>
-                  <TableHead>Factura PDF</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+              <TableHead>Comprador</TableHead>
+              <TableHead>RFC</TableHead>
+              <TableHead>ID de factura</TableHead>
+              <TableHead>Factura PDF</TableHead>
+              <TableHead>Estado</TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -505,6 +506,13 @@ export function FacturasTab({
                     <TableRow key={factura.id_persona}>
                       <TableCell className="font-medium">{factura.nombre_legal}</TableCell>
                       <TableCell>{factura.rfc || '-'}</TableCell>
+                      <TableCell>
+                        {tienePdf && factura.factura_pdf?.numero ? (
+                          factura.factura_pdf.numero
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {tienePdf ? (
                           <Button
