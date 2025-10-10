@@ -495,20 +495,28 @@ export default function Pagos() {
 
         const pagado = pagadoPorCuenta[cuenta.id] || 0;
         const precio_final = cuenta.precio_final || 0;
-        // Apply normalization to both the subtraction and ensure we never get negative zero
-        const restanteCalculado = precio_final - pagado;
-        const restante = normalizarSaldo(restanteCalculado);
-        
-        // Debug logging for negative zero detection
-        if (cuenta.id === 207 || cuenta.id === 208) {
-          console.log(`Cuenta ${cuenta.id}: precio_final=${precio_final}, pagado=${pagado}, restanteCalculado=${restanteCalculado}, restante final=${restante}, is -0?`, Object.is(restanteCalculado, -0));
+        // Force positive zero - apply multiple strategies
+        let restante = precio_final - pagado;
+        // Round to 2 decimals
+        restante = Math.round(restante * 100) / 100;
+        // If very close to zero OR is negative zero, force to positive zero
+        if (Math.abs(restante) < 0.01 || Object.is(restante, -0) || restante === 0) {
+          restante = 0;
         }
+        // Final safety: ensure we never have -0
+        restante = restante === 0 ? 0 : restante;
 
         // Calculate cash payment data (only for properties)
         const valorUma = cuenta.valor_uma || 0;
         const limiteEfectivo = valorUma * 8025;
         const pagadoEfectivo = tipo === 'Propiedad' ? (pagadoEfectivoPorCuenta[cuenta.id] || 0) : 0;
-        const restanteEfectivo = normalizarSaldo(limiteEfectivo - pagadoEfectivo);
+        let restanteEfectivo = limiteEfectivo - pagadoEfectivo;
+        // Round and force positive zero
+        restanteEfectivo = Math.round(restanteEfectivo * 100) / 100;
+        if (Math.abs(restanteEfectivo) < 0.01 || Object.is(restanteEfectivo, -0) || restanteEfectivo === 0) {
+          restanteEfectivo = 0;
+        }
+        restanteEfectivo = restanteEfectivo === 0 ? 0 : restanteEfectivo;
         const porcentajeEfectivo = limiteEfectivo > 0 ? (pagadoEfectivo / limiteEfectivo) * 100 : 0;
 
         return {
