@@ -662,37 +662,61 @@ export function DocumentsTab({
             
             // Validar entidad administradora antes de verificar cualquier documento de categoría 7
             if (noVerificados.length >= 1) {
-              // Obtener proyecto de la cuenta de cobranza (puede ser de propiedad o producto)
+              // Obtener la oferta de la cuenta de cobranza
               const cuentaResp = await supabaseClient
                 .from('cuentas_cobranza')
-                .select(`
-                  id_oferta,
-                  ofertas!fk_ccob_oferta (
-                    id_propiedad,
-                    id_producto,
-                    propiedades (
-                      id_entidad_relacionada_dueno,
-                      entidades_relacionadas (
-                        id_proyecto
-                      )
-                    ),
-                    productos_servicios (
-                      id_entidad_relacionada_dueno,
-                      entidades_relacionadas (
-                        id_proyecto
-                      )
-                    )
-                  )
-                `)
+                .select('id_oferta')
                 .eq('id', entityId)
                 .single();
               
-              // Determinar proyecto desde propiedad o producto
+              if (!cuentaResp.data?.id_oferta) {
+                throw new Error('No se pudo determinar la oferta');
+              }
+              
+              // Obtener el proyecto desde la oferta (puede ser de propiedad o producto)
+              const ofertaResp = await supabaseClient
+                .from('ofertas')
+                .select('id_propiedad, id_producto')
+                .eq('id', cuentaResp.data.id_oferta)
+                .single();
+              
               let proyectoId = null;
-              if (cuentaResp?.data?.ofertas?.propiedades?.entidades_relacionadas?.id_proyecto) {
-                proyectoId = cuentaResp.data.ofertas.propiedades.entidades_relacionadas.id_proyecto;
-              } else if (cuentaResp?.data?.ofertas?.productos_servicios?.entidades_relacionadas?.id_proyecto) {
-                proyectoId = cuentaResp.data.ofertas.productos_servicios.entidades_relacionadas.id_proyecto;
+              
+              // Si es una propiedad
+              if (ofertaResp.data?.id_propiedad) {
+                const propResp = await supabaseClient
+                  .from('propiedades')
+                  .select('id_entidad_relacionada_dueno')
+                  .eq('id', ofertaResp.data.id_propiedad)
+                  .single();
+                
+                if (propResp.data?.id_entidad_relacionada_dueno) {
+                  const entRelResp = await supabaseClient
+                    .from('entidades_relacionadas')
+                    .select('id_proyecto')
+                    .eq('id', propResp.data.id_entidad_relacionada_dueno)
+                    .single();
+                  
+                  proyectoId = entRelResp.data?.id_proyecto;
+                }
+              }
+              // Si es un producto
+              else if (ofertaResp.data?.id_producto) {
+                const prodResp = await supabaseClient
+                  .from('productos_servicios')
+                  .select('id_entidad_relacionada_dueno')
+                  .eq('id', ofertaResp.data.id_producto)
+                  .single();
+                
+                if (prodResp.data?.id_entidad_relacionada_dueno) {
+                  const entRelResp = await supabaseClient
+                    .from('entidades_relacionadas')
+                    .select('id_proyecto')
+                    .eq('id', prodResp.data.id_entidad_relacionada_dueno)
+                    .single();
+                  
+                  proyectoId = entRelResp.data?.id_proyecto;
+                }
               }
               
               if (!proyectoId) {
