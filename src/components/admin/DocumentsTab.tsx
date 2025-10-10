@@ -686,21 +686,25 @@ export function DocumentsTab({
                 throw new Error('No se pudo determinar el proyecto');
               }
               
-              // Verificar que existe entidad Administradora con cuenta_madre_stp
+              // Verificar que existe entidad Administradora
               const administradoraResp = await supabaseClient
                 .from('entidades_relacionadas')
                 .select('id, cuenta_madre_stp, personas!inner(nombre_legal)')
                 .eq('id_proyecto', proyectoId)
                 .eq('id_tipo_entidad', 6) // Administradora
                 .eq('activo', true)
-                .not('cuenta_madre_stp', 'is', null)
-                .single();
-              
-              if (!administradoraResp.data) {
+                .maybeSingle();
+
+              // Validar que existe y tiene cuenta_madre_stp
+              if (!administradoraResp.data || !administradoraResp.data.cuenta_madre_stp) {
+                const mensajeError = !administradoraResp.data 
+                  ? "No existe una entidad legal Administradora configurada en el proyecto."
+                  : "La entidad Administradora existe pero no tiene asignada una cuenta madre STP.";
+                
                 toast({
                   variant: "destructive",
                   title: "Entidad Administradora requerida",
-                  description: "Para verificar documentos de entrega de propiedad, primero debe configurar una entidad legal Administradora con su cuenta madre STP en el proyecto.",
+                  description: `Para verificar documentos de entrega de propiedad, ${mensajeError} Por favor complete la configuración en Entidades Legales.`,
                   duration: 6000
                 });
                 return;
