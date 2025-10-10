@@ -496,7 +496,13 @@ export default function Pagos() {
         const pagado = pagadoPorCuenta[cuenta.id] || 0;
         const precio_final = cuenta.precio_final || 0;
         // Apply normalization to both the subtraction and ensure we never get negative zero
-        const restante = normalizarSaldo(precio_final - pagado);
+        const restanteCalculado = precio_final - pagado;
+        const restante = normalizarSaldo(restanteCalculado);
+        
+        // Debug logging for negative zero detection
+        if (cuenta.id === 207 || cuenta.id === 208) {
+          console.log(`Cuenta ${cuenta.id}: precio_final=${precio_final}, pagado=${pagado}, restanteCalculado=${restanteCalculado}, restante final=${restante}, is -0?`, Object.is(restanteCalculado, -0));
+        }
 
         // Calculate cash payment data (only for properties)
         const valorUma = cuenta.valor_uma || 0;
@@ -582,11 +588,25 @@ export default function Pagos() {
   const totalMonto = filteredCuentas.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
 
   const formatCurrency = (amount: number) => {
-    // Handle negative zero by adding 0 (which converts -0 to 0)
-    const normalizedAmount = amount === 0 ? 0 : amount;
+    // Force convert -0 to positive 0 using multiple methods
+    let normalizedAmount = amount;
+    
+    // Method 1: Check for -0 explicitly
+    if (Object.is(amount, -0)) {
+      normalizedAmount = 0;
+    }
+    // Method 2: Add 0 to convert -0 to 0
+    normalizedAmount = normalizedAmount + 0;
+    // Method 3: Use Math.abs for very small numbers
+    if (Math.abs(normalizedAmount) < 0.001) {
+      normalizedAmount = 0;
+    }
+    
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
-      currency: 'MXN'
+      currency: 'MXN',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
     }).format(normalizedAmount);
   };
 
