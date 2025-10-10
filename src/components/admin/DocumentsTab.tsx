@@ -404,32 +404,68 @@ export function DocumentsTab({
         }
       }
 
-      // Create documento record
-      const documentoData: any = {
-        numero: numeroValue,
-        url: urlData.publicUrl,
-        id_tipo_documento: parseInt(selectedTipoDocumento),
-        activo: true,
-        es_verificado: false,
-      };
+      // Check if document already exists
+      let existingDocQuery = supabase
+        .from('documentos')
+        .select('id')
+        .eq('id_tipo_documento', parseInt(selectedTipoDocumento))
+        .eq('activo', true);
 
-      // Add foreign keys based on entity type
+      // Add filters based on entity type
       if (entityType === 'persona') {
-        documentoData.id_persona = entityId;
+        existingDocQuery = existingDocQuery.eq('id_persona', entityId);
       } else if (entityType === 'propiedad') {
-        documentoData.id_propiedad = idPropiedad;
-        documentoData.id_cuenta_cobranza = idCuentaCobranza;
+        if (idPropiedad) existingDocQuery = existingDocQuery.eq('id_propiedad', idPropiedad);
+        if (idCuentaCobranza) existingDocQuery = existingDocQuery.eq('id_cuenta_cobranza', idCuentaCobranza);
       } else if (entityType === 'cuenta_cobranza') {
-        documentoData.id_cuenta_cobranza = idCuentaCobranza;
-        documentoData.id_propiedad = idPropiedad;
-        if (idPersona) {
-          documentoData.id_persona = idPersona;
-        }
+        if (idCuentaCobranza) existingDocQuery = existingDocQuery.eq('id_cuenta_cobranza', idCuentaCobranza);
+        if (idPropiedad) existingDocQuery = existingDocQuery.eq('id_propiedad', idPropiedad);
+        if (idPersona) existingDocQuery = existingDocQuery.eq('id_persona', idPersona);
       }
 
-      const { error: insertError } = await supabase.from('documentos').insert(documentoData);
+      const { data: existingDoc } = await existingDocQuery.maybeSingle();
 
-      if (insertError) throw insertError;
+      if (existingDoc) {
+        // Update existing document
+        const { error: updateError } = await supabase
+          .from('documentos')
+          .update({
+            url: urlData.publicUrl,
+            es_verificado: false,
+            numero: numeroValue,
+            fecha_actualizacion: new Date().toISOString()
+          })
+          .eq('id', existingDoc.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new documento record
+        const documentoData: any = {
+          numero: numeroValue,
+          url: urlData.publicUrl,
+          id_tipo_documento: parseInt(selectedTipoDocumento),
+          activo: true,
+          es_verificado: false,
+        };
+
+        // Add foreign keys based on entity type
+        if (entityType === 'persona') {
+          documentoData.id_persona = entityId;
+        } else if (entityType === 'propiedad') {
+          documentoData.id_propiedad = idPropiedad;
+          documentoData.id_cuenta_cobranza = idCuentaCobranza;
+        } else if (entityType === 'cuenta_cobranza') {
+          documentoData.id_cuenta_cobranza = idCuentaCobranza;
+          documentoData.id_propiedad = idPropiedad;
+          if (idPersona) {
+            documentoData.id_persona = idPersona;
+          }
+        }
+
+        const { error: insertError } = await supabase.from('documentos').insert(documentoData);
+
+        if (insertError) throw insertError;
+      }
 
       // Reload documents
       await loadDocumentos();
