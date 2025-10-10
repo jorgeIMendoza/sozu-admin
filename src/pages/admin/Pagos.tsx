@@ -93,6 +93,16 @@ export default function Pagos() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  // Helper function to normalize balance and avoid floating point precision issues
+  const normalizarSaldo = (saldo: number): number => {
+    // If balance is very close to zero (less than 1 cent), treat it as zero
+    if (Math.abs(saldo) < 0.01) {
+      return 0;
+    }
+    // Round to 2 decimal places to avoid precision issues
+    return Math.round(saldo * 100) / 100;
+  };
+
   const { data: cuentasCobranza, isLoading } = useQuery({
     queryKey: ["cuentas_cobranza"],
     queryFn: async () => {
@@ -116,23 +126,46 @@ export default function Pagos() {
 
       if (!cuentas || cuentas.length === 0) return [];
 
-      // Get all payment amounts for each account
+      // Get all payment amounts for each account using aplicaciones_pago
       const cuentaIds = cuentas.map(c => c.id);
       console.log('Cuenta IDs:', cuentaIds);
       
-      const { data: pagosSums, error: pagosError } = await supabase
-        .from('pagos')
-        .select('id_cuenta_cobranza, monto')
+      // First get all acuerdos for these cuentas
+      const { data: acuerdosForPagos } = await supabase
+        .from('acuerdos_pago')
+        .select('id, id_cuenta_cobranza')
         .in('id_cuenta_cobranza', cuentaIds)
         .eq('activo', true);
 
-      console.log('Pagos query result:', { pagosSums, pagosError });
+      const acuerdoIdsForPagos = acuerdosForPagos?.map(a => a.id) || [];
+      
+      // Now get aplicaciones_pago for those acuerdos
+      const { data: aplicacionesPago, error: aplicacionesError } = await supabase
+        .from('aplicaciones_pago')
+        .select(`
+          monto,
+          id_acuerdo_pago,
+          es_multa,
+          pagos!inner(activo)
+        `)
+        .in('id_acuerdo_pago', acuerdoIdsForPagos)
+        .eq('activo', true)
+        .eq('pagos.activo', true)
+        .eq('es_multa', false);
 
-      // Calculate total payments per account
+      console.log('Aplicaciones pago query result:', { aplicacionesPago, aplicacionesError });
+
+      // Create a map from acuerdo_id to cuenta_id
+      const acuerdoToCuentaMap = acuerdosForPagos?.reduce((acc: Record<number, number>, a) => {
+        acc[a.id] = a.id_cuenta_cobranza;
+        return acc;
+      }, {}) || {};
+
+      // Calculate total payments per account from aplicaciones
       const pagadoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const totalPagado = pagosSums
-          ?.filter(p => p.id_cuenta_cobranza === cuenta.id)
-          ?.reduce((sum, p) => sum + (p.monto || 0), 0) || 0;
+        const totalPagado = aplicacionesPago
+          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
+          ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
         acc[cuenta.id] = totalPagado;
         console.log(`Cuenta ${cuenta.id}: pagado = ${totalPagado}`);
         return acc;
@@ -140,31 +173,60 @@ export default function Pagos() {
       
       console.log('Pagado por cuenta:', pagadoPorCuenta);
 
-      // Get cash payments (id_metodos_pago = 1) for all accounts
+      // Get cash payments (id_metodos_pago = 1) for all accounts using aplicaciones_pago
       const { data: pagosCash } = await supabase
         .from('pagos')
-        .select('id_cuenta_cobranza, monto, fecha_pago')
+        .select('id, fecha_pago, id_metodos_pago, activo')
         .in('id_cuenta_cobranza', cuentaIds)
         .eq('id_metodos_pago', 1)
         .eq('activo', true)
         .order('fecha_pago', { ascending: false });
 
+      const pagosCashIds = pagosCash?.map(p => p.id) || [];
+      
+      // Get aplicaciones for cash payments
+      const { data: aplicacionesCash } = await supabase
+        .from('aplicaciones_pago')
+        .select(`
+          monto,
+          id_acuerdo_pago,
+          id_pago,
+          es_multa
+        `)
+        .in('id_pago', pagosCashIds)
+        .in('id_acuerdo_pago', acuerdoIdsForPagos)
+        .eq('activo', true)
+        .eq('es_multa', false);
+
       const pagadoEfectivoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const totalEfectivo = pagosCash
-          ?.filter(p => p.id_cuenta_cobranza === cuenta.id)
-          ?.reduce((sum, p) => sum + (p.monto || 0), 0) || 0;
+        const totalEfectivo = aplicacionesCash
+          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
+          ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
         acc[cuenta.id] = totalEfectivo;
         return acc;
       }, {});
 
-      // Create a map of individual cash payments per account
+      // Create a map of individual cash payments per account with aggregated amounts
       const pagosCashPorCuenta = cuentas.reduce((acc: Record<number, CashPayment[]>, cuenta) => {
-        const pagos = pagosCash
-          ?.filter(p => p.id_cuenta_cobranza === cuenta.id)
-          ?.map(p => ({
-            fecha_pago: p.fecha_pago,
-            monto: p.monto
-          })) || [];
+        // Get all cash payment IDs for this cuenta through aplicaciones
+        const aplicacionesForCuenta = aplicacionesCash
+          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id) || [];
+        
+        // Group by payment ID and sum amounts
+        const pagoAggregated = aplicacionesForCuenta.reduce((pagoAcc: Record<number, number>, ap) => {
+          pagoAcc[ap.id_pago] = (pagoAcc[ap.id_pago] || 0) + (ap.monto || 0);
+          return pagoAcc;
+        }, {});
+        
+        // Map to payment details
+        const pagos = Object.entries(pagoAggregated).map(([pagoId, monto]) => {
+          const pago = pagosCash?.find(p => p.id === parseInt(pagoId));
+          return {
+            fecha_pago: pago?.fecha_pago || '',
+            monto: monto as number
+          };
+        }).filter(p => p.fecha_pago);
+        
         acc[cuenta.id] = pagos;
         return acc;
       }, {});
@@ -429,7 +491,7 @@ export default function Pagos() {
 
         const pagado = pagadoPorCuenta[cuenta.id] || 0;
         const precio_final = cuenta.precio_final || 0;
-        const restante = precio_final - pagado;
+        const restante = normalizarSaldo(precio_final - pagado);
 
         // Calculate cash payment data (only for properties)
         const valorUma = cuenta.valor_uma || 0;
