@@ -238,152 +238,7 @@ export function DocumentsTab({
     loadDocumentos();
   }, [entityId, entityType, tipoPersona]);
 
-  // Check category 7 documents - simplified to avoid TS deep instantiation errors
-  useEffect(() => {
-    if (entityType !== 'cuenta_cobranza' || !entityId || dialogAlreadyShown || documentos.length === 0) {
-      return;
-    }
-
-    const checkCategory7 = async () => {
-      try {
-        // Using type assertion to avoid deep type inference issues
-        const supabaseClient = supabase as any;
-        const response = await supabaseClient
-          .from('tipos_documento')
-          .select('id')
-          .eq('id_categoria_documento', 7)
-          .eq('activo', true);
-        
-        if (!response.data || response.data.length === 0) return;
-        
-        // Extract IDs
-        const categoria7Ids: number[] = [];
-        for (let i = 0; i < response.data.length; i++) {
-          categoria7Ids.push(response.data[i].id);
-        }
-        
-        // Filter documents of category 7
-        const categoria7Docs: Documento[] = [];
-        for (let i = 0; i < documentos.length; i++) {
-          const doc = documentos[i];
-          if (categoria7Ids.indexOf(doc.id_tipo_documento) !== -1 && doc.activo) {
-            categoria7Docs.push(doc);
-          }
-        }
-        
-        // Check if all are verified
-        if (categoria7Docs.length > 0) {
-          let allVerified = true;
-          for (let i = 0; i < categoria7Docs.length; i++) {
-            if (!categoria7Docs[i].es_verificado) {
-              allVerified = false;
-              break;
-            }
-          }
-          
-          if (allVerified) {
-            // Obtener proyecto e información necesaria
-            const cuentaResp = await supabaseClient
-              .from('cuentas_cobranza')
-              .select(`
-                id,
-                ofertas!cuentas_cobranza_id_oferta_fkey (
-                  id_propiedad,
-                  propiedades!ofertas_id_propiedad_fkey (
-                    id_entidad_relacionada_dueno,
-                    entidades_relacionadas!propiedades_id_entidad_relacionada_dueno_fkey (
-                      id_proyecto
-                    )
-                  )
-                )
-              `)
-              .eq('id', entityId)
-              .single();
-            
-            const proyectoId = cuentaResp?.data?.ofertas?.propiedades?.entidades_relacionadas?.id_proyecto;
-            
-            if (!proyectoId) {
-              console.error('No se pudo determinar el proyecto');
-              return;
-            }
-            
-            // Obtener entidad administradora
-            const administradoraResp = await supabaseClient
-              .from('entidades_relacionadas')
-              .select('id')
-              .eq('id_proyecto', proyectoId)
-              .eq('id_tipo_entidad', 6) // Administradora
-              .eq('activo', true)
-              .not('cuenta_madre_stp', 'is', null)
-              .single();
-            
-            if (!administradoraResp.data) {
-              console.error('No se encontró entidad administradora');
-              return;
-            }
-            
-            // Obtener compradores con sus datos
-            const compradoresResp = await supabaseClient
-              .from('compradores')
-              .select(`
-                id_persona,
-                personas!compradores_id_persona_fkey (
-                  nombre_legal,
-                  email
-                )
-              `)
-              .eq('id_cuenta_cobranza', entityId)
-              .eq('activo', true);
-            
-            if (!compradoresResp.data || compradoresResp.data.length === 0) {
-              console.error('No se encontraron compradores');
-              return;
-            }
-            
-            // Preparar payload
-            const payload = {
-              id_cuenta_cobranza: entityId,
-              id_entidad_administrador: administradoraResp.data.id,
-              compradores: compradoresResp.data.map((c: any) => ({
-                id_comprador: c.id_persona,
-                nombre: c.personas.nombre_legal,
-                email: c.personas.email || ''
-              }))
-            };
-            
-            // Llamar al endpoint
-            const response = await fetch('https://n8n.lovable.app/webhook/generaCuentaMantenimiento', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(payload)
-            });
-            
-            if (!response.ok) {
-              throw new Error('Error al generar cuenta de mantenimiento');
-            }
-            
-            toast({
-              title: "Cuenta de mantenimiento generada",
-              description: "Se ha generado exitosamente la cuenta de mantenimiento",
-            });
-            
-            setDialogAlreadyShown(true);
-          }
-        }
-      } catch (error) {
-        console.error('Error checking category 7:', error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al procesar documentos de categoría 7",
-        });
-      }
-    };
-
-    checkCategory7();
-  }, [documentos.length, entityType, entityId, dialogAlreadyShown, toast]);
+  // El efecto automático fue removido - ahora solo se procesa cuando el usuario confirma
 
   const handleUpload = async () => {
     if (!selectedFile || !selectedTipoDocumento) {
@@ -832,74 +687,124 @@ export function DocumentsTab({
 
   const procesarUltimoDocumento = async () => {
     try {
-      // 1. Obtener id_propiedad desde cuenta_cobranza
-      const { data: cuentaData } = await supabase
+      // 1. Obtener la oferta desde la cuenta de cobranza
+      const { data: cuentaData, error: cuentaError } = await supabase
         .from('cuentas_cobranza')
         .select('id_oferta')
         .eq('id', entityId)
         .single();
-      
-      if (!cuentaData?.id_oferta) throw new Error('No se encontró la oferta');
-      
-      const { data: ofertaData } = await supabase
+
+      if (cuentaError || !cuentaData?.id_oferta) {
+        throw new Error('No se pudo obtener la oferta de la cuenta');
+      }
+
+      // 2. Obtener la propiedad desde la oferta
+      const { data: ofertaData, error: ofertaError } = await supabase
         .from('ofertas')
-        .select('id_propiedad, id_producto')
+        .select('id_propiedad')
         .eq('id', cuentaData.id_oferta)
         .single();
-      
-      // Solo proceder si es una propiedad (no producto)
-      if (!ofertaData?.id_propiedad) {
-        toast({
-          title: "Documentos verificados",
-          description: "✓ Todos los documentos han sido verificados correctamente"
-        });
-        return;
+
+      if (ofertaError || !ofertaData?.id_propiedad) {
+        throw new Error('No se pudo obtener la propiedad de la oferta');
       }
-      
-      const idPropiedad = ofertaData.id_propiedad;
-      
-      // 2. Actualizar estatus de propiedad a "Entregado" (id=8)
-      const { error: updateError } = await supabase
+
+      // 3. Obtener la entidad relacionada dueño desde la propiedad
+      const { data: propiedadData, error: propiedadError } = await supabase
         .from('propiedades')
-        .update({ 
-          id_estatus_disponibilidad: 8,
-          fecha_actualizacion: new Date().toISOString()
-        })
-        .eq('id', idPropiedad);
-      
-      if (updateError) throw updateError;
-      
-      // 3. Llamar webhook para generar cuenta de mantenimiento
-      const webhookResponse = await fetch(`${N8N_WEBHOOK_BASE_URL}/generaCuentaMantenimiento`, {
+        .select('id_entidad_relacionada_dueno')
+        .eq('id', ofertaData.id_propiedad)
+        .single();
+
+      if (propiedadError || !propiedadData?.id_entidad_relacionada_dueno) {
+        throw new Error('No se pudo obtener la entidad dueña de la propiedad');
+      }
+
+      // 4. Obtener el proyecto desde la entidad relacionada
+      const { data: entidadData, error: entidadError } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_proyecto')
+        .eq('id', propiedadData.id_entidad_relacionada_dueno)
+        .single();
+
+      if (entidadError || !entidadData?.id_proyecto) {
+        throw new Error('No se pudo obtener el proyecto');
+      }
+
+      // 5. Obtener la entidad administradora del proyecto
+      const { data: entidadAdmin, error: adminError } = await supabase
+        .from('entidades_relacionadas')
+        .select('id')
+        .eq('id_proyecto', entidadData.id_proyecto)
+        .eq('id_tipo_entidad', 6) // 6 = Administradora
+        .eq('activo', true)
+        .single();
+
+      if (adminError || !entidadAdmin) {
+        throw new Error('No se encontró la entidad administradora del proyecto');
+      }
+
+      // 6. Obtener compradores con sus datos
+      const { data: compradoresData, error: compradoresError } = await supabase
+        .from('compradores')
+        .select('id_persona')
+        .eq('id_cuenta_cobranza', entityId)
+        .eq('activo', true);
+
+      if (compradoresError || !compradoresData || compradoresData.length === 0) {
+        throw new Error('No se pudieron obtener los compradores');
+      }
+
+      // 7. Obtener los datos de las personas compradoras
+      const personaIds = compradoresData.map(c => c.id_persona);
+      const { data: personasData, error: personasError } = await supabase
+        .from('personas')
+        .select('id, nombre_legal, email')
+        .in('id', personaIds);
+
+      if (personasError || !personasData) {
+        throw new Error('No se pudieron obtener los datos de los compradores');
+      }
+
+      const compradoresPayload = personasData.map(p => ({
+        id_comprador: p.id,
+        nombre: p.nombre_legal,
+        email: p.email || ''
+      }));
+
+      // 8. Llamar al webhook de N8N
+      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/generaCuentaMantenimiento`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id_cuenta_cobranza: entityId })
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id_cuenta_cobranza: entityId,
+          id_entidad_administrador: entidadAdmin.id,
+          compradores: compradoresPayload
+        }),
       });
-      
-      if (!webhookResponse.ok) {
+
+      if (!response.ok) {
         throw new Error('Error al generar cuenta de mantenimiento');
       }
-      
-      const resultado = await webhookResponse.json();
-      const clabeMantenimiento = resultado?.clabe_stp_mantenimiento || 'No disponible';
-      
-      // 4. Mostrar toast de éxito con CLABE
+
+      const result = await response.json();
+
       toast({
-        title: "🎉 ¡Propiedad entregada!",
-        description: `Cuenta de mantenimiento generada\nCLABE STP: ${clabeMantenimiento}`,
+        title: "Cuenta de mantenimiento generada",
+        description: `CLABE STP: ${result.clabe_stp_mantenimiento || 'N/A'}`,
         duration: 8000
       });
-      
-      // 5. Recargar datos
+
+      // Recargar documentos
       await loadDocumentos();
-      
-    } catch (error: any) {
-      console.error('Error procesando último documento:', error);
+    } catch (error) {
+      console.error('Error:', error);
       toast({
-        variant: "destructive",
         title: "Error",
-        description: `Error al procesar entrega: ${error.message}`,
-        duration: 6000
+        description: error instanceof Error ? error.message : "Error al procesar la entrega",
+        variant: "destructive",
       });
     }
   };
