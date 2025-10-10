@@ -556,24 +556,22 @@ export function DocumentsTab({
                         // Filter out document types that are already added (in saved or pending documents)
                         const existsInSaved = documentos.some(doc => doc.id_tipo_documento === tipo.id && doc.activo);
                         const existsInPending = pendingDocuments.some(doc => doc.tipoDocumento === tipo.id.toString());
+                        
+                        // Filter out invoice types when shouldAutoGenerateInvoice is true (owner doesn't have facturar enabled)
+                        const isInvoiceType = tipo.nombre.toLowerCase().includes('factura');
+                        if (shouldAutoGenerateInvoice && isInvoiceType) {
+                          return false;
+                        }
+                        
                         return !existsInSaved && !existsInPending;
                       })
                       .map((tipo) => {
-                        const isInvoiceType = tipo.nombre.toLowerCase().includes('factura');
-                        const isDisabled = shouldAutoGenerateInvoice && isInvoiceType;
-                        
                         return (
                           <SelectItem 
                             key={tipo.id} 
                             value={tipo.id.toString()}
-                            disabled={isDisabled}
                           >
                             {tipo.nombre}
-                            {isDisabled && (
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                (Se genera automáticamente)
-                              </span>
-                            )}
                           </SelectItem>
                         );
                       })}
@@ -822,24 +820,22 @@ export function DocumentsTab({
                       // Filter out document types that are already added (in saved or pending documents)
                       const existsInSaved = documentos.some(doc => doc.id_tipo_documento === tipo.id && doc.activo);
                       const existsInPending = pendingDocuments.some(doc => doc.tipoDocumento === tipo.id.toString());
+                      
+                      // Filter out invoice types when shouldAutoGenerateInvoice is true (owner doesn't have facturar enabled)
+                      const isInvoiceType = tipo.nombre.toLowerCase().includes('factura');
+                      if (shouldAutoGenerateInvoice && isInvoiceType) {
+                        return false;
+                      }
+                      
                       return !existsInSaved && !existsInPending;
                     })
                     .map((tipo) => {
-                      const isInvoiceType = tipo.nombre.toLowerCase().includes('factura');
-                      const isDisabled = shouldAutoGenerateInvoice && isInvoiceType;
-                      
                       return (
                         <SelectItem 
                           key={tipo.id} 
                           value={tipo.id.toString()}
-                          disabled={isDisabled}
                         >
                           {tipo.nombre}
-                          {isDisabled && (
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              (Se genera automáticamente)
-                            </span>
-                          )}
                         </SelectItem>
                       );
                     })}
