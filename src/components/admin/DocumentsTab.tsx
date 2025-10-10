@@ -404,6 +404,11 @@ export function DocumentsTab({
         }
       }
 
+      // Determinar si es una factura PDF o XML
+      const nombreTipoDoc = tipoDoc?.nombre.toLowerCase() || '';
+      const esFactura = nombreTipoDoc.includes('factura pdf') || nombreTipoDoc.includes('factura xml');
+      const esVerificado = esFactura ? true : false;
+
       // Check if document already exists
       let existingDocQuery = supabase
         .from('documentos')
@@ -431,7 +436,7 @@ export function DocumentsTab({
           .from('documentos')
           .update({
             url: urlData.publicUrl,
-            es_verificado: false,
+            es_verificado: esVerificado,
             numero: numeroValue,
             fecha_actualizacion: new Date().toISOString()
           })
@@ -445,7 +450,7 @@ export function DocumentsTab({
           url: urlData.publicUrl,
           id_tipo_documento: parseInt(selectedTipoDocumento),
           activo: true,
-          es_verificado: false,
+          es_verificado: esVerificado,
         };
 
         // Add foreign keys based on entity type
