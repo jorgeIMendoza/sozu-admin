@@ -746,7 +746,7 @@ export function DocumentsTab({
     // 6. Obtener compradores con sus datos
     const { data: compradoresData, error: compradoresError } = await supabase
       .from('compradores')
-      .select('id_persona')
+      .select('id_persona, porcentaje_copropiedad')
       .eq('id_cuenta_cobranza', entityId)
       .eq('activo', true);
 
@@ -765,11 +765,15 @@ export function DocumentsTab({
       throw new Error('No se pudieron obtener los datos de los compradores');
     }
 
-    const compradoresPayload = personasData.map(p => ({
-      id_comprador: p.id,
-      nombre: p.nombre_legal,
-      email: p.email || ''
-    }));
+    const compradoresPayload = personasData.map(p => {
+      const compradorData = compradoresData.find(c => c.id_persona === p.id);
+      return {
+        id_comprador: p.id,
+        nombre: p.nombre_legal,
+        email: p.email || '',
+        porcentaje_copropiedad: compradorData?.porcentaje_copropiedad || 0
+      };
+    });
 
     // 8. Llamar al webhook de N8N
     const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/generaCuentaMantenimiento`, {
