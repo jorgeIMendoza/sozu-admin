@@ -548,7 +548,10 @@ const Propiedades = () => {
           (paymentStatus.especial?.monto_pagado || 0) +
           (paymentStatus.cesion_derechos?.monto_pagado || 0)
         ) : 0;
-        const restante = precio_final - total_pagado;
+        // Calculate restante and eliminate -0
+        let restante = precio_final - total_pagado;
+        restante = +restante.toFixed(2);
+        if (Math.abs(restante) < 0.01) restante = 0;
         
         // Determinar si la cuenta existe pero no tiene acuerdos (esquema no seleccionado)
         const cuentaSinEsquema = cuentaCobranzaData?.id && (!paymentStatus || 
@@ -1437,10 +1440,13 @@ const Propiedades = () => {
   };
 
   const formatCurrency = (amount: number) => {
+    // Eliminate -0 before formatting
+    let value = +amount.toFixed(2);
+    if (Math.abs(value) < 0.01) value = 0;
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN',
-    }).format(amount);
+    }).format(value);
   };
 
   const formatConfiguracion = (config: Property['configuracion_modelo']) => {
