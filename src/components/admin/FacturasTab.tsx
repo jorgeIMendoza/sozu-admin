@@ -502,7 +502,15 @@ export function FacturasTab({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {facturas.map((factura) => {
+                {facturas
+                  .filter(factura => {
+                    // Si el dueño no puede facturar, solo mostrar compradores con facturas subidas
+                    if (!duenoPuedeFacturar) {
+                      return factura.factura_pdf || factura.factura_xml;
+                    }
+                    return true;
+                  })
+                  .map((factura) => {
                   const tienePdf = !!factura.factura_pdf;
                   const isDraft = factura.factura_pdf?.es_draft;
                   
