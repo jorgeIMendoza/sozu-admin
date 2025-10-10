@@ -667,7 +667,7 @@ export function DocumentsTab({
                 .from('cuentas_cobranza')
                 .select(`
                   id_oferta,
-                  ofertas (
+                  ofertas!fk_ccob_oferta (
                     id_propiedad,
                     id_producto,
                     propiedades (
