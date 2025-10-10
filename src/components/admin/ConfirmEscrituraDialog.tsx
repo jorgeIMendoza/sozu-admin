@@ -74,11 +74,12 @@ export function ConfirmEscrituraDialog({
       escrituraData.libro &&
       escrituraData.hoja &&
       escrituraData.fecha_escritura &&
-      escrituraData.numero_unidad_privativa
+      escrituraData.numero_unidad_privativa &&
+      numeroEscritura.trim() !== ''
     );
 
     setDatosEscrituracionCompletos(isComplete);
-  }, [escrituraData]);
+  }, [escrituraData, numeroEscritura]);
 
   const canSave = isCuentaFullyPaid && datosFiscalesCompradoresCompletos && datosEscrituracionCompletos && numeroEscritura.trim() !== '';
 
