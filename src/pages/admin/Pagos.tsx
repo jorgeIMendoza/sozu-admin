@@ -832,7 +832,7 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow 
                         key={cuenta.id}
-                        className={cuenta.restante === 0 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}
+                        className={Math.abs(cuenta.restante) < 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}
                       >
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
@@ -987,7 +987,7 @@ export default function Pagos() {
                          <TableCell className="font-semibold text-orange-600">
                            <div className="flex items-center gap-2">
                              {formatCurrency(cuenta.restante)}
-                             {cuenta.restante === 0 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 && (
+                             {Math.abs(cuenta.restante) < 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 && (
                                <TooltipProvider>
                                  <Tooltip>
                                    <TooltipTrigger>
@@ -1211,7 +1211,7 @@ export default function Pagos() {
                     {filteredCuentas.map((cuenta) => (
                       <TableRow 
                         key={cuenta.id}
-                        className={cuenta.restante === 0 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}
+                        className={Math.abs(cuenta.restante) < 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}
                       >
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
@@ -1366,7 +1366,7 @@ export default function Pagos() {
                          <TableCell className="font-semibold text-orange-600">
                            <div className="flex items-center gap-2">
                              {formatCurrency(cuenta.restante)}
-                             {cuenta.restante === 0 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 && (
+                             {Math.abs(cuenta.restante) < 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 && (
                                <TooltipProvider>
                                  <Tooltip>
                                    <TooltipTrigger>
