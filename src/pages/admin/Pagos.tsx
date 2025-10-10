@@ -99,8 +99,9 @@ export default function Pagos() {
     const rounded = Math.round(saldo * 100) / 100;
     
     // If balance is very close to zero (less than 1 cent), treat it as exactly zero
-    if (Math.abs(rounded) < 0.01) {
-      return 0;
+    // This also handles -0 (negative zero) by explicitly returning positive 0
+    if (Math.abs(rounded) < 0.01 || Object.is(rounded, -0)) {
+      return 0; // Explicitly return positive 0
     }
     
     return rounded;
@@ -581,10 +582,12 @@ export default function Pagos() {
   const totalMonto = filteredCuentas.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
 
   const formatCurrency = (amount: number) => {
+    // Handle negative zero by adding 0 (which converts -0 to 0)
+    const normalizedAmount = amount === 0 ? 0 : amount;
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN'
-    }).format(amount);
+    }).format(normalizedAmount);
   };
 
   // Handler to open cancel dialog
