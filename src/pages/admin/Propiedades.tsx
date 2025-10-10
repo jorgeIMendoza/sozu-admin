@@ -1778,7 +1778,7 @@ const Propiedades = () => {
                       {property.cuenta_cobranza_id ? formatCurrency(property.total_pagado) : '-'}
                     </TableCell>
                    <TableCell className="text-right">
-                     {property.precio_final && property.restante !== 0 ? (
+                     {property.cuenta_cobranza_id ? (
                        <span className={property.restante > 0 ? 'text-orange-600 font-semibold' : 'text-green-600 font-semibold'}>
                          {formatCurrency(property.restante)}
                        </span>
