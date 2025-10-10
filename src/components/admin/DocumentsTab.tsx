@@ -726,7 +726,7 @@ export function DocumentsTab({
               // Verificar que existe entidad Administradora
               const administradoraResp = await supabaseClient
                 .from('entidades_relacionadas')
-                .select('id, cuenta_madre_stp, personas!inner(nombre_legal)')
+                .select('id, cuenta_madre_stp, personas!fk_entrel_persona!inner(nombre_legal)')
                 .eq('id_proyecto', proyectoId)
                 .eq('id_tipo_entidad', 6) // Administradora
                 .eq('activo', true)
