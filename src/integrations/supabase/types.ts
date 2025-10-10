@@ -781,8 +781,9 @@ export type Database = {
           fecha_escritura: string | null
           hoja: string | null
           id: number
+          id_cuenta_cobranza_padre: number | null
           id_notario: number | null
-          id_oferta: number
+          id_oferta: number | null
           id_tipo_cancelacion: number | null
           libro: string | null
           moneda: string | null
@@ -808,8 +809,9 @@ export type Database = {
           fecha_escritura?: string | null
           hoja?: string | null
           id?: number
+          id_cuenta_cobranza_padre?: number | null
           id_notario?: number | null
-          id_oferta: number
+          id_oferta?: number | null
           id_tipo_cancelacion?: number | null
           libro?: string | null
           moneda?: string | null
@@ -835,8 +837,9 @@ export type Database = {
           fecha_escritura?: string | null
           hoja?: string | null
           id?: number
+          id_cuenta_cobranza_padre?: number | null
           id_notario?: number | null
-          id_oferta?: number
+          id_oferta?: number | null
           id_tipo_cancelacion?: number | null
           libro?: string | null
           moneda?: string | null
