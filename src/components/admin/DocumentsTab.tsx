@@ -1244,7 +1244,10 @@ export function DocumentsTab({
                 if (!documentoPendienteVerificar) return;
                 
                 try {
-                  // 1. Primero verificar el documento
+                  // 1. Primero llamar al webhook - CRÍTICO: webhook debe ejecutarse ANTES de verificar
+                  await procesarUltimoDocumento();
+                  
+                  // 2. Solo si el webhook fue exitoso, verificar el documento
                   const { error: verifyError } = await supabase
                     .from('documentos')
                     .update({ es_verificado: true })
@@ -1252,11 +1255,8 @@ export function DocumentsTab({
                   
                   if (verifyError) throw verifyError;
                   
-                  // 2. Recargar documentos
+                  // 3. Recargar documentos
                   await loadDocumentos();
-                  
-                  // 3. Procesar la entrega
-                  await procesarUltimoDocumento();
                   
                   // 4. Limpiar estado
                   setDocumentoPendienteVerificar(null);
@@ -1266,6 +1266,7 @@ export function DocumentsTab({
                     title: "Error",
                     description: `Error al procesar: ${error.message}`
                   });
+                  // No se limpia documentoPendienteVerificar para permitir reintentar
                 }
               }}
               className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800"
