@@ -495,28 +495,26 @@ export default function Pagos() {
 
         const pagado = pagadoPorCuenta[cuenta.id] || 0;
         const precio_final = cuenta.precio_final || 0;
-        // Force positive zero - apply multiple strategies
+        // Calculate difference and normalize to avoid -0
         let restante = precio_final - pagado;
-        // Round to 2 decimals
         restante = Math.round(restante * 100) / 100;
-        // If very close to zero OR is negative zero, force to positive zero
-        if (Math.abs(restante) < 0.01 || Object.is(restante, -0) || restante === 0) {
+        // Force any zero (including -0) to positive 0
+        if (Math.abs(restante) < 0.01) {
           restante = 0;
         }
-        // Final safety: ensure we never have -0
-        restante = restante === 0 ? 0 : restante;
+        // Final cleanup: use + operator to convert -0 to 0
+        restante = +restante.toFixed(2);
 
         // Calculate cash payment data (only for properties)
         const valorUma = cuenta.valor_uma || 0;
         const limiteEfectivo = valorUma * 8025;
         const pagadoEfectivo = tipo === 'Propiedad' ? (pagadoEfectivoPorCuenta[cuenta.id] || 0) : 0;
         let restanteEfectivo = limiteEfectivo - pagadoEfectivo;
-        // Round and force positive zero
         restanteEfectivo = Math.round(restanteEfectivo * 100) / 100;
-        if (Math.abs(restanteEfectivo) < 0.01 || Object.is(restanteEfectivo, -0) || restanteEfectivo === 0) {
+        if (Math.abs(restanteEfectivo) < 0.01) {
           restanteEfectivo = 0;
         }
-        restanteEfectivo = restanteEfectivo === 0 ? 0 : restanteEfectivo;
+        restanteEfectivo = +restanteEfectivo.toFixed(2);
         const porcentajeEfectivo = limiteEfectivo > 0 ? (pagadoEfectivo / limiteEfectivo) * 100 : 0;
 
         return {
@@ -596,26 +594,20 @@ export default function Pagos() {
   const totalMonto = filteredCuentas.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
 
   const formatCurrency = (amount: number) => {
-    // Force convert -0 to positive 0 using multiple methods
-    let normalizedAmount = amount;
-    
-    // Method 1: Check for -0 explicitly
-    if (Object.is(amount, -0)) {
-      normalizedAmount = 0;
+    // Aggressively eliminate -0
+    let value = amount;
+    // Convert to fixed then back to number to eliminate -0
+    value = +value.toFixed(2);
+    // If very close to zero, force to 0
+    if (Math.abs(value) < 0.01) {
+      value = 0;
     }
-    // Method 2: Add 0 to convert -0 to 0
-    normalizedAmount = normalizedAmount + 0;
-    // Method 3: Use Math.abs for very small numbers
-    if (Math.abs(normalizedAmount) < 0.001) {
-      normalizedAmount = 0;
-    }
-    
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(normalizedAmount);
+    }).format(value);
   };
 
   // Handler to open cancel dialog
