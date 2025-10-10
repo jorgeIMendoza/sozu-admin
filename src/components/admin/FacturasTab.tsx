@@ -497,7 +497,7 @@ export function FacturasTab({
               <TableHead>RFC</TableHead>
               <TableHead>ID de factura</TableHead>
               <TableHead>Factura PDF</TableHead>
-              <TableHead>Estado</TableHead>
+              <TableHead>Estado de la factura</TableHead>
               {duenoPuedeFacturar && <TableHead className="text-right">Acciones</TableHead>}
                 </TableRow>
               </TableHeader>
@@ -539,7 +539,7 @@ export function FacturasTab({
                       <TableCell>
                         {tienePdf ? (
                           <Badge variant={isDraft ? "secondary" : "default"}>
-                            {isDraft ? "Draft" : "Final"}
+                            {isDraft ? "Draft" : "Timbrada"}
                           </Badge>
                         ) : (
                           <Badge variant="outline">Sin factura</Badge>
