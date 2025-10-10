@@ -65,6 +65,11 @@ export function FacturasTab({
     idPersona: null,
     idDocumento: null
   });
+  const [validationData, setValidationData] = useState<{
+    cuentaPagadaCompletamente: boolean;
+    datosEscrituracionCompletos: boolean;
+    datosFiscalesCompradores: Record<number, boolean>;
+  } | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -127,8 +132,111 @@ export function FacturasTab({
     }
   };
 
+  // Función para validar datos fiscales de un comprador
+  const validateDatosFiscalesComprador = async (idPersona: number): Promise<boolean> => {
+    try {
+      const { data: persona, error } = await supabase
+        .from('personas')
+        .select('rfc, regimen, uso_cfdi, direccion_fiscal_calle, direccion_fiscal_num_ext, direccion_fiscal_colonia, direccion_fiscal_codigo_postal, direccion_fiscal_id_pais, direccion_fiscal_id_estado, direccion_fiscal_id_municipio')
+        .eq('id', idPersona)
+        .single();
+
+      if (error || !persona) return false;
+
+      // Verificar que todos los campos fiscales estén completos
+      return !!(
+        persona.rfc &&
+        persona.regimen &&
+        persona.uso_cfdi &&
+        persona.direccion_fiscal_calle &&
+        persona.direccion_fiscal_num_ext &&
+        persona.direccion_fiscal_colonia &&
+        persona.direccion_fiscal_codigo_postal &&
+        persona.direccion_fiscal_id_pais &&
+        persona.direccion_fiscal_id_estado &&
+        persona.direccion_fiscal_id_municipio
+      );
+    } catch (error) {
+      console.error('Error validando datos fiscales:', error);
+      return false;
+    }
+  };
+
+  // Función para validar si la cuenta está pagada completamente
+  const validateCuentaPagada = async (): Promise<boolean> => {
+    try {
+      const { data: cuenta, error: cuentaError } = await supabase
+        .from('cuentas_cobranza')
+        .select('precio_final')
+        .eq('id', cuentaCobranzaId)
+        .single();
+
+      if (cuentaError || !cuenta) return false;
+
+      const { data: pagos, error: pagosError } = await supabase
+        .from('pagos')
+        .select('monto')
+        .eq('id_cuenta_cobranza', cuentaCobranzaId)
+        .eq('activo', true);
+
+      if (pagosError) return false;
+
+      const totalPagado = pagos?.reduce((sum, pago) => sum + Number(pago.monto || 0), 0) || 0;
+      
+      return totalPagado >= Number(cuenta.precio_final);
+    } catch (error) {
+      console.error('Error validando pagos:', error);
+      return false;
+    }
+  };
+
+  // Función para validar datos de escrituración
+  const validateDatosEscrituracion = async (): Promise<boolean> => {
+    try {
+      const { data: cuenta, error } = await supabase
+        .from('cuentas_cobranza')
+        .select('numero_escritura, fecha_escritura, libro, hoja, clave_catastral, numero_unidad_privativa, id_notario')
+        .eq('id', cuentaCobranzaId)
+        .single();
+
+      if (error || !cuenta) return false;
+
+      // Verificar que todos los campos de escrituración estén completos
+      return !!(
+        cuenta.numero_escritura &&
+        cuenta.fecha_escritura &&
+        cuenta.libro &&
+        cuenta.hoja &&
+        cuenta.clave_catastral &&
+        cuenta.numero_unidad_privativa &&
+        cuenta.id_notario
+      );
+    } catch (error) {
+      console.error('Error validando datos de escrituración:', error);
+      return false;
+    }
+  };
+
+  // Función para cargar todas las validaciones
+  const loadValidations = async () => {
+    const cuentaPagada = await validateCuentaPagada();
+    const datosEscrituracion = await validateDatosEscrituracion();
+    
+    const datosFiscales: Record<number, boolean> = {};
+    for (const comprador of compradores) {
+      datosFiscales[comprador.id_persona] = await validateDatosFiscalesComprador(comprador.id_persona);
+    }
+
+    setValidationData({
+      cuentaPagadaCompletamente: cuentaPagada,
+      datosEscrituracionCompletos: datosEscrituracion,
+      datosFiscalesCompradores: datosFiscales
+    });
+  };
+
   useEffect(() => {
     loadFacturas();
+    loadValidations();
   }, [cuentaCobranzaId, compradores]);
 
   // Helper function to build complete payload
@@ -557,29 +665,53 @@ export function FacturasTab({
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             {/* Botón para generar primera factura draft */}
-                            {!tienePdf && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleRegenerarDraft(factura.id_persona, null)}
-                                      disabled={generatingForPersona === factura.id_persona}
-                                    >
-                                      {generatingForPersona === factura.id_persona ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <FileEdit className="h-4 w-4" />
-                                      )}
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Generar draft de factura</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
+                            {!tienePdf && (() => {
+                              const datosFiscalesCompletos = validationData?.datosFiscalesCompradores[factura.id_persona] ?? false;
+                              const cuentaPagada = validationData?.cuentaPagadaCompletamente ?? false;
+                              const escrituracionCompleta = validationData?.datosEscrituracionCompletos ?? false;
+                              
+                              const isDisabled = generatingForPersona === factura.id_persona || 
+                                                !datosFiscalesCompletos || 
+                                                !cuentaPagada || 
+                                                !escrituracionCompleta;
+
+                              const getTooltipMessage = () => {
+                                if (generatingForPersona === factura.id_persona) return "Generando...";
+                                const issues = [];
+                                if (!datosFiscalesCompletos) issues.push("datos fiscales incompletos");
+                                if (!cuentaPagada) issues.push("cuenta sin pagar completamente");
+                                if (!escrituracionCompleta) issues.push("datos de escrituración incompletos");
+                                
+                                if (issues.length === 0) return "Generar draft de factura";
+                                return `No se puede generar: ${issues.join(", ")}`;
+                              };
+
+                              return (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleRegenerarDraft(factura.id_persona, null)}
+                                          disabled={isDisabled}
+                                        >
+                                          {generatingForPersona === factura.id_persona ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <FileEdit className="h-4 w-4" />
+                                          )}
+                                        </Button>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{getTooltipMessage()}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              );
+                            })()}
                             
                             {/* Botón para regenerar draft */}
                             {tienePdf && isDraft && factura.factura_pdf && (
