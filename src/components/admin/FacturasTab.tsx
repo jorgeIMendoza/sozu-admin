@@ -135,11 +135,19 @@ export function FacturasTab({
       throw new Error('No se encontró el ID de la propiedad');
     }
 
-    // 1. Obtener datos completos del comprador
+    // 1. Obtener datos completos del comprador y su porcentaje de copropiedad
     const { data: compradorData, error: compradorError } = await supabase
       .from('personas')
       .select('*')
       .eq('id', idPersona)
+      .single();
+
+    // Obtener porcentaje de copropiedad del comprador
+    const { data: compradorCuentaData } = await supabase
+      .from('compradores')
+      .select('porcentaje_copropiedad')
+      .eq('id_persona', idPersona)
+      .eq('id_cuenta_cobranza', cuentaCobranzaId)
       .single();
 
     // Obtener datos de pais, estado y municipio fiscal por separado
@@ -304,7 +312,8 @@ export function FacturasTab({
       compradores: [
         {
           id_persona: compradorData.id,
-          nombre_legal: compradorData.nombre_legal,
+          nombre_completo: compradorData.nombre_legal,
+          porcentaje_propiedad: compradorCuentaData?.porcentaje_copropiedad || 0,
           email: compradorData.email,
           telefono: compradorData.telefono || '',
           rfc: compradorData.rfc || '',
