@@ -2419,8 +2419,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 console.log('📝 [onBlur numero_escritura] vendedorDetalle?.facturar:', vendedorDetalle?.facturar);
                                 
                                 if (newValue && newValue !== cuentaDetalle?.numero_escritura) {
-                                  // Si ya existe un numero_escritura guardado, guardar directamente sin confirmación
-                                  if (cuentaDetalle?.numero_escritura) {
+                                  // Si ya existe factura generada, guardar directamente sin confirmación
+                                  if (hasFacturas) {
                                     setNumeroEscritura(newValue);
                                     updateEscrituraMutation.mutate({ numero_escritura: newValue });
                                   }
@@ -2429,7 +2429,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                     setNumeroEscritura(newValue);
                                     updateEscrituraMutation.mutate({ numero_escritura: newValue });
                                   } else {
-                                    // Si factura y es la primera vez, mostrar dialog de confirmación
+                                    // Si factura y NO existe factura, mostrar dialog de confirmación
                                     setPendingNumeroEscritura(newValue);
                                     setShowConfirmEscrituraDialog(true);
                                   }
