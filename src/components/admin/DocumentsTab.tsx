@@ -662,16 +662,23 @@ export function DocumentsTab({
             
             // Validar entidad administradora antes de verificar cualquier documento de categoría 7
             if (noVerificados.length >= 1) {
-              // Obtener proyecto de la cuenta de cobranza
+              // Obtener proyecto de la cuenta de cobranza (puede ser de propiedad o producto)
               const cuentaResp = await supabaseClient
                 .from('cuentas_cobranza')
                 .select(`
                   id_oferta,
                   ofertas!cuentas_cobranza_id_oferta_fkey (
                     id_propiedad,
+                    id_producto,
                     propiedades!ofertas_id_propiedad_fkey (
                       id_entidad_relacionada_dueno,
                       entidades_relacionadas!propiedades_id_entidad_relacionada_dueno_fkey (
+                        id_proyecto
+                      )
+                    ),
+                    productos_servicios!ofertas_id_producto_fkey (
+                      id_entidad_relacionada_dueno,
+                      entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
                         id_proyecto
                       )
                     )
@@ -680,7 +687,13 @@ export function DocumentsTab({
                 .eq('id', entityId)
                 .single();
               
-              const proyectoId = cuentaResp?.data?.ofertas?.propiedades?.entidades_relacionadas?.id_proyecto;
+              // Determinar proyecto desde propiedad o producto
+              let proyectoId = null;
+              if (cuentaResp?.data?.ofertas?.propiedades?.entidades_relacionadas?.id_proyecto) {
+                proyectoId = cuentaResp.data.ofertas.propiedades.entidades_relacionadas.id_proyecto;
+              } else if (cuentaResp?.data?.ofertas?.productos_servicios?.entidades_relacionadas?.id_proyecto) {
+                proyectoId = cuentaResp.data.ofertas.productos_servicios.entidades_relacionadas.id_proyecto;
+              }
               
               if (!proyectoId) {
                 throw new Error('No se pudo determinar el proyecto');
