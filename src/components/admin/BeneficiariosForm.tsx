@@ -46,9 +46,10 @@ type Parentesco = {
 interface BeneficiariosFormProps {
   personaId: number;
   personaNombre: string;
+  isReadOnly?: boolean;
 }
 
-export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFormProps) {
+export function BeneficiariosForm({ personaId, personaNombre, isReadOnly = false }: BeneficiariosFormProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBeneficiario, setEditingBeneficiario] = useState<TempBeneficiario | null>(null);
   const [nombreBeneficiario, setNombreBeneficiario] = useState("");
@@ -312,37 +313,39 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
             )}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              resetForm();
-              setEditingBeneficiario(null);
-              setIsDialogOpen(true);
-            }}
-            className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Agregar Beneficiario
-          </Button>
-          {hasChanges && (
-            <Button
+        {!isReadOnly && (
+          <div className="flex gap-2">
+            <Button 
               type="button"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                saveAllMutation.mutate();
+                resetForm();
+                setEditingBeneficiario(null);
+                setIsDialogOpen(true);
               }}
-              disabled={saveAllMutation.isPending}
-              className="bg-gradient-to-r from-accent to-accent-glow hover:from-accent-glow hover:to-accent"
+              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300"
             >
-              <Save className="w-4 h-4 mr-2" />
-              Guardar Cambios
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Beneficiario
             </Button>
-          )}
-        </div>
+            {hasChanges && (
+              <Button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  saveAllMutation.mutate();
+                }}
+                disabled={saveAllMutation.isPending}
+                className="bg-gradient-to-r from-accent to-accent-glow hover:from-accent-glow hover:to-accent"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Guardar Cambios
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {tempBeneficiarios.length === 0 ? (
@@ -398,37 +401,40 @@ export function BeneficiariosForm({ personaId, personaNombre }: BeneficiariosFor
                       value={beneficiario.porcentaje_participacion}
                       onChange={(e) => handlePercentageChange(beneficiario.id, parseFloat(e.target.value) || 0)}
                       className="w-20 h-8 text-sm"
+                      disabled={isReadOnly}
                     />
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex gap-2 justify-end">
-                       <Button 
-                         type="button"
-                         variant="outline" 
-                         size="sm"
-                         onClick={(e) => {
-                           e.preventDefault();
-                           e.stopPropagation();
-                           handleEdit(beneficiario);
-                         }}
-                         className="hover:bg-primary/10 hover:border-primary transition-colors"
-                       >
-                         <Edit className="w-4 h-4" />
-                       </Button>
-                       <Button 
-                         type="button"
-                         variant="outline" 
-                         size="sm"
-                         onClick={(e) => {
-                           e.preventDefault();
-                           e.stopPropagation();
-                           handleDelete(beneficiario);
-                         }}
-                         className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
-                       >
-                         <Trash2 className="w-4 h-4" />
-                       </Button>
-                    </div>
+                    {!isReadOnly && (
+                      <div className="flex gap-2 justify-end">
+                         <Button 
+                           type="button"
+                           variant="outline" 
+                           size="sm"
+                           onClick={(e) => {
+                             e.preventDefault();
+                             e.stopPropagation();
+                             handleEdit(beneficiario);
+                           }}
+                           className="hover:bg-primary/10 hover:border-primary transition-colors"
+                         >
+                           <Edit className="w-4 h-4" />
+                         </Button>
+                         <Button 
+                           type="button"
+                           variant="outline" 
+                           size="sm"
+                           onClick={(e) => {
+                             e.preventDefault();
+                             e.stopPropagation();
+                             handleDelete(beneficiario);
+                           }}
+                           className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                         >
+                           <Trash2 className="w-4 h-4" />
+                         </Button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

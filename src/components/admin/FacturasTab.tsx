@@ -697,7 +697,7 @@ export function FacturasTab({
                                           variant="outline"
                                           size="sm"
                                           onClick={() => handleRegenerarDraft(factura.id_persona, null)}
-                                          disabled={isDisabled}
+                                          disabled={isDisabled || isReadOnly}
                                         >
                                           {generatingForPersona === factura.id_persona ? (
                                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -724,7 +724,7 @@ export function FacturasTab({
                                       variant="outline"
                                       size="sm"
                                       onClick={() => handleRegenerarDraft(factura.id_persona, factura.factura_pdf!.id)}
-                                      disabled={generatingForPersona === factura.id_persona}
+                                      disabled={generatingForPersona === factura.id_persona || isReadOnly}
                                     >
                                       {generatingForPersona === factura.id_persona ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -753,7 +753,7 @@ export function FacturasTab({
                                         idPersona: factura.id_persona, 
                                         idDocumento: factura.factura_pdf!.id 
                                       })}
-                                      disabled={generatingForPersona === factura.id_persona}
+                                      disabled={generatingForPersona === factura.id_persona || isReadOnly}
                                     >
                                       {generatingForPersona === factura.id_persona ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />

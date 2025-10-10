@@ -914,7 +914,11 @@ export function DocumentsTab({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">Documentos</h3>
-        <Button type="button" onClick={() => setIsUploadDialogOpen(true)}>
+        <Button 
+          type="button" 
+          onClick={() => setIsUploadDialogOpen(true)}
+          disabled={isReadOnly}
+        >
           <Upload className="mr-2 h-4 w-4" />
           Subir Documento
         </Button>
@@ -973,14 +977,16 @@ export function DocumentsTab({
                           {new Date().toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeletePending(pendingDoc.tempId)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {!isReadOnly && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeletePending(pendingDoc.tempId)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -1027,44 +1033,48 @@ export function DocumentsTab({
                               </Tooltip>
                             </TooltipProvider>
                             
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleToggleVerification(documento)}
-                                  >
-                                    {documento.es_verificado ? (
-                                      <Check className="h-4 w-4 text-green-600" />
-                                    ) : (
-                                      <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                                    )}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{documento.es_verificado ? 'Anular Verificación' : 'Verificar'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDelete(documento)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Eliminar documento</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                            {!isReadOnly && (
+                              <>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleToggleVerification(documento)}
+                                      >
+                                        {documento.es_verificado ? (
+                                          <Check className="h-4 w-4 text-green-600" />
+                                        ) : (
+                                          <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                                        )}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{documento.es_verificado ? 'Anular Verificación' : 'Verificar'}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleDelete(documento)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Eliminar documento</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
