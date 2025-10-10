@@ -149,12 +149,10 @@ export default function Pagos() {
         .select(`
           monto,
           id_acuerdo_pago,
-          es_multa,
-          pagos!inner(activo)
+          es_multa
         `)
         .in('id_acuerdo_pago', acuerdoIdsForPagos)
         .eq('activo', true)
-        .eq('pagos.activo', true)
         .eq('es_multa', false);
 
       console.log('Aplicaciones pago query result:', { aplicacionesPago, aplicacionesError });
