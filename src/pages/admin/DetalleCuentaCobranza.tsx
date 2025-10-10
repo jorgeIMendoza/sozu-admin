@@ -83,6 +83,7 @@ interface CuentaDetalle {
   producto_servicio_id?: number;
   categoria_producto_nombre?: string;
   estatus_disponibilidad?: string;
+  id_estatus_disponibilidad?: number;
   valor_uma?: number;
   id_propiedad?: number;
   detalles_producto?: {
@@ -582,6 +583,7 @@ export default function DetalleCuentaCobranza() {
         producto_servicio_id: productoServicioId,
         categoria_producto_nombre: categoriaProductoNombre,
         estatus_disponibilidad: estatusResult.data?.nombre || undefined,
+        id_estatus_disponibilidad: oferta?.propiedades?.id_estatus_disponibilidad || undefined,
         valor_uma: cuenta.valor_uma || undefined,
         id_propiedad: oferta?.propiedades?.id || undefined,
         detalles_producto: detallesProducto
@@ -1616,6 +1618,9 @@ export default function DetalleCuentaCobranza() {
   }
 
   const esCuentaCancelada = !cuentaDetalle?.activo;
+  
+  // Check if property status is "Entregado" (id=8) - makes everything read-only
+  const isReadOnly = cuentaDetalle?.id_estatus_disponibilidad === 8;
 
   return (
     <div className="space-y-6 relative">
@@ -1664,7 +1669,7 @@ export default function DetalleCuentaCobranza() {
         <div className="flex gap-2">
           <Button 
             onClick={() => setTransferDialog({ isOpen: true })}
-            disabled={!ultimoPagoSTP || esCuentaCancelada}
+            disabled={!ultimoPagoSTP || esCuentaCancelada || isReadOnly}
             variant="outline"
           >
             <ArrowRight className="h-4 w-4 mr-2" />
@@ -1672,7 +1677,7 @@ export default function DetalleCuentaCobranza() {
           </Button>
           <Button 
             onClick={() => setManualPaymentDialog(true)}
-            disabled={esCuentaCancelada || totalPagado >= (cuentaDetalle?.precio_final || 0)}
+            disabled={esCuentaCancelada || totalPagado >= (cuentaDetalle?.precio_final || 0) || isReadOnly}
           >
             <CreditCard className="h-4 w-4 mr-2" />
             Agregar pago manual
@@ -1734,7 +1739,7 @@ export default function DetalleCuentaCobranza() {
                     size="sm"
                     className="mt-3 w-full"
                     onClick={() => setTransferDialog({ isOpen: true })}
-                    disabled={!ultimoPagoSTP || !cuentaDetalle.activo}
+                    disabled={!ultimoPagoSTP || !cuentaDetalle.activo || isReadOnly}
                   >
                     <ArrowRight className="h-4 w-4 mr-2" />
                     Transferir sobrepago
@@ -2082,7 +2087,7 @@ export default function DetalleCuentaCobranza() {
           <div className="flex justify-between items-center">
             <CardTitle>Acuerdos de Pago y Aplicaciones</CardTitle>
             {/* Payment scheme selection when no scheme is selected */}
-            {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && !esCuentaCancelada && (
+            {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && !esCuentaCancelada && !isReadOnly && (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Plan de pagos:</span>
                 <Select onValueChange={(value) => handlePaymentSchemeSelection(parseInt(value))}>
@@ -2424,13 +2429,13 @@ export default function DetalleCuentaCobranza() {
                                                       variant="outline"
                                                       size="icon"
                                                       className="h-6 w-6"
-                                                     onClick={() => {
+                                                      onClick={() => {
                                                           setCepDialog({
                                                             isOpen: true,
                                                             paymentId: aplicacion.pago.id
                                                           });
                                                         }}
-                                                       disabled={esCuentaCancelada}
+                                                       disabled={esCuentaCancelada || isReadOnly}
                                                     >
                                                       <FileText className="h-3 w-3" />
                                                     </Button>
@@ -2452,7 +2457,7 @@ export default function DetalleCuentaCobranza() {
                                                       monto: aplicacion.monto,
                                                       conceptoNombre: conceptoDisplay
                                                     })}
-                                                    disabled={deletePaymentMutation.isPending || isStpPayment || esCuentaCancelada}
+                                                    disabled={deletePaymentMutation.isPending || isStpPayment || esCuentaCancelada || isReadOnly}
                                                   >
                                                     <Trash2 className="h-3 w-3" />
                                                   </Button>
@@ -2482,7 +2487,7 @@ export default function DetalleCuentaCobranza() {
                                 <AlertTriangle className="h-4 w-4 text-warning" />
                                 Multas
                               </h5>
-                              {!acuerdo.pago_completado && !esCuentaCancelada && (
+                              {!acuerdo.pago_completado && !esCuentaCancelada && !isReadOnly && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -2567,13 +2572,13 @@ export default function DetalleCuentaCobranza() {
                                               variant="destructive"
                                               size="icon"
                                               onClick={() => setDeleteMultaDialog({ isOpen: true, multa })}
-                                              disabled={deleteMultaMutation.isPending || multa.estaPagada || esCuentaCancelada}
+                                              disabled={deleteMultaMutation.isPending || multa.estaPagada || esCuentaCancelada || isReadOnly}
                                             >
                                               <Trash2 className="h-4 w-4" />
                                             </Button>
                                           </TooltipTrigger>
                                            <TooltipContent>
-                                             <p>{esCuentaCancelada ? "Cuenta cancelada - no se pueden eliminar multas" : multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
+                                             <p>{isReadOnly ? "Propiedad entregada - no se pueden eliminar multas" : esCuentaCancelada ? "Cuenta cancelada - no se pueden eliminar multas" : multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
                                            </TooltipContent>
                                         </Tooltip>
                                       </TooltipProvider>
