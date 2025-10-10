@@ -11,7 +11,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { FileText, Upload, Eye, Trash2, Check, CheckCircle, FileCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { ConfirmMantenimientoDialog } from "./ConfirmMantenimientoDialog";
 
 interface DocumentsTabProps {
   entityId?: number;
@@ -79,7 +78,6 @@ export function DocumentsTab({
     url: '',
     title: ''
   });
-  const [showMantenimientoDialog, setShowMantenimientoDialog] = useState(false);
   const [dialogAlreadyShown, setDialogAlreadyShown] = useState(false);
   const [selectedComprador, setSelectedComprador] = useState<string>("");
   const [hasInvoices, setHasInvoices] = useState(false);
@@ -269,17 +267,108 @@ export function DocumentsTab({
           }
           
           if (allVerified) {
-            setShowMantenimientoDialog(true);
+            // Obtener proyecto e información necesaria
+            const cuentaResp = await supabaseClient
+              .from('cuentas_cobranza')
+              .select(`
+                id,
+                ofertas!cuentas_cobranza_id_oferta_fkey (
+                  id_propiedad,
+                  propiedades!ofertas_id_propiedad_fkey (
+                    id_entidad_relacionada_dueno,
+                    entidades_relacionadas!propiedades_id_entidad_relacionada_dueno_fkey (
+                      id_proyecto
+                    )
+                  )
+                )
+              `)
+              .eq('id', entityId)
+              .single();
+            
+            const proyectoId = cuentaResp?.data?.ofertas?.propiedades?.entidades_relacionadas?.id_proyecto;
+            
+            if (!proyectoId) {
+              console.error('No se pudo determinar el proyecto');
+              return;
+            }
+            
+            // Obtener entidad administradora
+            const administradoraResp = await supabaseClient
+              .from('entidades_relacionadas')
+              .select('id')
+              .eq('id_proyecto', proyectoId)
+              .eq('id_tipo_entidad', 6) // Administradora
+              .eq('activo', true)
+              .not('cuenta_madre_stp', 'is', null)
+              .single();
+            
+            if (!administradoraResp.data) {
+              console.error('No se encontró entidad administradora');
+              return;
+            }
+            
+            // Obtener compradores con sus datos
+            const compradoresResp = await supabaseClient
+              .from('compradores')
+              .select(`
+                id_persona,
+                personas!compradores_id_persona_fkey (
+                  nombre_legal,
+                  email
+                )
+              `)
+              .eq('id_cuenta_cobranza', entityId)
+              .eq('activo', true);
+            
+            if (!compradoresResp.data || compradoresResp.data.length === 0) {
+              console.error('No se encontraron compradores');
+              return;
+            }
+            
+            // Preparar payload
+            const payload = {
+              id_cuenta_cobranza: entityId,
+              id_entidad_administrador: administradoraResp.data.id,
+              compradores: compradoresResp.data.map((c: any) => ({
+                id_comprador: c.id_persona,
+                nombre: c.personas.nombre_legal,
+                email: c.personas.email || ''
+              }))
+            };
+            
+            // Llamar al endpoint
+            const response = await fetch('https://n8n.lovable.app/webhook/generaCuentaMantenimiento', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) {
+              throw new Error('Error al generar cuenta de mantenimiento');
+            }
+            
+            toast({
+              title: "Cuenta de mantenimiento generada",
+              description: "Se ha generado exitosamente la cuenta de mantenimiento",
+            });
+            
             setDialogAlreadyShown(true);
           }
         }
       } catch (error) {
         console.error('Error checking category 7:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Error al procesar documentos de categoría 7",
+        });
       }
     };
 
     checkCategory7();
-  }, [documentos.length, entityType, entityId, dialogAlreadyShown]);
+  }, [documentos.length, entityType, entityId, dialogAlreadyShown, toast]);
 
   const handleUpload = async () => {
     if (!selectedFile || !selectedTipoDocumento) {
@@ -544,6 +633,83 @@ export function DocumentsTab({
 
   const handleToggleVerification = async (documento: Documento) => {
     try {
+      // Si es cuenta_cobranza y el documento NO está verificado, validamos antes de verificar
+      if (entityType === 'cuenta_cobranza' && !documento.es_verificado && entityId) {
+        // Verificar si es documento de categoría 7
+        const supabaseClient = supabase as any;
+        const tipoDocResp = await supabaseClient
+          .from('tipos_documento')
+          .select('id_categoria_tipo_documento')
+          .eq('id', documento.id_tipo_documento)
+          .single();
+        
+        if (tipoDocResp.data?.id_categoria_tipo_documento === 7) {
+          // Obtener todos los documentos de categoría 7 para esta cuenta
+          const tiposCategoria7Resp = await supabaseClient
+            .from('tipos_documento')
+            .select('id')
+            .eq('id_categoria_tipo_documento', 7)
+            .eq('activo', true);
+          
+          if (tiposCategoria7Resp.data) {
+            const categoria7Ids = tiposCategoria7Resp.data.map((t: any) => t.id);
+            const categoria7Docs = documentos.filter(
+              d => categoria7Ids.includes(d.id_tipo_documento) && d.activo
+            );
+            
+            // Contar cuántos NO están verificados (incluyendo el actual)
+            const noVerificados = categoria7Docs.filter(d => !d.es_verificado);
+            
+            // Si este es el último sin verificar, validar entidad administradora
+            if (noVerificados.length === 1 && noVerificados[0].id === documento.id) {
+              // Obtener proyecto de la cuenta de cobranza
+              const cuentaResp = await supabaseClient
+                .from('cuentas_cobranza')
+                .select(`
+                  id_oferta,
+                  ofertas!cuentas_cobranza_id_oferta_fkey (
+                    id_propiedad,
+                    propiedades!ofertas_id_propiedad_fkey (
+                      id_entidad_relacionada_dueno,
+                      entidades_relacionadas!propiedades_id_entidad_relacionada_dueno_fkey (
+                        id_proyecto
+                      )
+                    )
+                  )
+                `)
+                .eq('id', entityId)
+                .single();
+              
+              const proyectoId = cuentaResp?.data?.ofertas?.propiedades?.entidades_relacionadas?.id_proyecto;
+              
+              if (!proyectoId) {
+                throw new Error('No se pudo determinar el proyecto');
+              }
+              
+              // Verificar que existe entidad Administradora con cuenta_madre_stp
+              const administradoraResp = await supabaseClient
+                .from('entidades_relacionadas')
+                .select('id, cuenta_madre_stp, personas!inner(nombre_legal)')
+                .eq('id_proyecto', proyectoId)
+                .eq('id_tipo_entidad', 6) // Administradora
+                .eq('activo', true)
+                .not('cuenta_madre_stp', 'is', null)
+                .single();
+              
+              if (!administradoraResp.data) {
+                toast({
+                  variant: "destructive",
+                  title: "Entidad Administradora requerida",
+                  description: "Para verificar el último documento de entrega, primero debe configurar una entidad legal Administradora con su cuenta madre STP en el proyecto.",
+                  duration: 6000
+                });
+                return;
+              }
+            }
+          }
+        }
+      }
+
       const { error } = await supabase
         .from('documentos')
         .update({ es_verificado: !documento.es_verificado })
@@ -965,19 +1131,6 @@ export function DocumentsTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Mantenimiento Confirmation Dialog */}
-      {entityType === 'cuenta_cobranza' && entityId && (
-        <ConfirmMantenimientoDialog
-          isOpen={showMantenimientoDialog}
-          onClose={() => setShowMantenimientoDialog(false)}
-          cuentaCobranzaId={entityId}
-          onSuccess={() => {
-            setShowMantenimientoDialog(false);
-            loadDocumentos();
-          }}
-        />
-      )}
     </div>
   );
 }
