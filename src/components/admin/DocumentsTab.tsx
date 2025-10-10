@@ -82,6 +82,7 @@ export function DocumentsTab({
   const [showMantenimientoDialog, setShowMantenimientoDialog] = useState(false);
   const [dialogAlreadyShown, setDialogAlreadyShown] = useState(false);
   const [selectedComprador, setSelectedComprador] = useState<string>("");
+  const [hasInvoices, setHasInvoices] = useState(false);
   const { toast } = useToast();
 
   // Auto-select comprador if only one exists and invoice type is selected
@@ -188,7 +189,16 @@ export function DocumentsTab({
       }
       
       // Combine the data and filter out invoices (Facturas PDF/XML)
-      const docs = (docsData || [])
+      // First check if there are any invoices
+      const allDocs = docsData || [];
+      const invoicesExist = allDocs.some((doc) => {
+        const tipoNombre = tiposMap.get(doc.id_tipo_documento)?.toLowerCase() || '';
+        return tipoNombre.includes('factura') && (tipoNombre.includes('pdf') || tipoNombre.includes('xml'));
+      });
+      
+      setHasInvoices(invoicesExist);
+      
+      const docs = allDocs
         .filter((doc) => {
           const tipoNombre = tiposMap.get(doc.id_tipo_documento)?.toLowerCase() || '';
           // Excluir facturas PDF y XML
@@ -683,6 +693,13 @@ export function DocumentsTab({
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {hasInvoices && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md">
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                Las facturas se muestran en la pestaña Facturas
+              </p>
+            </div>
+          )}
           {isLoading ? (
             <div className="text-center py-6">
               <p className="text-muted-foreground">Cargando documentos...</p>
