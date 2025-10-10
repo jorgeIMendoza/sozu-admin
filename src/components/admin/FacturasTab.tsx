@@ -130,7 +130,7 @@ export function FacturasTab({
   }, [cuentaCobranzaId, compradores]);
 
   // Helper function to build complete payload
-  const buildInvoicePayload = async (idPersona: number, idDocumento: number | null, apiKey: string) => {
+  const buildInvoicePayload = async (idPersona: number, idDocumento: number | null, apiKey: string, esDraft: boolean = true) => {
     if (!propiedadId) {
       throw new Error('No se encontró el ID de la propiedad');
     }
@@ -280,6 +280,8 @@ export function FacturasTab({
       id_propiedad: propiedadId,
       id_cuenta_cobranza: cuentaCobranzaId,
       ...(idDocumento && { id_documento: idDocumento }),
+      es_draft: esDraft,
+      es_verificado: !esDraft,
       propiedad: {
         numero_propiedad: propiedadData.numero_propiedad,
         metraje_escriturable: propiedadData.m2_escriturables,
@@ -342,8 +344,8 @@ export function FacturasTab({
         throw new Error('No hay API key configurada para generar facturas');
       }
 
-      // Construir payload completo
-      const payload = await buildInvoicePayload(idPersona, idDocumento, apiKeyDraft);
+      // Construir payload completo (draft)
+      const payload = await buildInvoicePayload(idPersona, idDocumento, apiKeyDraft, true);
 
       const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/generaFactura`;
       
@@ -410,8 +412,8 @@ export function FacturasTab({
         throw new Error('No se encontró la API key del dueño');
       }
 
-      // Construir payload completo (igual que draft pero con api_key diferente)
-      const payload = await buildInvoicePayload(idPersona, idDocumento, entidadData.nombre_api_key);
+      // Construir payload completo (definitiva con es_draft=false y es_verificado=true)
+      const payload = await buildInvoicePayload(idPersona, idDocumento, entidadData.nombre_api_key, false);
 
       const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/generaFactura`;
       
