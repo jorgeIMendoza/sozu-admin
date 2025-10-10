@@ -95,6 +95,7 @@ export function DocumentsTab({
   const [selectedComprador, setSelectedComprador] = useState<string>("");
   const [hasInvoices, setHasInvoices] = useState(false);
   const [showConfirmEntrega, setShowConfirmEntrega] = useState(false);
+  const [documentoPendienteVerificar, setDocumentoPendienteVerificar] = useState<Documento | null>(null);
   const { toast } = useToast();
 
   // Auto-select comprador if only one exists and invoice type is selected
@@ -647,6 +648,48 @@ export function DocumentsTab({
 
   const handleToggleVerification = async (documento: Documento) => {
     try {
+      // 🔹 NUEVO: Si es cuenta_cobranza y se está verificando (no des-verificando)
+      if (entityType === 'cuenta_cobranza' && !documento.es_verificado) {
+        // Verificar si este documento es de categoría 7
+        const tipoDocResp = await supabase
+          .from('tipos_documento')
+          .select('id_categoria_documento')
+          .eq('id', documento.id_tipo_documento)
+          .single();
+        
+        if (tipoDocResp.data?.id_categoria_documento === 7) {
+          // Obtener todos los documentos de categoría 7
+          const tiposCategoria7Resp = await supabase
+            .from('tipos_documento')
+            .select('id')
+            .eq('id_categoria_documento', 7)
+            .eq('activo', true);
+
+          if (tiposCategoria7Resp.data) {
+            const categoria7Ids = tiposCategoria7Resp.data.map((t: any) => t.id);
+            
+            const { data: allDocs } = await supabase
+              .from('documentos')
+              .select('id, es_verificado')
+              .eq('id_cuenta_cobranza', entityId)
+              .in('id_tipo_documento', categoria7Ids)
+              .eq('activo', true);
+            
+            // Verificar si este es el ÚNICO documento sin verificar
+            const docsNoVerificados = allDocs?.filter(d => !d.es_verificado) || [];
+            const esUltimoSinVerificar = docsNoVerificados.length === 1 && docsNoVerificados[0].id === documento.id;
+            
+            if (esUltimoSinVerificar) {
+              // 🎯 Es el último! Mostrar diálogo de confirmación sin verificar aún
+              setDocumentoPendienteVerificar(documento);
+              setShowConfirmEntrega(true);
+              return; // No verificar todavía
+            }
+          }
+        }
+      }
+
+      // 🔹 Flujo normal: verificar/des-verificar documento
       // Si es cuenta_cobranza y el documento NO está verificado, validamos antes de verificar
       if (entityType === 'cuenta_cobranza' && !documento.es_verificado && entityId) {
         // Verificar si es documento de categoría 7
@@ -773,42 +816,6 @@ export function DocumentsTab({
       if (error) throw error;
       
       await loadDocumentos();
-
-      // 🔹 NUEVO: Verificar si era el último documento de categoría 7
-      if (entityType === 'cuenta_cobranza' && !documento.es_verificado) {
-        // Obtener el tipo de documento actualizado
-        const tipoDocResp = await supabase
-          .from('tipos_documento')
-          .select('id_categoria_documento')
-          .eq('id', documento.id_tipo_documento)
-          .single();
-        
-        if (tipoDocResp.data?.id_categoria_documento === 7) {
-          const tiposCategoria7Resp = await supabase
-            .from('tipos_documento')
-            .select('id')
-            .eq('id_categoria_documento', 7)
-            .eq('activo', true);
-
-          if (tiposCategoria7Resp.data) {
-            const categoria7Ids = tiposCategoria7Resp.data.map((t: any) => t.id);
-            
-            const { data: allDocs } = await supabase
-              .from('documentos')
-              .select('id, es_verificado')
-              .eq('id_cuenta_cobranza', entityId)
-              .in('id_tipo_documento', categoria7Ids)
-              .eq('activo', true);
-            
-            const todosVerificados = allDocs && allDocs.every(d => d.es_verificado);
-            
-            if (todosVerificados) {
-              setShowConfirmEntrega(true);
-              return; // Exit early to show confirmation dialog
-            }
-          }
-        }
-      }
       
       toast({ 
         title: "Éxito", 
@@ -1298,17 +1305,23 @@ export function DocumentsTab({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={showConfirmEntrega} onOpenChange={setShowConfirmEntrega}>
+      <AlertDialog open={showConfirmEntrega} onOpenChange={(open) => {
+        setShowConfirmEntrega(open);
+        if (!open) {
+          setDocumentoPendienteVerificar(null); // Limpiar documento pendiente si se cierra
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Confirmar entrega de propiedad?</AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
-              <p>Todos los documentos de entrega han sido verificados correctamente.</p>
+              <p>Este es el último documento de entrega pendiente por verificar.</p>
               <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-3 border border-yellow-200 dark:border-yellow-800">
                 <p className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
                   ⚠️ Esta acción es IRREVOCABLE
                 </p>
                 <ul className="list-disc list-inside space-y-1 text-sm text-yellow-700 dark:text-yellow-300">
+                  <li>El documento se verificará</li>
                   <li>La propiedad cambiará a estatus "Entregado"</li>
                   <li>Se generará automáticamente una cuenta de cobranza de mantenimiento</li>
                   <li>Todas las secciones quedarán en modo solo lectura</li>
@@ -1322,7 +1335,33 @@ export function DocumentsTab({
             <AlertDialogAction
               onClick={async () => {
                 setShowConfirmEntrega(false);
-                await procesarUltimoDocumento();
+                
+                if (!documentoPendienteVerificar) return;
+                
+                try {
+                  // 1. Primero verificar el documento
+                  const { error: verifyError } = await supabase
+                    .from('documentos')
+                    .update({ es_verificado: true })
+                    .eq('id', documentoPendienteVerificar.id);
+                  
+                  if (verifyError) throw verifyError;
+                  
+                  // 2. Recargar documentos
+                  await loadDocumentos();
+                  
+                  // 3. Procesar la entrega
+                  await procesarUltimoDocumento();
+                  
+                  // 4. Limpiar estado
+                  setDocumentoPendienteVerificar(null);
+                } catch (error: any) {
+                  toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: `Error al procesar: ${error.message}`
+                  });
+                }
               }}
               className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800"
             >
