@@ -708,10 +708,10 @@ export function DocumentsTab({
       throw new Error('No se pudo obtener la propiedad de la oferta');
     }
 
-    // 3. Obtener la entidad relacionada dueño desde la propiedad
+    // 3. Obtener la entidad relacionada dueño y m2_escriturables desde la propiedad
     const { data: propiedadData, error: propiedadError } = await supabase
       .from('propiedades')
-      .select('id_entidad_relacionada_dueno')
+      .select('id_entidad_relacionada_dueno, m2_escriturables')
       .eq('id', ofertaData.id_propiedad)
       .single();
 
@@ -728,6 +728,17 @@ export function DocumentsTab({
 
     if (entidadError || !entidadData?.id_proyecto) {
       throw new Error('No se pudo obtener el proyecto');
+    }
+
+    // 4.1. Obtener el costo_mantenimiento_m2 del proyecto
+    const { data: proyectoData, error: proyectoError } = await supabase
+      .from('proyectos')
+      .select('costo_mantenimiento_m2')
+      .eq('id', entidadData.id_proyecto)
+      .single();
+
+    if (proyectoError) {
+      throw new Error('No se pudo obtener el costo de mantenimiento del proyecto');
     }
 
     // 5. Obtener la entidad administradora del proyecto
@@ -784,7 +795,9 @@ export function DocumentsTab({
       body: JSON.stringify({
         id_cuenta_cobranza: entityId,
         id_entidad_administrador: entidadAdmin.id,
-        compradores: compradoresPayload
+        compradores: compradoresPayload,
+        costo_mantenimiento_m2: proyectoData?.costo_mantenimiento_m2 || 0,
+        m2_escriturables: propiedadData?.m2_escriturables || 0
       }),
     });
 
