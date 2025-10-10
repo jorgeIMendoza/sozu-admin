@@ -84,6 +84,17 @@ export function DocumentsTab({
   const [selectedComprador, setSelectedComprador] = useState<string>("");
   const { toast } = useToast();
 
+  // Auto-select comprador if only one exists and invoice type is selected
+  useEffect(() => {
+    if (!shouldAutoGenerateInvoice && entityType === 'cuenta_cobranza' && compradores.length === 1) {
+      const tipoDoc = tiposDocumento.find(t => t.id.toString() === selectedTipoDocumento);
+      const isInvoice = tipoDoc?.nombre.toLowerCase().includes('factura');
+      if (isInvoice && !selectedComprador) {
+        setSelectedComprador(compradores[0].id_persona.toString());
+      }
+    }
+  }, [selectedTipoDocumento, compradores, shouldAutoGenerateInvoice, entityType, tiposDocumento, selectedComprador]);
+
   // Load document types based on entity type and person type
   const loadTiposDocumento = async () => {
     try {
@@ -275,24 +286,12 @@ export function DocumentsTab({
     const isInvoice = tipoDoc?.nombre.toLowerCase().includes('factura');
     
     if (isInvoice && !shouldAutoGenerateInvoice && entityType === 'cuenta_cobranza' && compradores.length > 0) {
-      // Si no hay comprador seleccionado y hay más de un comprador, mostrar error
-      if (!selectedComprador && compradores.length > 1) {
+      // Si no hay comprador seleccionado, mostrar error
+      if (!selectedComprador) {
         toast({
           variant: "destructive",
           title: "Error",
           description: "Debe seleccionar un comprador para la factura",
-        });
-        return;
-      }
-      
-      // Si solo hay un comprador, seleccionarlo automáticamente
-      const compradorId = selectedComprador || compradores[0]?.id_persona.toString();
-      
-      if (!compradorId) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudo determinar el comprador",
         });
         return;
       }
@@ -401,7 +400,7 @@ export function DocumentsTab({
         
         // Si es factura y dueño NO factura, usar el comprador seleccionado
         if (isInvoice && !shouldAutoGenerateInvoice && compradores.length > 0) {
-          idPersona = parseInt(selectedComprador || compradores[0]?.id_persona.toString());
+          idPersona = parseInt(selectedComprador);
         }
       }
 
@@ -856,7 +855,7 @@ export function DocumentsTab({
             {(() => {
               const tipoDoc = tiposDocumento.find(t => t.id.toString() === selectedTipoDocumento);
               const isInvoice = tipoDoc?.nombre.toLowerCase().includes('factura');
-              return isInvoice && !shouldAutoGenerateInvoice && entityType === 'cuenta_cobranza' && compradores.length > 1 && (
+              return isInvoice && !shouldAutoGenerateInvoice && entityType === 'cuenta_cobranza' && compradores.length > 0 && (
                 <div>
                   <Label htmlFor="comprador">Comprador</Label>
                   <Select value={selectedComprador} onValueChange={setSelectedComprador}>
