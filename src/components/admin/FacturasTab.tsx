@@ -130,7 +130,7 @@ export function FacturasTab({
   }, [cuentaCobranzaId, compradores]);
 
   // Helper function to build complete payload
-  const buildInvoicePayload = async (idPersona: number, idDocumento: number, apiKey: string) => {
+  const buildInvoicePayload = async (idPersona: number, idDocumento: number | null, apiKey: string) => {
     if (!propiedadId) {
       throw new Error('No se encontró el ID de la propiedad');
     }
@@ -271,7 +271,7 @@ export function FacturasTab({
       tipo_factura: "propiedad",
       id_propiedad: propiedadId,
       id_cuenta_cobranza: cuentaCobranzaId,
-      id_documento: idDocumento,
+      ...(idDocumento && { id_documento: idDocumento }),
       propiedad: {
         numero_propiedad: propiedadData.numero_propiedad,
         metraje_escriturable: propiedadData.m2_escriturables,
@@ -326,9 +326,9 @@ export function FacturasTab({
     };
   };
 
-  // Mutation para regenerar factura draft
+  // Mutation para generar/regenerar factura draft
   const regenerarFacturaMutation = useMutation({
-    mutationFn: async ({ idPersona, idDocumento }: { idPersona: number; idDocumento: number }) => {
+    mutationFn: async ({ idPersona, idDocumento }: { idPersona: number; idDocumento: number | null }) => {
       if (!apiKeyDraft) {
         throw new Error('No hay API key configurada para generar facturas');
       }
@@ -356,7 +356,7 @@ export function FacturasTab({
     onSuccess: (data) => {
       toast({
         title: "Éxito",
-        description: "Factura draft generada correctamente"
+        description: "Factura generada correctamente"
       });
       loadFacturas();
     },
@@ -443,7 +443,7 @@ export function FacturasTab({
     }
   });
 
-  const handleRegenerarDraft = (idPersona: number, idDocumento: number) => {
+  const handleRegenerarDraft = (idPersona: number, idDocumento: number | null) => {
     setGeneratingForPersona(idPersona);
     regenerarFacturaMutation.mutate({ idPersona, idDocumento });
   };
@@ -526,6 +526,31 @@ export function FacturasTab({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {/* Botón para generar primera factura draft */}
+                          {!tienePdf && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => handleRegenerarDraft(factura.id_persona, null)}
+                                    disabled={generatingForPersona === factura.id_persona}
+                                  >
+                                    {generatingForPersona === factura.id_persona ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <FilePlus2 className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Generar Draft</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          
                           {/* Botón para regenerar draft */}
                           {tienePdf && isDraft && factura.factura_pdf && (
                             <TooltipProvider>
