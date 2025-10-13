@@ -228,18 +228,20 @@ export function EditPaymentDialog({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="clave_rastreo">Clave de Rastreo (Opcional)</Label>
-            <Input
-              id="clave_rastreo"
-              type="text"
-              placeholder="Ingresa la clave de rastreo"
-              value={formData.clave_rastreo}
-              onChange={(e) =>
-                setFormData({ ...formData, clave_rastreo: e.target.value })
-              }
-            />
-          </div>
+          {formData.id_metodos_pago === "7" && (
+            <div className="space-y-2">
+              <Label htmlFor="clave_rastreo">Clave de Rastreo (Opcional)</Label>
+              <Input
+                id="clave_rastreo"
+                type="text"
+                placeholder="Ingresa la clave de rastreo"
+                value={formData.clave_rastreo}
+                onChange={(e) =>
+                  setFormData({ ...formData, clave_rastreo: e.target.value })
+                }
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="descripcion">Descripción (Opcional)</Label>
