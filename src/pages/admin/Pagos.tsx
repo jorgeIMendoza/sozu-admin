@@ -721,13 +721,7 @@ export default function Pagos() {
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="activas">Cuentas Activas ({cuentasActivas.length})</TabsTrigger>
-          <TabsTrigger value="canceladas">Cuentas Canceladas ({cuentasCanceladas.length})</TabsTrigger>
-        </TabsList>
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mt-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -762,6 +756,12 @@ export default function Pagos() {
             </CardContent>
           </Card>
         </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="activas">Cuentas Activas ({cuentasActivas.length})</TabsTrigger>
+          <TabsTrigger value="canceladas">Cuentas Canceladas ({cuentasCanceladas.length})</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="activas" className="mt-6">
           <Card>
