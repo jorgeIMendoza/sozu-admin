@@ -82,6 +82,7 @@ interface PaymentScheme {
   nombre: string;
   porcentaje_enganche: number;
   numero_mensualidades: number;
+  numero_pagos_enganche: number;
   porcentaje_mensualidades: number;
   porcentaje_entrega: number;
   porcentaje_descuento_aumento: number;

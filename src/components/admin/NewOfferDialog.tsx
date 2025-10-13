@@ -78,6 +78,12 @@ const manualPaymentSchema = z.object({
   porcentaje_mensualidades: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0, "Debe ser un número válido mayor o igual a 0"),
   porcentaje_entrega: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0, "Debe ser un número válido mayor o igual a 0"),
   numero_mensualidades: z.string().min(1, "El número de mensualidades es requerido"),
+  numero_pagos_enganche: z.string()
+    .refine((val) => {
+      const num = parseInt(val);
+      return !isNaN(num) && num >= 1 && num <= 3;
+    }, "Debe ser un número entre 1 y 3")
+    .optional(),
   porcentaje_descuento_aumento: z.string().optional(),
 });
 
@@ -90,6 +96,7 @@ const formSchema = z.object({
   porcentaje_mensualidades: z.string().optional(),
   porcentaje_entrega: z.string().optional(),
   numero_mensualidades: z.string().optional(),
+  numero_pagos_enganche: z.string().optional(),
   porcentaje_descuento_aumento: z.string().optional(),
 }).refine((data) => {
   if (data.mode === "manual") {
@@ -156,6 +163,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       porcentaje_mensualidades: "", 
       porcentaje_entrega: "",
       numero_mensualidades: "",
+      numero_pagos_enganche: "1",
       porcentaje_descuento_aumento: "",
     },
   });
@@ -166,7 +174,11 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   // Watch percentage fields for manual payment validation
   const watchedEnganche = form.watch("porcentaje_enganche");
   const watchedMensualidades = form.watch("porcentaje_mensualidades");
+  const watchedNumeroPagosEnganche = form.watch("numero_pagos_enganche");
   const remainingPercentage = 100 - (parseFloat(watchedEnganche || "0") + parseFloat(watchedMensualidades || "0"));
+  const porcentajePorPago = watchedNumeroPagosEnganche && watchedEnganche 
+    ? (parseFloat(watchedEnganche) / parseInt(watchedNumeroPagosEnganche)).toFixed(2)
+    : "0.00";
 
   // Search persons query
   const { data: persons = [] } = useQuery({
@@ -203,6 +215,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         porcentaje_mensualidades: "",
         porcentaje_entrega: "",
         numero_mensualidades: "",
+        numero_pagos_enganche: "1",
         porcentaje_descuento_aumento: "",
       });
       setSelectedPerson(null);
@@ -239,6 +252,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       porcentaje_mensualidades: "",
       porcentaje_entrega: "",
       numero_mensualidades: "",
+      numero_pagos_enganche: "1",
       porcentaje_descuento_aumento: "",
     });
   };
@@ -391,6 +405,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
             porcentaje_mensualidades: parseFloat(data.porcentaje_mensualidades || "0"),
             porcentaje_entrega: parseFloat(data.porcentaje_entrega || "0"),
             numero_mensualidades: parseInt(data.numero_mensualidades || "0"),
+            numero_pagos_enganche: parseInt(data.numero_pagos_enganche || "1"),
             porcentaje_descuento_aumento: parseFloat(data.porcentaje_descuento_aumento || "0"),
             es_manual: true,
             activo: true
@@ -884,6 +899,41 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
 
                      <FormField
                        control={form.control}
+                       name="numero_pagos_enganche"
+                       render={({ field }) => (
+                         <FormItem>
+                           <FormLabel>Número de Pagos de Enganche *</FormLabel>
+                           <FormControl>
+                             <Input 
+                               type="number" 
+                               min="1"
+                               max="3"
+                               step="1"
+                               placeholder="1" 
+                               {...field}
+                               onChange={(e) => {
+                                 // Solo permitir números enteros entre 1 y 3
+                                 const value = e.target.value.replace(/\D/g, '');
+                                 const numValue = parseInt(value) || 1;
+                                 const clampedValue = Math.min(Math.max(numValue, 1), 3);
+                                 field.onChange(clampedValue.toString());
+                               }}
+                             />
+                           </FormControl>
+                           <FormMessage />
+                           {parseInt(field.value || "1") > 1 && (
+                             <p className="text-sm text-muted-foreground mt-1">
+                               Cada pago será del {porcentajePorPago}%
+                             </p>
+                           )}
+                         </FormItem>
+                       )}
+                     />
+                   </div>
+
+                   <div className="grid grid-cols-2 gap-4">
+                     <FormField
+                       control={form.control}
                        name="porcentaje_mensualidades"
                        render={({ field }) => (
                          <FormItem>
@@ -895,9 +945,6 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                          </FormItem>
                        )}
                      />
-                   </div>
-
-                   <div className="grid grid-cols-2 gap-4">
                      <FormField
                        control={form.control}
                        name="porcentaje_entrega"

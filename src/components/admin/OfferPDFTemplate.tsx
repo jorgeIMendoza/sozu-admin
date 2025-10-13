@@ -66,6 +66,7 @@ interface PaymentScheme {
   nombre: string;
   porcentaje_enganche: number;
   numero_mensualidades: number;
+  numero_pagos_enganche: number;
   porcentaje_mensualidades: number;
   porcentaje_entrega: number;
   porcentaje_descuento_aumento: number;
@@ -326,7 +327,9 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                   
                   <div className="space-y-2">
                     <div className="text-center">
-                      <p className="text-xs text-muted-foreground">Enganche</p>
+                      <p className="text-xs text-muted-foreground">
+                        Enganche{scheme.numero_pagos_enganche > 1 ? ` (en ${scheme.numero_pagos_enganche} pagos)` : ''}
+                      </p>
                       <p className="font-bold text-xs">{formatCurrency(calculation.enganche)}</p>
                       <p className="text-xs text-muted-foreground">({scheme.porcentaje_enganche}%)</p>
                     </div>

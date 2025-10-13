@@ -77,6 +77,7 @@ interface PaymentScheme {
   nombre: string;
   porcentaje_enganche: number;
   numero_mensualidades: number;
+  numero_pagos_enganche: number;
   porcentaje_mensualidades: number;
   porcentaje_entrega: number;
   porcentaje_descuento_aumento: number;
@@ -476,7 +477,9 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                       )}
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#000000' }}>Enganche:</span>
+                        <span style={{ color: '#000000' }}>
+                          Enganche{scheme.numero_pagos_enganche > 1 ? ` (en ${scheme.numero_pagos_enganche} pagos)` : ''}:
+                        </span>
                         <span style={{ color: '#000000', fontWeight: 'bold' }}>
                           {scheme.porcentaje_enganche}% {formatCurrency(amounts.enganche)}
                         </span>
