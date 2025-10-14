@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home } from "lucide-react";
+import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
 import { format } from "date-fns";
@@ -53,6 +53,7 @@ interface CuentaDetalle {
   modelo: string;
   proyecto_id: number;
   id_cuenta_cobranza_padre: number | null;
+  clabe_stp: string | null;
 }
 
 export default function DetalleCuentaMantenimiento() {
@@ -67,12 +68,7 @@ export default function DetalleCuentaMantenimiento() {
       // Get cuenta mantenimiento (stored in cuentas_cobranza with id_cuenta_cobranza_padre not null)
       const { data: cuenta, error: cuentaError } = await supabase
         .from('cuentas_cobranza')
-        .select(`
-          id,
-          precio_final,
-          id_cuenta_cobranza_padre,
-          id_oferta
-        `)
+        .select('id, precio_final, id_cuenta_cobranza_padre, clabe_stp')
         .eq('id', cuentaId)
         .not('id_cuenta_cobranza_padre', 'is', null)
         .maybeSingle();
@@ -80,20 +76,31 @@ export default function DetalleCuentaMantenimiento() {
       if (cuentaError) throw cuentaError;
       if (!cuenta) throw new Error('Cuenta de mantenimiento no encontrada');
 
-      // Get oferta and propiedad data
-      const { data: oferta } = await supabase
-        .from('ofertas')
-        .select(`
-          id,
-          propiedades!ofertas_id_propiedad_fkey(
-            id,
-            numero_propiedad,
-            id_entidad_relacionada_dueno,
-            id_edificio_modelo
-          )
-        `)
-        .eq('id', cuenta.id_oferta)
-        .maybeSingle();
+      // Get parent account to retrieve property data
+      const { data: parentCuenta } = cuenta.id_cuenta_cobranza_padre 
+        ? await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_oferta')
+            .eq('id', cuenta.id_cuenta_cobranza_padre)
+            .maybeSingle()
+        : { data: null };
+
+      // Get oferta and propiedad data from parent account
+      const { data: oferta } = parentCuenta?.id_oferta 
+        ? await supabase
+            .from('ofertas')
+            .select(`
+              id,
+              propiedades!ofertas_id_propiedad_fkey(
+                id,
+                numero_propiedad,
+                id_entidad_relacionada_dueno,
+                id_edificio_modelo
+              )
+            `)
+            .eq('id', parentCuenta.id_oferta)
+            .maybeSingle()
+        : { data: null };
 
       // Get propietarios (from parent cuenta_cobranza if exists)
       let propietarios: Propietario[] = [];
@@ -145,7 +152,8 @@ export default function DetalleCuentaMantenimiento() {
         numero_propiedad: oferta?.propiedades?.numero_propiedad || 'Sin número',
         modelo: edificioModeloResult.data?.modelos?.nombre || 'Sin modelo',
         proyecto_id: entidadResult.data?.id_proyecto || 0,
-        id_cuenta_cobranza_padre: cuenta.id_cuenta_cobranza_padre
+        id_cuenta_cobranza_padre: cuenta.id_cuenta_cobranza_padre,
+        clabe_stp: cuenta.clabe_stp
       };
 
       return detalle;
@@ -285,6 +293,13 @@ export default function DetalleCuentaMantenimiento() {
     return sum + totalAcuerdo;
   }, 0) || 0;
 
+  // Calculate pending payments including multas
+  const pagoMensual = acuerdosPago?.reduce((sum, acuerdo) => {
+    const totalAplicado = acuerdo.aplicaciones.reduce((appSum, app) => appSum + app.monto, 0);
+    const pendiente = acuerdo.monto - totalAplicado;
+    return sum + (pendiente > 0 ? pendiente : 0);
+  }, 0) || 0;
+
   const saldoPendiente = cuentaDetalle.precio_final - totalPagado;
 
   return (
@@ -298,25 +313,27 @@ export default function DetalleCuentaMantenimiento() {
               Regresar a Cuentas de Mantenimiento
             </Button>
           </Link>
-          <h1 className="text-3xl font-bold">
-            Cuenta de Mantenimiento {formatCuentaMantenimientoId(cuentaDetalle.id)}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-bold">
+              Cuenta de Mantenimiento {formatCuentaMantenimientoId(cuentaDetalle.id)}
+            </h1>
+            <Badge variant="secondary" className="text-sm">
+              Mantenimiento
+            </Badge>
+          </div>
         </div>
-        <Badge variant="secondary" className="text-lg px-4 py-2">
-          Mantenimiento
-        </Badge>
       </div>
 
       {/* Cards de Resumen */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Precio Final</CardTitle>
+            <CardTitle className="text-sm font-medium">Pago Mensual</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(cuentaDetalle.precio_final)}</div>
-            <p className="text-xs text-muted-foreground">Monto total de mantenimiento</p>
+            <div className="text-2xl font-bold">{formatCurrency(pagoMensual)}</div>
+            <p className="text-xs text-muted-foreground">Incluye recargos y multas pendientes</p>
           </CardContent>
         </Card>
 
@@ -328,7 +345,7 @@ export default function DetalleCuentaMantenimiento() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{formatCurrency(totalPagado)}</div>
             <p className="text-xs text-muted-foreground">
-              {((totalPagado / cuentaDetalle.precio_final) * 100).toFixed(1)}% del total
+              Pagado en esta cuenta
             </p>
           </CardContent>
         </Card>
@@ -341,7 +358,7 @@ export default function DetalleCuentaMantenimiento() {
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">{formatCurrency(saldoPendiente)}</div>
             <p className="text-xs text-muted-foreground">
-              {((saldoPendiente / cuentaDetalle.precio_final) * 100).toFixed(1)}% restante
+              Por pagar
             </p>
           </CardContent>
         </Card>
@@ -369,6 +386,10 @@ export default function DetalleCuentaMantenimiento() {
             <div>
               <label className="text-sm font-medium">No. Propiedad</label>
               <p className="text-sm text-muted-foreground">{cuentaDetalle.numero_propiedad}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">CLABE STP</label>
+              <p className="text-sm text-muted-foreground">{cuentaDetalle.clabe_stp || 'No asignada'}</p>
             </div>
           </div>
           
@@ -424,13 +445,33 @@ export default function DetalleCuentaMantenimiento() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5" />
-              Acuerdos de Pago
-            </CardTitle>
-            <Badge variant="secondary">
-              {acuerdosPago?.length || 0} acuerdos
-            </Badge>
+            <div className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5" />
+                Acuerdos de Pago
+              </CardTitle>
+              <Badge variant="secondary">
+                {acuerdosPago?.length || 0} acuerdos
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {/* TODO: implement transfer */}}
+              >
+                <ArrowRight className="h-4 w-4 mr-2" />
+                Transferir
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {/* TODO: implement manual payment */}}
+              >
+                <DollarSign className="h-4 w-4 mr-2" />
+                Pago Manual
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
