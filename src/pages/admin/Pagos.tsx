@@ -1140,49 +1140,63 @@ export default function Pagos() {
                            )}
                          </TableCell>
                            <TableCell>
-                            <TooltipProvider>
-                              <div className="flex gap-2">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button variant="outline" size="icon" asChild>
-                                      <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                        <Eye className="h-4 w-4" />
-                                      </Link>
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Ver Detalle</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button 
-                                      variant="secondary" 
-                                      size="icon"
-                                      onClick={() => handleEditCuenta(cuenta)}
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Editar Cuenta</p>
-                                  </TooltipContent>
-                                </Tooltip>
+                             <TooltipProvider>
+                               <div className="flex gap-2">
                                  <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button 
-                                      variant="outline" 
-                                      size="icon"
-                                      onClick={() => handleAddManualPayment(cuenta)}
-                                      disabled={cuenta.pagado >= cuenta.precio_final}
-                                    >
-                                      <Plus className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>{cuenta.pagado >= cuenta.precio_final ? 'Cuenta totalmente pagada' : 'Agregar Pago Manual'}</p>
-                                  </TooltipContent>
-                                </Tooltip>
+                                   <TooltipTrigger asChild>
+                                     <Button variant="outline" size="icon" asChild>
+                                       <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
+                                         <Eye className="h-4 w-4" />
+                                       </Link>
+                                     </Button>
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Ver Detalle</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                                 <Tooltip>
+                                   <TooltipTrigger asChild>
+                                     <Button 
+                                       variant="outline" 
+                                       size="icon"
+                                       onClick={() => {}}
+                                     >
+                                       <FileText className="h-4 w-4" />
+                                     </Button>
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Descargar Estado de Cuenta</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                                 <Tooltip>
+                                   <TooltipTrigger asChild>
+                                     <Button 
+                                       variant="secondary" 
+                                       size="icon"
+                                       onClick={() => handleEditCuenta(cuenta)}
+                                     >
+                                       <Edit className="h-4 w-4" />
+                                     </Button>
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Editar Cuenta</p>
+                                   </TooltipContent>
+                                 </Tooltip>
+                                  <Tooltip>
+                                   <TooltipTrigger asChild>
+                                     <Button 
+                                       variant="outline" 
+                                       size="icon"
+                                       onClick={() => handleAddManualPayment(cuenta)}
+                                       disabled={cuenta.pagado >= cuenta.precio_final}
+                                     >
+                                       <Plus className="h-4 w-4" />
+                                     </Button>
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>{cuenta.pagado >= cuenta.precio_final ? 'Cuenta totalmente pagada' : 'Agregar Pago Manual'}</p>
+                                   </TooltipContent>
+                                 </Tooltip>
                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                      <Button 
@@ -1204,20 +1218,6 @@ export default function Pagos() {
                                  </Tooltip>
                                  <Tooltip>
                                    <TooltipTrigger asChild>
-                                     <Button 
-                                       variant="outline" 
-                                       size="icon"
-                                       onClick={() => {}}
-                                     >
-                                       <FileText className="h-4 w-4" />
-                                     </Button>
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Descargar Estado de Cuenta</p>
-                                   </TooltipContent>
-                                 </Tooltip>
-                                 <Tooltip>
-                                   <TooltipTrigger asChild>
                                       <Button 
                                        variant="destructive" 
                                        size="icon"
@@ -1230,8 +1230,8 @@ export default function Pagos() {
                                      <p>Cancelar Cuenta</p>
                                    </TooltipContent>
                                  </Tooltip>
-                              </div>
-                            </TooltipProvider>
+                               </div>
+                             </TooltipProvider>
                           </TableCell>
                       </TableRow>
                     ))}
@@ -1624,20 +1624,34 @@ export default function Pagos() {
                           </Badge>
                         </TableCell>
                          <TableCell>
-                           <TooltipProvider>
-                             <div className="flex gap-2">
-                               <Tooltip>
-                                 <TooltipTrigger asChild>
-                                   <Button variant="outline" size="icon" asChild>
-                                     <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
-                                       <Eye className="h-4 w-4" />
-                                     </Link>
-                                   </Button>
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p>Ver Detalle</p>
-                                 </TooltipContent>
-                               </Tooltip>
+                            <TooltipProvider>
+                              <div className="flex gap-2">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="outline" size="icon" asChild>
+                                      <Link to={`/admin/cuentas-cobranza/${cuenta.id}/detalle`}>
+                                        <Eye className="h-4 w-4" />
+                                      </Link>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Ver Detalle</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                 <Tooltip>
+                                   <TooltipTrigger asChild>
+                                     <Button 
+                                       variant="outline" 
+                                       size="icon"
+                                       onClick={() => {}}
+                                     >
+                                       <FileText className="h-4 w-4" />
+                                     </Button>
+                                   </TooltipTrigger>
+                                   <TooltipContent>
+                                     <p>Descargar Estado de Cuenta</p>
+                                   </TooltipContent>
+                                 </Tooltip>
                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                      <Button 
@@ -1657,22 +1671,8 @@ export default function Pagos() {
                                      <p>Descargar Oferta</p>
                                    </TooltipContent>
                                  </Tooltip>
-                                 <Tooltip>
-                                   <TooltipTrigger asChild>
-                                     <Button 
-                                       variant="outline" 
-                                       size="icon"
-                                       onClick={() => {}}
-                                     >
-                                       <FileText className="h-4 w-4" />
-                                     </Button>
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Descargar Estado de Cuenta</p>
-                                   </TooltipContent>
-                                 </Tooltip>
                               </div>
-                           </TooltipProvider>
+                            </TooltipProvider>
                          </TableCell>
                       </TableRow>
                     ))}
