@@ -182,14 +182,13 @@ export class ReciboPagoService {
         currency: 'MXN',
       }).format(amount);
 
-    // Convert amount to words with pesos
-    const montoEnLetra = this.numberToWords(data.aplicacion.monto);
-    const montoEnLetraCapitalizado = montoEnLetra.charAt(0).toUpperCase() + montoEnLetra.slice(1);
+    // Convert amount to words with pesos format
+    const montoEnLetra = this.numberToWordsWithPesos(data.aplicacion.monto);
 
     // Bueno por
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Bueno por: ${formatMoney(data.aplicacion.monto)} (${montoEnLetraCapitalizado})`, 20, currentY);
+    doc.text(`Bueno por: ${formatMoney(data.aplicacion.monto)} (${montoEnLetra})`, 20, currentY);
     currentY += 10;
 
     // Get buyer info with gender
@@ -197,10 +196,9 @@ export class ReciboPagoService {
     const clientName = primerComprador?.personas?.nombre_legal || 'N/A';
     const sexoComprador = primerComprador?.personas?.sexo?.toLowerCase();
     
-    // Determine article based on gender (del/de la, Señor/Señora, el/la)
-    const articulo = sexoComprador === 'masculino' ? 'del' : 'de la';
-    const tratamiento = sexoComprador === 'masculino' ? 'Señor' : 'Señora';
-    const articuloElLa = sexoComprador === 'masculino' ? 'el' : 'la';
+    // Determine article based on gender (del Señor/de la Señora, el/la)
+    const articulo = sexoComprador === 'masculino' ? 'del Señor' : 'de la Señora';
+    const articuloElLa = sexoComprador === 'masculino' ? 'el Señor' : 'la Señora';
 
     // Payment date formatting
     const paymentDate = data.pago?.fecha_pago
@@ -214,7 +212,7 @@ export class ReciboPagoService {
 
     // Main text
     currentY += 5;
-    const mainText = `Recibimos ${articulo} ${tratamiento} ${clientName} la cantidad de ${formatMoney(data.aplicacion.monto)} (${montoEnLetraCapitalizado}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${data.unidadInfo.proyecto || 'N/A'}, al efecto de adquirir siguiente la unidad condominal, cuyas características serán:`;
+    const mainText = `Recibimos ${articulo} ${clientName} la cantidad de ${formatMoney(data.aplicacion.monto)} (${montoEnLetra}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${data.unidadInfo.proyecto || 'N/A'}, al efecto de adquirir siguiente la unidad condominal, cuyas características serán:`;
     
     const mainTextLines = doc.splitTextToSize(mainText, pageWidth - 40);
     mainTextLines.forEach((line: string) => {
@@ -236,9 +234,8 @@ export class ReciboPagoService {
         currentY += 7;
       }
 
-      const precioEnLetra = this.numberToWords(data.cuenta.precio_final);
-      const precioCapitalizado = precioEnLetra.charAt(0).toUpperCase() + precioEnLetra.slice(1);
-      const montoText = `3. Monto total de depósito en garantía de cumplimiento al que se compromete ${articuloElLa} ${tratamiento} ${clientName}: $${formatMoney(data.cuenta.precio_final).replace('$', '')} (${precioCapitalizado} Pesos 00/100 M.N.)`;
+      const precioEnLetra = this.numberToWordsWithPesos(data.cuenta.precio_final);
+      const montoText = `3. Monto total de depósito en garantía de cumplimiento al que se compromete ${articuloElLa} ${clientName}: ${formatMoney(data.cuenta.precio_final)} (${precioEnLetra})`;
       const montoLines = doc.splitTextToSize(montoText, pageWidth - 50);
       montoLines.forEach((line: string) => {
         doc.text(line, 25, currentY);
@@ -348,7 +345,7 @@ export class ReciboPagoService {
     });
   }
 
-  private numberToWords(num: number): string {
+  private numberToWordsWithPesos(num: number): string {
     // Redondear a 2 decimales
     const roundedNum = Math.round(num * 100) / 100;
     
@@ -356,65 +353,72 @@ export class ReciboPagoService {
     const parteEntera = Math.floor(roundedNum);
     const parteDecimal = Math.round((roundedNum - parteEntera) * 100);
     
+    // Convertir parte entera a palabras
+    const palabrasEntera = this.convertirEntero(parteEntera);
+    const palabrasEnteraCapitalizada = palabrasEntera.charAt(0).toUpperCase() + palabrasEntera.slice(1);
+    
+    // Formato final: "Monto en letra Pesos decimal/100 M.N."
+    return `${palabrasEnteraCapitalizada} Pesos ${parteDecimal.toString().padStart(2, '0')}/100 M.N.`;
+  }
+
+  private numberToWords(num: number): string {
+    // Para metros cuadrados y otros números sin formato de pesos
+    const roundedNum = Math.round(num * 100) / 100;
+    const parteEntera = Math.floor(roundedNum);
+    const parteDecimal = Math.round((roundedNum - parteEntera) * 100);
+    
+    let resultado = this.convertirEntero(parteEntera);
+    
+    if (parteDecimal > 0) {
+      resultado += ` punto ${this.convertirEntero(parteDecimal)}`;
+    }
+    
+    return resultado;
+  }
+
+  private convertirEntero(n: number): string {
     const units = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
     const tens = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
     const teens = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve'];
     const hundreds = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
-    const thousands = ['', 'mil', 'dos mil', 'tres mil', 'cuatro mil', 'cinco mil', 'seis mil', 'siete mil', 'ocho mil', 'nueve mil'];
 
-    const convertirEntero = (n: number): string => {
-      if (n === 0) return 'cero';
-      if (n < 10) return units[n];
-      if (n >= 10 && n < 20) return teens[n - 10];
-      if (n >= 20 && n < 100) {
-        const unit = n % 10;
-        const ten = Math.floor(n / 10);
-        return unit === 0 ? tens[ten] : `${tens[ten]} y ${units[unit]}`;
-      }
-      if (n >= 100 && n < 1000) {
-        const hundred = Math.floor(n / 100);
-        const resto = n % 100;
-        const hundredText = n === 100 ? 'cien' : hundreds[hundred];
-        return resto === 0 ? hundredText : `${hundredText} ${convertirEntero(resto)}`;
-      }
-      if (n >= 1000 && n < 10000) {
-        const thousand = Math.floor(n / 1000);
-        const resto = n % 1000;
-        const thousandText = thousand === 1 ? 'mil' : thousands[thousand];
-        return resto === 0 ? thousandText : `${thousandText} ${convertirEntero(resto)}`;
-      }
-      if (n >= 10000 && n < 100000) {
-        const decenas = Math.floor(n / 1000);
-        const resto = n % 1000;
-        const decenasText = convertirEntero(decenas) + ' mil';
-        return resto === 0 ? decenasText : `${decenasText} ${convertirEntero(resto)}`;
-      }
-      if (n >= 100000 && n < 1000000) {
-        const centenas = Math.floor(n / 1000);
-        const resto = n % 1000;
-        const centenasText = convertirEntero(centenas) + ' mil';
-        return resto === 0 ? centenasText : `${centenasText} ${convertirEntero(resto)}`;
-      }
-      if (n >= 1000000 && n < 2000000) {
-        const resto = n % 1000000;
-        return resto === 0 ? 'un millón' : `un millón ${convertirEntero(resto)}`;
-      }
-      if (n >= 2000000) {
-        const millones = Math.floor(n / 1000000);
-        const resto = n % 1000000;
-        const millonesText = convertirEntero(millones) + ' millones';
-        return resto === 0 ? millonesText : `${millonesText} ${convertirEntero(resto)}`;
-      }
-      return n.toString();
-    };
-
-    let resultado = convertirEntero(parteEntera);
-    
-    // Si hay parte decimal, agregarla
-    if (parteDecimal > 0) {
-      resultado += ` punto ${convertirEntero(parteDecimal)}`;
+    if (n === 0) return 'cero';
+    if (n < 10) return units[n];
+    if (n >= 10 && n < 20) return teens[n - 10];
+    if (n >= 20 && n < 100) {
+      const unit = n % 10;
+      const ten = Math.floor(n / 10);
+      return unit === 0 ? tens[ten] : `${tens[ten]} y ${units[unit]}`;
     }
-    
-    return resultado;
+    if (n >= 100 && n < 1000) {
+      const hundred = Math.floor(n / 100);
+      const resto = n % 100;
+      const hundredText = n === 100 ? 'cien' : hundreds[hundred];
+      return resto === 0 ? hundredText : `${hundredText} ${this.convertirEntero(resto)}`;
+    }
+    if (n >= 1000 && n < 1000000) {
+      const miles = Math.floor(n / 1000);
+      const resto = n % 1000;
+      let milesText = '';
+      
+      if (miles === 1) {
+        milesText = 'mil';
+      } else {
+        milesText = this.convertirEntero(miles) + ' mil';
+      }
+      
+      return resto === 0 ? milesText : `${milesText} ${this.convertirEntero(resto)}`;
+    }
+    if (n >= 1000000 && n < 2000000) {
+      const resto = n % 1000000;
+      return resto === 0 ? 'un millón' : `un millón ${this.convertirEntero(resto)}`;
+    }
+    if (n >= 2000000) {
+      const millones = Math.floor(n / 1000000);
+      const resto = n % 1000000;
+      const millonesText = this.convertirEntero(millones) + ' millones';
+      return resto === 0 ? millonesText : `${millonesText} ${this.convertirEntero(resto)}`;
+    }
+    return n.toString();
   }
 }
