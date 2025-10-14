@@ -15,7 +15,6 @@ import { CompradoresDetailDialog } from "@/components/admin/CompradoresDetailDia
 import { EditCuentaCobranzaDialog } from "@/components/admin/EditCuentaCobranzaDialog";
 import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 import { TransferMoneyDialog } from "@/components/admin/TransferMoneyDialog";
-import { CancelCuentaDialog } from "@/components/admin/CancelCuentaDialog";
 import { CashPaymentDetailDialog } from "@/components/admin/CashPaymentDetailDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -66,7 +65,6 @@ interface CuentaCobranza {
 
 export default function CuentasMantenimiento() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("activas");
   const [selectedTipos, setSelectedTipos] = useState<Array<'Propiedad' | 'Producto' | 'Servicio'>>(['Propiedad', 'Producto', 'Servicio']);
   
   // Filter states
@@ -77,10 +75,6 @@ export default function CuentasMantenimiento() {
   const [proyectoFilter, setProyectoFilter] = useState("");
   const [noPropiedadFilter, setNoPropiedadFilter] = useState("");
   const [modeloFilter, setModeloFilter] = useState("");
-  const [cancelDialog, setCancelDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
-    isOpen: false,
-    cuenta: null
-  });
   const [editDialog, setEditDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
     isOpen: false,
     cuenta: null
@@ -566,13 +560,10 @@ export default function CuentasMantenimiento() {
     },
   });
 
-  // Filter by active status and search term
-  const cuentasActivas = cuentasCobranza?.filter(cuenta => cuenta.activo) || [];
-  const cuentasCanceladas = cuentasCobranza?.filter(cuenta => !cuenta.activo) || [];
+  // Filter only active maintenance accounts
+  const cuentasToFilter = cuentasCobranza?.filter(c => c.activo) || [];
   
-  const currentCuentas = activeTab === "activas" ? cuentasActivas : cuentasCanceladas;
-  
-  const filteredCuentas = currentCuentas.filter(cuenta => {
+  const filteredCuentas = cuentasToFilter.filter(cuenta => {
     // Filter by tipo
     if (!selectedTipos.includes(cuenta.tipo)) {
       return false;
@@ -624,6 +615,23 @@ export default function CuentasMantenimiento() {
                           clabeFilter || proyectoFilter || noPropiedadFilter || 
                           modeloFilter || searchTerm;
 
+  // Navigation functions
+  const handlePropertyClick = (clabe: string) => {
+    navigate(`/admin/propiedades?search=${encodeURIComponent(clabe)}`);
+  };
+
+  const handleCompradorClick = (rfc: string) => {
+    navigate(`/admin/compradores?search=${encodeURIComponent(rfc)}`);
+  };
+
+  const handleVendedorClick = (nombreVendedor: string) => {
+    navigate(`/admin/entidades-legales?search=${encodeURIComponent(nombreVendedor)}`);
+  };
+
+  const handleEditCuenta = (cuenta: CuentaCobranza) => {
+    setEditDialog({ isOpen: true, cuenta });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -641,7 +649,7 @@ export default function CuentasMantenimiento() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Cuentas de Mantenimientos</h1>
           <p className="text-muted-foreground">
-            Gestiona todas las cuentas de mantenimiento ({filteredCuentas.length} {activeTab === "activas" ? "activas" : "canceladas"})
+            Gestiona todas las cuentas de mantenimiento ({filteredCuentas.length})
           </p>
         </div>
       </div>
@@ -787,17 +795,7 @@ export default function CuentasMantenimiento() {
         </Popover>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="activas">
-            Activas ({cuentasActivas.length})
-          </TabsTrigger>
-          <TabsTrigger value="canceladas">
-            Canceladas ({cuentasCanceladas.length})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={activeTab} className="space-y-4">
+      <div className="space-y-4">
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
@@ -844,24 +842,28 @@ export default function CuentasMantenimiento() {
                             {cuenta.producto_nombre || '-'}
                           </TableCell>
                           <TableCell>
-                            <div className="max-w-xs">
-                              {cuenta.compradores.length > 0 ? (
-                                <div className="space-y-1">
-                                  {cuenta.compradores.slice(0, 2).map((c, idx) => (
-                                    <div key={idx} className="text-sm">
-                                      {c.nombre_legal}
-                                    </div>
-                                  ))}
-                                  {cuenta.compradores.length > 2 && (
-                                    <div className="text-xs text-muted-foreground">
-                                      +{cuenta.compradores.length - 2} más
-                                    </div>
-                                  )}
-                                </div>
+                            {cuenta.compradores.length > 0 ? (
+                              cuenta.compradores.length > 1 ? (
+                                <CompradoresDetailDialog compradores={cuenta.compradores} />
                               ) : (
-                                <span className="text-muted-foreground">Sin compradores</span>
-                              )}
-                            </div>
+                                <div className="space-y-1">
+                                  <Badge 
+                                    variant="secondary" 
+                                    className="block w-fit cursor-pointer hover:bg-secondary/80" 
+                                    onClick={() => handleCompradorClick(cuenta.compradores[0].rfc || cuenta.compradores[0].nombre_legal)}
+                                  >
+                                    {cuenta.compradores[0].nombre_legal}
+                                  </Badge>
+                                  <div className="text-xs text-muted-foreground">
+                                    {cuenta.compradores[0].rfc && `RFC: ${cuenta.compradores[0].rfc}`}
+                                    <br />
+                                    {cuenta.compradores[0].porcentaje_copropiedad.toFixed(2)}% propiedad
+                                  </div>
+                                </div>
+                              )
+                            ) : (
+                              <span className="text-muted-foreground">Sin compradores</span>
+                            )}
                           </TableCell>
                           <TableCell className="font-mono text-xs">
                             {cuenta.clabe_stp || '-'}
@@ -927,8 +929,7 @@ export default function CuentasMantenimiento() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   );
 }
