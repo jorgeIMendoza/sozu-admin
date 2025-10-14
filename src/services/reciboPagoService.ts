@@ -209,7 +209,7 @@ export class ReciboPagoService {
     const buenoporText = `Bueno por: ${formatMoney(montoPago)} (${montoEnLetra})`;
     const buenoporLines = doc.splitTextToSize(buenoporText, pageWidth - 40);
     buenoporLines.forEach((line: string) => {
-      doc.text(line, 20, currentY);
+      doc.text(line, 20, currentY, { align: 'justify', maxWidth: pageWidth - 40 });
       currentY += 7;
     });
     currentY += 3;
@@ -240,7 +240,7 @@ export class ReciboPagoService {
     
     const mainTextLines = doc.splitTextToSize(mainText, pageWidth - 40);
     mainTextLines.forEach((line: string) => {
-      doc.text(line, 20, currentY);
+      doc.text(line, 20, currentY, { align: 'justify', maxWidth: pageWidth - 40 });
       currentY += 7;
     });
 
@@ -262,7 +262,7 @@ export class ReciboPagoService {
       const montoText = `3. Monto total de depósito en garantía de cumplimiento al que se compromete ${articuloElLa} ${clientName}: ${formatMoney(data.cuenta.precio_final)} (${precioEnLetra})`;
       const montoLines = doc.splitTextToSize(montoText, pageWidth - 50);
       montoLines.forEach((line: string) => {
-        doc.text(line, 25, currentY);
+        doc.text(line, 25, currentY, { align: 'justify', maxWidth: pageWidth - 50 });
         currentY += 7;
       });
     }
@@ -274,7 +274,7 @@ export class ReciboPagoService {
     const legalText1 = 'La cantidad aquí entregada y recibida será aplicada al depósito en garantía de cumplimiento, al momento de la celebración del contrato de promesa de compraventa.';
     const legalLines1 = doc.splitTextToSize(legalText1, pageWidth - 40);
     legalLines1.forEach((line: string) => {
-      doc.text(line, 20, currentY);
+      doc.text(line, 20, currentY, { align: 'justify', maxWidth: pageWidth - 40 });
       currentY += 6;
     });
 
@@ -283,7 +283,7 @@ export class ReciboPagoService {
     const legalText2 = `Será obligación de la empresa mantener debidamente informado al aportante de la forma y términos en los que se lleve a cabo la gestión la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoMayusculas}.`;
     const legalLines2 = doc.splitTextToSize(legalText2, pageWidth - 40);
     legalLines2.forEach((line: string) => {
-      doc.text(line, 20, currentY);
+      doc.text(line, 20, currentY, { align: 'justify', maxWidth: pageWidth - 40 });
       currentY += 6;
     });
 
