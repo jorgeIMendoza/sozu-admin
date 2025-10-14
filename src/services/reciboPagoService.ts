@@ -156,13 +156,21 @@ export class ReciboPagoService {
     const pageWidth = doc.internal.pageSize.width;
     let currentY = 20;
 
-    // Add logo if available
+    // Add Sozu logo on the left
+    try {
+      const sozuLogo = await this.loadImage('/images/sozu-logo.png');
+      doc.addImage(sozuLogo, 'PNG', 20, currentY, 40, 20);
+    } catch (error) {
+      console.warn('Could not load Sozu logo:', error);
+    }
+
+    // Add project logo on the right
     if (data.unidadInfo.logo) {
       try {
-        const img = await this.loadImage(data.unidadInfo.logo);
-        doc.addImage(img, 'PNG', 20, currentY, 40, 20);
+        const projectLogo = await this.loadImage(data.unidadInfo.logo);
+        doc.addImage(projectLogo, 'PNG', pageWidth - 60, currentY, 40, 20);
       } catch (error) {
-        console.warn('Could not load logo:', error);
+        console.warn('Could not load project logo:', error);
       }
     }
 
