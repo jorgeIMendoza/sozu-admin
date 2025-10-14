@@ -50,6 +50,7 @@ interface CuentaCobranza {
   edificio: string;
   numero_propiedad: string;
   modelo: string;
+  clave_catastral: string | null;
   activo: boolean;
   id_oferta: number;
   motivo_cancelacion?: string | null;
@@ -123,6 +124,7 @@ export default function CuentasMantenimiento() {
           id_oferta,
           activo,
           valor_uma,
+          id_cuenta_cobranza_padre,
           tipos_cancelacion:id_tipo_cancelacion(nombre)
         `)
         .not('id_cuenta_cobranza_padre', 'is', null);
@@ -133,6 +135,20 @@ export default function CuentasMantenimiento() {
       }
 
       if (!cuentas || cuentas.length === 0) return [];
+
+      // Get parent cuentas_cobranza to fetch clave_catastral and parent oferta
+      const parentCuentaIds = [...new Set(cuentas.map(c => c.id_cuenta_cobranza_padre).filter((id): id is number => id !== null))];
+      const { data: parentCuentas } = parentCuentaIds.length > 0 ? await supabase
+        .from('cuentas_cobranza')
+        .select(`
+          id,
+          clave_catastral,
+          id_oferta
+        `)
+        .in('id', parentCuentaIds) : { data: [] };
+
+      // Create map for quick parent lookup
+      const parentCuentasMap = new Map((parentCuentas || []).map(pc => [pc.id, pc] as [number, typeof pc]));
 
       // Get all payment amounts for each account using aplicaciones_pago
       const cuentaIds = cuentas.map(c => c.id);
@@ -349,6 +365,25 @@ export default function CuentasMantenimiento() {
         console.log('🔍 Cuentas con multas pendientes:', multasPendientesPorCuenta);
       }
 
+      // Get parent ofertas to fetch property/project/modelo from parent cuenta
+      const parentOfertaIds = parentCuentas?.map(pc => pc.id_oferta).filter((id): id is number => id !== null) || [];
+      const { data: parentOfertas } = parentOfertaIds.length > 0 ? await supabase
+        .from('ofertas')
+        .select(`
+          id,
+          id_propiedad,
+          propiedades!ofertas_id_propiedad_fkey(
+            id,
+            numero_propiedad,
+            id_entidad_relacionada_dueno,
+            id_edificio_modelo
+          )
+        `)
+        .in('id', parentOfertaIds) : { data: [] };
+
+      // Create map for quick parent oferta lookup
+      const parentOfertasMap = new Map((parentOfertas || []).map(po => [po.id, po] as [number, typeof po]));
+
       // Get offer IDs to fetch related data
       const ofertaIds = cuentas.map(c => c.id_oferta).filter(id => id !== null);
 
@@ -386,8 +421,15 @@ export default function CuentasMantenimiento() {
         .in('id_cuenta_cobranza', cuentas.map(c => c.id));
 
       // Get entidades relacionadas, proyectos, edificios, modelos, productos
-      const entidadIds = ofertas?.map(o => o.propiedades?.id_entidad_relacionada_dueno).filter(Boolean) || [];
-      const edificioModeloIds = ofertas?.map(o => o.propiedades?.id_edificio_modelo).filter(Boolean) || [];
+      // Include both maintenance account ofertas AND parent ofertas
+      const entidadIds = [
+        ...(ofertas?.map(o => o.propiedades?.id_entidad_relacionada_dueno).filter(Boolean) || []),
+        ...(parentOfertas?.map(po => po.propiedades?.id_entidad_relacionada_dueno).filter(Boolean) || [])
+      ];
+      const edificioModeloIds = [
+        ...(ofertas?.map(o => o.propiedades?.id_edificio_modelo).filter(Boolean) || []),
+        ...(parentOfertas?.map(po => po.propiedades?.id_edificio_modelo).filter(Boolean) || [])
+      ];
       const productoIds = ofertas?.map(o => o.id_producto).filter(Boolean) || [];
 
       // Get productos_servicios data 
@@ -459,11 +501,21 @@ export default function CuentasMantenimiento() {
 
       // Transform the data
       const transformedData: CuentaCobranza[] = cuentas.map(cuenta => {
-        const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
-        const propiedad = oferta?.propiedades;
-        const entidad = entidadesResult.data?.find(e => e.id === propiedad?.id_entidad_relacionada_dueno);
-        const edificioModelo = edificiosModelosResult.data?.find(em => em.id === propiedad?.id_edificio_modelo);
+        // Get parent cuenta and its oferta (for proyecto, propiedad, modelo, clave_catastral)
+        const parentCuenta = cuenta.id_cuenta_cobranza_padre ? parentCuentasMap.get(cuenta.id_cuenta_cobranza_padre) : null;
+        const parentOferta = parentCuenta?.id_oferta ? parentOfertasMap.get(parentCuenta.id_oferta) : null;
+        const parentPropiedad = parentOferta?.propiedades;
+        
+        // Get parent entidad and edificioModelo for proyecto and modelo
+        const entidad = entidadesResult.data?.find(e => e.id === parentPropiedad?.id_entidad_relacionada_dueno);
+        const edificioModelo = edificiosModelosResult.data?.find(em => em.id === parentPropiedad?.id_edificio_modelo);
         const cuentaCompradores = compradores?.filter(c => c.id_cuenta_cobranza === cuenta.id) || [];
+        
+        // Get clave_catastral from parent cuenta
+        const claveCatastral = parentCuenta?.clave_catastral || null;
+        
+        // Get maintenance account's own oferta (still needed for tipo determination)
+        const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
         
         // Determine tipo based on oferta
         let tipo: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
@@ -526,7 +578,7 @@ export default function CuentasMantenimiento() {
           producto_nombre: productoNombre,
           clabe_stp: cuenta.clabe_stp,
           precio_final,
-          precio_lista: propiedad?.precio_lista || null,
+          precio_lista: parentPropiedad?.precio_lista || null,
           pagado,
           restante,
           cash_limit: limiteEfectivo,
@@ -543,8 +595,9 @@ export default function CuentasMantenimiento() {
           dueno: entidad?.personas?.nombre_legal || 'Sin dueño',
           proyecto: entidad?.proyectos?.nombre || 'Sin proyecto',
           edificio: edificioModelo?.edificios?.nombre || 'Sin edificio',
-          numero_propiedad: propiedad?.numero_propiedad || 'Sin número',
+          numero_propiedad: parentPropiedad?.numero_propiedad || 'Sin número',
           modelo: edificioModelo?.modelos?.nombre || 'Sin modelo',
+          clave_catastral: claveCatastral,
           activo: cuenta.activo,
           id_oferta: cuenta.id_oferta,
           motivo_cancelacion: (cuenta as any).tipos_cancelacion?.nombre || null,
@@ -744,7 +797,7 @@ export default function CuentasMantenimiento() {
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <Table>
+                  <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-24">ID</TableHead>
@@ -753,6 +806,7 @@ export default function CuentasMantenimiento() {
                       <TableHead>Proyecto</TableHead>
                       <TableHead>Propiedad</TableHead>
                       <TableHead>Modelo</TableHead>
+                      <TableHead>Clave Catastral</TableHead>
                       <TableHead className="text-right">Precio Final</TableHead>
                       <TableHead className="text-right">Pagado</TableHead>
                       <TableHead className="text-right">Restante</TableHead>
@@ -762,7 +816,7 @@ export default function CuentasMantenimiento() {
                   <TableBody>
                     {filteredCuentas.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                           No se encontraron cuentas de mantenimiento
                         </TableCell>
                       </TableRow>
@@ -804,6 +858,9 @@ export default function CuentasMantenimiento() {
                           <TableCell>{cuenta.proyecto}</TableCell>
                           <TableCell>{cuenta.numero_propiedad}</TableCell>
                           <TableCell>{cuenta.modelo}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {cuenta.clave_catastral || '-'}
+                          </TableCell>
                           <TableCell className="text-right font-medium">
                             ${cuenta.precio_final.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
