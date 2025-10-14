@@ -852,13 +852,24 @@ export default function CuentasMantenimiento() {
                               <span className="text-muted-foreground">Sin propietarios</span>
                             )}
                           </TableCell>
-                          <TableCell className="font-mono text-xs">
+                          <TableCell 
+                            className="font-mono text-xs cursor-pointer hover:bg-secondary/50 transition-colors"
+                            onClick={() => {
+                              if (cuenta.clabe_stp) {
+                                navigator.clipboard.writeText(cuenta.clabe_stp);
+                                toast({
+                                  title: "CLABE STP copiada",
+                                  description: "La CLABE STP se ha copiado al portapapeles",
+                                });
+                              }
+                            }}
+                          >
                             {cuenta.clabe_stp || '-'}
                           </TableCell>
                           <TableCell>{cuenta.proyecto}</TableCell>
                           <TableCell>{cuenta.numero_propiedad}</TableCell>
                           <TableCell>{cuenta.modelo}</TableCell>
-                          <TableCell className="font-mono text-xs">
+                          <TableCell className="text-xs">
                             {cuenta.clave_catastral || '-'}
                           </TableCell>
                           <TableCell className="text-right font-medium">
