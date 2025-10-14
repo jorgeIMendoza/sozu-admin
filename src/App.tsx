@@ -39,6 +39,7 @@ const RepresentantesLegales = lazy(() => import("./pages/admin/RepresentantesLeg
 const Productos = lazy(() => import("./pages/admin/Productos"));
 const Servicios = lazy(() => import("./pages/admin/Servicios"));
 const CategoriasProductos = lazy(() => import("./pages/admin/CategoriasProductos"));
+const CuentasMantenimiento = lazy(() => import("./pages/admin/CuentasMantenimiento"));
 const ComingSoon = lazy(() => import("./pages/admin/ComingSoon"));
 
 const queryClient = new QueryClient();
@@ -92,6 +93,7 @@ const App = () => (
             <Route path="estacionamientos" element={<Estacionamientos />} />
             <Route path="bodegas" element={<Bodegas />} />
             <Route path="cuentas-cobranza" element={<Pagos />} />
+            <Route path="cuentas-mantenimiento" element={<CuentasMantenimiento />} />
             <Route path="cuentas-cobranza/:id/detalle" element={<DetalleCuentaCobranza />} />
             <Route path="pagos" element={<ComingSoon title="Pagos" />} />
             <Route path="cuentas-bancarias" element={<ComingSoon title="Cuentas Bancarias" />} />
