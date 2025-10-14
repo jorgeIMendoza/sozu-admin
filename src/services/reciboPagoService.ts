@@ -72,10 +72,10 @@ export class ReciboPagoService {
         ofertaData = oferta;
       }
 
-      // Fetch compradores
+      // Fetch compradores with sex info
       const { data: compradores, error: compradoresError } = await supabase
         .from('compradores')
-        .select('*, personas!compradores_id_persona_fkey(*)')
+        .select('*, personas!compradores_id_persona_fkey(nombre_legal, sexo)')
         .eq('id_cuenta_cobranza', data.cuentaCobranzaId)
         .eq('activo', true);
 
@@ -84,11 +84,11 @@ export class ReciboPagoService {
       // Fetch property or product details
       let unidadInfo: any = {};
       if (ofertaData?.id_propiedad) {
-        const { data: propiedadData } = await supabase
+          const { data: propiedadData } = await supabase
           .from('propiedades')
           .select(`
             numero_propiedad,
-            m2_reales,
+            m2_escriturables,
             id_entidad_relacionada_dueno
           `)
           .eq('id', ofertaData.id_propiedad)
@@ -96,7 +96,7 @@ export class ReciboPagoService {
 
         if (propiedadData) {
           unidadInfo.numero = propiedadData.numero_propiedad;
-          unidadInfo.m2 = propiedadData.m2_reales;
+          unidadInfo.m2 = propiedadData.m2_escriturables;
           
           // Get project info
           const { data: entidadData } = await supabase
@@ -108,7 +108,7 @@ export class ReciboPagoService {
           if (entidadData?.id_proyecto) {
             const { data: proyectoData } = await supabase
               .from('proyectos')
-              .select('nombre, direccion, url_imagen_portada')
+              .select('nombre, direccion, url_imagen_portada, url_firma_recibos, nombre_firmante_recibos')
               .eq('id', entidadData.id_proyecto)
               .maybeSingle();
 
@@ -116,6 +116,8 @@ export class ReciboPagoService {
               unidadInfo.proyecto = proyectoData.nombre;
               unidadInfo.direccion = proyectoData.direccion;
               unidadInfo.logo = proyectoData.url_imagen_portada;
+              unidadInfo.firma = proyectoData.url_firma_recibos;
+              unidadInfo.nombreFirmante = proyectoData.nombre_firmante_recibos;
             }
           }
 
@@ -173,135 +175,96 @@ export class ReciboPagoService {
 
     currentY += 15;
 
-    // Bueno por
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
+    // Format money
     const formatMoney = (amount: number) =>
       new Intl.NumberFormat('es-MX', {
         style: 'currency',
         currency: 'MXN',
       }).format(amount);
-    
-    doc.text(`Bueno por: ${formatMoney(data.aplicacion.monto)}`, 20, currentY);
+
+    // Convert amount to words with pesos
+    const montoEnLetra = this.numberToWords(data.aplicacion.monto);
+    const montoEnLetraCapitalizado = montoEnLetra.charAt(0).toUpperCase() + montoEnLetra.slice(1);
+
+    // Bueno por
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Bueno por: ${formatMoney(data.aplicacion.monto)} (${montoEnLetraCapitalizado})`, 20, currentY);
     currentY += 10;
 
-    // Client information
-    const clientName = data.compradores.length > 0
-      ? data.compradores.map((c: any) => c.personas.nombre_legal).join(', ')
-      : 'N/A';
+    // Get buyer info with gender
+    const primerComprador = data.compradores.length > 0 ? data.compradores[0] : null;
+    const clientName = primerComprador?.personas?.nombre_legal || 'N/A';
+    const sexoComprador = primerComprador?.personas?.sexo?.toLowerCase();
+    
+    // Determine article based on gender (del/de la, Señor/Señora, el/la)
+    const articulo = sexoComprador === 'masculino' ? 'del' : 'de la';
+    const tratamiento = sexoComprador === 'masculino' ? 'Señor' : 'Señora';
+    const articuloElLa = sexoComprador === 'masculino' ? 'el' : 'la';
 
-    const formatDate = (date: string) =>
-      new Date(date).toLocaleDateString('es-MX', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-
+    // Payment date formatting
     const paymentDate = data.pago?.fecha_pago
       ? new Date(data.pago.fecha_pago)
       : new Date();
+    
+    const dia = paymentDate.getDate();
+    const mes = paymentDate.toLocaleDateString('es-MX', { month: 'long' });
+    const anio = paymentDate.getFullYear();
+    const fechaFormateada = `${dia} de ${mes} de ${anio}`;
+
+    // Main text
+    currentY += 5;
+    const mainText = `Recibimos ${articulo} ${tratamiento} ${clientName} la cantidad de ${formatMoney(data.aplicacion.monto)} (${montoEnLetraCapitalizado}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${data.unidadInfo.proyecto || 'N/A'}, al efecto de adquirir siguiente la unidad condominal, cuyas características serán:`;
+    
+    const mainTextLines = doc.splitTextToSize(mainText, pageWidth - 40);
+    mainTextLines.forEach((line: string) => {
+      doc.text(line, 20, currentY);
+      currentY += 7;
+    });
 
     currentY += 5;
-    const textLines = doc.splitTextToSize(
-      `Recibimos del/la Señor/a ${clientName} la cantidad de ${formatMoney(data.aplicacion.monto)}, ` +
-      `el día ${paymentDate.getDate()} de ${paymentDate.toLocaleDateString('es-MX', { month: 'long' })} ` +
-      `de ${paymentDate.getFullYear()}.`,
-      pageWidth - 40
-    );
-    
-    textLines.forEach((line: string) => {
-      doc.text(line, 20, currentY);
-      currentY += 7;
-    });
 
-    currentY += 10;
-
-    // Payment concept
-    const concepto = data.pago?.descripcion || 
-      data.acuerdo?.conceptos_pago?.nombre || 
-      'Pago';
-
-    const conceptoLines = doc.splitTextToSize(
-      `Por concepto de: ${concepto}`,
-      pageWidth - 40
-    );
-    
-    conceptoLines.forEach((line: string) => {
-      doc.text(line, 20, currentY);
-      currentY += 7;
-    });
-
-    currentY += 10;
-
-    // Property information if available
+    // Property characteristics
     if (data.unidadInfo.numero) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Información de la Unidad:', 20, currentY);
-      currentY += 10;
-
-      doc.setFont('helvetica', 'normal');
-      
-      if (data.unidadInfo.proyecto) {
-        doc.text(`Proyecto: ${data.unidadInfo.proyecto}`, 25, currentY);
-        currentY += 7;
-      }
-
-      doc.text(`Unidad condominal: ${data.unidadInfo.numero}`, 25, currentY);
+      doc.text(`1. Unidad condominal: ${data.unidadInfo.numero}`, 25, currentY);
       currentY += 7;
 
       if (data.unidadInfo.m2) {
-        doc.text(
-          `Metros estimados: ${data.unidadInfo.m2} m² (${this.numberToWords(data.unidadInfo.m2)} metros cuadrados)`,
-          25,
-          currentY
-        );
+        const m2EnLetra = this.numberToWords(data.unidadInfo.m2);
+        const m2Capitalizado = m2EnLetra.charAt(0).toUpperCase() + m2EnLetra.slice(1);
+        doc.text(`2. Metros estimados: ${data.unidadInfo.m2} m² (${m2Capitalizado} metros cuadrados)`, 25, currentY);
         currentY += 7;
       }
 
-      doc.text(
-        `Monto total de depósito: ${formatMoney(data.cuenta.precio_final)}`,
-        25,
-        currentY
-      );
-      currentY += 10;
+      const precioEnLetra = this.numberToWords(data.cuenta.precio_final);
+      const precioCapitalizado = precioEnLetra.charAt(0).toUpperCase() + precioEnLetra.slice(1);
+      const montoText = `3. Monto total de depósito en garantía de cumplimiento al que se compromete ${articuloElLa} ${tratamiento} ${clientName}: $${formatMoney(data.cuenta.precio_final).replace('$', '')} (${precioCapitalizado} Pesos 00/100 M.N.)`;
+      const montoLines = doc.splitTextToSize(montoText, pageWidth - 50);
+      montoLines.forEach((line: string) => {
+        doc.text(line, 25, currentY);
+        currentY += 7;
+      });
     }
 
     currentY += 10;
 
-    // Payment method information
-    if (data.pago) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Información del Pago:', 20, currentY);
-      currentY += 10;
-
-      doc.setFont('helvetica', 'normal');
-      
-      if (data.pago.metodos_pago?.nombre) {
-        doc.text(`Método de pago: ${data.pago.metodos_pago.nombre}`, 25, currentY);
-        currentY += 7;
-      }
-
-      if (data.pago.clave_rastreo) {
-        doc.text(`Clave de rastreo: ${data.pago.clave_rastreo}`, 25, currentY);
-        currentY += 7;
-      }
-
-      doc.text(`Fecha de pago: ${formatDate(data.pago.fecha_pago)}`, 25, currentY);
-      currentY += 10;
-    }
-
-    currentY += 20;
-
-    // Additional notes
-    doc.setFontSize(10);
-    const notesLines = doc.splitTextToSize(
-      'La cantidad aquí entregada y recibida será aplicada conforme al acuerdo de pago establecido.',
-      pageWidth - 40
-    );
-    
-    notesLines.forEach((line: string) => {
+    // Legal notes
+    doc.setFontSize(11);
+    const legalText1 = 'La cantidad aquí entregada y recibida será aplicada al depósito en garantía de cumplimiento, al momento de la celebración del contrato de promesa de compraventa.';
+    const legalLines1 = doc.splitTextToSize(legalText1, pageWidth - 40);
+    legalLines1.forEach((line: string) => {
       doc.text(line, 20, currentY);
-      currentY += 5;
+      currentY += 6;
+    });
+
+    currentY += 5;
+
+    const proyectoMayusculas = (data.unidadInfo.proyecto || 'N/A').toUpperCase();
+    const legalText2 = `Será obligación de la empresa mantener debidamente informado al aportante de la forma y términos en los que se lleve a cabo la gestión la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoMayusculas}.`;
+    const legalLines2 = doc.splitTextToSize(legalText2, pageWidth - 40);
+    legalLines2.forEach((line: string) => {
+      doc.text(line, 20, currentY);
+      currentY += 6;
     });
 
     currentY += 20;
@@ -310,11 +273,35 @@ export class ReciboPagoService {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('ATENTAMENTE', pageWidth / 2, currentY, { align: 'center' });
-    currentY += 20;
+    currentY += 15;
 
+    // Add company name (propietario)
     if (data.unidadInfo.propietario) {
       doc.setFont('helvetica', 'normal');
       doc.text(data.unidadInfo.propietario, pageWidth / 2, currentY, { align: 'center' });
+      currentY += 10;
+    }
+
+    // Add signature image if available
+    if (data.unidadInfo.firma) {
+      try {
+        const firmaImg = await this.loadImage(data.unidadInfo.firma);
+        const imgWidth = 40;
+        const imgHeight = 20;
+        doc.addImage(firmaImg, 'PNG', (pageWidth - imgWidth) / 2, currentY, imgWidth, imgHeight);
+        currentY += imgHeight + 5;
+      } catch (error) {
+        console.warn('Could not load signature image:', error);
+        currentY += 15;
+      }
+    } else {
+      currentY += 15;
+    }
+
+    // Add signer name if available
+    if (data.unidadInfo.nombreFirmante) {
+      doc.setFont('helvetica', 'normal');
+      doc.text(data.unidadInfo.nombreFirmante, pageWidth / 2, currentY, { align: 'center' });
       currentY += 7;
     }
 
@@ -373,6 +360,7 @@ export class ReciboPagoService {
     const tens = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
     const teens = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve'];
     const hundreds = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
+    const thousands = ['', 'mil', 'dos mil', 'tres mil', 'cuatro mil', 'cinco mil', 'seis mil', 'siete mil', 'ocho mil', 'nueve mil'];
 
     const convertirEntero = (n: number): string => {
       if (n === 0) return 'cero';
@@ -389,7 +377,34 @@ export class ReciboPagoService {
         const hundredText = n === 100 ? 'cien' : hundreds[hundred];
         return resto === 0 ? hundredText : `${hundredText} ${convertirEntero(resto)}`;
       }
-      // Para números >= 1000, retornar el número
+      if (n >= 1000 && n < 10000) {
+        const thousand = Math.floor(n / 1000);
+        const resto = n % 1000;
+        const thousandText = thousand === 1 ? 'mil' : thousands[thousand];
+        return resto === 0 ? thousandText : `${thousandText} ${convertirEntero(resto)}`;
+      }
+      if (n >= 10000 && n < 100000) {
+        const decenas = Math.floor(n / 1000);
+        const resto = n % 1000;
+        const decenasText = convertirEntero(decenas) + ' mil';
+        return resto === 0 ? decenasText : `${decenasText} ${convertirEntero(resto)}`;
+      }
+      if (n >= 100000 && n < 1000000) {
+        const centenas = Math.floor(n / 1000);
+        const resto = n % 1000;
+        const centenasText = convertirEntero(centenas) + ' mil';
+        return resto === 0 ? centenasText : `${centenasText} ${convertirEntero(resto)}`;
+      }
+      if (n >= 1000000 && n < 2000000) {
+        const resto = n % 1000000;
+        return resto === 0 ? 'un millón' : `un millón ${convertirEntero(resto)}`;
+      }
+      if (n >= 2000000) {
+        const millones = Math.floor(n / 1000000);
+        const resto = n % 1000000;
+        const millonesText = convertirEntero(millones) + ' millones';
+        return resto === 0 ? millonesText : `${millonesText} ${convertirEntero(resto)}`;
+      }
       return n.toString();
     };
 
