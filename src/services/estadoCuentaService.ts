@@ -53,7 +53,7 @@ export class EstadoCuentaService {
         .select(`
           *,
           metodos_pago!pagos_id_metodos_pago_fkey(nombre),
-          aplicaciones_pago!inner(
+          aplicaciones_pago!fk_aplicaciones_pago_pago(
             monto,
             id_acuerdo_pago,
             es_multa
