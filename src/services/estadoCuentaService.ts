@@ -52,7 +52,7 @@ export class EstadoCuentaService {
         .from("pagos")
         .select(`
           *,
-          metodos_pago(nombre),
+          metodos_pago!pagos_id_metodos_pago_fkey(nombre),
           aplicaciones_pago!inner(
             monto,
             id_acuerdo_pago,
@@ -72,21 +72,21 @@ export class EstadoCuentaService {
           .from("propiedades")
           .select("id_entidad_relacionada_dueno")
           .eq("id", ofertaData.id_propiedad)
-          .single();
+          .maybeSingle();
 
         if (propiedadData) {
           const { data: entidadData } = await supabase
             .from("entidades_relacionadas")
             .select("id_proyecto")
             .eq("id", propiedadData.id_entidad_relacionada_dueno)
-            .single();
+            .maybeSingle();
 
           if (entidadData) {
             const { data: proyecto } = await supabase
               .from("proyectos")
               .select("*")
               .eq("id", entidadData.id_proyecto)
-              .single();
+              .maybeSingle();
 
             proyectoData = proyecto;
           }
@@ -95,15 +95,15 @@ export class EstadoCuentaService {
 
       // Calculate totals
       const precioFinal = cuentaData.precio_final || 0;
-      const totalPagado = pagos.reduce((sum, pago) => {
-        const aplicacionesNoPagadas = pago.aplicaciones_pago.filter(
+      const totalPagado = (pagos || []).reduce((sum, pago) => {
+        const aplicacionesNoPagadas = (pago.aplicaciones_pago || []).filter(
           (ap: any) => !ap.es_multa
         );
         return sum + aplicacionesNoPagadas.reduce((s: number, ap: any) => s + (ap.monto || 0), 0);
       }, 0);
 
-      const totalMultas = pagos.reduce((sum, pago) => {
-        const aplicacionesMultas = pago.aplicaciones_pago.filter(
+      const totalMultas = (pagos || []).reduce((sum, pago) => {
+        const aplicacionesMultas = (pago.aplicaciones_pago || []).filter(
           (ap: any) => ap.es_multa
         );
         return sum + aplicacionesMultas.reduce((s: number, ap: any) => s + (ap.monto || 0), 0);
@@ -115,9 +115,9 @@ export class EstadoCuentaService {
       await this.renderTemplate({
         cuenta: cuentaData,
         oferta: ofertaData,
-        compradores,
-        acuerdos,
-        pagos,
+        compradores: compradores || [],
+        acuerdos: acuerdos || [],
+        pagos: pagos || [],
         proyecto: proyectoData,
         precioFinal,
         totalPagado,
@@ -241,7 +241,7 @@ export class EstadoCuentaService {
           return `
           <tr>
             <td>${acuerdo.orden}</td>
-            <td>${acuerdo.conceptos_pago.nombre}</td>
+            <td>${acuerdo.conceptos_pago?.nombre || "N/A"}</td>
             <td>${acuerdo.fecha_pago ? formatDate(acuerdo.fecha_pago) : "N/A"}</td>
             <td class="right">${formatMoney(acuerdo.monto)}</td>
             <td class="right">${formatMoney(pagadoAcuerdo)}</td>
@@ -265,7 +265,7 @@ export class EstadoCuentaService {
           return `
           <tr>
             <td>${formatDate(pago.fecha_pago)}</td>
-            <td>${pago.metodos_pago.nombre}</td>
+            <td>${pago.metodos_pago?.nombre || "N/A"}</td>
             <td>${pago.clave_rastreo || "N/A"}</td>
             <td class="right">${formatMoney(montoPago)}</td>
           </tr>
