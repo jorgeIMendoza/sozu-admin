@@ -532,10 +532,10 @@ export default function DetalleCuentaMantenimiento() {
                               {acuerdo.fecha_pago && (
                                 <div className="flex flex-col text-xs text-muted-foreground">
                                   <span className="text-green-600 dark:text-green-400">
-                                    Sin recargos hasta: {addDays(acuerdo.fecha_pago, 10)}
+                                    Sin recargos: {formatDate(acuerdo.fecha_pago)} al {addDays(acuerdo.fecha_pago, 10)}
                                   </span>
                                   <span className="text-amber-600 dark:text-amber-400">
-                                    Con recargos después del {addDays(acuerdo.fecha_pago, 10)}
+                                    Con recargos desde: {addDays(acuerdo.fecha_pago, 11)}
                                   </span>
                                 </div>
                               )}
