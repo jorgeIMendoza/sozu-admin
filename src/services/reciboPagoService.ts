@@ -159,7 +159,7 @@ export class ReciboPagoService {
     // Add Sozu logo on the left
     try {
       const sozuLogoData = await this.loadImageWithDimensions('/images/sozu-logo.png');
-      const maxHeight = 20;
+      const maxHeight = 12;
       const aspectRatio = sozuLogoData.width / sozuLogoData.height;
       const logoHeight = maxHeight;
       const logoWidth = logoHeight * aspectRatio;
@@ -172,7 +172,7 @@ export class ReciboPagoService {
     if (data.unidadInfo.logo) {
       try {
         const projectLogoData = await this.loadImageWithDimensions(data.unidadInfo.logo);
-        const maxHeight = 20;
+        const maxHeight = 12;
         const aspectRatio = projectLogoData.width / projectLogoData.height;
         const logoHeight = maxHeight;
         const logoWidth = logoHeight * aspectRatio;
