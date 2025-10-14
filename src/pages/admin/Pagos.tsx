@@ -22,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
+import { EstadoCuentaService } from "@/services/estadoCuentaService";
 
 interface Comprador {
   nombre_legal: string;
@@ -97,6 +98,7 @@ export default function Pagos() {
     isOpen: false,
     cuenta: null
   });
+  const [isGeneratingEstadoCuenta, setIsGeneratingEstadoCuenta] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -639,6 +641,27 @@ export default function Pagos() {
     setCancelDialog({ isOpen: true, cuenta });
   };
 
+  const handleDownloadEstadoCuenta = async (idCuenta: number) => {
+    try {
+      setIsGeneratingEstadoCuenta(true);
+      const service = new EstadoCuentaService();
+      await service.generateEstadoCuenta({ id_cuenta: idCuenta });
+      toast({
+        title: "Estado de cuenta generado",
+        description: "El PDF se ha descargado exitosamente.",
+      });
+    } catch (error) {
+      console.error("Error generating estado de cuenta:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo generar el estado de cuenta.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingEstadoCuenta(false);
+    }
+  };
+
   const handleEditCuenta = (cuenta: CuentaCobranza) => {
     setEditDialog({ isOpen: true, cuenta });
   };
@@ -1154,20 +1177,25 @@ export default function Pagos() {
                                      <p>Ver Detalle</p>
                                    </TooltipContent>
                                  </Tooltip>
-                                 <Tooltip>
-                                   <TooltipTrigger asChild>
-                                     <Button 
-                                       variant="outline" 
-                                       size="icon"
-                                       onClick={() => {}}
-                                     >
-                                       <FileText className="h-4 w-4" />
-                                     </Button>
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Descargar Estado de Cuenta</p>
-                                   </TooltipContent>
-                                 </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        variant="outline" 
+                                        size="icon"
+                                        onClick={() => handleDownloadEstadoCuenta(cuenta.id)}
+                                        disabled={isGeneratingEstadoCuenta}
+                                      >
+                                        {isGeneratingEstadoCuenta ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <FileText className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Descargar Estado de Cuenta</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                      <Button 
@@ -1638,20 +1666,25 @@ export default function Pagos() {
                                     <p>Ver Detalle</p>
                                   </TooltipContent>
                                 </Tooltip>
-                                 <Tooltip>
-                                   <TooltipTrigger asChild>
-                                     <Button 
-                                       variant="outline" 
-                                       size="icon"
-                                       onClick={() => {}}
-                                     >
-                                       <FileText className="h-4 w-4" />
-                                     </Button>
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Descargar Estado de Cuenta</p>
-                                   </TooltipContent>
-                                 </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        variant="outline" 
+                                        size="icon"
+                                        onClick={() => handleDownloadEstadoCuenta(cuenta.id)}
+                                        disabled={isGeneratingEstadoCuenta}
+                                      >
+                                        {isGeneratingEstadoCuenta ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <FileText className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Descargar Estado de Cuenta</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                      <Button 
