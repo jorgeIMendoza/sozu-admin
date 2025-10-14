@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Pencil } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Pencil, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +22,7 @@ import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialo
 import { EditPaymentDialog } from "@/components/admin/EditPaymentDialog";
 import { TransferirEntreComisionesDialog } from "@/components/admin/TransferirEntreComisionesDialog";
 import { formatCuentaCobranzaId, formatOfertaId } from "@/utils/cuentaCobranzaUtils";
+import { ReciboPagoService } from "@/services/reciboPagoService";
 
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -415,6 +416,7 @@ export default function DetalleCuentaCobranza() {
   }>({
     isOpen: false
   });
+  const [downloadingRecibo, setDownloadingRecibo] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -1564,6 +1566,31 @@ export default function DetalleCuentaCobranza() {
     }
   };
 
+  const handleDownloadRecibo = async (aplicacionId: number) => {
+    try {
+      setDownloadingRecibo(aplicacionId);
+      const reciboService = new ReciboPagoService();
+      await reciboService.generateRecibo({
+        aplicacionId,
+        cuentaCobranzaId: cuentaId,
+      });
+      
+      toast({
+        title: "Recibo generado",
+        description: "El recibo se ha descargado correctamente",
+      });
+    } catch (error) {
+      console.error("Error generating recibo:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo generar el recibo",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingRecibo(null);
+    }
+  };
+
   // Multa functions
   const handleNewMulta = (acuerdoId: number) => {
     const acuerdo = acuerdosPago?.find(a => a.id === acuerdoId);
@@ -2502,6 +2529,28 @@ export default function DetalleCuentaCobranza() {
                                                   </TooltipContent>
                                                 </Tooltip>
                                               )}
+                                              
+                                              {/* Download Receipt Button - Always show for all payment types */}
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <Button
+                                                    variant="outline"
+                                                    size="icon"
+                                                    className="h-6 w-6"
+                                                    onClick={() => handleDownloadRecibo(aplicacion.id)}
+                                                    disabled={downloadingRecibo === aplicacion.id}
+                                                  >
+                                                    {downloadingRecibo === aplicacion.id ? (
+                                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                      <Download className="h-3 w-3" />
+                                                    )}
+                                                  </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <p>Descargar Recibo</p>
+                                                </TooltipContent>
+                                              </Tooltip>
                                               
                                               {/* Edit Button - Only for non-STP payments and incomplete agreements */}
                                               {!isStpPayment && !acuerdo.pago_completado && (
