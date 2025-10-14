@@ -31,7 +31,7 @@ export class EstadoCuentaService {
       // Fetch compradores
       const { data: compradores, error: compradoresError } = await supabase
         .from("compradores")
-        .select("*, personas(*)")
+        .select("*, personas!compradores_id_persona_fkey(*)")
         .eq("id_cuenta_cobranza", data.id_cuenta)
         .eq("activo", true);
 
