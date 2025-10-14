@@ -341,20 +341,44 @@ export class ReciboPagoService {
   }
 
   private numberToWords(num: number): string {
+    // Redondear a 2 decimales
+    const roundedNum = Math.round(num * 100) / 100;
+    
+    // Separar parte entera y decimal
+    const parteEntera = Math.floor(roundedNum);
+    const parteDecimal = Math.round((roundedNum - parteEntera) * 100);
+    
     const units = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
     const tens = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
     const teens = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve'];
+    const hundreds = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
 
-    if (num === 0) return 'cero';
-    if (num < 10) return units[num];
-    if (num >= 10 && num < 20) return teens[num - 10];
-    if (num >= 20 && num < 100) {
-      const unit = num % 10;
-      const ten = Math.floor(num / 10);
-      return unit === 0 ? tens[ten] : `${tens[ten]} y ${units[unit]}`;
+    const convertirEntero = (n: number): string => {
+      if (n === 0) return 'cero';
+      if (n < 10) return units[n];
+      if (n >= 10 && n < 20) return teens[n - 10];
+      if (n >= 20 && n < 100) {
+        const unit = n % 10;
+        const ten = Math.floor(n / 10);
+        return unit === 0 ? tens[ten] : `${tens[ten]} y ${units[unit]}`;
+      }
+      if (n >= 100 && n < 1000) {
+        const hundred = Math.floor(n / 100);
+        const resto = n % 100;
+        const hundredText = n === 100 ? 'cien' : hundreds[hundred];
+        return resto === 0 ? hundredText : `${hundredText} ${convertirEntero(resto)}`;
+      }
+      // Para números >= 1000, retornar el número
+      return n.toString();
+    };
+
+    let resultado = convertirEntero(parteEntera);
+    
+    // Si hay parte decimal, agregarla
+    if (parteDecimal > 0) {
+      resultado += ` punto ${convertirEntero(parteDecimal)}`;
     }
-
-    // For numbers >= 100, just return the number
-    return num.toString();
+    
+    return resultado;
   }
 }
