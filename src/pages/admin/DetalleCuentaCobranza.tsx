@@ -1391,7 +1391,9 @@ export default function DetalleCuentaCobranza() {
   };
 
   const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'dd/MM/yyyy', { locale: es });
+    const [year, month, day] = dateString.split('-').map(Number);
+    const localDate = new Date(year, month - 1, day);
+    return format(localDate, 'dd/MM/yyyy', { locale: es });
   };
 
   const toggleAcuerdo = (acuerdoId: number) => {

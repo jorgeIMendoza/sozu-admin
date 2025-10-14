@@ -250,7 +250,9 @@ export default function DetalleCuentaMantenimiento() {
   });
 
   const formatDate = (date: string) => {
-    return format(new Date(date), "dd 'de' MMMM 'de' yyyy", { locale: es });
+    const [year, month, day] = date.split('-').map(Number);
+    const localDate = new Date(year, month - 1, day);
+    return format(localDate, "dd 'de' MMMM 'de' yyyy", { locale: es });
   };
 
   const formatCurrency = (amount: number) => {
