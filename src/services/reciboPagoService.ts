@@ -25,6 +25,7 @@ export class ReciboPagoService {
         const { data: pago } = await supabase
           .from('pagos')
           .select(`
+            monto,
             fecha_pago,
             clave_rastreo,
             descripcion,
@@ -199,12 +200,13 @@ export class ReciboPagoService {
       }).format(amount);
 
     // Convert amount to words with pesos format
-    const montoEnLetra = this.numberToWordsWithPesos(data.aplicacion.monto);
+    const montoPago = data.pago?.monto || 0;
+    const montoEnLetra = this.numberToWordsWithPesos(montoPago);
 
     // Bueno por
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Bueno por: ${formatMoney(data.aplicacion.monto)} (${montoEnLetra})`, 20, currentY);
+    doc.text(`Bueno por: ${formatMoney(montoPago)} (${montoEnLetra})`, 20, currentY);
     currentY += 10;
 
     // Get buyer info with gender
@@ -229,7 +231,7 @@ export class ReciboPagoService {
     // Main text
     currentY += 5;
     const proyectoMayusculas = (data.unidadInfo.proyecto || 'N/A').toUpperCase();
-    const mainText = `Recibimos ${articulo} ${clientName} la cantidad de ${formatMoney(data.aplicacion.monto)} (${montoEnLetra}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoMayusculas}, al efecto de adquirir siguiente la unidad condominal, cuyas características serán:`;
+    const mainText = `Recibimos ${articulo} ${clientName} la cantidad de ${formatMoney(montoPago)} (${montoEnLetra}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoMayusculas}, al efecto de adquirir siguiente la unidad condominal, cuyas características serán:`;
     
     const mainTextLines = doc.splitTextToSize(mainText, pageWidth - 40);
     mainTextLines.forEach((line: string) => {
