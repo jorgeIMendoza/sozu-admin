@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { supabase } from '@/integrations/supabase/client';
+import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
 
 interface ReciboPagoData {
   aplicacionId: number;
@@ -139,6 +140,8 @@ export class ReciboPagoService {
         cuenta: cuentaData,
         compradores: compradores || [],
         unidadInfo,
+        cuentaCobranzaId: data.cuentaCobranzaId,
+        oferta: ofertaData,
       });
     } catch (error) {
       console.error('Error generating recibo:', error);
@@ -318,8 +321,26 @@ export class ReciboPagoService {
     doc.setFont('helvetica', 'italic');
     doc.text('Gerente de cobranza', pageWidth / 2, currentY, { align: 'center' });
 
-    // Save PDF
-    const fileName = `Recibo_de_pago_${new Date().toISOString()}.pdf`;
+    // Format date as yyyy_mm_dd
+    const formatDateForFilename = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}_${month}_${day}`;
+    };
+
+    // Determine account type for formatting
+    const tipoCuenta = data.oferta?.id_producto ? 'Producto' : 'Propiedad';
+    const cuentaFormatted = formatCuentaCobranzaId(data.cuentaCobranzaId, tipoCuenta);
+    
+    // Get payment date
+    const fechaPago = data.pago?.fecha_pago 
+      ? new Date(data.pago.fecha_pago) 
+      : new Date();
+    const fechaFormatted = formatDateForFilename(fechaPago);
+
+    // Save PDF with formatted name
+    const fileName = `recibo_cuenta_${cuentaFormatted}_${fechaFormatted}.pdf`;
     doc.save(fileName);
   }
 

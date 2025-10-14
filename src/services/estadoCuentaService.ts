@@ -123,6 +123,7 @@ export class EstadoCuentaService {
         totalPagado,
         totalMultas,
         saldoPendiente,
+        id_cuenta: data.id_cuenta,
       });
     } catch (error) {
       console.error("Error generating estado de cuenta:", error);
@@ -285,13 +286,13 @@ export class EstadoCuentaService {
         "Este estado de cuenta muestra el detalle de acuerdos de pago y pagos realizados.";
 
     // Generate PDF
-    await this.generatePDF(container);
+    await this.generatePDF(container, data.id_cuenta, data.oferta);
 
     // Cleanup
     document.body.removeChild(container);
   }
 
-  private async generatePDF(container: HTMLElement): Promise<void> {
+  private async generatePDF(container: HTMLElement, idCuenta: number, oferta: any): Promise<void> {
     const card = container.querySelector(".card") as HTMLElement;
     if (!card) return;
 
@@ -312,6 +313,25 @@ export class EstadoCuentaService {
     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
     pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`estado-cuenta-${Date.now()}.pdf`);
+    
+    // Format date as yyyy_mm_dd
+    const formatDateForFilename = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}_${month}_${day}`;
+    };
+
+    // Determine account type for formatting
+    const tipoCuenta = oferta?.id_producto ? 'Producto' : 'Propiedad';
+    const cuentaFormatted = formatCuentaCobranzaId(idCuenta, tipoCuenta);
+    
+    // Get current date
+    const fechaActual = new Date();
+    const fechaFormatted = formatDateForFilename(fechaActual);
+
+    // Save PDF with formatted name
+    const fileName = `estado_cuenta_${cuentaFormatted}_${fechaFormatted}.pdf`;
+    pdf.save(fileName);
   }
 }
