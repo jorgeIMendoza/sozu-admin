@@ -6,14 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Receipt, Wrench } from "lucide-react";
+import { Search, Eye, X, Edit, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Receipt, Wrench } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { CompradoresDetailDialog } from "@/components/admin/CompradoresDetailDialog";
 import { EditCuentaCobranzaDialog } from "@/components/admin/EditCuentaCobranzaDialog";
-import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 import { TransferMoneyDialog } from "@/components/admin/TransferMoneyDialog";
 import { CashPaymentDetailDialog } from "@/components/admin/CashPaymentDetailDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -79,10 +78,6 @@ export default function CuentasMantenimiento() {
     cuenta: null
   });
   const [loadingDownload, setLoadingDownload] = useState<number | null>(null);
-  const [paymentDialog, setPaymentDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
-    isOpen: false,
-    cuenta: null
-  });
   const [transferDialog, setTransferDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
     isOpen: false,
     cuenta: null
@@ -912,7 +907,7 @@ export default function CuentasMantenimiento() {
                                 : '0.00'
                             }
                           </TableCell>
-                          <TableCell>
+                           <TableCell>
                             <div className="flex items-center justify-center gap-2">
                               <TooltipProvider>
                                 <Tooltip>
@@ -925,20 +920,6 @@ export default function CuentasMantenimiento() {
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p>Ver detalle</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon"
-                                      onClick={() => setPaymentDialog({ isOpen: true, cuenta })}
-                                    >
-                                      <Plus className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Agregar pago manual</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -955,21 +936,6 @@ export default function CuentasMantenimiento() {
       </div>
 
       {/* Dialog de pago manual */}
-      {paymentDialog.cuenta && (
-        <AddManualPaymentDialog
-          isOpen={paymentDialog.isOpen}
-          onClose={() => {
-            setPaymentDialog({ isOpen: false, cuenta: null });
-            queryClient.invalidateQueries({ queryKey: ["cuentas_mantenimiento"] });
-          }}
-          cuentaCobranzaId={paymentDialog.cuenta.id}
-          cuentaCobranzaLabel={`CM-${paymentDialog.cuenta.id.toString().padStart(6, '0')}`}
-          tipoCuenta={paymentDialog.cuenta.tipo}
-          precioFinal={paymentDialog.cuenta.precio_final}
-          montoPagado={paymentDialog.cuenta.pagado}
-          esMantenimiento={true}
-        />
-      )}
     </div>
   );
 }

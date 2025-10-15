@@ -7,12 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, CreditCard } from "lucide-react";
+import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 import { TransferirEntreComisionesDialog } from "@/components/admin/TransferirEntreComisionesDialog";
 
 interface AcuerdoPago {
@@ -65,7 +64,6 @@ export default function DetalleCuentaMantenimiento() {
   const { id } = useParams<{ id: string }>();
   const cuentaId = parseInt(id || '0');
   const [openAcuerdos, setOpenAcuerdos] = useState<{ [key: number]: boolean }>({});
-  const [manualPaymentDialog, setManualPaymentDialog] = useState(false);
   const [transferDialog, setTransferDialog] = useState<{ isOpen: boolean }>({ isOpen: false });
   const [propietariosOpen, setPropietariosOpen] = useState(false);
 
@@ -447,12 +445,6 @@ export default function DetalleCuentaMantenimiento() {
             <ArrowRight className="h-4 w-4 mr-2" />
             Transferir entre cuentas
           </Button>
-          <Button 
-            onClick={() => setManualPaymentDialog(true)}
-          >
-            <CreditCard className="h-4 w-4 mr-2" />
-            Agregar pago manual
-          </Button>
         </div>
       </div>
 
@@ -700,17 +692,6 @@ export default function DetalleCuentaMantenimiento() {
       </Card>
 
       {/* Dialogs */}
-      <AddManualPaymentDialog
-        isOpen={manualPaymentDialog}
-        onClose={() => setManualPaymentDialog(false)}
-        cuentaCobranzaId={cuentaId}
-        cuentaCobranzaLabel={formatCuentaMantenimientoId(cuentaId)}
-        tipoCuenta="Propiedad"
-        precioFinal={cuentaDetalle.precio_final}
-        montoPagado={totalPagado}
-        esMantenimiento={true}
-      />
-      
       <TransferirEntreComisionesDialog
         isOpen={transferDialog.isOpen}
         onClose={() => setTransferDialog({ isOpen: false })}
