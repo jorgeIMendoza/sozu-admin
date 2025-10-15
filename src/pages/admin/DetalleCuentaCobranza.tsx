@@ -2217,9 +2217,12 @@ export default function DetalleCuentaCobranza() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="acuerdos-aplicaciones" className="w-full">
-            <TabsList>
+            <TabsList className={cuentaDetalle?.tipo_cuenta === 'Propiedad' ? 'grid w-full grid-cols-3' : 'grid w-full grid-cols-2'}>
               <TabsTrigger value="acuerdos-aplicaciones">Acuerdos de Pago y Aplicaciones</TabsTrigger>
               <TabsTrigger value="pagos-aplicados">Pagos Aplicados</TabsTrigger>
+              {cuentaDetalle?.tipo_cuenta === 'Propiedad' && (
+                <TabsTrigger value="documentos">Documentos</TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="acuerdos-aplicaciones" className="mt-6">
@@ -2880,21 +2883,16 @@ export default function DetalleCuentaCobranza() {
                     </div>
                   )}
                 </TabsContent>
+
+                {/* Documentos Tab - only available for properties */}
+                {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id && (
+                  <TabsContent value="documentos" className="mt-6">
+                    <ReadOnlyDocumentsView cuentaCobranzaId={cuentaDetalle.id} />
+                  </TabsContent>
+                )}
               </Tabs>
             </CardContent>
           </Card>
-
-          {/* Documentos Tab - only available for properties */}
-          {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Documentos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ReadOnlyDocumentsView cuentaCobranzaId={cuentaDetalle.id} />
-              </CardContent>
-            </Card>
-          )}
 
       <DeleteConfirmationDialog
         open={deleteDialog.isOpen}
