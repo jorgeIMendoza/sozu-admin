@@ -934,7 +934,7 @@ export default function CuentasMantenimiento() {
                                       size="icon"
                                       onClick={() => setPaymentDialog({ isOpen: true, cuenta })}
                                     >
-                                      <CreditCard className="h-4 w-4" />
+                                      <Plus className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
