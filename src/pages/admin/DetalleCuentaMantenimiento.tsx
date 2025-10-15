@@ -591,15 +591,11 @@ export default function DetalleCuentaMantenimiento() {
                       <CollapsibleTrigger asChild>
                         <div className="w-full p-3 flex items-center justify-between hover:bg-muted/50 cursor-pointer">
                           <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-3">
-                              <div className="flex-shrink-0 w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-semibold">
-                                {acuerdo.orden}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium">{acuerdo.concepto}</span>
-                              </div>
+                            <div className="flex-shrink-0 w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-semibold">
+                              {acuerdo.orden}
                             </div>
                             <div className="flex flex-col gap-1">
+                              <span className="text-sm font-medium">{acuerdo.concepto}</span>
                               {conRecargos() && cuentaDetalle?.porcentaje_anual_cuota_extraordinaria ? (
                                 <>
                                   <span className="text-sm text-muted-foreground line-through">
