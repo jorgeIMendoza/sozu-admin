@@ -584,96 +584,103 @@ export default function DetalleCuentaMantenimiento() {
         </Card>
       </div>
 
+      {/* Información de la Propiedad */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Home className="h-5 w-5" />
+            Información de la Propiedad
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label className="text-sm font-medium">Proyecto</label>
+              <p className="text-sm text-muted-foreground">{cuentaDetalle.proyecto}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Modelo</label>
+              <p className="text-sm text-muted-foreground">{cuentaDetalle.modelo}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Edificio</label>
+              <p className="text-sm text-muted-foreground">{cuentaDetalle.edificio}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">No. Propiedad</label>
+              <p className="text-sm text-muted-foreground">{cuentaDetalle.numero_propiedad}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Metraje</label>
+              <p className="text-sm text-muted-foreground">
+                {cuentaDetalle.m2_escriturables ? `${cuentaDetalle.m2_escriturables} m²` : 'N/A'}
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">CLABE STP</label>
+              <p className="text-sm text-muted-foreground">{cuentaDetalle.clabe_stp || 'No asignada'}</p>
+            </div>
+          </div>
+          
+          {cuentaDetalle?.propietarios && cuentaDetalle.propietarios.length > 0 && (
+            <div className="mt-4">
+              <Collapsible open={propietariosOpen} onOpenChange={setPropietariosOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full flex items-center justify-between p-3 h-auto">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Propietarios ({cuentaDetalle.propietarios.length})</span>
+                    </div>
+                    {propietariosOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>RFC</TableHead>
+                        <TableHead className="text-right">% Copropiedad</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cuentaDetalle.propietarios.map((propietario, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{propietario.nombre_legal}</TableCell>
+                          <TableCell>
+                            {propietario.rfc ? (
+                              <Badge variant="secondary">{propietario.rfc}</Badge>
+                            ) : (
+                              'Sin RFC'
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">{propietario.porcentaje_copropiedad.toFixed(2)}%</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="mt-2 text-right pr-4">
+                    <span className="text-sm font-medium">
+                      Total: {cuentaDetalle.propietarios.reduce((sum, p) => sum + p.porcentaje_copropiedad, 0).toFixed(2)}%
+                    </span>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Tabs */}
       <Card>
         <CardHeader>
-          <CardTitle>Detalle de Cuenta</CardTitle>
+          <CardTitle>Acuerdos y Pagos</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="info" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="info">Información General</TabsTrigger>
+          <Tabs defaultValue="acuerdos" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="acuerdos">Acuerdos de Pago y Aplicaciones</TabsTrigger>
               <TabsTrigger value="pagos">Pagos Aplicados</TabsTrigger>
             </TabsList>
-
-            {/* Tab: Información General */}
-            <TabsContent value="info" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mt-4">
-                <div>
-                  <label className="text-sm font-medium">Proyecto</label>
-                  <p className="text-sm text-muted-foreground">{cuentaDetalle.proyecto}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Modelo</label>
-                  <p className="text-sm text-muted-foreground">{cuentaDetalle.modelo}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Edificio</label>
-                  <p className="text-sm text-muted-foreground">{cuentaDetalle.edificio}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">No. Propiedad</label>
-                  <p className="text-sm text-muted-foreground">{cuentaDetalle.numero_propiedad}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Metraje</label>
-                  <p className="text-sm text-muted-foreground">
-                    {cuentaDetalle.m2_escriturables ? `${cuentaDetalle.m2_escriturables} m²` : 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">CLABE STP</label>
-                  <p className="text-sm text-muted-foreground">{cuentaDetalle.clabe_stp || 'No asignada'}</p>
-                </div>
-              </div>
-              
-              {cuentaDetalle?.propietarios && cuentaDetalle.propietarios.length > 0 && (
-                <div className="mt-4">
-                  <Collapsible open={propietariosOpen} onOpenChange={setPropietariosOpen}>
-                    <CollapsibleTrigger asChild>
-                      <Button variant="ghost" className="w-full flex items-center justify-between p-3 h-auto">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">Propietarios ({cuentaDetalle.propietarios.length})</span>
-                        </div>
-                        {propietariosOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Nombre</TableHead>
-                            <TableHead>RFC</TableHead>
-                            <TableHead className="text-right">% Copropiedad</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {cuentaDetalle.propietarios.map((propietario, index) => (
-                            <TableRow key={index}>
-                              <TableCell className="font-medium">{propietario.nombre_legal}</TableCell>
-                              <TableCell>
-                                {propietario.rfc ? (
-                                  <Badge variant="secondary">{propietario.rfc}</Badge>
-                                ) : (
-                                  'Sin RFC'
-                                )}
-                              </TableCell>
-                              <TableCell className="text-right">{propietario.porcentaje_copropiedad.toFixed(2)}%</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                      <div className="mt-2 text-right pr-4">
-                        <span className="text-sm font-medium">
-                          Total: {cuentaDetalle.propietarios.reduce((sum, p) => sum + p.porcentaje_copropiedad, 0).toFixed(2)}%
-                        </span>
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </div>
-              )}
-            </TabsContent>
 
             {/* Tab: Acuerdos de Pago */}
             <TabsContent value="acuerdos" className="space-y-4">
