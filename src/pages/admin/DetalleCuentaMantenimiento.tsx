@@ -56,7 +56,7 @@ interface CuentaDetalle {
   proyecto_id: number;
   id_cuenta_cobranza_padre: number | null;
   clabe_stp: string | null;
-  porcentaje_anual_cuota_extraordinaria: number | null;
+  monto_mensual_cuota_extraordinaria: number | null;
   proyecto_nombre: string;
 }
 
@@ -168,13 +168,13 @@ export default function DetalleCuentaMantenimiento() {
               if (entidadResult?.id_proyecto) {
                 const { data: proyectoData } = await supabase
                   .from('proyectos')
-                  .select('nombre, porcentaje_anual_cuota_extraordinaria')
+                  .select('nombre, monto_mensual_cuota_extraordinaria')
                   .eq('id', entidadResult.id_proyecto)
                   .maybeSingle();
 
                 if (proyectoData) {
                   proyectoNombre = proyectoData.nombre || 'Sin proyecto';
-                  porcentajeAnual = proyectoData.porcentaje_anual_cuota_extraordinaria;
+                  porcentajeAnual = proyectoData.monto_mensual_cuota_extraordinaria;
                 }
               }
             }
@@ -203,7 +203,7 @@ export default function DetalleCuentaMantenimiento() {
         proyecto_id: 0,
         id_cuenta_cobranza_padre: cuenta.id_cuenta_cobranza_padre,
         clabe_stp: cuenta.clabe_stp,
-        porcentaje_anual_cuota_extraordinaria: porcentajeAnual,
+        monto_mensual_cuota_extraordinaria: porcentajeAnual,
         proyecto_nombre: proyectoNombre
       };
 
@@ -334,12 +334,12 @@ export default function DetalleCuentaMantenimiento() {
   };
 
   const calcularMontos = (montoConRecargos: number) => {
-    if (!cuentaDetalle?.porcentaje_anual_cuota_extraordinaria) {
+    if (!cuentaDetalle?.monto_mensual_cuota_extraordinaria) {
       return { montoOriginal: montoConRecargos, montoRecargos: 0 };
     }
     
-    const montoOriginal = montoConRecargos / (1 + (cuentaDetalle.porcentaje_anual_cuota_extraordinaria / 360));
-    const montoRecargos = montoConRecargos - montoOriginal;
+    const montoRecargos = cuentaDetalle.monto_mensual_cuota_extraordinaria;
+    const montoOriginal = montoConRecargos - montoRecargos;
     
     return { montoOriginal, montoRecargos };
   };
@@ -598,7 +598,7 @@ export default function DetalleCuentaMantenimiento() {
                             </div>
                             <div className="flex flex-col gap-1">
                               <span className="text-sm font-medium">{acuerdo.concepto}</span>
-                              {conRecargos() && cuentaDetalle?.porcentaje_anual_cuota_extraordinaria ? (
+                              {conRecargos() && cuentaDetalle?.monto_mensual_cuota_extraordinaria ? (
                                 <>
                                   <span className="text-sm text-muted-foreground line-through">
                                     {formatCurrency(calcularMontos(acuerdo.monto).montoOriginal)}
