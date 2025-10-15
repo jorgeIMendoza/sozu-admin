@@ -872,40 +872,19 @@ export default function CuentasMantenimiento() {
                           <TableCell>
                             {cuenta.clave_catastral || '-'}
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div className="space-y-1">
-                              <div className="font-medium">
-                                ${cuenta.precio_final.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Incluye recargos y multas pendientes
-                              </div>
-                            </div>
+                          <TableCell className="text-right font-medium">
+                            ${cuenta.precio_final.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div className="space-y-1">
-                              <div className="font-medium text-green-600">
-                                ${cuenta.pagado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Pagado en esta cuenta
-                              </div>
-                            </div>
+                          <TableCell className="text-right font-medium text-green-600">
+                            ${cuenta.pagado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div className="space-y-1">
-                              <div className="font-medium text-orange-600">
-                                ${normalizarSaldo(cuenta.restante) > 0 
-                                  ? normalizarSaldo(cuenta.restante).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                  : normalizarSaldo(cuenta.restante) < 0
-                                    ? Math.abs(normalizarSaldo(cuenta.restante)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                    : '0.00'
-                                }
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Por pagar
-                              </div>
-                            </div>
+                          <TableCell className="text-right font-medium text-orange-600">
+                            ${normalizarSaldo(cuenta.restante) > 0 
+                              ? normalizarSaldo(cuenta.restante).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              : normalizarSaldo(cuenta.restante) < 0
+                                ? Math.abs(normalizarSaldo(cuenta.restante)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : '0.00'
+                            }
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-center gap-2">
