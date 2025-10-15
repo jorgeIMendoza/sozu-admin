@@ -154,14 +154,16 @@ export default function CuentasMantenimiento() {
       const cuentaIds = cuentas.map(c => c.id);
       console.log('Cuenta IDs:', cuentaIds);
       
-      // First get all acuerdos for these cuentas
+      // First get all acuerdos for these cuentas with monto
       const { data: acuerdosForPagos } = await supabase
         .from('acuerdos_pago')
-        .select('id, id_cuenta_cobranza')
+        .select('id, id_cuenta_cobranza, monto')
         .in('id_cuenta_cobranza', cuentaIds)
         .eq('activo', true);
 
       const acuerdoIdsForPagos = acuerdosForPagos?.map(a => a.id) || [];
+      
+      console.log('🔍 Acuerdos de pago (inicial):', acuerdosForPagos);
       
       // Now get aplicaciones_pago for those acuerdos
       const { data: aplicacionesPago, error: aplicacionesError } = await supabase
@@ -251,29 +253,20 @@ export default function CuentasMantenimiento() {
         return acc;
       }, {});
 
-      // Get acuerdos_pago to check if "Apartado" or "Enganche" is paid and to calculate total mensual
-      const { data: acuerdosPago } = await supabase
-        .from('acuerdos_pago')
-        .select('id, id_cuenta_cobranza, id_concepto, pago_completado, monto')
-        .in('id_cuenta_cobranza', cuentaIds)
-        .eq('activo', true);
-
-      console.log('🔍 Acuerdos de pago:', acuerdosPago);
-
-      // Calculate total mensual per account (sum of acuerdos monto)
+      // Calculate total mensual per account (sum of acuerdos monto) - using acuerdosForPagos
       const totalMensualPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const acuerdosCuenta = acuerdosPago?.filter(ap => ap.id_cuenta_cobranza === cuenta.id) || [];
+        const acuerdosCuenta = acuerdosForPagos?.filter(ap => ap.id_cuenta_cobranza === cuenta.id) || [];
         const totalMensual = acuerdosCuenta.reduce((sum, acuerdo) => sum + (acuerdo.monto || 0), 0);
         acc[cuenta.id] = totalMensual;
         console.log(`Cuenta ${cuenta.id}: total mensual (acuerdos) = ${totalMensual}`);
         return acc;
       }, {});
       
-      console.log('Pagado por cuenta:', pagadoPorCuenta);
-      console.log('Total mensual por cuenta:', totalMensualPorCuenta);
+      console.log('✅ Pagado por cuenta:', pagadoPorCuenta);
+      console.log('✅ Total mensual por cuenta:', totalMensualPorCuenta);
 
       // Get aplicaciones_pago para verificar si hay pagos de cesión de derechos
-      const acuerdoIds = acuerdosPago?.map(a => a.id) || [];
+      const acuerdoIds = acuerdosForPagos?.map(a => a.id) || [];
       let cesionDerechosMap: Record<number, boolean> = {};
       
       if (acuerdoIds.length > 0) {
@@ -283,8 +276,15 @@ export default function CuentasMantenimiento() {
           .in('id_acuerdo_pago', acuerdoIds)
           .eq('activo', true);
 
+        // Get concepto info for cesion de derechos check
+        const { data: acuerdosConConcepto } = await supabase
+          .from('acuerdos_pago')
+          .select('id, id_concepto, id_cuenta_cobranza')
+          .in('id', acuerdoIds)
+          .eq('activo', true);
+
         // Crear mapeo de acuerdo_id a concepto_id y cuenta_id
-        const acuerdosMap = acuerdosPago?.reduce((acc: any, a) => {
+        const acuerdosMap = acuerdosConConcepto?.reduce((acc: any, a) => {
           acc[a.id] = { id_concepto: a.id_concepto, id_cuenta_cobranza: a.id_cuenta_cobranza };
           return acc;
         }, {});
@@ -316,20 +316,27 @@ export default function CuentasMantenimiento() {
 
       console.log('🔍 Cuentas de productos:', Array.from(cuentasProductoSet));
 
+      // Get acuerdos with concepto info for apartado check
+      const { data: acuerdosConceptos } = await supabase
+        .from('acuerdos_pago')
+        .select('id, id_cuenta_cobranza, id_concepto, pago_completado')
+        .in('id_cuenta_cobranza', cuentaIds)
+        .eq('activo', true);
+
       // Create a map of whether initial payment is made for each cuenta
       const apartadoPagadoPorCuenta = cuentas.reduce((acc: Record<number, boolean>, cuenta) => {
         const esProducto = cuentasProductoSet.has(cuenta.id);
         
         if (esProducto) {
           // Para productos, el pago inicial es el Enganche (id_concepto = 2)
-          const acuerdoEnganche = acuerdosPago?.find(
+          const acuerdoEnganche = acuerdosConceptos?.find(
             ap => ap.id_cuenta_cobranza === cuenta.id && ap.id_concepto === 2
           );
           acc[cuenta.id] = acuerdoEnganche?.pago_completado || false;
           console.log(`💰 Cuenta ${cuenta.id} [PRODUCTO]: enganche_pagado = ${acc[cuenta.id]}`);
         } else {
           // Para propiedades, el pago inicial es Apartado (id_concepto = 1) o Cesión de derechos (id_concepto = 6)
-          const acuerdoApartado = acuerdosPago?.find(
+          const acuerdoApartado = acuerdosConceptos?.find(
             ap => ap.id_cuenta_cobranza === cuenta.id && ap.id_concepto === 1
           );
           acc[cuenta.id] = (acuerdoApartado?.pago_completado || false) || (cesionDerechosMap[cuenta.id] || false);
@@ -341,13 +348,13 @@ export default function CuentasMantenimiento() {
 
       // Create a map to check if each cuenta has acuerdos
       const tieneAcuerdosPorCuenta = cuentas.reduce((acc: Record<number, boolean>, cuenta) => {
-        const tieneAcuerdos = acuerdosPago?.some(ap => ap.id_cuenta_cobranza === cuenta.id) || false;
+        const tieneAcuerdos = acuerdosForPagos?.some(ap => ap.id_cuenta_cobranza === cuenta.id) || false;
         acc[cuenta.id] = tieneAcuerdos;
         return acc;
       }, {});
 
       // Get multas pendientes para cada cuenta
-      const acuerdoIdsForMultas = acuerdosPago?.map(ap => ap.id) || [];
+      const acuerdoIdsForMultas = acuerdosForPagos?.map(ap => ap.id) || [];
       let multasPendientesPorCuenta: Record<number, boolean> = {};
       let montosMultasPorCuenta: Record<number, number> = {};
       
@@ -359,7 +366,7 @@ export default function CuentasMantenimiento() {
           .eq('activo', true);
 
         // Crear un mapa de acuerdo_id a cuenta_id
-        const acuerdoToCuentaMap = acuerdosPago?.reduce((acc: any, ap) => {
+        const acuerdoToCuentaMapMultas = acuerdosForPagos?.reduce((acc: any, ap) => {
           acc[ap.id] = ap.id_cuenta_cobranza;
           return acc;
         }, {});
@@ -367,7 +374,7 @@ export default function CuentasMantenimiento() {
         // Calcular total de multas por cuenta (pagadas y no pagadas)
         cuentas.forEach(cuenta => {
           const multasCuenta = multas?.filter(multa => 
-            acuerdoToCuentaMap[multa.id_acuerdo_pago] === cuenta.id
+            acuerdoToCuentaMapMultas[multa.id_acuerdo_pago] === cuenta.id
           ) || [];
           
           const totalMultas = multasCuenta.reduce((sum, multa) => sum + (multa.monto || 0), 0);
