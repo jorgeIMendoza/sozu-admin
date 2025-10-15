@@ -296,6 +296,25 @@ export default function DetalleCuentaMantenimiento() {
     enabled: !!cuentaId,
   });
 
+  // Fetch multas for this cuenta
+  const { data: multas } = useQuery({
+    queryKey: ["multas_mantenimiento", cuentaId],
+    queryFn: async () => {
+      const acuerdoIds = acuerdosPago?.map(a => a.id) || [];
+      if (acuerdoIds.length === 0) return [];
+
+      const { data, error } = await supabase
+        .from('multas')
+        .select('id, monto, es_pagada, id_acuerdo_pago')
+        .in('id_acuerdo_pago', acuerdoIds)
+        .eq('activo', true);
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!cuentaId && !!acuerdosPago && acuerdosPago.length > 0,
+  });
+
   const formatDate = (date: string) => {
     const [year, month, day] = date.split('-').map(Number);
     const localDate = new Date(year, month - 1, day);
@@ -372,14 +391,13 @@ export default function DetalleCuentaMantenimiento() {
     return sum + totalAcuerdo;
   }, 0) || 0;
 
-  // Calculate pending payments including multas
-  const pagoMensual = acuerdosPago?.reduce((sum, acuerdo) => {
-    const totalAplicado = acuerdo.aplicaciones.reduce((appSum, app) => appSum + app.monto, 0);
-    const pendiente = acuerdo.monto - totalAplicado;
-    return sum + (pendiente > 0 ? pendiente : 0);
-  }, 0) || 0;
+  // Calculate total mensual: suma de todos los acuerdos + todas las multas
+  const totalAcuerdos = acuerdosPago?.reduce((sum, acuerdo) => sum + (acuerdo.monto || 0), 0) || 0;
+  const totalMultas = multas?.reduce((sum, multa) => sum + (multa.monto || 0), 0) || 0;
+  const pagoMensual = totalAcuerdos + totalMultas;
 
-  const saldoPendiente = cuentaDetalle.precio_final - totalPagado;
+  // Saldo pendiente = pago mensual - total pagado
+  const saldoPendiente = pagoMensual - totalPagado;
 
   // Find last payment and check if it's STP
   const pagosAplicados = acuerdosPago?.flatMap(acuerdo => 
@@ -447,7 +465,7 @@ export default function DetalleCuentaMantenimiento() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(pagoMensual)}</div>
-            <p className="text-xs text-muted-foreground">Incluye recargos y multas pendientes</p>
+            <p className="text-xs text-muted-foreground">Incluye recargos y multas</p>
           </CardContent>
         </Card>
 
