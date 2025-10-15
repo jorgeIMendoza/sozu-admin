@@ -105,6 +105,13 @@ const navigationItems = [
       { title: "Cuentas de mantenimientos", href: "/admin/cuentas-mantenimiento", icon: Wrench },
     ]
   },
+  {
+    title: "Notarios",
+    icon: ScrollText,
+    children: [
+      { title: "Revision de documentacion", href: "/admin/notarios/revision-documentacion", icon: FileText },
+    ]
+  },
 ];
 
 export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps) => {
