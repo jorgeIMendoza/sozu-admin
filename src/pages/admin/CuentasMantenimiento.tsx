@@ -339,14 +339,14 @@ export default function CuentasMantenimiento() {
       // Get multas pendientes para cada cuenta
       const acuerdoIdsForMultas = acuerdosPago?.map(ap => ap.id) || [];
       let multasPendientesPorCuenta: Record<number, boolean> = {};
+      let montosMultasPorCuenta: Record<number, number> = {};
       
       if (acuerdoIdsForMultas.length > 0) {
         const { data: multas } = await supabase
           .from('multas')
-          .select('id, id_acuerdo_pago, es_pagada')
+          .select('id, id_acuerdo_pago, es_pagada, monto')
           .in('id_acuerdo_pago', acuerdoIdsForMultas)
-          .eq('activo', true)
-          .eq('es_pagada', false);
+          .eq('activo', true);
 
         // Crear un mapa de acuerdo_id a cuenta_id
         const acuerdoToCuentaMap = acuerdosPago?.reduce((acc: any, ap) => {
@@ -354,15 +354,22 @@ export default function CuentasMantenimiento() {
           return acc;
         }, {});
 
-        // Marcar qué cuentas tienen multas pendientes
-        multas?.forEach(multa => {
-          const cuentaId = acuerdoToCuentaMap[multa.id_acuerdo_pago];
-          if (cuentaId) {
-            multasPendientesPorCuenta[cuentaId] = true;
-          }
+        // Calcular total de multas por cuenta (pagadas y no pagadas)
+        cuentas.forEach(cuenta => {
+          const multasCuenta = multas?.filter(multa => 
+            acuerdoToCuentaMap[multa.id_acuerdo_pago] === cuenta.id
+          ) || [];
+          
+          const totalMultas = multasCuenta.reduce((sum, multa) => sum + (multa.monto || 0), 0);
+          montosMultasPorCuenta[cuenta.id] = totalMultas;
+          
+          // Verificar si tiene multas pendientes (no pagadas)
+          const tieneMultasPendientes = multasCuenta.some(m => !m.es_pagada);
+          multasPendientesPorCuenta[cuenta.id] = tieneMultasPendientes;
         });
 
         console.log('🔍 Cuentas con multas pendientes:', multasPendientesPorCuenta);
+        console.log('🔍 Montos de multas por cuenta:', montosMultasPorCuenta);
       }
 
       // Get parent ofertas to fetch property/project/modelo from parent cuenta
@@ -549,7 +556,8 @@ export default function CuentasMantenimiento() {
         }
 
         const pagado = pagadoPorCuenta[cuenta.id] || 0;
-        const precio_final = cuenta.precio_final || 0;
+        const multasMonto = montosMultasPorCuenta[cuenta.id] || 0;
+        const precio_final = (cuenta.precio_final || 0) + multasMonto; // Total mensual incluye multas
         // Calculate difference and normalize to avoid -0
         let restante = precio_final - pagado;
         restante = Math.round(restante * 100) / 100;
