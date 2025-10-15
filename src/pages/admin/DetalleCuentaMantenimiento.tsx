@@ -571,7 +571,7 @@ export default function DetalleCuentaMantenimiento() {
           <div className="flex items-center gap-2">
             <CardTitle className="flex items-center gap-2">
               <CalendarDays className="h-5 w-5" />
-              Acuerdos de Pago
+              Acuerdos de Pago y Aplicaciones
             </CardTitle>
             <Badge variant="secondary">
               {acuerdosPago?.length || 0} acuerdos
