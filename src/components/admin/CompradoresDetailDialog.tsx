@@ -50,10 +50,13 @@ export function CompradoresDetailDialog({ compradores, trigger, label = 'comprad
   });
 
   const handleNavigateToCompradores = (rfc?: string) => {
+    // Determine the correct route based on the label
+    const route = label === 'propietarios' ? '/admin/duenos' : '/admin/compradores';
+    
     if (rfc) {
-      navigate(`/admin/compradores?search=${encodeURIComponent(rfc)}`);
+      navigate(`${route}?search=${encodeURIComponent(rfc)}`);
     } else {
-      navigate('/admin/compradores');
+      navigate(route);
     }
     setOpen(false);
   };
