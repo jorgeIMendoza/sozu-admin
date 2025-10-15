@@ -262,6 +262,12 @@ export default function DetalleCuentaMantenimiento() {
     return format(localDate, "dd 'de' MMMM 'de' yyyy", { locale: es });
   };
 
+  const conRecargos = () => {
+    const today = new Date();
+    const dayOfMonth = today.getDate();
+    return dayOfMonth > 10;
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
@@ -528,6 +534,7 @@ export default function DetalleCuentaMantenimiento() {
                             <div className="flex flex-col gap-1">
                               <span className="text-sm text-muted-foreground">
                                 {formatCurrency(acuerdo.monto)}
+                                {conRecargos() && <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">(recargos incluidos)</span>}
                               </span>
                               {acuerdo.fecha_pago && (
                                 <div className="flex flex-col text-xs text-muted-foreground">
