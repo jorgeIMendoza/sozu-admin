@@ -960,6 +960,59 @@ export default function DetalleCuentaCobranza() {
     enabled: !!cuentaId,
   });
 
+  // Query to get all pagos for this cuenta
+  const { data: pagos } = useQuery({
+    queryKey: ["pagos_cuenta", cuentaId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pagos')
+        .select(`
+          id,
+          fecha_pago,
+          monto,
+          clave_rastreo,
+          id_metodos_pago,
+          descripcion,
+          metodos_pago!pagos_id_metodos_pago_fkey(nombre)
+        `)
+        .eq('id_cuenta_cobranza', cuentaId)
+        .eq('activo', true)
+        .order('fecha_pago', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!cuentaId
+  });
+
+  // Query to get aplicaciones_pago for all pagos
+  const { data: aplicacionesPorPago } = useQuery({
+    queryKey: ["aplicaciones_por_pago", cuentaId],
+    queryFn: async () => {
+      if (!pagos || pagos.length === 0) return [];
+
+      const pagoIds = pagos.map(p => p.id);
+      const { data, error } = await supabase
+        .from('aplicaciones_pago')
+        .select(`
+          id,
+          monto,
+          id_pago,
+          id_acuerdo_pago,
+          acuerdos_pago!aplicaciones_pago_id_acuerdo_pago_fkey(
+            fecha_pago,
+            conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre)
+          )
+        `)
+        .in('id_pago', pagoIds)
+        .eq('activo', true);
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!pagos && pagos.length > 0
+  });
+
   // Query for cash payments limit calculation (only for properties)
   const { data: cashPaymentsData } = useQuery({
     queryKey: ["cash_payments", cuentaId, cuentaDetalle?.id_propiedad],
@@ -2157,57 +2210,58 @@ export default function DetalleCuentaCobranza() {
         </CardContent>
       </Card>
 
-      {/* Main Content with Tabs */}
-      <Tabs defaultValue="acuerdos" className="w-full">
-        <TabsList>
-          <TabsTrigger value="acuerdos">Acuerdos de Pago</TabsTrigger>
-          {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id && (
-            <TabsTrigger value="documentos">Documentos</TabsTrigger>
-          )}
-        </TabsList>
-
-        <TabsContent value="acuerdos" className="mt-6">
-          {/* Acuerdos de pago */}
-          <Card className={esCuentaCancelada ? 'opacity-60' : ''}>
+      {/* Acuerdos y Pagos section */}
+      <Card className={esCuentaCancelada ? 'opacity-60' : ''}>
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle>Acuerdos de Pago y Aplicaciones</CardTitle>
-            {/* Payment scheme selection when no scheme is selected */}
-            {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && !esCuentaCancelada && !isReadOnly && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Plan de pagos:</span>
-                <Select onValueChange={(value) => handlePaymentSchemeSelection(parseInt(value))}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Seleccionar esquema de pago" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableSchemes.map((scheme) => (
-                      <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                        {scheme.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {/* Show selected scheme when one is selected */}
-            {offerData && offerData.id_esquema_pago_seleccionado && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">Plan de pagos:</span>
-                <Badge 
-                  variant={isPaymentPlanModified ? "outline" : "secondary"}
-                  className={isPaymentPlanModified ? "bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300" : ""}
-                >
-                  {formatOfertaId(offerData.id)} - {offerData.esquema_nombre}
-                  {isPaymentPlanModified && " modificado"}
-                </Badge>
-              </div>
-            )}
-          </div>
+          <CardTitle>Acuerdos y Pagos</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Payment Plan Details Section */}
-          {originalScheme && (
+          <Tabs defaultValue="acuerdos-aplicaciones" className="w-full">
+            <TabsList>
+              <TabsTrigger value="acuerdos-aplicaciones">Acuerdos de Pago y Aplicaciones</TabsTrigger>
+              <TabsTrigger value="pagos-aplicados">Pagos Aplicados</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="acuerdos-aplicaciones" className="mt-6">
+              {/* Payment scheme selection and agreement details */}
+              <div className="space-y-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Acuerdos de Pago y Aplicaciones</h3>
+                  {/* Payment scheme selection when no scheme is selected */}
+                  {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && !esCuentaCancelada && !isReadOnly && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Plan de pagos:</span>
+                      <Select onValueChange={(value) => handlePaymentSchemeSelection(parseInt(value))}>
+                        <SelectTrigger className="w-48">
+                          <SelectValue placeholder="Seleccionar esquema de pago" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableSchemes.map((scheme) => (
+                            <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                              {scheme.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {/* Show selected scheme when one is selected */}
+                  {offerData && offerData.id_esquema_pago_seleccionado && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-muted-foreground">Plan de pagos:</span>
+                      <Badge 
+                        variant={isPaymentPlanModified ? "outline" : "secondary"}
+                        className={isPaymentPlanModified ? "bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300" : ""}
+                      >
+                        {formatOfertaId(offerData.id)} - {offerData.esquema_nombre}
+                        {isPaymentPlanModified && " modificado"}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+
+                {/* Payment Plan Details Section */}
+                {originalScheme && (
             <div className="mb-6">
               <div className="border rounded-lg p-4 space-y-4">
                 <h3 className="text-lg font-semibold">
@@ -2732,17 +2786,115 @@ export default function DetalleCuentaCobranza() {
               No hay acuerdos de pago registrados
             </div>
           )}
-        </CardContent>
-      </Card>
-        </TabsContent>
+              </div>
+            </TabsContent>
 
-        {/* Documentos Tab - only available for properties */}
-        {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id && (
-          <TabsContent value="documentos" className="mt-6">
-            <ReadOnlyDocumentsView cuentaCobranzaId={cuentaDetalle.id} />
-          </TabsContent>
-        )}
-      </Tabs>
+            <TabsContent value="pagos-aplicados" className="mt-6">
+                  {/* Pagos Aplicados Section */}
+                  {pagos && pagos.length > 0 ? (
+                    <div className="space-y-2">
+                      {pagos.map((pago) => {
+                        const aplicacionesDelPago = aplicacionesPorPago?.filter(a => a.id_pago === pago.id) || [];
+                        const isPagoOpen = openAcuerdos[pago.id];
+                        
+                        return (
+                          <Collapsible 
+                            key={pago.id} 
+                            open={isPagoOpen} 
+                            onOpenChange={() => toggleAcuerdo(pago.id)}
+                          >
+                            <div className="border rounded-lg">
+                              <CollapsibleTrigger asChild>
+                                <div className="w-full p-3 flex items-center justify-between hover:bg-muted/50 cursor-pointer">
+                                  <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3">
+                                      <DollarSign className="h-5 w-5 text-success" />
+                                      <div className="flex flex-col">
+                                        <span className="text-sm font-medium">
+                                          Pago de {formatCurrency(pago.monto)}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                          {pago.metodos_pago?.nombre} - {formatDate(pago.fecha_pago)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {pago.clave_rastreo && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {pago.clave_rastreo}
+                                      </Badge>
+                                    )}
+                                    <Badge variant="secondary" className="text-xs">
+                                      {aplicacionesDelPago.length} aplicación(es)
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {isPagoOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                  </div>
+                                </div>
+                              </CollapsibleTrigger>
+                              
+                              <CollapsibleContent>
+                                <div className="px-3 pb-3">
+                                  {aplicacionesDelPago.length > 0 ? (
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead className="text-xs">Concepto</TableHead>
+                                          <TableHead className="text-xs">Fecha Acuerdo</TableHead>
+                                          <TableHead className="text-xs">Monto Aplicado</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {aplicacionesDelPago.map((aplicacion) => (
+                                          <TableRow key={aplicacion.id}>
+                                            <TableCell className="text-xs">
+                                              {aplicacion.acuerdos_pago?.conceptos_pago?.nombre || 'Sin concepto'}
+                                            </TableCell>
+                                            <TableCell className="text-xs">
+                                              {aplicacion.acuerdos_pago?.fecha_pago 
+                                                ? formatDate(aplicacion.acuerdos_pago.fecha_pago)
+                                                : 'Sin fecha'}
+                                            </TableCell>
+                                            <TableCell className="font-medium text-xs">
+                                              {formatCurrency(aplicacion.monto)}
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  ) : (
+                                    <div className="text-center py-4 text-muted-foreground">
+                                      No hay aplicaciones para este pago
+                                    </div>
+                                  )}
+                                </div>
+                              </CollapsibleContent>
+                            </div>
+                          </Collapsible>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No hay pagos registrados
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+
+          {/* Documentos Tab - only available for properties */}
+          {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Documentos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ReadOnlyDocumentsView cuentaCobranzaId={cuentaDetalle.id} />
+              </CardContent>
+            </Card>
+          )}
 
       <DeleteConfirmationDialog
         open={deleteDialog.isOpen}
