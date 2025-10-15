@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +23,6 @@ interface CompradoresDetailDialogProps {
 
 export function CompradoresDetailDialog({ compradores, trigger, label = 'compradores' }: CompradoresDetailDialogProps) {
   const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
 
   // Fetch personas details to check for spouse relationships
   const { data: personasDetails } = useQuery({
@@ -48,18 +46,6 @@ export function CompradoresDetailDialog({ compradores, trigger, label = 'comprad
     const spouseId = persona.id_conyuge;
     return spouseId && personasDetails.some(p => p.id === spouseId);
   });
-
-  const handleNavigateToCompradores = (rfc?: string) => {
-    // Determine the correct route based on the label
-    const route = label === 'propietarios' ? '/admin/duenos' : '/admin/compradores';
-    
-    if (rfc) {
-      navigate(`${route}?search=${encodeURIComponent(rfc)}`);
-    } else {
-      navigate(route);
-    }
-    setOpen(false);
-  };
 
   const defaultTrigger = (
     <Button variant="outline" size="sm">
@@ -114,11 +100,8 @@ export function CompradoresDetailDialog({ compradores, trigger, label = 'comprad
                 const spouseName = hasSpouse ? personasDetails?.find(p => p.id === personaDetail.id_conyuge)?.nombre_legal : null;
                 
                 return (
-                  <TableRow key={index} className="hover:bg-muted/50 cursor-pointer transition-colors">
-                    <TableCell 
-                      className="font-medium hover:text-primary cursor-pointer"
-                      onClick={() => handleNavigateToCompradores(comprador.rfc || undefined)}
-                    >
+                  <TableRow key={index} className="hover:bg-muted/50">
+                    <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <span>{comprador.nombre_legal}</span>
                         {hasSpouse && spouseName && (
@@ -135,12 +118,9 @@ export function CompradoresDetailDialog({ compradores, trigger, label = 'comprad
                         )}
                       </div>
                     </TableCell>
-                    <TableCell 
-                      className="cursor-pointer"
-                      onClick={() => handleNavigateToCompradores(comprador.rfc || undefined)}
-                    >
+                    <TableCell>
                       {comprador.rfc ? (
-                        <Badge variant="outline" className="hover:bg-primary/10">{comprador.rfc}</Badge>
+                        <Badge variant="outline">{comprador.rfc}</Badge>
                       ) : (
                         <span className="text-muted-foreground">Sin RFC</span>
                       )}
