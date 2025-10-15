@@ -57,7 +57,8 @@ interface CuentaDetalle {
   proyecto_id: number;
   id_cuenta_cobranza_padre: number | null;
   clabe_stp: string | null;
-  porcentaje_cuota_extraordinaria: number | null;
+  porcentaje_anual_cuota_extraordinaria: number | null;
+  proyecto_nombre: string;
 }
 
 export default function DetalleCuentaMantenimiento() {
@@ -129,38 +130,82 @@ export default function DetalleCuentaMantenimiento() {
         })).filter(c => c.nombre_legal) || [];
       }
 
-      // Get project and building info
-      const [entidadResult, edificioModeloResult] = await Promise.all([
-        supabase
-          .from('entidades_relacionadas')
-          .select(`
-            id_proyecto,
-            proyectos!entidades_relacionadas_id_proyecto_fkey(nombre, porcentaje_cuota_extraordinaria)
-          `)
-          .eq('id', oferta?.propiedades?.id_entidad_relacionada_dueno)
-          .maybeSingle(),
-        supabase
-          .from('edificios_modelos')
-          .select(`
-            edificios!edificios_modelos_id_edificio_fkey(nombre),
-            modelos!edificios_modelos_id_modelo_fkey(nombre)
-          `)
-          .eq('id', oferta?.propiedades?.id_edificio_modelo)
-          .maybeSingle()
-      ]);
+      // Fetch proyecto info from cuenta padre
+      let proyectoNombre = 'Sin proyecto';
+      let porcentajeAnual = null;
+      
+      if (cuenta.id_cuenta_cobranza_padre) {
+        // Get oferta from cuenta padre
+        const { data: cuentaPadre } = await supabase
+          .from('cuentas_cobranza')
+          .select('id_oferta')
+          .eq('id', cuenta.id_cuenta_cobranza_padre)
+          .maybeSingle();
+
+        if (cuentaPadre?.id_oferta) {
+          // Get propiedad from oferta
+          const { data: ofertaData } = await supabase
+            .from('ofertas')
+            .select('id_propiedad')
+            .eq('id', cuentaPadre.id_oferta)
+            .maybeSingle();
+
+          if (ofertaData?.id_propiedad) {
+            // Get entidad relacionada from propiedad
+            const { data: propiedadData } = await supabase
+              .from('propiedades')
+              .select('id_entidad_relacionada_dueno')
+              .eq('id', ofertaData.id_propiedad)
+              .maybeSingle();
+
+            if (propiedadData?.id_entidad_relacionada_dueno) {
+              // Get proyecto info
+              const { data: entidadResult } = await supabase
+                .from('entidades_relacionadas')
+                .select('id_proyecto')
+                .eq('id', propiedadData.id_entidad_relacionada_dueno)
+                .maybeSingle();
+
+              if (entidadResult?.id_proyecto) {
+                const { data: proyectoData } = await supabase
+                  .from('proyectos')
+                  .select('nombre, porcentaje_anual_cuota_extraordinaria')
+                  .eq('id', entidadResult.id_proyecto)
+                  .maybeSingle();
+
+                if (proyectoData) {
+                  proyectoNombre = proyectoData.nombre || 'Sin proyecto';
+                  porcentajeAnual = proyectoData.porcentaje_anual_cuota_extraordinaria;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Get building info
+      const { data: edificioModeloResult } = await supabase
+        .from('edificios_modelos')
+        .select(`
+          edificios!edificios_modelos_id_edificio_fkey(nombre),
+          modelos!edificios_modelos_id_modelo_fkey(nombre)
+        `)
+        .eq('id', oferta?.propiedades?.id_edificio_modelo)
+        .maybeSingle();
 
       const detalle: CuentaDetalle = {
         id: cuenta.id,
         precio_final: cuenta.precio_final || 0,
         propietarios,
-        proyecto: entidadResult.data?.proyectos?.nombre || 'Sin proyecto',
-        edificio: edificioModeloResult.data?.edificios?.nombre || 'Sin edificio',
+        proyecto: proyectoNombre,
+        edificio: edificioModeloResult?.edificios?.nombre || 'Sin edificio',
         numero_propiedad: oferta?.propiedades?.numero_propiedad || 'Sin número',
-        modelo: edificioModeloResult.data?.modelos?.nombre || 'Sin modelo',
-        proyecto_id: entidadResult.data?.id_proyecto || 0,
+        modelo: edificioModeloResult?.modelos?.nombre || 'Sin modelo',
+        proyecto_id: 0,
         id_cuenta_cobranza_padre: cuenta.id_cuenta_cobranza_padre,
         clabe_stp: cuenta.clabe_stp,
-        porcentaje_cuota_extraordinaria: entidadResult.data?.proyectos?.porcentaje_cuota_extraordinaria || null
+        porcentaje_anual_cuota_extraordinaria: porcentajeAnual,
+        proyecto_nombre: proyectoNombre
       };
 
       return detalle;
@@ -271,11 +316,11 @@ export default function DetalleCuentaMantenimiento() {
   };
 
   const calcularMontos = (montoConRecargos: number) => {
-    if (!cuentaDetalle?.porcentaje_cuota_extraordinaria) {
+    if (!cuentaDetalle?.porcentaje_anual_cuota_extraordinaria) {
       return { montoOriginal: montoConRecargos, montoRecargos: 0 };
     }
     
-    const montoOriginal = montoConRecargos / (1 + cuentaDetalle.porcentaje_cuota_extraordinaria / 100);
+    const montoOriginal = montoConRecargos / (1 + (cuentaDetalle.porcentaje_anual_cuota_extraordinaria / 360));
     const montoRecargos = montoConRecargos - montoOriginal;
     
     return { montoOriginal, montoRecargos };
@@ -545,7 +590,7 @@ export default function DetalleCuentaMantenimiento() {
                               </div>
                             </div>
                             <div className="flex flex-col gap-1">
-                              {conRecargos() && cuentaDetalle?.porcentaje_cuota_extraordinaria ? (
+                              {conRecargos() && cuentaDetalle?.porcentaje_anual_cuota_extraordinaria ? (
                                 <>
                                   <span className="text-sm text-muted-foreground line-through">
                                     {formatCurrency(calcularMontos(acuerdo.monto).montoOriginal)}
