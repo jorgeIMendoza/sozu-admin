@@ -681,14 +681,26 @@ export default function DetalleCuentaMantenimiento() {
                 );
               })}
               </div>
-              {visibleAcuerdos < acuerdosPago.length && (
-                <div className="flex justify-center pt-2">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setVisibleAcuerdos(prev => prev + 5)}
-                  >
-                    Ver más
-                  </Button>
+              {(visibleAcuerdos < acuerdosPago.length || visibleAcuerdos > 5) && (
+                <div className="flex justify-center gap-2 pt-2">
+                  {visibleAcuerdos > 5 && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setVisibleAcuerdos(5)}
+                    >
+                      <ChevronUp className="h-4 w-4 mr-1" />
+                      Ver menos
+                    </Button>
+                  )}
+                  {visibleAcuerdos < acuerdosPago.length && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setVisibleAcuerdos(prev => prev + 5)}
+                    >
+                      Ver más
+                      <ChevronDown className="h-4 w-4 ml-1" />
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
