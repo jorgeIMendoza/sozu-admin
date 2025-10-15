@@ -57,6 +57,7 @@ interface CuentaDetalle {
   proyecto_id: number;
   id_cuenta_cobranza_padre: number | null;
   clabe_stp: string | null;
+  porcentaje_cuota_extraordinaria: number | null;
 }
 
 export default function DetalleCuentaMantenimiento() {
@@ -134,7 +135,7 @@ export default function DetalleCuentaMantenimiento() {
           .from('entidades_relacionadas')
           .select(`
             id_proyecto,
-            proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
+            proyectos!entidades_relacionadas_id_proyecto_fkey(nombre, porcentaje_cuota_extraordinaria)
           `)
           .eq('id', oferta?.propiedades?.id_entidad_relacionada_dueno)
           .maybeSingle(),
@@ -158,7 +159,8 @@ export default function DetalleCuentaMantenimiento() {
         modelo: edificioModeloResult.data?.modelos?.nombre || 'Sin modelo',
         proyecto_id: entidadResult.data?.id_proyecto || 0,
         id_cuenta_cobranza_padre: cuenta.id_cuenta_cobranza_padre,
-        clabe_stp: cuenta.clabe_stp
+        clabe_stp: cuenta.clabe_stp,
+        porcentaje_cuota_extraordinaria: entidadResult.data?.proyectos?.porcentaje_cuota_extraordinaria || null
       };
 
       return detalle;
@@ -266,6 +268,17 @@ export default function DetalleCuentaMantenimiento() {
     const today = new Date();
     const dayOfMonth = today.getDate();
     return dayOfMonth > 10;
+  };
+
+  const calcularMontos = (montoConRecargos: number) => {
+    if (!cuentaDetalle?.porcentaje_cuota_extraordinaria) {
+      return { montoOriginal: montoConRecargos, montoRecargos: 0 };
+    }
+    
+    const montoOriginal = montoConRecargos / (1 + cuentaDetalle.porcentaje_cuota_extraordinaria / 100);
+    const montoRecargos = montoConRecargos - montoOriginal;
+    
+    return { montoOriginal, montoRecargos };
   };
 
   const formatCurrency = (amount: number) => {
@@ -532,10 +545,24 @@ export default function DetalleCuentaMantenimiento() {
                               </div>
                             </div>
                             <div className="flex flex-col gap-1">
-                              <span className="text-sm text-muted-foreground">
-                                {formatCurrency(acuerdo.monto)}
-                                {conRecargos() && <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">(recargos incluidos)</span>}
-                              </span>
+                              {conRecargos() && cuentaDetalle?.porcentaje_cuota_extraordinaria ? (
+                                <>
+                                  <span className="text-sm text-muted-foreground line-through">
+                                    {formatCurrency(calcularMontos(acuerdo.monto).montoOriginal)}
+                                  </span>
+                                  <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                                    {formatCurrency(acuerdo.monto)}
+                                    <span className="ml-1 text-xs">(recargos incluidos)</span>
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Recargo: {formatCurrency(calcularMontos(acuerdo.monto).montoRecargos)}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">
+                                  {formatCurrency(acuerdo.monto)}
+                                </span>
+                              )}
                               {acuerdo.fecha_pago && (
                                 <div className="flex flex-col text-xs text-muted-foreground">
                                   <span className="text-green-600 dark:text-green-400">
