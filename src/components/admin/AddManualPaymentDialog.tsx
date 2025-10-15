@@ -218,9 +218,11 @@ export function AddManualPaymentDialog({
       // Call webhook after successful payment creation
       try {
         // Determine siguiente_accion based on account type
-        const siguienteAccion = (tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') 
-          ? 'aplicar_pago_manual_producto'
-          : 'aplicar_pago_manual';
+        const siguienteAccion = esMantenimiento
+          ? 'aplicar_pago_manual_mantenimiento'
+          : (tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') 
+            ? 'aplicar_pago_manual_producto'
+            : 'aplicar_pago_manual';
         
         const webhookBody = {
           success: true,
@@ -256,6 +258,7 @@ export function AddManualPaymentDialog({
         description: "El pago manual ha sido registrado exitosamente",
       });
       queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
+      queryClient.invalidateQueries({ queryKey: ["cuentas_mantenimiento"] });
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       form.reset();
       onClose();
