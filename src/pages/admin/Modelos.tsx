@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Edit, Home, Trash2 } from "lucide-react";
+import { Search, Edit, Home, Trash2, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NewModeloDialog } from "@/components/admin/NewModeloDialog";
 import { EditModeloDialog } from "@/components/admin/EditModeloDialog";
@@ -40,6 +40,7 @@ export default function Modelos() {
   const [modeloToDelete, setModeloToDelete] = useState<Modelo | null>(null);
   const [selectedModelForMultimedia, setSelectedModelForMultimedia] = useState<Modelo | null>(null);
   const [isMultimediaDialogOpen, setIsMultimediaDialogOpen] = useState(false);
+  const [selectedDescripcion, setSelectedDescripcion] = useState<{ nombre: string; descripcion: string } | null>(null);
   const { toast } = useToast();
 
   const { data: modelosActivos, isLoading: loadingActivos, refetch: refetchActivos } = useQuery({
@@ -217,8 +218,18 @@ export default function Modelos() {
                             <span>{modelo.nombre}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {modelo.descripcion || "Sin descripción"}
+                        <TableCell>
+                          {modelo.descripcion ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedDescripcion({ nombre: modelo.nombre, descripcion: modelo.descripcion || "" })}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">Sin descripción</span>
+                          )}
                         </TableCell>
                         <TableCell>{modelo.numero_recamaras || "-"}</TableCell>
                         <TableCell>{modelo.numero_completo_banos || "-"}</TableCell>
@@ -311,8 +322,18 @@ export default function Modelos() {
                             <span>{modelo.nombre}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {modelo.descripcion || "Sin descripción"}
+                        <TableCell>
+                          {modelo.descripcion ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedDescripcion({ nombre: modelo.nombre, descripcion: modelo.descripcion || "" })}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">Sin descripción</span>
+                          )}
                         </TableCell>
                         <TableCell>{modelo.numero_recamaras || "-"}</TableCell>
                         <TableCell>{modelo.numero_completo_banos || "-"}</TableCell>
@@ -385,6 +406,18 @@ export default function Modelos() {
           {selectedModelForMultimedia && (
             <ModelMultimediaSection modelId={selectedModelForMultimedia.id} />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para ver descripción */}
+      <Dialog open={!!selectedDescripcion} onOpenChange={() => setSelectedDescripcion(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Descripción - {selectedDescripcion?.nombre}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="whitespace-pre-wrap text-sm">{selectedDescripcion?.descripcion}</p>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
