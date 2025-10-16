@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Trash2, Eye, RotateCcw, Upload, Image } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Eye, RotateCcw, ChevronDown, ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Table,
   TableBody,
@@ -24,15 +26,23 @@ interface Vista {
   id: number;
   nombre: string;
   url?: string | null;
+  id_proyecto?: number | null;
   activo: boolean;
   fecha_creacion: string;
   fecha_actualizacion: string;
 }
 
+interface Proyecto {
+  id: number;
+  nombre: string;
+}
+
 export default function Vistas() {
   const [vistas, setVistas] = useState<Vista[]>([]);
+  const [proyectos, setProyectos] = useState<Proyecto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProyectoFilter, setSelectedProyectoFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("activos");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -40,16 +50,39 @@ export default function Vistas() {
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false);
   const [selectedVista, setSelectedVista] = useState<Vista | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
   const [formData, setFormData] = useState({
     nombre: "",
-    url: ""
+    url: "",
+    id_proyecto: ""
   });
 
   const { toast } = useToast();
 
   useEffect(() => {
     fetchVistas();
+    fetchProyectos();
   }, []);
+
+  const fetchProyectos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('proyectos')
+        .select('id, nombre')
+        .eq('activo', true)
+        .order('nombre', { ascending: true });
+
+      if (error) throw error;
+      setProyectos(data || []);
+    } catch (error) {
+      console.error('Error fetching proyectos:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudieron cargar los proyectos",
+      });
+    }
+  };
 
   const fetchVistas = async () => {
     try {
@@ -91,6 +124,7 @@ export default function Vistas() {
         .insert([{
           nombre: formData.nombre.trim(),
           url: formData.url || null,
+          id_proyecto: formData.id_proyecto ? parseInt(formData.id_proyecto) : null,
           activo: true
         }])
         .select()
@@ -100,7 +134,7 @@ export default function Vistas() {
 
       setVistas(prev => [...prev, data]);
       setIsCreateDialogOpen(false);
-      setFormData({ nombre: "", url: "" });
+      setFormData({ nombre: "", url: "", id_proyecto: "" });
       toast({
         title: "Éxito",
         description: "Vista creada correctamente",
@@ -132,6 +166,7 @@ export default function Vistas() {
 
       const updateData: any = {
         nombre: formData.nombre.trim(),
+        id_proyecto: formData.id_proyecto ? parseInt(formData.id_proyecto) : null,
       };
 
       // Only update URL if there's a change
@@ -153,7 +188,7 @@ export default function Vistas() {
       ));
       setIsEditDialogOpen(false);
       setSelectedVista(null);
-      setFormData({ nombre: "", url: "" });
+      setFormData({ nombre: "", url: "", id_proyecto: "" });
       toast({
         title: "Éxito",
         description: "Vista actualizada correctamente",
@@ -240,7 +275,8 @@ export default function Vistas() {
     setSelectedVista(vista);
     setFormData({ 
       nombre: vista.nombre,
-      url: vista.url || ""
+      url: vista.url || "",
+      id_proyecto: vista.id_proyecto?.toString() || ""
     });
     setIsEditDialogOpen(true);
   };
@@ -255,11 +291,40 @@ export default function Vistas() {
     setIsRestoreDialogOpen(true);
   };
 
+  const toggleProject = (projectId: number) => {
+    setExpandedProjects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(projectId)) {
+        newSet.delete(projectId);
+      } else {
+        newSet.add(projectId);
+      }
+      return newSet;
+    });
+  };
+
   const filteredVistas = vistas.filter(vista => {
     const matchesSearch = vista.nombre.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesTab = activeTab === "activos" ? vista.activo : !vista.activo;
-    return matchesSearch && matchesTab;
+    const matchesProyecto = selectedProyectoFilter === "all" || 
+      (selectedProyectoFilter === "sin-proyecto" ? !vista.id_proyecto : vista.id_proyecto?.toString() === selectedProyectoFilter);
+    return matchesSearch && matchesTab && matchesProyecto;
   });
+
+  // Group vistas by project
+  const vistasByProject = filteredVistas.reduce((acc, vista) => {
+    const projectId = vista.id_proyecto || 0; // 0 for vistas without project
+    if (!acc[projectId]) {
+      acc[projectId] = [];
+    }
+    acc[projectId].push(vista);
+    return acc;
+  }, {} as Record<number, Vista[]>);
+
+  const getProyectoNombre = (id?: number | null) => {
+    if (!id) return "Sin Proyecto";
+    return proyectos.find(p => p.id === id)?.nombre || "Proyecto Desconocido";
+  };
 
   if (loading) {
     return (
@@ -304,6 +369,26 @@ export default function Vistas() {
                   placeholder="Ej: Vista al mar, Vista a la montaña"
                 />
               </div>
+
+              <div>
+                <Label htmlFor="id_proyecto">Proyecto</Label>
+                <Select
+                  value={formData.id_proyecto}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, id_proyecto: value }))}
+                >
+                  <SelectTrigger id="id_proyecto">
+                    <SelectValue placeholder="Selecciona un proyecto (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Sin proyecto</SelectItem>
+                    {proyectos.map((proyecto) => (
+                      <SelectItem key={proyecto.id} value={proyecto.id.toString()}>
+                        {proyecto.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               
               <div>
                 <ImageUploadField
@@ -319,7 +404,7 @@ export default function Vistas() {
                   variant="outline"
                   onClick={() => {
                     setIsCreateDialogOpen(false);
-                    setFormData({ nombre: "", url: "" });
+                    setFormData({ nombre: "", url: "", id_proyecto: "" });
                   }}
                   disabled={isSubmitting}
                 >
@@ -364,89 +449,141 @@ export default function Vistas() {
                     className="pl-8"
                   />
                 </div>
+                <Select
+                  value={selectedProyectoFilter}
+                  onValueChange={setSelectedProyectoFilter}
+                >
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Filtrar por proyecto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los proyectos</SelectItem>
+                    <SelectItem value="sin-proyecto">Sin proyecto</SelectItem>
+                    {proyectos.map((proyecto) => (
+                      <SelectItem key={proyecto.id} value={proyecto.id.toString()}>
+                        {proyecto.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Imagen</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Fecha Creación</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredVistas.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground">
-                          No se encontraron vistas
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredVistas.map((vista) => (
-                        <TableRow key={vista.id}>
-                          <TableCell className="font-medium">{vista.id}</TableCell>
-                          <TableCell>{vista.nombre}</TableCell>
-                          <TableCell>
-                            {vista.url ? (
-                              <img 
-                                src={vista.url} 
-                                alt={vista.nombre}
-                                className="w-10 h-10 object-cover rounded-md"
-                                onError={(e) => {
-                                  e.currentTarget.src = '/placeholder.svg';
-                                }}
-                              />
-                            ) : (
-                              <span className="text-muted-foreground text-sm">Sin imagen</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={vista.activo ? "default" : "secondary"}>
-                              {vista.activo ? "Activo" : "Inactivo"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {new Date(vista.fecha_creacion).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end space-x-2">
-                              {activeTab === "activos" ? (
-                                <>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => openEditDialog(vista)}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => openDeleteDialog(vista)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => openRestoreDialog(vista)}
-                                >
-                                  <RotateCcw className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+              <div className="space-y-4">
+                {Object.keys(vistasByProject).length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    No se encontraron vistas
+                  </div>
+                ) : (
+                  Object.entries(vistasByProject).map(([projectId, projectVistas]) => {
+                    const numProjectId = parseInt(projectId);
+                    const isExpanded = expandedProjects.has(numProjectId);
+                    const projectName = getProyectoNombre(numProjectId === 0 ? null : numProjectId);
+
+                    return (
+                      <Collapsible
+                        key={projectId}
+                        open={isExpanded}
+                        onOpenChange={() => toggleProject(numProjectId)}
+                      >
+                        <Card>
+                          <CollapsibleTrigger asChild>
+                            <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-5 w-5" />
+                                  ) : (
+                                    <ChevronRight className="h-5 w-5" />
+                                  )}
+                                  <CardTitle className="text-lg">{projectName}</CardTitle>
+                                  <Badge variant="secondary">{projectVistas.length}</Badge>
+                                </div>
+                              </div>
+                            </CardHeader>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <CardContent>
+                              <div className="rounded-md border">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>ID</TableHead>
+                                      <TableHead>Nombre</TableHead>
+                                      <TableHead>Imagen</TableHead>
+                                      <TableHead>Estado</TableHead>
+                                      <TableHead>Fecha Creación</TableHead>
+                                      <TableHead className="text-right">Acciones</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {projectVistas.map((vista) => (
+                                      <TableRow key={vista.id}>
+                                        <TableCell className="font-medium">{vista.id}</TableCell>
+                                        <TableCell>{vista.nombre}</TableCell>
+                                        <TableCell>
+                                          {vista.url ? (
+                                            <img 
+                                              src={vista.url} 
+                                              alt={vista.nombre}
+                                              className="w-10 h-10 object-cover rounded-md"
+                                              onError={(e) => {
+                                                e.currentTarget.src = '/placeholder.svg';
+                                              }}
+                                            />
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">Sin imagen</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Badge variant={vista.activo ? "default" : "secondary"}>
+                                            {vista.activo ? "Activo" : "Inactivo"}
+                                          </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                          {new Date(vista.fecha_creacion).toLocaleDateString()}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          <div className="flex items-center justify-end space-x-2">
+                                            {activeTab === "activos" ? (
+                                              <>
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  onClick={() => openEditDialog(vista)}
+                                                >
+                                                  <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  onClick={() => openDeleteDialog(vista)}
+                                                >
+                                                  <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                              </>
+                                            ) : (
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => openRestoreDialog(vista)}
+                                              >
+                                                <RotateCcw className="h-4 w-4" />
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </CardContent>
+                          </CollapsibleContent>
+                        </Card>
+                      </Collapsible>
+                    );
+                  })
+                )}
               </div>
             </CardContent>
           </Card>
@@ -474,6 +611,26 @@ export default function Vistas() {
             </div>
 
             <div>
+              <Label htmlFor="edit-id_proyecto">Proyecto</Label>
+              <Select
+                value={formData.id_proyecto}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, id_proyecto: value }))}
+              >
+                <SelectTrigger id="edit-id_proyecto">
+                  <SelectValue placeholder="Selecciona un proyecto (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Sin proyecto</SelectItem>
+                  {proyectos.map((proyecto) => (
+                    <SelectItem key={proyecto.id} value={proyecto.id.toString()}>
+                      {proyecto.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
               <ImageUploadField
                 label="Imagen de la Vista"
                 value={formData.url}
@@ -488,7 +645,7 @@ export default function Vistas() {
               onClick={() => {
                 setIsEditDialogOpen(false);
                 setSelectedVista(null);
-                setFormData({ nombre: "", url: "" });
+                setFormData({ nombre: "", url: "", id_proyecto: "" });
               }}
               disabled={isSubmitting}
             >
