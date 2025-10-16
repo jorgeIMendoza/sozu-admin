@@ -679,10 +679,10 @@ const Proyectos = () => {
       <Tabs defaultValue="active" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="active">
-            Proyectos Activos ({activeProjects.length})
+            Proyectos Activos ({filteredActiveProjects.length})
           </TabsTrigger>
           <TabsTrigger value="deleted">
-            Proyectos Eliminados ({deletedProjects.length})
+            Proyectos Eliminados ({filteredDeletedProjects.length})
           </TabsTrigger>
         </TabsList>
         
