@@ -326,6 +326,10 @@ export default function Vistas() {
     return proyectos.find(p => p.id === id)?.nombre || "Proyecto Desconocido";
   };
 
+  // Count active and deleted vistas
+  const activosCount = vistas.filter(v => v.activo).length;
+  const eliminadosCount = vistas.filter(v => !v.activo).length;
+
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -420,17 +424,26 @@ export default function Vistas() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="activos">Activos</TabsTrigger>
-          <TabsTrigger value="eliminados">Eliminados</TabsTrigger>
+          <TabsTrigger value="activos">
+            Vistas Activas ({activosCount})
+          </TabsTrigger>
+          <TabsTrigger value="eliminados">
+            Vistas Eliminadas ({eliminadosCount})
+          </TabsTrigger>
         </TabsList>
         
         <TabsContent value={activeTab}>
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Eye className="h-5 w-5" />
-                Vistas {activeTab === "activos" ? "Activas" : "Eliminadas"} ({filteredVistas.length})
-              </CardTitle>
+              <div className="flex items-center gap-3">
+                <Eye className="h-6 w-6" />
+                <CardTitle className="text-2xl">
+                  Vistas {activeTab === "activos" ? "Activas" : "Eliminadas"}
+                </CardTitle>
+                <Badge variant="secondary" className="text-base px-3 py-1">
+                  {filteredVistas.length} {filteredVistas.length === 1 ? 'vista' : 'vistas'}
+                </Badge>
+              </div>
               <CardDescription>
                 {activeTab === "activos" 
                   ? "Lista de todas las vistas activas en el sistema"
