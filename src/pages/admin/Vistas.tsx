@@ -42,7 +42,7 @@ export default function Vistas() {
   const [proyectos, setProyectos] = useState<Proyecto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedProyectoFilter, setSelectedProyectoFilter] = useState<string>("");
+  const [selectedProyectoFilter, setSelectedProyectoFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("activos");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -307,7 +307,7 @@ export default function Vistas() {
   const filteredVistas = vistas.filter(vista => {
     const matchesSearch = vista.nombre.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesTab = activeTab === "activos" ? vista.activo : !vista.activo;
-    const matchesProyecto = !selectedProyectoFilter || (vista.id_proyecto?.toString() === selectedProyectoFilter);
+    const matchesProyecto = selectedProyectoFilter === "all" || (vista.id_proyecto?.toString() === selectedProyectoFilter);
     return matchesSearch && matchesTab && matchesProyecto;
   });
 
@@ -470,7 +470,7 @@ export default function Vistas() {
                     <SelectValue placeholder="Filtrar por proyecto" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos los proyectos</SelectItem>
+                    <SelectItem value="all">Todos los proyectos</SelectItem>
                     {proyectos.map((proyecto) => (
                       <SelectItem key={proyecto.id} value={proyecto.id.toString()}>
                         {proyecto.nombre}
