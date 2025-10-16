@@ -235,6 +235,23 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      // Verificar si existe un proyecto con el mismo nombre
+      const { data: existingProject } = await supabase
+        .from("proyectos")
+        .select("id, nombre")
+        .ilike("nombre", values.nombre.trim())
+        .eq("activo", true)
+        .single();
+
+      if (existingProject) {
+        toast({
+          variant: "destructive",
+          title: "Error al crear proyecto",
+          description: `Ya existe un proyecto activo con el nombre "${values.nombre}". Por favor, elige otro nombre.`,
+        });
+        return;
+      }
+
       // Para proyectos tipo Productos, Servicios o Mantenimientos, usar estatus por defecto (id=1)
       const isSpecialProject = values.id_tipo_uso === "9" || values.id_tipo_uso === "10" || values.id_tipo_uso === "11";
       
