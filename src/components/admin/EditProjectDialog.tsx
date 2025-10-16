@@ -48,8 +48,8 @@ const formSchema = z.object({
   costo_mantenimiento_m2: z.string().optional(),
   monto_mensual_cuota_extraordinaria: z.string()
     .optional()
-    .refine((val) => !val || (parseFloat(val) > 0 && parseFloat(val) <= 5000), {
-      message: "El monto debe ser mayor a 0 y no mayor a 5000"
+    .refine((val) => !val || (parseFloat(val) >= 0 && parseFloat(val) <= 5000), {
+      message: "El monto debe ser entre 0 y 5000"
     }),
   monto_garantia_renta: z.string().optional(),
   mostrar_precio_m2_en_oferta: z.boolean().default(true),
