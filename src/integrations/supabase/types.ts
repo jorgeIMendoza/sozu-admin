@@ -853,6 +853,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "cuentas_cobranza_id_cuenta_cobranza_padre_fkey"
+            columns: ["id_cuenta_cobranza_padre"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "cuentas_cobranza_id_tipo_cancelacion_fkey"
             columns: ["id_tipo_cancelacion"]
             isOneToOne: false
@@ -2975,13 +2982,15 @@ export type Database = {
           id_tipo_propiedad: number
           id_tipo_transaccion: number
           id_vista: number | null
-          m2_escriturables: number | null
-          m2_reales: number | null
+          m2_exteriores: number
+          m2_interiores: number
+          m2_loft: number
           monto_apartado: number | null
           monto_apartado_pagando: number | null
           numero_piso: number | null
           numero_propiedad: string
           precio_lista: number
+          rentado_estancia_corta: boolean
           url_imagen_portada: string | null
         }
         Insert: {
@@ -2998,13 +3007,15 @@ export type Database = {
           id_tipo_propiedad: number
           id_tipo_transaccion: number
           id_vista?: number | null
-          m2_escriturables?: number | null
-          m2_reales?: number | null
+          m2_exteriores?: number
+          m2_interiores?: number
+          m2_loft?: number
           monto_apartado?: number | null
           monto_apartado_pagando?: number | null
           numero_piso?: number | null
           numero_propiedad: string
           precio_lista: number
+          rentado_estancia_corta?: boolean
           url_imagen_portada?: string | null
         }
         Update: {
@@ -3021,13 +3032,15 @@ export type Database = {
           id_tipo_propiedad?: number
           id_tipo_transaccion?: number
           id_vista?: number | null
-          m2_escriturables?: number | null
-          m2_reales?: number | null
+          m2_exteriores?: number
+          m2_interiores?: number
+          m2_loft?: number
           monto_apartado?: number | null
           monto_apartado_pagando?: number | null
           numero_piso?: number | null
           numero_propiedad?: string
           precio_lista?: number
+          rentado_estancia_corta?: boolean
           url_imagen_portada?: string | null
         }
         Relationships: [
@@ -3131,8 +3144,9 @@ export type Database = {
           id_tipo_propiedad: string | null
           id_tipo_transaccion: string | null
           id_vista: string | null
-          m2_escriturables: string | null
-          m2_reales: string | null
+          m2_exteriores: string | null
+          m2_interiores: string | null
+          m2_loft: string | null
           monto_apartado: string | null
           nombre_propietario: string | null
           numero_piso: string | null
@@ -3152,8 +3166,9 @@ export type Database = {
           id_tipo_propiedad?: string | null
           id_tipo_transaccion?: string | null
           id_vista?: string | null
-          m2_escriturables?: string | null
-          m2_reales?: string | null
+          m2_exteriores?: string | null
+          m2_interiores?: string | null
+          m2_loft?: string | null
           monto_apartado?: string | null
           nombre_propietario?: string | null
           numero_piso?: string | null
@@ -3173,8 +3188,9 @@ export type Database = {
           id_tipo_propiedad?: string | null
           id_tipo_transaccion?: string | null
           id_vista?: string | null
-          m2_escriturables?: string | null
-          m2_reales?: string | null
+          m2_exteriores?: string | null
+          m2_interiores?: string | null
+          m2_loft?: string | null
           monto_apartado?: string | null
           nombre_propietario?: string | null
           numero_piso?: string | null
@@ -3186,7 +3202,7 @@ export type Database = {
       proyectos: {
         Row: {
           activo: boolean
-          costo_mantenimiento_m2: number | null
+          costo_mantenimiento_m2: number
           descripcion: string | null
           direccion: string | null
           direccion_id_estado: number | null
@@ -3204,6 +3220,8 @@ export type Database = {
           id_tipo_uso: number | null
           latitud: number | null
           longitud: number | null
+          monto_garantia_renta: number
+          monto_mensual_cuota_extraordinaria: number
           mostrar_bodega_en_oferta: boolean
           mostrar_edificio_en_oferta: boolean
           mostrar_estacionamientos_en_oferta: boolean
@@ -3213,17 +3231,14 @@ export type Database = {
           mostrar_seccion_efectivo_en_oferta: boolean
           nombre: string
           nombre_firmante_recibos: string | null
-          porcentaje_anual_cuota_estancia_corta: number | null
-          porcentaje_anual_cuota_extraordinaria: number | null
-          porcentaje_anual_cuota_garantia_renta: number | null
-          precio_m2_actual: number | null
+          precio_m2_actual: number
           url_firma_recibos: string | null
           url_imagen_portada: string | null
           url_logo: string | null
         }
         Insert: {
           activo?: boolean
-          costo_mantenimiento_m2?: number | null
+          costo_mantenimiento_m2?: number
           descripcion?: string | null
           direccion?: string | null
           direccion_id_estado?: number | null
@@ -3241,6 +3256,8 @@ export type Database = {
           id_tipo_uso?: number | null
           latitud?: number | null
           longitud?: number | null
+          monto_garantia_renta: number
+          monto_mensual_cuota_extraordinaria?: number
           mostrar_bodega_en_oferta?: boolean
           mostrar_edificio_en_oferta?: boolean
           mostrar_estacionamientos_en_oferta?: boolean
@@ -3250,17 +3267,14 @@ export type Database = {
           mostrar_seccion_efectivo_en_oferta?: boolean
           nombre: string
           nombre_firmante_recibos?: string | null
-          porcentaje_anual_cuota_estancia_corta?: number | null
-          porcentaje_anual_cuota_extraordinaria?: number | null
-          porcentaje_anual_cuota_garantia_renta?: number | null
-          precio_m2_actual?: number | null
+          precio_m2_actual?: number
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null
           url_logo?: string | null
         }
         Update: {
           activo?: boolean
-          costo_mantenimiento_m2?: number | null
+          costo_mantenimiento_m2?: number
           descripcion?: string | null
           direccion?: string | null
           direccion_id_estado?: number | null
@@ -3278,6 +3292,8 @@ export type Database = {
           id_tipo_uso?: number | null
           latitud?: number | null
           longitud?: number | null
+          monto_garantia_renta?: number
+          monto_mensual_cuota_extraordinaria?: number
           mostrar_bodega_en_oferta?: boolean
           mostrar_edificio_en_oferta?: boolean
           mostrar_estacionamientos_en_oferta?: boolean
@@ -3287,10 +3303,7 @@ export type Database = {
           mostrar_seccion_efectivo_en_oferta?: boolean
           nombre?: string
           nombre_firmante_recibos?: string | null
-          porcentaje_anual_cuota_estancia_corta?: number | null
-          porcentaje_anual_cuota_extraordinaria?: number | null
-          porcentaje_anual_cuota_garantia_renta?: number | null
-          precio_m2_actual?: number | null
+          precio_m2_actual?: number
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null
           url_logo?: string | null
