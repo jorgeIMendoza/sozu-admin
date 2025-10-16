@@ -384,7 +384,6 @@ export default function Vistas() {
                     <SelectValue placeholder="Selecciona un proyecto (opcional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sin proyecto</SelectItem>
                     {proyectos.map((proyecto) => (
                       <SelectItem key={proyecto.id} value={proyecto.id.toString()}>
                         {proyecto.nombre}
@@ -632,7 +631,6 @@ export default function Vistas() {
                   <SelectValue placeholder="Selecciona un proyecto (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sin proyecto</SelectItem>
                   {proyectos.map((proyecto) => (
                     <SelectItem key={proyecto.id} value={proyecto.id.toString()}>
                       {proyecto.nombre}
