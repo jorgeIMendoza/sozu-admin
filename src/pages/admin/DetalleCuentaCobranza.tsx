@@ -2219,7 +2219,7 @@ export default function DetalleCuentaCobranza() {
       {/* Acuerdos y Pagos section */}
       <Card className={esCuentaCancelada ? 'opacity-60' : ''}>
         <CardHeader>
-          <CardTitle>Acuerdos y Pagos</CardTitle>
+          <CardTitle>Acuerdos, Pagos y Documentos</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="acuerdos-aplicaciones" className="w-full">
