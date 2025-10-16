@@ -18,8 +18,8 @@ interface PropertyDetails {
   id: number;
   numero_propiedad: string;
   precio_lista: number;
-  m2_reales: number | null;
-  m2_escriturables: number | null;
+  m2_interiores: number | null;
+  m2_exteriores: number | null;
   descripcion: string | null;
   numero_piso?: number | null;
   clabe_stp_tmp_apartado?: string | null;
@@ -265,24 +265,24 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 )}
                 <div style={{ marginBottom: '8px' }}>
                   <span style={{ fontWeight: 'normal' }}>Área: </span>
-                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.m2_reales?.toFixed(2) || 'N/A'} m²</span>
+                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.m2_interiores?.toFixed(2) || 'N/A'} m²</span>
                 </div>
                 <div style={{ marginBottom: '8px' }}>
-                  <span style={{ fontWeight: 'normal' }}>m² reales: </span>
-                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.m2_reales?.toFixed(2) || 'N/A'} m²</span>
+                  <span style={{ fontWeight: 'normal' }}>m² interiores: </span>
+                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.m2_interiores?.toFixed(2) || 'N/A'} m²</span>
                 </div>
                 <div style={{ marginBottom: '8px' }}>
-                  <span style={{ fontWeight: 'normal' }}>m² escriturables: </span>
-                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.m2_escriturables?.toFixed(2) || 'N/A'} m²</span>
+                  <span style={{ fontWeight: 'normal' }}>m² exteriores: </span>
+                  <span style={{ fontWeight: 'bold' }}>{propertyDetails.m2_exteriores?.toFixed(2) || 'N/A'} m²</span>
                 </div>
                 <div style={{ marginBottom: '8px' }}>
                   <span style={{ fontWeight: 'normal' }}>Precio de lista: </span>
                   <span style={{ fontWeight: 'bold' }}>{formatCurrency(propertyDetails.precio_lista)}</span>
                 </div>
-                {propertyDetails.m2_escriturables && propertyDetails.m2_escriturables > 0 && (
+                {propertyDetails.m2_exteriores && propertyDetails.m2_exteriores > 0 && (
                   <div style={{ marginBottom: '8px' }}>
                     <span style={{ fontWeight: 'normal' }}>Precio m2: </span>
-                    <span style={{ fontWeight: 'bold' }}>{formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_escriturables)}</span>
+                    <span style={{ fontWeight: 'bold' }}>{formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_exteriores)}</span>
                   </div>
                 )}
                 <div style={{ marginBottom: '8px' }}>

@@ -15,7 +15,7 @@ interface PropertyDetails {
   id: number;
   numero_propiedad: string;
   numero_piso: number;
-  m2_reales: number;
+  m2_interiores: number;
   precio_lista: number;
   edificio: string;
   modelo: string;
@@ -228,7 +228,7 @@ export class PDFGenerationService {
       id: propertyData.id,
       numero_propiedad: propertyData.numero_propiedad,
       numero_piso: propertyData.numero_piso,
-      m2_reales: (propertyData.m2_interiores || 0) + (propertyData.m2_exteriores || 0),
+      m2_interiores: (propertyData.m2_interiores || 0) + (propertyData.m2_exteriores || 0),
       precio_lista: propertyData.precio_lista,
       edificio: edificioName,
       modelo: modeloData?.nombre || 'No especificado',
@@ -390,7 +390,7 @@ export class PDFGenerationService {
       [`Precio de Lista:`, `$${propertyDetails.precio_lista.toLocaleString('es-MX')}`],
       [`Edificio:`, propertyDetails.edificio],
       [`Piso:`, propertyDetails.numero_piso.toString()],
-      [`Metros Reales:`, `${propertyDetails.m2_reales} m²`],
+      [`Metros Interiores:`, `${propertyDetails.m2_interiores} m²`],
       [`Modelo:`, propertyDetails.modelo],
       [`Número de Recámaras:`, propertyDetails.recamaras.toString()],
       [`Número de Baños:`, propertyDetails.banos_completos.toString()],

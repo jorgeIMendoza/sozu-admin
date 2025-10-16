@@ -13,8 +13,8 @@ interface PropertyDetails {
   id: number;
   numero_propiedad: string;
   precio_lista: number;
-  m2_reales: number | null;
-  m2_escriturables: number | null;
+  m2_interiores: number | null;
+  m2_exteriores: number | null;
   descripcion: string | null;
   numero_piso?: number | null;
   clabe_stp_tmp_apartado?: string | null;
@@ -208,21 +208,21 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-muted-foreground">m² reales:</span>
-                <span className="font-semibold">{propertyDetails.m2_reales?.toFixed(2) || 'N/A'} m²</span>
+                <span className="text-muted-foreground">m² interiores:</span>
+                <span className="font-semibold">{propertyDetails.m2_interiores?.toFixed(2) || 'N/A'} m²</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">m² escriturables:</span>
-                <span className="font-semibold">{propertyDetails.m2_escriturables?.toFixed(2) || 'N/A'} m²</span>
+                <span className="text-muted-foreground">m² exteriores:</span>
+                <span className="font-semibold">{propertyDetails.m2_exteriores?.toFixed(2) || 'N/A'} m²</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Precio de lista:</span>
                 <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista)}</span>
               </div>
-              {propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && propertyDetails.m2_escriturables && propertyDetails.m2_escriturables > 0 && (
+              {propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && propertyDetails.m2_exteriores && propertyDetails.m2_exteriores > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Precio por m²:</span>
-                  <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_escriturables)}</span>
+                  <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_exteriores)}</span>
                 </div>
               )}
               {propertyDetails.projectData?.mostrar_estacionamientos_en_oferta !== false && estacionamientos && estacionamientos.length > 0 && (

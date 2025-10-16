@@ -23,8 +23,8 @@ interface PropertyDetails {
   id: number;
   numero_propiedad: string;
   precio_lista: number;
-  m2_reales: number | null;
-  m2_escriturables: number | null;
+  m2_interiores: number | null;
+  m2_exteriores: number | null;
   descripcion: string | null;
   numero_piso?: number | null;
   clabe_stp_tmp_apartado?: string | null;
@@ -693,8 +693,8 @@ class HTMLToPDFService {
       id: propiedad.id,
       numero_propiedad: propiedad.numero_propiedad,
       precio_lista: propiedad.precio_lista,
-      m2_reales: (propiedad.m2_interiores || 0) + (propiedad.m2_exteriores || 0),
-      m2_escriturables: (propiedad.m2_interiores || 0) + (propiedad.m2_exteriores || 0),
+      m2_interiores: propiedad.m2_interiores,
+      m2_exteriores: propiedad.m2_exteriores,
       descripcion: propiedad.descripcion,
       numero_piso: propiedad.numero_piso,
       clabe_stp_tmp_apartado: clabeStp,
@@ -1353,7 +1353,7 @@ class HTMLToPDFService {
               }, formatCurrency(propertyDetails.precio_lista))
             ]),
             // Precio por m² - if configured
-            propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && propertyDetails.m2_escriturables && React.createElement('div', {
+            propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && propertyDetails.m2_exteriores && React.createElement('div', {
               key: 'price-m2',
               className: 'flex justify-between'
             }, [
@@ -1364,7 +1364,7 @@ class HTMLToPDFService {
               React.createElement('span', {
                 key: 'value',
                 className: 'font-semibold'
-              }, formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_escriturables))
+              }, formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_exteriores))
             ]),
             // Piso - if configured
             propertyDetails.projectData?.mostrar_piso_en_oferta !== false && propertyDetails.numero_piso && React.createElement('div', {

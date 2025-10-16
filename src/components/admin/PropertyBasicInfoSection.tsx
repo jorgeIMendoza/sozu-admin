@@ -388,10 +388,10 @@ export const PropertyBasicInfoSection = ({
 
           <FormField
             control={form.control}
-            name="m2_reales"
+            name="m2_interiores"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>M² Reales *</FormLabel>
+                <FormLabel>M² Interiores *</FormLabel>
                 <FormControl>
                   <Input type="number" step="0.01" placeholder="Ej: 85.50" {...field} />
                 </FormControl>
@@ -402,10 +402,10 @@ export const PropertyBasicInfoSection = ({
 
           <FormField
             control={form.control}
-            name="m2_escriturables"
+            name="m2_exteriores"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>M² Escriturables *</FormLabel>
+                <FormLabel>M² Exteriores *</FormLabel>
                 <FormControl>
                   <Input type="number" step="0.01" placeholder="Ej: 80.00" {...field} />
                 </FormControl>

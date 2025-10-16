@@ -59,7 +59,7 @@ interface CuentaDetalle {
   clabe_stp: string | null;
   monto_mensual_cuota_extraordinaria: number | null;
   proyecto_nombre: string;
-  m2_escriturables: number | null;
+  m2_exteriores: number | null;
 }
 
 export default function DetalleCuentaMantenimiento() {
@@ -209,7 +209,7 @@ export default function DetalleCuentaMantenimiento() {
         clabe_stp: cuenta.clabe_stp,
         monto_mensual_cuota_extraordinaria: porcentajeAnual,
         proyecto_nombre: proyectoNombre,
-        m2_escriturables: ((oferta?.propiedades?.m2_interiores || 0) + (oferta?.propiedades?.m2_exteriores || 0)) || null
+        m2_exteriores: ((oferta?.propiedades?.m2_interiores || 0) + (oferta?.propiedades?.m2_exteriores || 0)) || null
       };
 
       return detalle;
@@ -614,7 +614,7 @@ export default function DetalleCuentaMantenimiento() {
             <div>
               <label className="text-sm font-medium">Metraje</label>
               <p className="text-sm text-muted-foreground">
-                {cuentaDetalle.m2_escriturables ? `${cuentaDetalle.m2_escriturables} m²` : 'N/A'}
+                {cuentaDetalle.m2_exteriores ? `${cuentaDetalle.m2_exteriores} m²` : 'N/A'}
               </p>
             </div>
             <div>
