@@ -46,8 +46,12 @@ const formSchema = z.object({
   nombre_firmante_recibos: z.string().optional(),
   url_imagen_portada: z.string().optional(),
   costo_mantenimiento_m2: z.string().optional(),
-  porcentaje_anual_cuota_extraordinaria: z.string().optional(),
-  porcentaje_anual_cuota_garantia_renta: z.string().optional(),
+  monto_mensual_cuota_extraordinaria: z.string()
+    .optional()
+    .refine((val) => !val || (parseFloat(val) > 0 && parseFloat(val) <= 5000), {
+      message: "El monto debe ser mayor a 0 y no mayor a 5000"
+    }),
+  monto_garantia_renta: z.string().optional(),
   mostrar_precio_m2_en_oferta: z.boolean().default(true),
   mostrar_piso_en_oferta: z.boolean().default(true),
   mostrar_seccion_efectivo_en_oferta: z.boolean().default(true),
@@ -94,8 +98,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
       nombre_firmante_recibos: "",
       url_imagen_portada: "",
       costo_mantenimiento_m2: "",
-      porcentaje_anual_cuota_extraordinaria: "",
-      porcentaje_anual_cuota_garantia_renta: "",
+      monto_mensual_cuota_extraordinaria: "",
+      monto_garantia_renta: "",
       mostrar_precio_m2_en_oferta: true,
       mostrar_piso_en_oferta: true,
       mostrar_seccion_efectivo_en_oferta: true,
@@ -251,8 +255,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
         nombre_firmante_recibos: project.nombre_firmante_recibos || "",
         url_imagen_portada: project.url_imagen_portada || "",
         costo_mantenimiento_m2: project.costo_mantenimiento_m2?.toString() || "",
-        porcentaje_anual_cuota_extraordinaria: project.porcentaje_anual_cuota_extraordinaria?.toString() || "",
-        porcentaje_anual_cuota_garantia_renta: project.porcentaje_anual_cuota_garantia_renta?.toString() || "",
+        monto_mensual_cuota_extraordinaria: project.monto_mensual_cuota_extraordinaria?.toString() || "",
+        monto_garantia_renta: project.monto_garantia_renta?.toString() || "",
         mostrar_precio_m2_en_oferta: project.mostrar_precio_m2_en_oferta ?? true,
         mostrar_piso_en_oferta: project.mostrar_piso_en_oferta ?? true,
         mostrar_seccion_efectivo_en_oferta: project.mostrar_seccion_efectivo_en_oferta ?? true,
@@ -292,8 +296,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
         nombre_firmante_recibos: values.nombre_firmante_recibos || null,
         url_imagen_portada: values.url_imagen_portada || null,
         costo_mantenimiento_m2: values.costo_mantenimiento_m2 ? parseFloat(values.costo_mantenimiento_m2) : null,
-        porcentaje_anual_cuota_extraordinaria: values.porcentaje_anual_cuota_extraordinaria ? parseFloat(values.porcentaje_anual_cuota_extraordinaria) : null,
-        porcentaje_anual_cuota_garantia_renta: values.porcentaje_anual_cuota_garantia_renta ? parseFloat(values.porcentaje_anual_cuota_garantia_renta) : null,
+        monto_mensual_cuota_extraordinaria: values.monto_mensual_cuota_extraordinaria ? parseFloat(values.monto_mensual_cuota_extraordinaria) : null,
+        monto_garantia_renta: values.monto_garantia_renta ? parseFloat(values.monto_garantia_renta) : null,
         mostrar_precio_m2_en_oferta: values.mostrar_precio_m2_en_oferta,
         mostrar_piso_en_oferta: values.mostrar_piso_en_oferta,
         mostrar_seccion_efectivo_en_oferta: values.mostrar_seccion_efectivo_en_oferta,
@@ -877,10 +881,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                         
                         <FormField
                           control={form.control}
-                          name="porcentaje_anual_cuota_extraordinaria"
+                          name="monto_mensual_cuota_extraordinaria"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>% Anual Cuota Extraordinaria</FormLabel>
+                              <FormLabel>Monto mensual de cuota extraordinaria</FormLabel>
                               <FormControl>
                                 <Input 
                                   type="number"
@@ -898,16 +902,16 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
 
                         <FormField
                           control={form.control}
-                          name="porcentaje_anual_cuota_garantia_renta"
+                          name="monto_garantia_renta"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>% Anual Cuota Garantía Renta</FormLabel>
+                              <FormLabel>Monto mensual de garantía de renta</FormLabel>
                               <FormControl>
                                 <Input 
                                   type="number"
                                   step="0.01"
                                   placeholder="0.00" 
-                                  {...field} 
+                                  {...field}
                                 />
                               </FormControl>
                               <FormMessage />

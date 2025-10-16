@@ -64,8 +64,12 @@ const formSchema = z.object({
   nombre_firmante_recibos: z.string().optional(),
   url_imagen_portada: z.string().optional(),
   costo_mantenimiento_m2: z.string().optional(),
-  porcentaje_anual_cuota_extraordinaria: z.string().optional(),
-  porcentaje_anual_cuota_garantia_renta: z.string().optional(),
+  monto_mensual_cuota_extraordinaria: z.string()
+    .optional()
+    .refine((val) => !val || (parseFloat(val) > 0 && parseFloat(val) <= 5000), {
+      message: "El monto debe ser mayor a 0 y no mayor a 5000"
+    }),
+  monto_garantia_renta: z.string().optional(),
 }).refine((data) => {
   // Si no es tipo Productos, Servicios o Mantenimientos, id_estatus_proyecto es requerido
   if (data.id_tipo_uso !== "9" && data.id_tipo_uso !== "10" && data.id_tipo_uso !== "11") {
@@ -115,8 +119,8 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
       nombre_firmante_recibos: "",
       url_imagen_portada: "",
       costo_mantenimiento_m2: "",
-      porcentaje_anual_cuota_extraordinaria: "",
-      porcentaje_anual_cuota_garantia_renta: "",
+      monto_mensual_cuota_extraordinaria: "",
+      monto_garantia_renta: "",
     },
   });
 
@@ -254,8 +258,8 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         nombre_firmante_recibos: values.nombre_firmante_recibos || null,
         url_imagen_portada: values.url_imagen_portada || null,
         costo_mantenimiento_m2: values.costo_mantenimiento_m2 ? parseFloat(values.costo_mantenimiento_m2) : null,
-        porcentaje_anual_cuota_extraordinaria: values.porcentaje_anual_cuota_extraordinaria ? parseFloat(values.porcentaje_anual_cuota_extraordinaria) : null,
-        porcentaje_anual_cuota_garantia_renta: values.porcentaje_anual_cuota_garantia_renta ? parseFloat(values.porcentaje_anual_cuota_garantia_renta) : null,
+        monto_mensual_cuota_extraordinaria: values.monto_mensual_cuota_extraordinaria ? parseFloat(values.monto_mensual_cuota_extraordinaria) : null,
+        monto_garantia_renta: values.monto_garantia_renta ? parseFloat(values.monto_garantia_renta) : null,
       };
 
       const { data: newProject, error } = await supabase
@@ -906,10 +910,10 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                       
                       <FormField
                         control={form.control}
-                        name="porcentaje_anual_cuota_extraordinaria"
+                        name="monto_mensual_cuota_extraordinaria"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>% Anual Cuota Extraordinaria</FormLabel>
+                            <FormLabel>Monto mensual de cuota extraordinaria</FormLabel>
                             <FormControl>
                               <Input 
                                 type="number"
@@ -927,16 +931,16 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
 
                       <FormField
                         control={form.control}
-                        name="porcentaje_anual_cuota_garantia_renta"
+                        name="monto_garantia_renta"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>% Anual Cuota Garantía Renta</FormLabel>
+                            <FormLabel>Monto mensual de garantía de renta</FormLabel>
                             <FormControl>
                               <Input 
                                 type="number"
                                 step="0.01"
                                 placeholder="0.00" 
-                                {...field} 
+                                {...field}
                               />
                             </FormControl>
                             <FormMessage />
