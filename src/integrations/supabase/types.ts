@@ -4123,6 +4123,10 @@ export type Database = {
           vista: string
         }[]
       }
+      incrementar_precio_m2_mensual: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       insertar_pago_stp: {
         Args: {
           p_claverastreo: string
