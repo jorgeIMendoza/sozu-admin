@@ -977,7 +977,7 @@ export default function DetalleCuentaCobranza() {
         `)
         .eq('id_cuenta_cobranza', cuentaId)
         .eq('activo', true)
-        .order('fecha_pago', { ascending: false });
+        .order('fecha_pago', { ascending: true });
 
       if (error) throw error;
       return data;
