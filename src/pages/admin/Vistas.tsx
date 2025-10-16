@@ -516,22 +516,20 @@ export default function Vistas() {
                             <CardContent>
                               <div className="rounded-md border">
                                 <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>ID</TableHead>
-                                      <TableHead>Nombre</TableHead>
-                                      <TableHead>Imagen</TableHead>
-                                      <TableHead>Estado</TableHead>
-                                      <TableHead>Fecha Creación</TableHead>
-                                      <TableHead className="text-right">Acciones</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
+                                   <TableHeader>
+                                     <TableRow>
+                                       <TableHead>Nombre</TableHead>
+                                       <TableHead>Imagen</TableHead>
+                                       <TableHead>Estado</TableHead>
+                                       <TableHead>Fecha Creación</TableHead>
+                                       <TableHead className="text-right">Acciones</TableHead>
+                                     </TableRow>
+                                   </TableHeader>
                                   <TableBody>
-                                    {projectVistas.map((vista) => (
-                                      <TableRow key={vista.id}>
-                                        <TableCell className="font-medium">{vista.id}</TableCell>
-                                        <TableCell>{vista.nombre}</TableCell>
-                                        <TableCell>
+                                     {projectVistas.map((vista) => (
+                                       <TableRow key={vista.id}>
+                                         <TableCell>{vista.nombre}</TableCell>
+                                         <TableCell>
                                           {vista.url ? (
                                             <img 
                                               src={vista.url} 
