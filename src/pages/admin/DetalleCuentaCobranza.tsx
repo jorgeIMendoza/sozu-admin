@@ -1443,10 +1443,16 @@ export default function DetalleCuentaCobranza() {
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    const [year, month, day] = dateString.split('-').map(Number);
-    const localDate = new Date(year, month - 1, day);
-    return format(localDate, 'dd/MM/yyyy', { locale: es });
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'Sin fecha';
+    try {
+      const [year, month, day] = dateString.split('-').map(Number);
+      const localDate = new Date(year, month - 1, day);
+      if (isNaN(localDate.getTime())) return 'Fecha inválida';
+      return format(localDate, 'dd/MM/yyyy', { locale: es });
+    } catch (error) {
+      return 'Fecha inválida';
+    }
   };
 
   const toggleAcuerdo = (acuerdoId: number) => {
