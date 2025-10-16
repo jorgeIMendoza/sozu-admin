@@ -117,6 +117,15 @@ export default function Vistas() {
       return;
     }
 
+    if (!formData.id_proyecto) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "El proyecto es requerido",
+      });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -125,7 +134,7 @@ export default function Vistas() {
         .insert([{
           nombre: formData.nombre.trim(),
           url: formData.url || null,
-          id_proyecto: formData.id_proyecto ? parseInt(formData.id_proyecto) : null,
+          id_proyecto: parseInt(formData.id_proyecto),
           activo: true
         }])
         .select()
@@ -162,12 +171,21 @@ export default function Vistas() {
       return;
     }
 
+    if (!formData.id_proyecto) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "El proyecto es requerido",
+      });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
       const updateData: any = {
         nombre: formData.nombre.trim(),
-        id_proyecto: formData.id_proyecto ? parseInt(formData.id_proyecto) : null,
+        id_proyecto: parseInt(formData.id_proyecto),
       };
 
       // Only update URL if there's a change
@@ -381,7 +399,7 @@ export default function Vistas() {
                   onValueChange={(value) => setFormData(prev => ({ ...prev, id_proyecto: value }))}
                 >
                   <SelectTrigger id="id_proyecto">
-                    <SelectValue placeholder="Selecciona un proyecto (opcional)" />
+                    <SelectValue placeholder="Selecciona un proyecto" />
                   </SelectTrigger>
                   <SelectContent>
                     {proyectos.map((proyecto) => (
@@ -626,7 +644,7 @@ export default function Vistas() {
                 onValueChange={(value) => setFormData(prev => ({ ...prev, id_proyecto: value }))}
               >
                 <SelectTrigger id="edit-id_proyecto">
-                  <SelectValue placeholder="Selecciona un proyecto (opcional)" />
+                  <SelectValue placeholder="Selecciona un proyecto" />
                 </SelectTrigger>
                 <SelectContent>
                   {proyectos.map((proyecto) => (
