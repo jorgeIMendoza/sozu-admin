@@ -1466,7 +1466,7 @@ const Propiedades = () => {
   };
 
   const formatPrecioPorM2 = (precio: number, m2Interiores: number, m2Exteriores: number) => {
-    const totalM2 = m2Interiores + m2Exteriores;
+    const totalM2 = (m2Interiores || 0) + (m2Exteriores || 0);
     if (totalM2 === 0) return 'N/A';
     return formatCurrency(precio / totalM2);
   };
@@ -1593,17 +1593,17 @@ const Propiedades = () => {
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
-                          <span>{(property.m2_interiores + property.m2_exteriores).toFixed(2)} m²</span>
+                          <span>{((property.m2_interiores || 0) + (property.m2_exteriores || 0)).toFixed(2)} m²</span>
                         </TooltipTrigger>
                         <TooltipContent>
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
                               <Home className="h-3 w-3" />
-                              <span>M2 interiores: {property.m2_interiores.toFixed(2)} m²</span>
+                              <span>M2 interiores: {(property.m2_interiores || 0).toFixed(2)} m²</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Home className="h-3 w-3" />
-                              <span>M2 exteriores: {property.m2_exteriores.toFixed(2)} m²</span>
+                              <span>M2 exteriores: {(property.m2_exteriores || 0).toFixed(2)} m²</span>
                             </div>
                           </div>
                         </TooltipContent>
