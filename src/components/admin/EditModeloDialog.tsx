@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Edit } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -36,7 +37,13 @@ const formSchema = z.object({
   numero_medio_bano: z.number().optional(),
   caracteristicas: z.array(z.string()).default([]),
   habilitar_asignar: z.boolean().default(false),
+  id_proyecto: z.string().min(1, "El proyecto es requerido"),
 });
+
+interface Proyecto {
+  id: number;
+  nombre: string;
+}
 
 interface Modelo {
   id: number;
@@ -46,14 +53,16 @@ interface Modelo {
   numero_completo_banos?: number;
   numero_medio_bano?: number;
   habilitar_asignar?: boolean;
+  id_proyecto?: number | null;
 }
 
 interface EditModeloDialogProps {
   modelo: Modelo;
   onModeloUpdated: () => void;
+  proyectos: Proyecto[];
 }
 
-export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogProps) => {
+export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditModeloDialogProps) => {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -67,6 +76,7 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogPr
       numero_medio_bano: modelo.numero_medio_bano || undefined,
       caracteristicas: [],
       habilitar_asignar: modelo.habilitar_asignar || false,
+      id_proyecto: modelo.id_proyecto?.toString() || "",
     },
   });
 
@@ -119,6 +129,7 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogPr
         numero_completo_banos: values.numero_completo_banos || null,
         numero_medio_bano: values.numero_medio_bano || null,
         habilitar_asignar: values.habilitar_asignar,
+        id_proyecto: parseInt(values.id_proyecto),
       };
 
       const { error: modeloError } = await supabase
@@ -189,6 +200,31 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated }: EditModeloDialogPr
             }} 
             className="space-y-4"
           >
+            <FormField
+              control={form.control}
+              name="id_proyecto"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Proyecto</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona un proyecto" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {proyectos.map((proyecto) => (
+                        <SelectItem key={proyecto.id} value={proyecto.id.toString()}>
+                          {proyecto.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="nombre"
