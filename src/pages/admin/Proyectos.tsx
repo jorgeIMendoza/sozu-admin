@@ -486,14 +486,14 @@ const Proyectos = () => {
                     </TableCell>
                     <TableCell>
                       {avgPropertyPrice > 0 ? `$${avgPropertyPrice.toLocaleString('es-MX', { 
-                        minimumFractionDigits: 0, 
-                        maximumFractionDigits: 0 
+                        minimumFractionDigits: 2, 
+                        maximumFractionDigits: 2 
                       })}` : "N/A"}
                     </TableCell>
                     <TableCell>
                       {avgPricePerM2 > 0 ? `$${avgPricePerM2.toLocaleString('es-MX', { 
-                        minimumFractionDigits: 0, 
-                        maximumFractionDigits: 0 
+                        minimumFractionDigits: 2, 
+                        maximumFractionDigits: 2 
                       })}` : "N/A"}
                     </TableCell>
                     <TableCell>
