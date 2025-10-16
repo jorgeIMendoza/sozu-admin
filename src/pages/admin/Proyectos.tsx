@@ -42,6 +42,8 @@ const Proyectos = () => {
           nombre,
           descripcion,
           direccion,
+          latitud,
+          longitud,
           activo,
           fecha_inicio_construccion,
           id_tipo_uso,
@@ -122,6 +124,8 @@ const Proyectos = () => {
           nombre,
           descripcion,
           direccion,
+          latitud,
+          longitud,
           activo,
           fecha_inicio_construccion,
           id_tipo_uso,
@@ -459,7 +463,20 @@ const Proyectos = () => {
                     <TableCell>{developer}</TableCell>
                     <TableCell>{departmentCount}</TableCell>
                     <TableCell>{city}</TableCell>
-                    <TableCell>{project.direccion || "No especificada"}</TableCell>
+                    <TableCell>
+                      {project.latitud && project.longitud ? (
+                        <a 
+                          href={`https://www.google.com/maps?q=${project.latitud},${project.longitud}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          {project.direccion || "Ver en mapa"}
+                        </a>
+                      ) : (
+                        project.direccion || "No especificada"
+                      )}
+                    </TableCell>
                     <TableCell>
                       {avgPropertyPrice > 0 ? `$${avgPropertyPrice.toLocaleString('es-MX', { 
                         minimumFractionDigits: 0, 
