@@ -75,7 +75,8 @@ const Proyectos = () => {
               propiedades!fk_propiedades_edificio_modelo (
                 id,
                 precio_lista,
-                m2_escriturables
+                m2_interiores,
+                m2_exteriores
               )
             )
           ),
@@ -157,7 +158,8 @@ const Proyectos = () => {
               propiedades!fk_propiedades_edificio_modelo (
                 id,
                 precio_lista,
-                m2_escriturables
+                m2_interiores,
+                m2_exteriores
               )
             )
           ),
@@ -337,19 +339,21 @@ const Proyectos = () => {
     
     if (properties.length === 0) return 0;
     
-    const validProperties = properties.filter((property: any) => 
-      property.precio_lista && property.precio_lista > 0 &&
-      property.m2_escriturables && property.m2_escriturables > 0
-    );
+    const validProperties = properties.filter((property: any) => {
+      const totalM2 = (property.m2_interiores || 0) + (property.m2_exteriores || 0);
+      return property.precio_lista && property.precio_lista > 0 && totalM2 > 0;
+    });
     
-    console.log('Valid properties with precio_lista and m2_escriturables:', validProperties.length);
+    console.log('Valid properties with precio_lista and m2:', validProperties.length);
     
     if (validProperties.length === 0) return 0;
     
     const totalPrice = validProperties.reduce((sum: number, property: any) => 
       sum + (property.precio_lista || 0), 0);
-    const totalM2 = validProperties.reduce((sum: number, property: any) => 
-      sum + (property.m2_escriturables || 0), 0);
+    const totalM2 = validProperties.reduce((sum: number, property: any) => {
+      const m2 = (property.m2_interiores || 0) + (property.m2_exteriores || 0);
+      return sum + m2;
+    }, 0);
     
     if (totalM2 === 0) return 0;
     
