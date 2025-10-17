@@ -137,13 +137,15 @@ export function ModelCharacteristicsSection({
         .maybeSingle();
 
       if (existing) {
-        // Update activo status
-        const { error } = await supabase
-          .from('modelos_caracteristicas')
-          .update({ activo: isActive })
-          .eq('id', existing.id);
-        
-        if (error) throw error;
+        // Update activo status only if different
+        if (existing.activo !== isActive) {
+          const { error } = await supabase
+            .from('modelos_caracteristicas')
+            .update({ activo: isActive })
+            .eq('id', existing.id);
+          
+          if (error) throw error;
+        }
       } else {
         // Create new relation
         const { error } = await supabase
@@ -154,7 +156,8 @@ export function ModelCharacteristicsSection({
             activo: isActive
           }]);
         
-        if (error) throw error;
+        // Ignore unique constraint violation errors (23505) as it means the record already exists
+        if (error && error.code !== '23505') throw error;
       }
     },
     onSuccess: () => {
