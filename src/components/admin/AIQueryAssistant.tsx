@@ -466,8 +466,9 @@ export function AIQueryAssistant() {
               </TabsContent>
 
               <TabsContent value="data">
-                {response.summary && Object.keys(response.summary).length > 0 && (response.summary.totalPagado !== undefined || response.summary.totalPendiente !== undefined) ? (
-                  <div className="space-y-4">
+                <div className="space-y-4">
+                  {/* Resumen section - only shown when totalPagado or totalPendiente exist */}
+                  {response.summary && (response.summary.totalPagado !== undefined || response.summary.totalPendiente !== undefined) && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-base">Resumen de Datos</CardTitle>
@@ -503,86 +504,59 @@ export function AIQueryAssistant() {
                         </div>
                       </CardContent>
                     </Card>
-                    
-                    {response.rawData && response.rawData.length > 0 && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-base">Datos Detallados</CardTitle>
-                          <CardDescription>
-                            Mostrando {response.rawData.length} registro(s)
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="rounded-md border overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  {Object.keys(response.rawData[0]).map((key) => (
+                  )}
+                  
+                  {/* Detailed data section - filter out IDs */}
+                  {response.rawData && response.rawData.length > 0 ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Datos Detallados</CardTitle>
+                        <CardDescription>
+                          Mostrando {response.rawData.length} registro(s)
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="rounded-md border overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                {Object.keys(response.rawData[0])
+                                  .filter(key => !key.toLowerCase().includes('id'))
+                                  .map((key) => (
                                     <TableHead key={key} className="capitalize">
                                       {translateLabel(key)}
                                     </TableHead>
                                   ))}
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {response.rawData.slice(0, 50).map((row, i) => (
-                                  <TableRow key={i}>
-                                    {Object.entries(row).map(([key, value]: [string, any], j) => (
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {response.rawData.slice(0, 50).map((row, i) => (
+                                <TableRow key={i}>
+                                  {Object.entries(row)
+                                    .filter(([key]) => !key.toLowerCase().includes('id'))
+                                    .map(([key, value]: [string, any], j) => (
                                       <TableCell key={j}>
                                         {formatCellValue(value, key)}
                                       </TableCell>
                                     ))}
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                            {response.rawData.length > 50 && (
-                              <div className="p-2 text-xs text-center text-muted-foreground bg-muted">
-                                Mostrando primeros 50 de {response.rawData.length} registros
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                ) : response.rawData && response.rawData.length > 0 ? (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Datos</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="rounded-md border overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              {Object.keys(response.rawData[0]).map((key) => (
-                                <TableHead key={key} className="capitalize">
-                                  {translateLabel(key)}
-                                </TableHead>
+                                </TableRow>
                               ))}
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {response.rawData.map((row, i) => (
-                              <TableRow key={i}>
-                                {Object.entries(row).map(([key, value]: [string, any], j) => (
-                                  <TableCell key={j}>
-                                    {formatCellValue(value, key)}
-                                  </TableCell>
-                                ))}
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No hay datos para mostrar
-                  </div>
-                )}
+                            </TableBody>
+                          </Table>
+                          {response.rawData.length > 50 && (
+                            <div className="p-2 text-xs text-center text-muted-foreground bg-muted">
+                              Mostrando primeros 50 de {response.rawData.length} registros
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No hay datos para mostrar
+                    </div>
+                  )}
+                </div>
               </TabsContent>
             </Tabs>
           </CardContent>
