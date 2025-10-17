@@ -41,10 +41,6 @@ interface PropertyDetails {
     mostrar_precio_m2_en_oferta?: boolean;
     mostrar_piso_en_oferta?: boolean;
     mostrar_seccion_efectivo_en_oferta?: boolean;
-    mostrar_estacionamientos_en_oferta?: boolean;
-    mostrar_bodega_en_oferta?: boolean;
-    mostrar_modelo_en_oferta?: boolean;
-    mostrar_edificio_en_oferta?: boolean;
     precio_m2_actual?: number;
   };
   ownerData?: {
@@ -134,7 +130,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
     const paymentCalculation = selectedPaymentScheme ? calculatePaymentAmounts(selectedPaymentScheme) : null;
 
     return (
-      <div ref={ref} className="bg-white text-gray-900 font-sans text-base leading-relaxed">
+      <div ref={ref} className="bg-white text-gray-900 font-sans text-lg leading-relaxed">
         {/* Cover Page */}
         <div className="min-h-screen p-12 flex flex-col relative overflow-hidden">
           {/* Background gradient */}
@@ -175,32 +171,26 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
           {/* Property Summary */}
           <div className="relative z-10 bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-border">
-            <h3 className="text-base font-bold mb-4 text-primary">Detalles de la Propiedad</h3>
+            <h3 className="text-xl font-bold mb-4 text-primary">Detalles de la Propiedad</h3>
             <div className="grid grid-cols-2 gap-8">
               {/* Left Column - Property Details */}
-            <div className="space-y-1">
+            <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Número de departamento:</span>
+                <span className="text-muted-foreground">Proyecto:</span>
+                <span className="font-semibold">{propertyDetails.projectData?.nombre || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Edificio:</span>
+                <span className="font-semibold">{propertyDetails.building?.nombre || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Modelo:</span>
+                <span className="font-semibold">{propertyDetails.model?.nombre || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Número de propiedad:</span>
                 <span className="font-semibold">{propertyDetails.numero_propiedad}</span>
               </div>
-              {propertyDetails.projectData?.mostrar_modelo_en_oferta !== false && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Modelo:</span>
-                  <span className="font-semibold">{propertyDetails.model?.nombre || 'N/A'}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Configuración:</span>
-                <span className="font-semibold">
-                  {propertyDetails.model?.numero_recamaras || 0} rec, {propertyDetails.model?.numero_completo_banos || 0} baños, {propertyDetails.model?.numero_medio_bano || 0} 1/2 baños
-                </span>
-              </div>
-              {propertyDetails.projectData?.mostrar_edificio_en_oferta !== false && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Edificio:</span>
-                  <span className="font-semibold">{propertyDetails.building?.nombre || 'N/A'}</span>
-                </div>
-              )}
               {propertyDetails.projectData?.mostrar_piso_en_oferta !== false && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Piso:</span>
@@ -208,49 +198,39 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-muted-foreground">m² interiores:</span>
-                <span className="font-semibold">{propertyDetails.m2_interiores?.toFixed(2) || 'N/A'} m²</span>
+                <span className="text-muted-foreground">Vista:</span>
+                <span className="font-semibold">{propertyDetails.vista?.nombre || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">m² exteriores:</span>
-                <span className="font-semibold">{propertyDetails.m2_exteriores?.toFixed(2) || 'N/A'} m²</span>
+                <span className="text-muted-foreground">Área:</span>
+                <span className="font-semibold">
+                  {((propertyDetails.m2_interiores || 0) + (propertyDetails.m2_exteriores || 0)).toFixed(2)} m²
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Precio de lista:</span>
                 <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista)}</span>
               </div>
-              {propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && propertyDetails.m2_exteriores && propertyDetails.m2_exteriores > 0 && (
+              {propertyDetails.projectData?.mostrar_precio_m2_en_oferta !== false && (propertyDetails.m2_interiores || propertyDetails.m2_exteriores) && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Precio por m²:</span>
-                  <span className="font-semibold">{formatCurrency(propertyDetails.precio_lista / propertyDetails.m2_exteriores)}</span>
-                </div>
-              )}
-              {propertyDetails.projectData?.mostrar_estacionamientos_en_oferta !== false && estacionamientos && estacionamientos.length > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Estacionamientos:</span>
                   <span className="font-semibold">
-                    {estacionamientos.length} ({estacionamientos.map(e => e.tipos_estacionamiento?.nombre).filter(Boolean).join(', ')})
+                    {formatCurrency(propertyDetails.precio_lista / ((propertyDetails.m2_interiores || 0) + (propertyDetails.m2_exteriores || 0)))}
                   </span>
-                </div>
-              )}
-              {propertyDetails.projectData?.mostrar_bodega_en_oferta !== false && bodegas && bodegas.length > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Bodega:</span>
-                  <span className="font-semibold">{bodegas.length}</span>
                 </div>
               )}
             </div>
               
               {/* Right Column - Amenities */}
               <div>
-                <h4 className="text-sm font-bold mb-3 text-primary">Amenidades</h4>
+                <h4 className="text-lg font-bold mb-3 text-primary">Amenidades</h4>
                 <div className="grid grid-cols-5 gap-2">
                   {amenities.filter(amenity => amenity.url).slice(0, 15).map((amenity) => (
                     <div key={amenity.id} className="flex justify-center">
                       <img
                         src={amenity.url}
                         alt={amenity.nombre}
-                        className="w-8 h-8 object-contain"
+                        className="w-10 h-10 object-contain"
                       />
                     </div>
                   ))}
@@ -262,20 +242,20 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           {/* Contacts Section */}
           <div className="relative z-10 mt-4 grid grid-cols-2 gap-6">
             {/* Agent Info Card */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-border">
-              <h3 className="text-sm font-bold mb-3 text-primary">Información del Agente</h3>
-              <div className="space-y-2 text-xs leading-tight">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 shadow-lg border border-border">
+              <h3 className="text-lg font-bold mb-4 text-primary">Información del Agente</h3>
+              <div className="space-y-2 text-sm leading-tight">
                 <div>
-                  <p className="text-xs text-muted-foreground">Nombre</p>
+                  <p className="text-sm text-muted-foreground">Nombre</p>
                   <p className="font-semibold">{creatorInfo?.nombre_legal || 'No disponible'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p className="text-sm text-muted-foreground">Email</p>
                   <p className="font-semibold">{creatorInfo?.email || 'No disponible'}</p>
                 </div>
                 {creatorInfo?.telefono && (
                   <div>
-                    <p className="text-xs text-muted-foreground">Teléfono</p>
+                    <p className="text-sm text-muted-foreground">Teléfono</p>
                     <p className="font-semibold">{creatorInfo.telefono}</p>
                   </div>
                 )}
@@ -283,26 +263,26 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
             </div>
 
             {/* Buyer Info Card */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-border">
-              <h3 className="text-sm font-bold mb-3 text-primary">Información del Comprador</h3>
-              <div className="space-y-2 text-xs leading-tight">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 shadow-lg border border-border">
+              <h3 className="text-lg font-bold mb-4 text-primary">Información del Comprador</h3>
+              <div className="space-y-2 text-sm leading-tight">
                 <div>
-                  <p className="text-xs text-muted-foreground">Nombre</p>
+                  <p className="text-sm text-muted-foreground">Nombre</p>
                   <p className="font-semibold">{(leadInfo?.nombre_legal || offerData.leadName).toUpperCase()}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p className="text-sm text-muted-foreground">Email</p>
                   <p className="font-semibold">{leadInfo?.email || offerData.leadEmail}</p>
                 </div>
                 {leadInfo?.telefono && (
                   <div>
-                    <p className="text-xs text-muted-foreground">Teléfono</p>
+                    <p className="text-sm text-muted-foreground">Teléfono</p>
                     <p className="font-semibold">{leadInfo.telefono}</p>
                   </div>
                 )}
                 {leadInfo?.rfc && (
                   <div>
-                    <p className="text-xs text-muted-foreground">RFC</p>
+                    <p className="text-sm text-muted-foreground">RFC</p>
                     <p className="font-semibold">{leadInfo.rfc}</p>
                   </div>
                 )}
@@ -314,7 +294,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
         {/* Payment Options Page */}
         <div className="min-h-screen p-10 break-before-page">
-          <h2 className="text-sm font-bold mb-6 text-primary text-center">Opciones de Pago Disponibles</h2>
+          <h2 className="text-xl font-bold mb-6 text-primary text-center">Opciones de Pago Disponibles</h2>
           
           <div className="grid grid-cols-2 gap-4">
             {filteredPaymentSchemes.map((scheme) => {
@@ -360,7 +340,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
         {/* Banking Data Page */}
         <div className="min-h-screen p-10 break-before-page">
-          <h2 className="text-sm font-bold mb-6 text-primary text-center">Datos Bancarios</h2>
+          <h2 className="text-xl font-bold mb-6 text-primary text-center">Datos Bancarios</h2>
           
           <div className="grid grid-cols-2 gap-6">
             {/* Transfer Card */}
