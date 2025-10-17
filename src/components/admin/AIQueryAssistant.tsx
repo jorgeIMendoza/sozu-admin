@@ -312,9 +312,9 @@ export function AIQueryAssistant() {
               </TabsList>
 
               <TabsContent value="explanation" className="space-y-4">
-                {response.summary && Object.keys(response.summary).length > 0 && (
+                {response.summary && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    {response.summary.totalPagado !== undefined && (
+                    {response.summary.totalPagado !== undefined && response.summary.totalPagado !== null && (
                       <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-sm font-medium">Total Pagado</CardTitle>
@@ -330,7 +330,7 @@ export function AIQueryAssistant() {
                         </CardContent>
                       </Card>
                     )}
-                    {response.summary.totalPendiente !== undefined && (
+                    {response.summary.totalPendiente !== undefined && response.summary.totalPendiente !== null && (
                       <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-sm font-medium">Total Pendiente</CardTitle>
@@ -357,22 +357,6 @@ export function AIQueryAssistant() {
                     <p className="text-sm leading-relaxed">{response.explanation}</p>
                   </CardContent>
                 </Card>
-
-                {response.sqlQuery && (
-                  <Collapsible>
-                    <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="sm" className="w-full">
-                        <ChevronDown className="mr-2 h-4 w-4" />
-                        Ver SQL ejecutado
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <pre className="mt-2 p-4 bg-muted rounded-lg text-xs overflow-x-auto">
-                        <code>{response.sqlQuery}</code>
-                      </pre>
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
               </TabsContent>
 
               <TabsContent value="chart">
@@ -399,7 +383,7 @@ export function AIQueryAssistant() {
               </TabsContent>
 
               <TabsContent value="data">
-                {response.summary && Object.keys(response.summary).length > 0 ? (
+                {response.summary && Object.keys(response.summary).length > 0 && (response.summary.totalPagado !== undefined || response.summary.totalPendiente !== undefined) ? (
                   <div className="space-y-4">
                     <Card>
                       <CardHeader>
