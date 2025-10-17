@@ -47,6 +47,7 @@ export function AIQueryAssistant() {
   const [response, setResponse] = useState<AIQueryResponse | null>(null);
   const [showRawData, setShowRawData] = useState(false);
   const [selectedChartType, setSelectedChartType] = useState<"pie" | "bar" | "line" | "area">("bar");
+  const [isPercentageQuery, setIsPercentageQuery] = useState(false);
   const { toast } = useToast();
 
   const handleSubmit = async () => {
@@ -61,6 +62,10 @@ export function AIQueryAssistant() {
 
     setIsLoading(true);
     setResponse(null);
+    
+    // Detectar si la pregunta es sobre porcentajes
+    const isPercentage = /porcentaje|%|porciento|proporción|fracción|ratio/i.test(question);
+    setIsPercentageQuery(isPercentage);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-database-query', {
@@ -186,11 +191,16 @@ export function AIQueryAssistant() {
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+      const value = payload[0].value;
+      const formattedValue = isPercentageQuery 
+        ? `${value.toFixed(2)}%` 
+        : formatCurrency(value);
+      
       return (
         <div className="bg-background border border-border rounded-lg shadow-lg p-3">
           <p className="font-semibold text-sm mb-1">{label}</p>
           <p className="text-primary text-sm">
-            Monto: {formatCurrency(payload[0].value)}
+            {isPercentageQuery ? 'Porcentaje' : 'Monto'}: {formattedValue}
           </p>
         </div>
       );
@@ -202,6 +212,9 @@ export function AIQueryAssistant() {
     if (!response?.chartData) return null;
 
     const formatYAxis = (value: number) => {
+      if (isPercentageQuery) {
+        return `${value.toFixed(0)}%`;
+      }
       if (value >= 1000000) {
         return `$${(value / 1000000).toFixed(1)}M`;
       } else if (value >= 1000) {
@@ -220,10 +233,10 @@ export function AIQueryAssistant() {
               <YAxis tickFormatter={formatYAxis} />
               <Tooltip content={<CustomTooltip />} />
               <Legend 
-                formatter={() => "Monto"} 
+                formatter={() => isPercentageQuery ? "Porcentaje" : "Monto"} 
                 wrapperStyle={{ paddingTop: '10px' }}
               />
-              <Bar dataKey="value" fill="hsl(var(--primary))" name="Monto" />
+              <Bar dataKey="value" fill="hsl(var(--primary))" name={isPercentageQuery ? "Porcentaje" : "Monto"} />
             </BarChart>
           </ResponsiveContainer>
         );
@@ -236,10 +249,10 @@ export function AIQueryAssistant() {
               <YAxis tickFormatter={formatYAxis} />
               <Tooltip content={<CustomTooltip />} />
               <Legend 
-                formatter={() => "Monto"} 
+                formatter={() => isPercentageQuery ? "Porcentaje" : "Monto"} 
                 wrapperStyle={{ paddingTop: '10px' }}
               />
-              <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" name="Monto" />
+              <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" name={isPercentageQuery ? "Porcentaje" : "Monto"} />
             </LineChart>
           </ResponsiveContainer>
         );
@@ -252,7 +265,9 @@ export function AIQueryAssistant() {
                 cx="50%"
                 cy="50%"
                 labelLine={true}
-                label={(entry) => `${entry.name}: ${formatCurrency(entry.value)}`}
+                label={(entry) => isPercentageQuery 
+                  ? `${entry.name}: ${entry.value.toFixed(2)}%` 
+                  : `${entry.name}: ${formatCurrency(entry.value)}`}
                 outerRadius={100}
                 fill="hsl(var(--primary))"
                 dataKey="value"
@@ -278,10 +293,10 @@ export function AIQueryAssistant() {
               <YAxis tickFormatter={formatYAxis} />
               <Tooltip content={<CustomTooltip />} />
               <Legend 
-                formatter={() => "Monto"} 
+                formatter={() => isPercentageQuery ? "Porcentaje" : "Monto"} 
                 wrapperStyle={{ paddingTop: '10px' }}
               />
-              <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.2)" name="Monto" />
+              <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.2)" name={isPercentageQuery ? "Porcentaje" : "Monto"} />
             </AreaChart>
           </ResponsiveContainer>
         );
