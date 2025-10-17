@@ -321,8 +321,8 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
       if (error) throw error;
 
       toast({
-        title: "Propiedad actualizada",
-        description: "Los datos de la propiedad se han actualizado correctamente.",
+        title: "✅ Propiedad actualizada exitosamente",
+        description: "⚠️ IMPORTANTE: La propiedad pasará a estado DRAFT para que puedas verificar los cambios antes de aprobarla nuevamente.",
       });
 
       onSuccess();
