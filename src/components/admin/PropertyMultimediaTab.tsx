@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Star, Plus, Upload, Play, Eye } from "lucide-react";
+import { Star, Plus, Upload, Play, Eye, Power, PowerOff } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
@@ -101,6 +102,27 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     },
     onError: () => {
       toast({ title: "Error al agregar video de YouTube", variant: "destructive" });
+    }
+  });
+
+  // Mutation to toggle multimedia status
+  const toggleStatusMutation = useMutation({
+    mutationFn: async ({ multimediaId, newStatus }: { multimediaId: number; newStatus: boolean }) => {
+      const { error } = await supabase
+        .from('multimedias_propiedad')
+        .update({ activo: newStatus })
+        .eq('id', multimediaId);
+      
+      if (error) throw error;
+    },
+    onSuccess: (_, { newStatus }) => {
+      queryClient.invalidateQueries({ queryKey: ['propertyVistas', propertyId] });
+      toast({ 
+        title: newStatus ? "Multimedia reactivado exitosamente" : "Multimedia inactivado exitosamente" 
+      });
+    },
+    onError: () => {
+      toast({ title: "Error al cambiar estado del multimedia", variant: "destructive" });
     }
   });
 
@@ -598,27 +620,75 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
           )}
 
           {vistasPropiedad.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {vistasPropiedad.map((vista) => (
                 <Card key={vista.id}>
-                  <CardContent className="pt-4">
-                    <h4 className="font-medium mb-2">{vista.descripcion || 'Multimedia'}</h4>
-                    {vista.es_imagen ? (
-                      <img 
-                        src={vista.url} 
-                        alt={vista.descripcion || 'Multimedia'}
-                        className="w-full h-32 object-cover rounded-md"
-                        onError={(e) => {
-                          e.currentTarget.src = '/placeholder.svg';
-                        }}
-                      />
-                    ) : (
-                      <video 
-                        src={vista.url} 
-                        className="w-full h-32 object-cover rounded-md"
-                        controls
-                      />
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge variant="outline">
+                          {vista.es_imagen ? "Imagen" : "Video"}
+                        </Badge>
+                        <Badge variant={vista.activo ? "default" : "secondary"}>
+                          {vista.activo ? "Activo" : "Inactivo"}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleStatusMutation.mutate({ 
+                          multimediaId: vista.id, 
+                          newStatus: !vista.activo 
+                        })}
+                        disabled={toggleStatusMutation.isPending}
+                      >
+                        {vista.activo ? (
+                          <>
+                            <PowerOff className="w-4 h-4 mr-1" />
+                            Inactivar
+                          </>
+                        ) : (
+                          <>
+                            <Power className="w-4 h-4 mr-1" />
+                            Reactivar
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    
+                    <div className="aspect-video bg-muted rounded-md overflow-hidden">
+                      {vista.es_imagen ? (
+                        <img 
+                          src={vista.url} 
+                          alt={vista.descripcion || 'Multimedia'}
+                          className={`w-full h-full object-cover ${!vista.activo ? 'grayscale opacity-50' : ''}`}
+                          onError={(e) => {
+                            e.currentTarget.src = '/placeholder.svg';
+                          }}
+                        />
+                      ) : (
+                        <video 
+                          src={vista.url} 
+                          controls={vista.activo}
+                          className={`w-full h-full object-cover ${!vista.activo ? 'grayscale opacity-50' : ''}`}
+                        />
+                      )}
+                    </div>
+                    
+                    {vista.descripcion && (
+                      <p className="text-sm text-muted-foreground mt-2 p-2 bg-muted rounded-sm">
+                        {vista.descripcion}
+                      </p>
                     )}
+                    
+                    <a 
+                      href={vista.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline mt-2 block truncate"
+                    >
+                      Ver archivo original
+                    </a>
                   </CardContent>
                 </Card>
               ))}
