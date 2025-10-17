@@ -441,15 +441,16 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                          {item.activo ? "Activo" : "Inactivo"}
                        </Badge>
                      </div>
-                     <Button
-                       variant="outline"
-                       size="sm"
-                       onClick={() => toggleStatusMutation.mutate({ 
-                         multimediaId: item.id, 
-                         newStatus: !item.activo 
-                       })}
-                       disabled={toggleStatusMutation.isPending}
-                     >
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleStatusMutation.mutate({ 
+                          multimediaId: item.id, 
+                          newStatus: !item.activo 
+                        })}
+                        disabled={toggleStatusMutation.isPending}
+                      >
                        {item.activo ? (
                          <>
                            <PowerOff className="w-4 h-4 mr-1" />
@@ -583,6 +584,7 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                       {video.activo ? 'Activo' : 'Inactivo'}
                     </Badge>
                     <Button
+                      type="button"
                       variant="outline"
                       size="sm"
                       onClick={() => toggleYoutubeStatusMutation.mutate({ 
