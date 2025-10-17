@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Star, Plus, Upload, Play, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -27,8 +28,11 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
   });
   
   const [vistaForm, setVistaForm] = useState({
-    nombre: '',
-    url: ''
+    tipo_multimedia: 'imagen' as 'imagen' | 'video',
+    descripcion: '',
+    url: '',
+    es_imagen: true,
+    file: null as File | null
   });
 
   const [coverImageUrl, setCoverImageUrl] = useState(
@@ -52,7 +56,7 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     enabled: !!propertyId
   });
 
-  // Since vistas_propiedad table doesn't exist, we'll use multimedias_propiedad for now
+  // Fetch multimedia (vistas) from multimedias_propiedad
   const { data: vistasPropiedad = [] } = useQuery({
     queryKey: ['propertyVistas', propertyId],
     queryFn: async () => {
@@ -61,7 +65,6 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
         .from('multimedias_propiedad')
         .select('*')
         .eq('id_propiedad', propertyId)
-        .eq('es_imagen', true)
         .order('fecha_creacion', { ascending: false });
       
       if (error) throw error;
@@ -106,13 +109,34 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     mutationFn: async (vistaData: typeof vistaForm) => {
       if (!propertyId) throw new Error('Property ID is required');
       
+      let finalUrl = vistaData.url;
+      
+      // Si hay un archivo, subirlo primero
+      if (vistaData.file) {
+        const fileExt = vistaData.file.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `properties/${propertyId}/multimedia/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(filePath, vistaData.file);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(filePath);
+        
+        finalUrl = data.publicUrl;
+      }
+      
       const { data, error } = await supabase
         .from('multimedias_propiedad')
         .insert([{
-          descripcion: vistaData.nombre,
-          url: vistaData.url,
+          descripcion: vistaData.descripcion,
+          url: finalUrl,
           id_propiedad: propertyId,
-          es_imagen: true,
+          es_imagen: vistaData.es_imagen,
           activo: true
         }])
         .select()
@@ -123,12 +147,18 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['propertyVistas', propertyId] });
-      setVistaForm({ nombre: '', url: '' });
+      setVistaForm({ 
+        tipo_multimedia: 'imagen',
+        descripcion: '', 
+        url: '',
+        es_imagen: true,
+        file: null
+      });
       setIsAddingVista(false);
-      toast({ title: "Vista agregada exitosamente" });
+      toast({ title: "Multimedia agregado exitosamente" });
     },
     onError: () => {
-      toast({ title: "Error al agregar vista", variant: "destructive" });
+      toast({ title: "Error al agregar multimedia", variant: "destructive" });
     }
   });
 
@@ -174,13 +204,43 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     addYoutubeMutation.mutate(youtubeForm);
   };
 
+  const handleVistaFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      setVistaForm(prev => ({
+        ...prev,
+        file: file,
+        url: URL.createObjectURL(file),
+        es_imagen: file.type.startsWith('image/')
+      }));
+      
+      toast({ title: "Archivo cargado" });
+    } catch (error) {
+      console.error('Error loading file:', error);
+      toast({ title: "Error al cargar archivo", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleVistaSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!vistaForm.nombre.trim() || !vistaForm.url.trim()) {
-      toast({ title: "Debes completar todos los campos", variant: "destructive" });
+    if (!vistaForm.descripcion.trim() || (!vistaForm.url.trim() && !vistaForm.file)) {
+      toast({ title: "Debes completar la descripción y agregar un archivo o URL", variant: "destructive" });
       return;
     }
     addVistaMutation.mutate(vistaForm);
+  };
+
+  const isImageUrl = (url: string) => {
+    return /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
+  };
+
+  const isVideoUrl = (url: string) => {
+    return /\.(mp4|webm|ogg|mov)$/i.test(url);
   };
 
   const getYouTubeEmbedUrl = (url: string) => {
@@ -374,7 +434,7 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                 size="sm"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Agregar Vista
+                Agregar Multimedia
               </Button>
             )}
           </div>
@@ -382,33 +442,109 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
         <CardContent className="space-y-4">
           {!propertyId && (
             <p className="text-muted-foreground">
-              Las vistas se podrán agregar después de crear la propiedad.
+              Los multimedias se podrán agregar después de crear la propiedad.
             </p>
           )}
 
           {isAddingVista && (
             <Card>
-              <CardContent className="pt-4">
+              <CardHeader>
+                <CardTitle>Nuevo Multimedia</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <form onSubmit={handleVistaSubmit} className="space-y-4">
                   <div>
-                    <Label htmlFor="vista-name">Nombre de la Vista</Label>
-                    <Input
-                      id="vista-name"
-                      value={vistaForm.nombre}
-                      onChange={(e) => setVistaForm(prev => ({ ...prev, nombre: e.target.value }))}
-                      placeholder="Ej: Vista desde balcón"
-                    />
+                    <Label htmlFor="tipo">Tipo de Multimedia</Label>
+                    <Select
+                      value={vistaForm.tipo_multimedia}
+                      onValueChange={(value: 'imagen' | 'video') => {
+                        setVistaForm(prev => ({ 
+                          ...prev, 
+                          tipo_multimedia: value,
+                          es_imagen: value === 'imagen'
+                        }));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="imagen">Imagen</SelectItem>
+                        <SelectItem value="video">Video</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  
+
                   <div>
-                    <Label htmlFor="vista-url">URL de la Imagen</Label>
+                    <Label htmlFor="vista-file">Subir Archivo</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="vista-file"
+                        type="file"
+                        accept={vistaForm.tipo_multimedia === 'imagen' ? "image/*" : "video/*"}
+                        onChange={handleVistaFileUpload}
+                        disabled={uploading}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={uploading}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploading ? "Subiendo..." : "Subir"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="vista-url">O ingresa URL directamente</Label>
                     <Input
                       id="vista-url"
+                      type="url"
                       value={vistaForm.url}
                       onChange={(e) => setVistaForm(prev => ({ ...prev, url: e.target.value }))}
-                      placeholder="https://ejemplo.com/vista.jpg"
+                      placeholder="https://..."
                     />
                   </div>
+
+                  <div>
+                    <Label htmlFor="vista-descripcion">Descripción (opcional)</Label>
+                    <Input
+                      id="vista-descripcion"
+                      type="text"
+                      value={vistaForm.descripcion}
+                      onChange={(e) => setVistaForm(prev => ({ ...prev, descripcion: e.target.value }))}
+                      placeholder="Descripción del multimedia..."
+                    />
+                  </div>
+
+                  {vistaForm.url && (
+                    <div className="mt-4">
+                      <Label>Vista previa:</Label>
+                      <div className="mt-2 border rounded-md p-2">
+                        {isImageUrl(vistaForm.url) || vistaForm.tipo_multimedia === 'imagen' ? (
+                          <img 
+                            src={vistaForm.url} 
+                            alt="Preview" 
+                            className="max-w-full h-48 object-contain"
+                            onError={(e) => {
+                              e.currentTarget.src = '/placeholder.svg';
+                            }}
+                          />
+                        ) : isVideoUrl(vistaForm.url) || vistaForm.tipo_multimedia === 'video' ? (
+                          <video 
+                            src={vistaForm.url} 
+                            controls
+                            className="max-w-full h-48"
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Vista previa no disponible para este tipo de archivo
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="flex gap-2">
                     <Button type="submit" disabled={addVistaMutation.isPending}>
@@ -432,15 +568,23 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
               {vistasPropiedad.map((vista) => (
                 <Card key={vista.id}>
                   <CardContent className="pt-4">
-                    <h4 className="font-medium mb-2">{vista.descripcion || 'Vista'}</h4>
-                    <img 
-                      src={vista.url} 
-                      alt={vista.descripcion || 'Vista'}
-                      className="w-full h-32 object-cover rounded-md"
-                      onError={(e) => {
-                        e.currentTarget.src = '/placeholder.svg';
-                      }}
-                    />
+                    <h4 className="font-medium mb-2">{vista.descripcion || 'Multimedia'}</h4>
+                    {vista.es_imagen ? (
+                      <img 
+                        src={vista.url} 
+                        alt={vista.descripcion || 'Multimedia'}
+                        className="w-full h-32 object-cover rounded-md"
+                        onError={(e) => {
+                          e.currentTarget.src = '/placeholder.svg';
+                        }}
+                      />
+                    ) : (
+                      <video 
+                        src={vista.url} 
+                        className="w-full h-32 object-cover rounded-md"
+                        controls
+                      />
+                    )}
                   </CardContent>
                 </Card>
               ))}
