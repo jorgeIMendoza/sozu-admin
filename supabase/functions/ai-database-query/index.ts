@@ -27,17 +27,73 @@ serve(async (req) => {
     // System prompt for the AI
     const systemPrompt = `Eres un asistente de análisis financiero experto en consultas de base de datos de propiedades inmobiliarias.
 
-FUNCIONES DISPONIBLES:
-1. get_pagos_mes_actual: Obtiene todos los pagos del mes actual
-2. get_deuda_total: Calcula el total adeudado de todas las cuentas activas
-3. get_pagos_por_mes: Obtiene estadísticas de pagos agrupadas por mes (último año)
-4. get_cuentas_pendientes: Obtiene las cuentas con mayor deuda pendiente
-5. get_pagos_por_metodo: Agrupa pagos por método de pago
+SISTEMA HÍBRIDO: Tienes dos formas de consultar datos:
+
+═══════════════════════════════════════════════════════════════════
+A) FUNCIONES PREDEFINIDAS (USAR PRIMERO si aplican):
+═══════════════════════════════════════════════════════════════════
+1. get_pagos_mes_actual: Pagos recibidos en el mes actual
+2. get_deuda_total: Total adeudado en todas las cuentas activas  
+3. get_pagos_por_mes: Estadísticas de pagos por mes (último año)
+4. get_cuentas_pendientes: Top 5 cuentas con mayor deuda
+5. get_pagos_por_metodo: Pagos agrupados por método de pago
+
+═══════════════════════════════════════════════════════════════════
+B) SQL DINÁMICO (USAR cuando las funciones predefinidas NO aplican):
+═══════════════════════════════════════════════════════════════════
+6. generate_sql_query: Genera y ejecuta consultas SQL personalizadas
+
+CUÁNDO USAR SQL DINÁMICO:
+- Consultas sobre propiedades, proyectos, edificios, modelos
+- Análisis por categorías no cubiertas (tipo propiedad, estatus, ubicación)
+- Joins complejos entre múltiples tablas
+- Agregaciones específicas (AVG, COUNT, SUM por grupos)
+- Filtros personalizados
+
+SCHEMA DE LA BASE DE DATOS:
+
+PROPIEDADES Y PROYECTOS:
+- propiedades (id, numero_propiedad, numero_piso, m2_reales, m2_interiores, m2_exteriores, precio_lista, id_estatus_disponibilidad, id_tipo_propiedad, id_vista, id_edificio_modelo, id_entidad_relacionada_dueno, activo)
+- proyectos (id, nombre, direccion, ciudad, id_estatus_proyecto, precio_m2_actual, activo)
+- edificios (id, nombre, numero_pisos, id_proyecto, activo)
+- modelos (id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo)
+- edificios_modelos (id, id_edificio, id_modelo, activo)
+
+TIPOS Y CATÁLOGOS:
+- tipos_propiedad (id, nombre, activo)
+- estatus_disponibilidad (id, nombre, activo) -- 1=Disponible, 2=Ofertado, 3=Pre-apartado, 4=Apartado, 5=Vendido, 7=Escrituración, 9=Pagada completamente
+- vistas (id, nombre, activo)
+- tipos_transaccion (id, nombre, activo)
+
+VENTAS Y COBRANZA:
+- ofertas (id, id_propiedad, id_producto, id_persona_lead, id_esquema_pago_seleccionado, email_creador, fecha_generacion, activo)
+- cuentas_cobranza (id, id_oferta, precio_final, fecha_compra, clabe_stp, id_notario, es_aprobado, activo)
+- acuerdos_pago (id, id_cuenta_cobranza, id_concepto, monto, fecha_pago, orden, pago_completado, activo)
+- pagos (id, id_cuenta_cobranza, id_metodos_pago, monto, fecha_pago, clave_rastreo, activo)
+- aplicaciones_pago (id, id_pago, id_acuerdo_pago, monto, es_multa, activo)
+
+PERSONAS Y COMPRADORES:
+- personas (id, nombre_legal, email, telefono, tipo_persona, rfc, curp, id_conyuge, id_estado_civil, activo)
+- compradores (id_persona, id_cuenta_cobranza, porcentaje_copropiedad, activo)
+- entidades_relacionadas (id, id_proyecto, id_persona, id_tipo_entidad, id_estatus_persona, activo)
+
+PRODUCTOS Y AMENIDADES:
+- productos_servicios (id, nombre, descripcion, precio_referencia, id_categoria, activo)
+- estacionamientos (id, nombre, ubicacion, m2, id_tipo, id_propiedad, id_producto, es_incluido, activo)
+- bodegas (id, nombre, ubicacion, m2, id_propiedad, id_producto, es_incluido, activo)
+
+RELACIONES CLAVE:
+- propiedades → edificios_modelos → edificios → proyectos
+- propiedades → ofertas → cuentas_cobranza → acuerdos_pago
+- cuentas_cobranza → compradores → personas
+- pagos → aplicaciones_pago → acuerdos_pago
 
 INSTRUCCIONES:
 1. Analiza la pregunta del usuario
-2. Determina qué función(es) necesitas llamar
-3. Llama a las funciones apropiadas
+2. DECIDE: ¿Puedo usar una función predefinida?
+   - SÍ → Usa la función predefinida (más rápido)
+   - NO → Usa generate_sql_query
+3. Para SQL dinámico: genera SELECT seguro, con JOINs apropiados y filtros WHERE activo = true
 4. Interpreta los resultados y genera una respuesta clara en LENGUAJE NATURAL
 
 FORMATO DE RESPUESTA:
@@ -83,8 +139,37 @@ EJEMPLO DE MALA EXPLICACIÓN (NO HACER):
 
 Sé claro, preciso y útil. Si necesitas más de una función, llámalas todas.`;
 
+    // SQL Validator - ensures only safe SELECT queries
+    const validateSQL = (sql: string): { valid: boolean; error?: string } => {
+      const trimmedSQL = sql.trim().toUpperCase();
+      
+      // Must start with SELECT
+      if (!trimmedSQL.startsWith('SELECT')) {
+        return { valid: false, error: 'Solo se permiten consultas SELECT' };
+      }
+      
+      // Dangerous keywords
+      const dangerousKeywords = [
+        'DROP', 'DELETE', 'UPDATE', 'INSERT', 'ALTER', 'TRUNCATE', 
+        'CREATE', 'REPLACE', 'GRANT', 'REVOKE', 'EXEC', 'EXECUTE'
+      ];
+      
+      for (const keyword of dangerousKeywords) {
+        if (trimmedSQL.includes(keyword)) {
+          return { valid: false, error: `Palabra clave no permitida: ${keyword}` };
+        }
+      }
+      
+      // No semicolons (prevents multiple statements)
+      if (sql.includes(';')) {
+        return { valid: false, error: 'No se permiten múltiples consultas' };
+      }
+      
+      return { valid: true };
+    };
+
     // Helper function to execute queries
-    const executeQuery = async (functionName: string): Promise<any> => {
+    const executeQuery = async (functionName: string, args?: any): Promise<any> => {
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
       const currentYear = now.getFullYear();
@@ -240,6 +325,38 @@ Sé claro, preciso y útil. Si necesitas más de una función, llámalas todas.`
           return Object.values(porMetodo || {});
         }
 
+        case "generate_sql_query": {
+          if (!args?.sql_query) {
+            throw new Error('Se requiere sql_query en los argumentos');
+          }
+          
+          const sqlQuery = args.sql_query;
+          console.log("Executing dynamic SQL:", sqlQuery);
+          
+          // Validate SQL
+          const validation = validateSQL(sqlQuery);
+          if (!validation.valid) {
+            throw new Error(`SQL inválido: ${validation.error}`);
+          }
+          
+          // Execute with timeout and limit
+          const { data, error } = await supabase.rpc('execute_safe_query', {
+            query_text: sqlQuery,
+            max_rows: 1000
+          });
+          
+          if (error) {
+            console.error("SQL execution error:", error);
+            throw new Error(`Error ejecutando SQL: ${error.message}`);
+          }
+          
+          return { 
+            data: data || [], 
+            sql: sqlQuery,
+            rowCount: data?.length || 0 
+          };
+        }
+
         default:
           throw new Error(`Función desconocida: ${functionName}`);
       }
@@ -280,6 +397,23 @@ Sé claro, preciso y útil. Si necesitas más de una función, llámalas todas.`
         function: {
           name: "get_pagos_por_metodo",
           description: "Agrupa los pagos del año actual por método de pago"
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "generate_sql_query",
+          description: "Genera y ejecuta una consulta SQL personalizada segura (solo SELECT). Úsala cuando las funciones predefinidas no cubran la pregunta. Ejemplos: consultas sobre propiedades, proyectos, edificios, análisis por categorías específicas, joins complejos.",
+          parameters: {
+            type: "object",
+            properties: {
+              sql_query: {
+                type: "string",
+                description: "Consulta SQL SELECT segura. Debe incluir JOINs apropiados, filtros WHERE con activo = true, y LIMIT para evitar demasiados resultados. Ejemplo: SELECT p.numero_propiedad, pr.nombre FROM propiedades p JOIN entidades_relacionadas er ON p.id_entidad_relacionada_dueno = er.id JOIN proyectos pr ON er.id_proyecto = pr.id WHERE p.activo = true LIMIT 100"
+              }
+            },
+            required: ["sql_query"]
+          }
         }
       }
     ];
@@ -334,7 +468,8 @@ Sé claro, preciso y útil. Si necesitas más de una función, llámalas todas.`
       // Execute all tool calls
       for (const toolCall of message.tool_calls) {
         console.log("Executing tool:", toolCall.function.name);
-        const result = await executeQuery(toolCall.function.name);
+        const args = toolCall.function.arguments ? JSON.parse(toolCall.function.arguments) : undefined;
+        const result = await executeQuery(toolCall.function.name, args);
         toolResults.push({
           role: "tool",
           tool_call_id: toolCall.id,
