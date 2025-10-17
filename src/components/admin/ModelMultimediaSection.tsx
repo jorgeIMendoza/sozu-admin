@@ -167,7 +167,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
               es_imagen: file.type.startsWith('image/'),
               url: data.publicUrl,
               descripcion: newMultimedia.descripcion || file.name,
-              ver_como_ubicacion_en_oferta: false,
+              ver_como_ubicacion_en_oferta: newMultimedia.ver_como_ubicacion_en_oferta,
               id_modelo: modelId
             }]);
 
