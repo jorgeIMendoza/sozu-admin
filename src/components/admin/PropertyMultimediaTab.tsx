@@ -36,6 +36,8 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     file: null as File | null
   });
 
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
   const [coverImageUrl, setCoverImageUrl] = useState(
     form?.getValues("url_imagen_portada") || ''
   );
@@ -254,37 +256,91 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
   };
 
   const handleVistaFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    try {
-      setVistaForm(prev => ({
-        ...prev,
-        file: file,
-        url: URL.createObjectURL(file),
-        es_imagen: file.type.startsWith('image/')
-      }));
-      
-      toast({ title: "Archivo cargado" });
-    } catch (error) {
-      console.error('Error loading file:', error);
-      toast({ title: "Error al cargar archivo", variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleVistaSubmit = () => {
-    console.log('handleVistaSubmit called with form:', vistaForm);
+    const files = Array.from(event.target.files || []);
     
-    if (!vistaForm.descripcion.trim() || (!vistaForm.url.trim() && !vistaForm.file)) {
-      toast({ title: "Debes completar la descripción y agregar un archivo o URL", variant: "destructive" });
+    if (files.length > 10) {
+      toast({ 
+        title: "Límite excedido", 
+        description: "Solo puedes subir hasta 10 archivos a la vez",
+        variant: "destructive" 
+      });
       return;
     }
-    
-    console.log('Submitting vista form:', vistaForm);
-    addVistaMutation.mutate(vistaForm);
+
+    setSelectedFiles(files);
+    toast({ title: `${files.length} archivo(s) seleccionado(s)` });
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleVistaSubmit = async () => {
+    if (selectedFiles.length === 0 && !vistaForm.url.trim()) {
+      toast({ title: "Debes seleccionar archivos o ingresar una URL", variant: "destructive" });
+      return;
+    }
+
+    if (selectedFiles.length > 0) {
+      // Bulk upload
+      setUploading(true);
+      
+      const uploadPromises = selectedFiles.map(async (file) => {
+        try {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const filePath = `properties/${propertyId}/multimedia/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('documentos')
+            .upload(filePath, file);
+
+          if (uploadError) throw uploadError;
+
+          const { data } = supabase.storage
+            .from('documentos')
+            .getPublicUrl(filePath);
+
+          const { error: insertError } = await supabase
+            .from('multimedias_propiedad')
+            .insert([{
+              descripcion: vistaForm.descripcion || file.name,
+              url: data.publicUrl,
+              id_propiedad: propertyId,
+              es_imagen: file.type.startsWith('image/'),
+              activo: true
+            }]);
+
+          if (insertError) throw insertError;
+          return { success: true, fileName: file.name };
+        } catch (error) {
+          console.error('Error uploading file:', file.name, error);
+          return { success: false, fileName: file.name };
+        }
+      });
+
+      const results = await Promise.allSettled(uploadPromises);
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+      const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length;
+
+      queryClient.invalidateQueries({ queryKey: ['propertyVistas', propertyId] });
+      setSelectedFiles([]);
+      setVistaForm({ tipo_multimedia: 'imagen', descripcion: '', url: '', es_imagen: true, file: null });
+      setIsAddingVista(false);
+      setUploading(false);
+
+      toast({
+        title: `Proceso completado`,
+        description: `${successful} archivo(s) agregado(s) exitosamente${failed > 0 ? `. ${failed} fallaron` : ''}`
+      });
+    } else {
+      // Single URL submission
+      if (!vistaForm.descripcion.trim()) {
+        toast({ title: "Debes completar la descripción", variant: "destructive" });
+        return;
+      }
+      addVistaMutation.mutate(vistaForm);
+    }
   };
 
   const isImageUrl = (url: string) => {
@@ -528,7 +584,7 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                   </div>
 
                   <div>
-                    <Label htmlFor="vista-file">Subir Archivo</Label>
+                    <Label htmlFor="vista-file">Subir Archivos (máximo 10)</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         id="vista-file"
@@ -536,6 +592,7 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                         accept={vistaForm.tipo_multimedia === 'imagen' ? "image/*" : "video/*"}
                         onChange={handleVistaFileUpload}
                         disabled={uploading}
+                        multiple
                       />
                       <Button
                         type="button"
@@ -548,6 +605,48 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                     </div>
                   </div>
 
+                  {selectedFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label>{selectedFiles.length} archivo(s) seleccionado(s) (máximo 10)</Label>
+                        <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setSelectedFiles([])}
+                        >
+                          Eliminar todos
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                        {selectedFiles.map((file, index) => (
+                          <div key={index} className="relative border rounded-md p-2">
+                            <div className="aspect-square bg-muted rounded overflow-hidden mb-1">
+                              {file.type.startsWith('image/') ? (
+                                <img src={URL.createObjectURL(file)} alt={file.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <video src={URL.createObjectURL(file)} className="w-full h-full object-cover" />
+                              )}
+                            </div>
+                            <p className="text-xs truncate">{file.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              className="absolute top-1 right-1 h-6 w-6"
+                              onClick={() => handleRemoveFile(index)}
+                            >
+                              ✕
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <Label htmlFor="vista-url">O ingresa URL directamente</Label>
                     <Input
@@ -556,11 +655,12 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                       value={vistaForm.url}
                       onChange={(e) => setVistaForm(prev => ({ ...prev, url: e.target.value }))}
                       placeholder="https://..."
+                      disabled={selectedFiles.length > 0}
                     />
                   </div>
 
                   <div>
-                    <Label htmlFor="vista-descripcion">Descripción (opcional)</Label>
+                    <Label htmlFor="vista-descripcion">Descripción {selectedFiles.length > 1 && '(se aplicará a todos los archivos)'}</Label>
                     <Input
                       id="vista-descripcion"
                       type="text"
@@ -570,7 +670,7 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                     />
                   </div>
 
-                  {vistaForm.url && (
+                  {vistaForm.url && selectedFiles.length === 0 && (
                     <div className="mt-4">
                       <Label>Vista previa:</Label>
                       <div className="mt-2 border rounded-md p-2">
@@ -602,14 +702,18 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                     <Button 
                       type="button" 
                       onClick={handleVistaSubmit}
-                      disabled={addVistaMutation.isPending}
+                      disabled={addVistaMutation.isPending || uploading}
                     >
-                      {addVistaMutation.isPending ? "Guardando..." : "Guardar"}
+                      {addVistaMutation.isPending || uploading ? "Guardando..." : "Guardar"}
                     </Button>
                     <Button 
                       type="button" 
                       variant="outline" 
-                      onClick={() => setIsAddingVista(false)}
+                      onClick={() => {
+                        setIsAddingVista(false);
+                        setSelectedFiles([]);
+                        setVistaForm({ tipo_multimedia: 'imagen', descripcion: '', url: '', es_imagen: true, file: null });
+                      }}
                     >
                       Cancelar
                     </Button>

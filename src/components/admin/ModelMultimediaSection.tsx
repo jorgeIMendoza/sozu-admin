@@ -26,6 +26,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
     ver_como_ubicacion_en_oferta: false
   });
   const [uploading, setUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const { data: multimedia = [] } = useQuery({
     queryKey: ['modelMultimedia', modelId],
@@ -114,42 +115,89 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
   });
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `models/${modelId}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('documentos')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from('documentos')
-        .getPublicUrl(filePath);
-
-      setNewMultimedia(prev => ({ ...prev, url: data.publicUrl }));
-      toast({ title: "Archivo subido exitosamente" });
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      toast({ title: "Error al subir archivo", variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMultimedia.url) {
-      toast({ title: "Por favor proporciona una URL o sube un archivo", variant: "destructive" });
+    const files = Array.from(event.target.files || []);
+    
+    if (files.length > 10) {
+      toast({ 
+        title: "Límite excedido", 
+        description: "Solo puedes subir hasta 10 archivos a la vez",
+        variant: "destructive" 
+      });
       return;
     }
-    addMutation.mutate(newMultimedia);
+
+    setSelectedFiles(files);
+    toast({ title: `${files.length} archivo(s) seleccionado(s)` });
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (selectedFiles.length === 0 && !newMultimedia.url) {
+      toast({ title: "Por favor selecciona archivos o proporciona una URL", variant: "destructive" });
+      return;
+    }
+
+    if (selectedFiles.length > 0) {
+      // Bulk upload
+      setUploading(true);
+      
+      const uploadPromises = selectedFiles.map(async (file) => {
+        try {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const filePath = `models/${modelId}/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('documentos')
+            .upload(filePath, file);
+
+          if (uploadError) throw uploadError;
+
+          const { data } = supabase.storage
+            .from('documentos')
+            .getPublicUrl(filePath);
+
+          const { error: insertError } = await supabase
+            .from('multimedias_modelo')
+            .insert([{
+              es_imagen: file.type.startsWith('image/'),
+              url: data.publicUrl,
+              descripcion: newMultimedia.descripcion || file.name,
+              ver_como_ubicacion_en_oferta: false,
+              id_modelo: modelId
+            }]);
+
+          if (insertError) throw insertError;
+          return { success: true, fileName: file.name };
+        } catch (error) {
+          console.error('Error uploading file:', file.name, error);
+          return { success: false, fileName: file.name };
+        }
+      });
+
+      const results = await Promise.allSettled(uploadPromises);
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+      const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length;
+
+      queryClient.invalidateQueries({ queryKey: ['modelMultimedia', modelId] });
+      setSelectedFiles([]);
+      setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false });
+      setIsAdding(false);
+      setUploading(false);
+
+      toast({
+        title: `Proceso completado`,
+        description: `${successful} archivo(s) agregado(s) exitosamente${failed > 0 ? `. ${failed} fallaron` : ''}`
+      });
+    } else {
+      // Single URL submission
+      addMutation.mutate(newMultimedia);
+    }
   };
 
   const isImageUrl = (url: string) => {
@@ -205,7 +253,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
               </div>
 
               <div>
-                <Label htmlFor="file">Subir Archivo</Label>
+                <Label htmlFor="file">Subir Archivos (máximo 10)</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     id="file"
@@ -213,6 +261,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                     accept={newMultimedia.es_imagen ? "image/*" : "video/*"}
                     onChange={handleFileUpload}
                     disabled={uploading}
+                    multiple
                   />
                   <Button
                     type="button"
@@ -225,6 +274,48 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                 </div>
               </div>
 
+              {selectedFiles.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label>{selectedFiles.length} archivo(s) seleccionado(s) (máximo 10)</Label>
+                    <Button 
+                      type="button"
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setSelectedFiles([])}
+                    >
+                      Eliminar todos
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                    {selectedFiles.map((file, index) => (
+                      <div key={index} className="relative border rounded-md p-2">
+                        <div className="aspect-square bg-muted rounded overflow-hidden mb-1">
+                          {file.type.startsWith('image/') ? (
+                            <img src={URL.createObjectURL(file)} alt={file.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <video src={URL.createObjectURL(file)} className="w-full h-full object-cover" />
+                          )}
+                        </div>
+                        <p className="text-xs truncate">{file.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-1 right-1 h-6 w-6"
+                          onClick={() => handleRemoveFile(index)}
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="url">O ingresa URL directamente</Label>
                 <Input
@@ -233,11 +324,12 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                   value={newMultimedia.url}
                   onChange={(e) => setNewMultimedia(prev => ({ ...prev, url: e.target.value }))}
                   placeholder="https://..."
+                  disabled={selectedFiles.length > 0}
                 />
               </div>
 
               <div>
-                <Label htmlFor="descripcion">Descripción (opcional)</Label>
+                <Label htmlFor="descripcion">Descripción (opcional) {selectedFiles.length > 1 && '- se aplicará a todos'}</Label>
                 <Input
                   id="descripcion"
                   type="text"
@@ -247,7 +339,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                 />
               </div>
 
-              {newMultimedia.url && (
+              {newMultimedia.url && selectedFiles.length === 0 && (
                 <div className="mt-4">
                   <Label>Vista previa:</Label>
                   <div className="mt-2 border rounded-md p-2">
@@ -296,6 +388,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                   variant="outline" 
                   onClick={() => {
                     setIsAdding(false);
+                    setSelectedFiles([]);
                     setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false });
                   }}
                 >
