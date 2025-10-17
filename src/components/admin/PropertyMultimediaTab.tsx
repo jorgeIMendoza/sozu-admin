@@ -107,12 +107,16 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
   // Mutation to add vista using multimedias_propiedad
   const addVistaMutation = useMutation({
     mutationFn: async (vistaData: typeof vistaForm) => {
-      if (!propertyId) throw new Error('Property ID is required');
+      if (!propertyId) {
+        console.error('No propertyId provided');
+        throw new Error('Property ID is required');
+      }
       
       let finalUrl = vistaData.url;
       
       // Si hay un archivo, subirlo primero
       if (vistaData.file) {
+        console.log('Uploading file:', vistaData.file.name);
         const fileExt = vistaData.file.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;
         const filePath = `properties/${propertyId}/multimedia/${fileName}`;
@@ -121,14 +125,26 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
           .from('documentos')
           .upload(filePath, vistaData.file);
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          throw uploadError;
+        }
 
         const { data } = supabase.storage
           .from('documentos')
           .getPublicUrl(filePath);
         
         finalUrl = data.publicUrl;
+        console.log('File uploaded successfully:', finalUrl);
       }
+      
+      console.log('Inserting multimedia:', {
+        descripcion: vistaData.descripcion,
+        url: finalUrl,
+        id_propiedad: propertyId,
+        es_imagen: vistaData.es_imagen,
+        activo: true
+      });
       
       const { data, error } = await supabase
         .from('multimedias_propiedad')
@@ -142,10 +158,16 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Insert error:', error);
+        throw error;
+      }
+      
+      console.log('Multimedia inserted successfully:', data);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('Mutation success, invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['propertyVistas', propertyId] });
       setVistaForm({ 
         tipo_multimedia: 'imagen',
@@ -157,8 +179,13 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
       setIsAddingVista(false);
       toast({ title: "Multimedia agregado exitosamente" });
     },
-    onError: () => {
-      toast({ title: "Error al agregar multimedia", variant: "destructive" });
+    onError: (error: any) => {
+      console.error('Mutation error:', error);
+      toast({ 
+        title: "Error al agregar multimedia", 
+        description: error?.message || 'Error desconocido',
+        variant: "destructive" 
+      });
     }
   });
 
@@ -226,12 +253,15 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     }
   };
 
-  const handleVistaSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVistaSubmit = () => {
+    console.log('handleVistaSubmit called with form:', vistaForm);
+    
     if (!vistaForm.descripcion.trim() || (!vistaForm.url.trim() && !vistaForm.file)) {
       toast({ title: "Debes completar la descripción y agregar un archivo o URL", variant: "destructive" });
       return;
     }
+    
+    console.log('Submitting vista form:', vistaForm);
     addVistaMutation.mutate(vistaForm);
   };
 
@@ -452,7 +482,7 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                 <CardTitle>Nuevo Multimedia</CardTitle>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleVistaSubmit} className="space-y-4">
+                <form className="space-y-4">
                   <div>
                     <Label htmlFor="tipo">Tipo de Multimedia</Label>
                     <Select
@@ -547,7 +577,11 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                   )}
                   
                   <div className="flex gap-2">
-                    <Button type="submit" disabled={addVistaMutation.isPending}>
+                    <Button 
+                      type="button" 
+                      onClick={handleVistaSubmit}
+                      disabled={addVistaMutation.isPending}
+                    >
                       {addVistaMutation.isPending ? "Guardando..." : "Guardar"}
                     </Button>
                     <Button 
