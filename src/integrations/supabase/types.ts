@@ -494,25 +494,25 @@ export type Database = {
           activo: boolean
           fecha_actualizacion: string
           fecha_creacion: string
-          habilitar_asignar: boolean
           id: number
           nombre: string
+          ver_en_oferta: boolean | null
         }
         Insert: {
           activo?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          habilitar_asignar?: boolean
-          id?: never
+          id?: number
           nombre: string
+          ver_en_oferta?: boolean | null
         }
         Update: {
           activo?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
-          habilitar_asignar?: boolean
-          id?: never
+          id?: number
           nombre?: string
+          ver_en_oferta?: boolean | null
         }
         Relationships: []
       }

@@ -19,6 +19,7 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
   const queryClient = useQueryClient();
   const [isAddingCharacteristic, setIsAddingCharacteristic] = useState(false);
   const [newCharacteristicName, setNewCharacteristicName] = useState("");
+  const [newCharacteristicVerEnOferta, setNewCharacteristicVerEnOferta] = useState(true);
   const [selectedCharacteristics, setSelectedCharacteristics] = useState<string[]>([]);
 
   // Fetch available characteristics (only enabled ones)
@@ -29,7 +30,6 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
         .from('caracteristicas')
         .select('*')
         .eq('activo', true)
-        .eq('habilitar_asignar', true)
         .order('nombre');
       
       if (error) throw error;
@@ -61,22 +61,23 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
 
   // Mutation to add new characteristic
   const addCharacteristicMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const { data, error } = await supabase
+    mutationFn: async (data: { nombre: string; ver_en_oferta: boolean }) => {
+      const { data: result, error } = await supabase
         .from('caracteristicas')
         .insert([{
-          nombre: name,
-          habilitar_asignar: true
+          nombre: data.nombre,
+          ver_en_oferta: data.ver_en_oferta,
         }])
         .select()
         .single();
       
       if (error) throw error;
-      return data;
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availableCharacteristics'] });
       setNewCharacteristicName("");
+      setNewCharacteristicVerEnOferta(true);
       setIsAddingCharacteristic(false);
       toast({ title: "Característica agregada exitosamente" });
     },
@@ -161,110 +162,109 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
       toast({ title: "Por favor ingresa un nombre para la característica", variant: "destructive" });
       return;
     }
-    addCharacteristicMutation.mutate(newCharacteristicName.trim());
+    addCharacteristicMutation.mutate({
+      nombre: newCharacteristicName.trim(),
+      ver_en_oferta: newCharacteristicVerEnOferta
+    });
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Características de la Propiedad</h3>
-        <Button
-          onClick={() => setIsAddingCharacteristic(true)}
-          disabled={isAddingCharacteristic}
-          variant="outline"
-          size="sm"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Característica
-        </Button>
-      </div>
-
-      {isAddingCharacteristic && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Nueva Característica</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAddNewCharacteristic} className="space-y-4">
-              <div>
-                <Label htmlFor="characteristic-name">Nombre de la Característica</Label>
-                <Input
-                  id="characteristic-name"
-                  type="text"
-                  value={newCharacteristicName}
-                  onChange={(e) => setNewCharacteristicName(e.target.value)}
-                  placeholder="Ej. Balcón, Terraza, etc."
-                />
-              </div>
-              
-              <div className="flex gap-2">
-                <Button type="submit" disabled={addCharacteristicMutation.isPending}>
-                  {addCharacteristicMutation.isPending ? "Guardando..." : "Guardar"}
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsAddingCharacteristic(false);
-                    setNewCharacteristicName("");
-                  }}
-                >
-                  Cancelar
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Seleccionar Características</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {availableCharacteristics.length === 0 ? (
-            <p className="text-muted-foreground">No hay características disponibles</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {availableCharacteristics.map((characteristic) => (
-                <div key={characteristic.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`characteristic-${characteristic.id}`}
-                    checked={selectedCharacteristics.includes(characteristic.id.toString())}
-                    onCheckedChange={(checked) => 
-                      handleCharacteristicToggle(characteristic.id.toString(), checked as boolean)
-                    }
-                    disabled={updateCharacteristicsMutation.isPending}
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle>Características de la Propiedad</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Selecciona las características que incluye esta propiedad
+            </p>
+          </div>
+          <Button
+            onClick={() => setIsAddingCharacteristic(true)}
+            disabled={isAddingCharacteristic}
+            variant="outline"
+            size="sm"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Característica
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isAddingCharacteristic && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Nueva Característica</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleAddNewCharacteristic} className="space-y-4">
+                <div>
+                  <Label htmlFor="characteristic-name">Nombre de la Característica</Label>
+                  <Input
+                    id="characteristic-name"
+                    type="text"
+                    value={newCharacteristicName}
+                    onChange={(e) => setNewCharacteristicName(e.target.value)}
+                    placeholder="Ej. Balcón, Terraza, etc."
                   />
-                  <Label 
-                    htmlFor={`characteristic-${characteristic.id}`}
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    {characteristic.nombre}
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="ver-en-oferta"
+                    checked={newCharacteristicVerEnOferta}
+                    onCheckedChange={(checked) => setNewCharacteristicVerEnOferta(checked as boolean)}
+                  />
+                  <Label htmlFor="ver-en-oferta" className="text-sm font-normal cursor-pointer">
+                    Ver en oferta
                   </Label>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={addCharacteristicMutation.isPending}>
+                    {addCharacteristicMutation.isPending ? "Guardando..." : "Guardar"}
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsAddingCharacteristic(false);
+                      setNewCharacteristicName("");
+                      setNewCharacteristicVerEnOferta(true);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
 
-      {propertyCharacteristics.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Características Asignadas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {propertyCharacteristics.map((pc: any) => (
-                <Badge key={pc.id} variant="secondary">
-                  {pc.caracteristicas.nombre}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+        {availableCharacteristics.length === 0 ? (
+          <p className="text-muted-foreground">No hay características disponibles</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            {availableCharacteristics.map((characteristic) => (
+              <div key={characteristic.id} className="flex items-center space-x-2 p-3 border rounded-md hover:bg-muted/50 transition-colors">
+                <Checkbox
+                  id={`characteristic-${characteristic.id}`}
+                  checked={selectedCharacteristics.includes(characteristic.id.toString())}
+                  onCheckedChange={(checked) => 
+                    handleCharacteristicToggle(characteristic.id.toString(), checked as boolean)
+                  }
+                  disabled={updateCharacteristicsMutation.isPending}
+                />
+                <Label 
+                  htmlFor={`characteristic-${characteristic.id}`}
+                  className="text-sm font-normal cursor-pointer flex-1"
+                >
+                  {characteristic.nombre}
+                </Label>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

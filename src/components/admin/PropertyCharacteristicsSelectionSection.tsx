@@ -23,7 +23,6 @@ export const PropertyCharacteristicsSelectionSection = ({
         .from("caracteristicas")
         .select("id, nombre")
         .eq("activo", true)
-        .eq("habilitar_asignar", true)
         .order("nombre");
 
       if (error) throw error;

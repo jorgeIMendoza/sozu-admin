@@ -24,6 +24,7 @@ export function ModelCharacteristicsSection({
   const queryClient = useQueryClient();
   const [isAddingCharacteristic, setIsAddingCharacteristic] = useState(false);
   const [newCharacteristicName, setNewCharacteristicName] = useState("");
+  const [newCharacteristicVerEnOferta, setNewCharacteristicVerEnOferta] = useState(true);
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>(selectedCharacteristicIds);
 
   // Fetch available characteristics
@@ -67,21 +68,23 @@ export function ModelCharacteristicsSection({
 
   // Mutation to add new characteristic
   const addCharacteristicMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const { data, error } = await supabase
+    mutationFn: async (data: { nombre: string; ver_en_oferta: boolean }) => {
+      const { data: result, error } = await supabase
         .from('caracteristicas')
         .insert([{
-          nombre: name
+          nombre: data.nombre,
+          ver_en_oferta: data.ver_en_oferta,
         }])
         .select()
         .single();
       
       if (error) throw error;
-      return data;
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['caracteristicas-activas'] });
       setNewCharacteristicName("");
+      setNewCharacteristicVerEnOferta(true);
       setIsAddingCharacteristic(false);
       toast({ title: "Característica agregada exitosamente" });
     },
@@ -129,7 +132,10 @@ export function ModelCharacteristicsSection({
       toast({ title: "Por favor ingresa un nombre para la característica", variant: "destructive" });
       return;
     }
-    addCharacteristicMutation.mutate(newCharacteristicName.trim());
+    addCharacteristicMutation.mutate({
+      nombre: newCharacteristicName.trim(),
+      ver_en_oferta: newCharacteristicVerEnOferta
+    });
   };
 
   return (
@@ -159,34 +165,46 @@ export function ModelCharacteristicsSection({
               <CardTitle className="text-base">Nueva Característica</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleAddNewCharacteristic} className="space-y-4">
-                <div>
-                  <Label htmlFor="characteristic-name">Nombre de la Característica</Label>
-                  <Input
-                    id="characteristic-name"
-                    type="text"
-                    value={newCharacteristicName}
-                    onChange={(e) => setNewCharacteristicName(e.target.value)}
-                    placeholder="Ej. Closet, Cocina integral, etc."
-                  />
-                </div>
-                
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={addCharacteristicMutation.isPending}>
-                    {addCharacteristicMutation.isPending ? "Guardando..." : "Guardar"}
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => {
-                      setIsAddingCharacteristic(false);
-                      setNewCharacteristicName("");
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              </form>
+            <form onSubmit={handleAddNewCharacteristic} className="space-y-4">
+              <div>
+                <Label htmlFor="characteristic-name">Nombre de la Característica</Label>
+                <Input
+                  id="characteristic-name"
+                  type="text"
+                  value={newCharacteristicName}
+                  onChange={(e) => setNewCharacteristicName(e.target.value)}
+                  placeholder="Ej. Closet, Cocina integral, etc."
+                />
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="ver-en-oferta"
+                  checked={newCharacteristicVerEnOferta}
+                  onCheckedChange={(checked) => setNewCharacteristicVerEnOferta(checked as boolean)}
+                />
+                <Label htmlFor="ver-en-oferta" className="text-sm font-normal cursor-pointer">
+                  Ver en oferta
+                </Label>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button type="submit" disabled={addCharacteristicMutation.isPending}>
+                  {addCharacteristicMutation.isPending ? "Guardando..." : "Guardar"}
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsAddingCharacteristic(false);
+                    setNewCharacteristicName("");
+                    setNewCharacteristicVerEnOferta(true);
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </form>
             </CardContent>
           </Card>
         )}
