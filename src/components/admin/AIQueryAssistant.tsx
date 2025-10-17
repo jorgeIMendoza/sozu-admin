@@ -37,7 +37,7 @@ export function AIQueryAssistant() {
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<AIQueryResponse | null>(null);
   const [showRawData, setShowRawData] = useState(false);
-  const [chartType, setChartType] = useState<"auto" | "pie" | "bar" | "line" | "area">("auto");
+  const [selectedChartType, setSelectedChartType] = useState<"pie" | "bar" | "line" | "area">("bar");
   const { toast } = useToast();
 
   const handleSubmit = async () => {
@@ -55,10 +55,7 @@ export function AIQueryAssistant() {
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-database-query', {
-        body: { 
-          question: question.trim(),
-          preferredChartType: chartType === "auto" ? null : chartType
-        }
+        body: { question: question.trim() }
       });
 
       if (error) throw error;
@@ -143,7 +140,7 @@ export function AIQueryAssistant() {
   };
 
   const renderChart = () => {
-    if (!response?.chartData || !response.chartType) return null;
+    if (!response?.chartData) return null;
 
     const formatYAxis = (value: number) => {
       if (value >= 1000000) {
@@ -154,7 +151,7 @@ export function AIQueryAssistant() {
       return `$${value}`;
     };
 
-    switch (response.chartType) {
+    switch (selectedChartType) {
       case "bar":
         return (
           <ResponsiveContainer width="100%" height={300}>
@@ -277,29 +274,6 @@ export function AIQueryAssistant() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Tipo de gráfico</label>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: "auto", label: "Automático" },
-                { value: "pie", label: "Pastel" },
-                { value: "bar", label: "Barras" },
-                { value: "line", label: "Línea" },
-                { value: "area", label: "Área" },
-              ].map((option) => (
-                <Button
-                  key={option.value}
-                  variant={chartType === option.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setChartType(option.value as any)}
-                  className="text-xs"
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
           <Button 
             onClick={handleSubmit} 
             disabled={isLoading || !question.trim()}
@@ -386,21 +360,44 @@ export function AIQueryAssistant() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="chart">
+              <TabsContent value="chart" className="space-y-4">
                 {response.chartData && response.chartData.length > 0 ? (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Visualización</CardTitle>
-                      <CardDescription>
-                        Representación gráfica de los datos
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="py-4">
-                        {renderChart()}
+                  <>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">Tipo de gráfico</label>
+                      <div className="flex gap-2">
+                        {[
+                          { value: "bar", label: "Barras", icon: "BarChart3" },
+                          { value: "line", label: "Línea", icon: "LineChart" },
+                          { value: "pie", label: "Pastel", icon: "PieChart" },
+                          { value: "area", label: "Área", icon: "AreaChart" },
+                        ].map((option) => (
+                          <Button
+                            key={option.value}
+                            variant={selectedChartType === option.value ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setSelectedChartType(option.value as any)}
+                          >
+                            {option.label}
+                          </Button>
+                        ))}
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                    
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Visualización</CardTitle>
+                        <CardDescription>
+                          Representación gráfica de los datos
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="py-4">
+                          {renderChart()}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <p>No hay datos para graficar</p>
