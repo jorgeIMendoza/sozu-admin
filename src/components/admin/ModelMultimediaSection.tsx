@@ -363,7 +363,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                 </div>
               )}
 
-              {newMultimedia.es_imagen && (
+              {newMultimedia.es_imagen && selectedFiles.length <= 1 && (
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="ver_como_ubicacion_en_oferta"
