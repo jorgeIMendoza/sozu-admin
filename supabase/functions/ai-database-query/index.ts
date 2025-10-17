@@ -171,21 +171,26 @@ Sé claro, preciso y útil. Si necesitas más de una función, llámalas todas.`
 
     // SQL Validator - ensures only safe SELECT queries
     const validateSQL = (sql: string): { valid: boolean; error?: string } => {
-      const trimmedSQL = sql.trim().toUpperCase();
+      // Remove all leading/trailing whitespace and normalize line breaks
+      const cleanSQL = sql.trim().replace(/\s+/g, ' ');
+      const upperSQL = cleanSQL.toUpperCase();
       
-      // Must start with SELECT
-      if (!trimmedSQL.startsWith('SELECT')) {
+      // Must start with SELECT (case insensitive, after cleaning)
+      if (!upperSQL.startsWith('SELECT')) {
+        console.log('SQL validation failed - does not start with SELECT:', cleanSQL.substring(0, 50));
         return { valid: false, error: 'Solo se permiten consultas SELECT' };
       }
       
-      // Dangerous keywords
+      // Dangerous keywords (excluding SELECT which is at the start)
       const dangerousKeywords = [
         'DROP', 'DELETE', 'UPDATE', 'INSERT', 'ALTER', 'TRUNCATE', 
-        'CREATE', 'REPLACE', 'GRANT', 'REVOKE', 'EXEC', 'EXECUTE'
+        'CREATE', 'GRANT', 'REVOKE', 'EXEC', 'EXECUTE'
       ];
       
       for (const keyword of dangerousKeywords) {
-        if (trimmedSQL.includes(keyword)) {
+        // Use word boundaries to avoid false positives (e.g., "REPLACE" in a string)
+        const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+        if (regex.test(upperSQL)) {
           return { valid: false, error: `Palabra clave no permitida: ${keyword}` };
         }
       }
