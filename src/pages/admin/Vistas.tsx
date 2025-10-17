@@ -135,15 +135,18 @@ export default function Vistas() {
       setIsSubmitting(true);
 
       // Validar que no exista una vista con el mismo nombre en el mismo proyecto
-      const { data: existingVista } = await supabase
+      const normalizedName = values.nombre.trim().toUpperCase();
+      const { data: existingVistas } = await supabase
         .from('vistas')
-        .select('id')
-        .eq('nombre', values.nombre.trim())
+        .select('id, nombre')
         .eq('id_proyecto', parseInt(values.id_proyecto))
-        .eq('activo', true)
-        .maybeSingle();
+        .eq('activo', true);
 
-      if (existingVista) {
+      const duplicateFound = existingVistas?.some(
+        vista => vista.nombre.trim().toUpperCase() === normalizedName
+      );
+
+      if (duplicateFound) {
         toast({
           variant: "destructive",
           title: "Error",
@@ -192,16 +195,19 @@ export default function Vistas() {
       setIsSubmitting(true);
 
       // Validar que no exista otra vista con el mismo nombre en el mismo proyecto
-      const { data: existingVista } = await supabase
+      const normalizedName = values.nombre.trim().toUpperCase();
+      const { data: existingVistas } = await supabase
         .from('vistas')
-        .select('id')
-        .eq('nombre', values.nombre.trim())
+        .select('id, nombre')
         .eq('id_proyecto', parseInt(values.id_proyecto))
         .eq('activo', true)
-        .neq('id', selectedVista.id) // Excluir la vista actual
-        .maybeSingle();
+        .neq('id', selectedVista.id); // Excluir la vista actual
 
-      if (existingVista) {
+      const duplicateFound = existingVistas?.some(
+        vista => vista.nombre.trim().toUpperCase() === normalizedName
+      );
+
+      if (duplicateFound) {
         toast({
           variant: "destructive",
           title: "Error",
