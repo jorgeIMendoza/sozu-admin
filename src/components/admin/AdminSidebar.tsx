@@ -120,7 +120,7 @@ const navigationItems = [
     ]
   },
   {
-    title: "Consultas IA",
+    title: "pregunta a ValerIA",
     href: "/admin/consultas-ia",
     icon: Bot,
   },
