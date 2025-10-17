@@ -1861,6 +1861,7 @@ export type Database = {
           fecha_creacion: string | null
           habilitar_asignar: boolean | null
           id: number
+          id_proyecto: number | null
           nombre: string
           numero_completo_banos: number | null
           numero_medio_bano: number | null
@@ -1873,6 +1874,7 @@ export type Database = {
           fecha_creacion?: string | null
           habilitar_asignar?: boolean | null
           id?: number
+          id_proyecto?: number | null
           nombre: string
           numero_completo_banos?: number | null
           numero_medio_bano?: number | null
@@ -1885,12 +1887,21 @@ export type Database = {
           fecha_creacion?: string | null
           habilitar_asignar?: boolean | null
           id?: number
+          id_proyecto?: number | null
           nombre?: string
           numero_completo_banos?: number | null
           numero_medio_bano?: number | null
           numero_recamaras?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "modelos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       modelos_caracteristicas: {
         Row: {
@@ -4039,6 +4050,7 @@ export type Database = {
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
+          id_proyecto: number | null
           nombre: string
           url: string | null
         }
@@ -4047,6 +4059,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
+          id_proyecto?: number | null
           nombre: string
           url?: string | null
         }
@@ -4055,10 +4068,19 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
+          id_proyecto?: number | null
           nombre?: string
           url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vistas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
