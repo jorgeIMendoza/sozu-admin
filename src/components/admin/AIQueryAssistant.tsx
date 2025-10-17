@@ -243,9 +243,12 @@ export function AIQueryAssistant() {
                           <DollarSign className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold">
-                            ${response.summary.totalPagado?.toLocaleString('es-MX')}
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                            ${response.summary.totalPagado?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Ingresos recibidos
+                          </p>
                         </CardContent>
                       </Card>
                     )}
@@ -256,18 +259,26 @@ export function AIQueryAssistant() {
                           <TrendingUp className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold">
-                            ${response.summary.totalPendiente?.toLocaleString('es-MX')}
+                          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                            ${response.summary.totalPendiente?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Por cobrar
+                          </p>
                         </CardContent>
                       </Card>
                     )}
                   </div>
                 )}
                 
-                <div className="prose prose-sm max-w-none">
-                  <p className="whitespace-pre-wrap">{response.explanation}</p>
-                </div>
+                <Card className="bg-muted/50">
+                  <CardHeader>
+                    <CardTitle className="text-base">Análisis</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm leading-relaxed">{response.explanation}</p>
+                  </CardContent>
+                </Card>
 
                 {response.sqlQuery && (
                   <Collapsible>
@@ -299,29 +310,122 @@ export function AIQueryAssistant() {
               </TabsContent>
 
               <TabsContent value="data">
-                {response.rawData && response.rawData.length > 0 ? (
-                  <div className="rounded-md border overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {Object.keys(response.rawData[0]).map((key) => (
-                            <TableHead key={key}>{key}</TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {response.rawData.map((row, i) => (
-                          <TableRow key={i}>
-                            {Object.values(row).map((value: any, j) => (
-                              <TableCell key={j}>
-                                {value === null ? '-' : String(value)}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                {response.summary && Object.keys(response.summary).length > 0 ? (
+                  <div className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Resumen de Datos</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="rounded-md border overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Concepto</TableHead>
+                                <TableHead className="text-right">Valor</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {Object.entries(response.summary).map(([key, value]) => {
+                                let label = key;
+                                if (key === 'totalPagado') label = 'Total Pagado';
+                                if (key === 'totalPendiente') label = 'Total Pendiente';
+                                
+                                const displayValue = typeof value === 'number' 
+                                  ? `$${value.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                  : String(value);
+                                
+                                return (
+                                  <TableRow key={key}>
+                                    <TableCell className="font-medium">{label}</TableCell>
+                                    <TableCell className="text-right">{displayValue}</TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    {response.rawData && response.rawData.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Datos Detallados</CardTitle>
+                          <CardDescription>
+                            Mostrando {response.rawData.length} registro(s)
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="rounded-md border overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  {Object.keys(response.rawData[0]).map((key) => (
+                                    <TableHead key={key} className="capitalize">
+                                      {key.replace(/_/g, ' ')}
+                                    </TableHead>
+                                  ))}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {response.rawData.slice(0, 50).map((row, i) => (
+                                  <TableRow key={i}>
+                                    {Object.values(row).map((value: any, j) => (
+                                      <TableCell key={j}>
+                                        {value === null 
+                                          ? '-' 
+                                          : typeof value === 'number'
+                                            ? value.toLocaleString('es-MX')
+                                            : String(value)}
+                                      </TableCell>
+                                    ))}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                            {response.rawData.length > 50 && (
+                              <div className="p-2 text-xs text-center text-muted-foreground bg-muted">
+                                Mostrando primeros 50 de {response.rawData.length} registros
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
+                ) : response.rawData && response.rawData.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Datos</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="rounded-md border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              {Object.keys(response.rawData[0]).map((key) => (
+                                <TableHead key={key} className="capitalize">
+                                  {key.replace(/_/g, ' ')}
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {response.rawData.map((row, i) => (
+                              <TableRow key={i}>
+                                {Object.values(row).map((value: any, j) => (
+                                  <TableCell key={j}>
+                                    {value === null ? '-' : String(value)}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     No hay datos para mostrar

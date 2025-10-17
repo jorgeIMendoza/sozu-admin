@@ -350,8 +350,28 @@ Sé claro, preciso y útil. Si necesitas más de una función, llámalas todas.`
             return acc;
           }, []);
 
+        // Auto-generate chart if summary exists but no chartData
+        let autoChartData = parsedResponse.chartData;
+        let autoChartType = parsedResponse.chartType;
+        
+        if (!autoChartData && parsedResponse.summary) {
+          const summary = parsedResponse.summary;
+          if (summary.totalPagado !== undefined || summary.totalPendiente !== undefined) {
+            autoChartData = [];
+            if (summary.totalPagado !== undefined && summary.totalPagado > 0) {
+              autoChartData.push({ name: "Pagado", value: summary.totalPagado });
+            }
+            if (summary.totalPendiente !== undefined && summary.totalPendiente > 0) {
+              autoChartData.push({ name: "Pendiente", value: summary.totalPendiente });
+            }
+            autoChartType = autoChartData.length > 0 ? "bar" : null;
+          }
+        }
+
         return new Response(JSON.stringify({
           ...parsedResponse,
+          chartData: autoChartData,
+          chartType: autoChartType,
           rawData: allRawData,
           sqlQuery: "Consulta ejecutada mediante funciones predefinidas (seguras)"
         }), {
