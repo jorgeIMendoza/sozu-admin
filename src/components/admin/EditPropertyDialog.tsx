@@ -585,6 +585,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                       placeholder="Selecciona estatus"
                       searchPlaceholder="Buscar estatus..."
                       emptyText="No se encontró el estatus."
+                      disabled={true}
                     />
                   </div>
 
