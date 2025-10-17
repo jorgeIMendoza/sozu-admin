@@ -467,8 +467,11 @@ export function AIQueryAssistant() {
 
               <TabsContent value="data">
                 <div className="space-y-4">
-                  {/* Resumen section - only shown when totalPagado or totalPendiente exist */}
-                  {response.summary && (response.summary.totalPagado !== undefined || response.summary.totalPendiente !== undefined) && (
+                  {/* Resumen section - only shown when totalPagado or totalPendiente exist and are not null */}
+                  {response.summary && (
+                    (response.summary.totalPagado !== undefined && response.summary.totalPagado !== null) || 
+                    (response.summary.totalPendiente !== undefined && response.summary.totalPendiente !== null)
+                  ) && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-base">Resumen de Datos</CardTitle>
