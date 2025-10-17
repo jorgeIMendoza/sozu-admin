@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -92,15 +91,23 @@ export function ModelCharacteristicsSection({
     }
   });
 
-  // Initialize selected IDs from model characteristics
+  // Initialize selected IDs from model characteristics or props
   useEffect(() => {
     if (modelCharacteristics.length > 0) {
       const currentIds = modelCharacteristics.map(mc => mc.id_caracteristica.toString());
       setInternalSelectedIds(currentIds);
-    } else if (selectedCharacteristicIds.length > 0) {
+      if (onCharacteristicsChange) {
+        onCharacteristicsChange(currentIds);
+      }
+    }
+  }, [modelCharacteristics]);
+
+  // Update internal state when external prop changes (for new models)
+  useEffect(() => {
+    if (!modelId && selectedCharacteristicIds.length >= 0) {
       setInternalSelectedIds(selectedCharacteristicIds);
     }
-  }, [modelCharacteristics, selectedCharacteristicIds]);
+  }, [selectedCharacteristicIds, modelId]);
 
   const handleCharacteristicToggle = (characteristicId: string, checked: boolean) => {
     let newSelected;
@@ -180,52 +187,28 @@ export function ModelCharacteristicsSection({
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Seleccionar Características</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {availableCharacteristics.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay características disponibles</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {availableCharacteristics.map((characteristic) => (
-                <div key={characteristic.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`model-char-${characteristic.id}`}
-                    checked={internalSelectedIds.includes(characteristic.id.toString())}
-                    onCheckedChange={(checked) => 
-                      handleCharacteristicToggle(characteristic.id.toString(), checked as boolean)
-                    }
-                  />
-                  <Label 
-                    htmlFor={`model-char-${characteristic.id}`}
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    {characteristic.nombre}
-                  </Label>
-                </div>
-              ))}
+      {availableCharacteristics.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No hay características disponibles</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {availableCharacteristics.map((characteristic) => (
+            <div key={characteristic.id} className="flex items-center space-x-2">
+              <Checkbox
+                id={`model-char-${characteristic.id}`}
+                checked={internalSelectedIds.includes(characteristic.id.toString())}
+                onCheckedChange={(checked) => 
+                  handleCharacteristicToggle(characteristic.id.toString(), checked as boolean)
+                }
+              />
+              <Label 
+                htmlFor={`model-char-${characteristic.id}`}
+                className="text-sm font-normal cursor-pointer"
+              >
+                {characteristic.nombre}
+              </Label>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {modelId && modelCharacteristics.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Características Asignadas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {modelCharacteristics.map((mc: any) => (
-                <Badge key={mc.id} variant="secondary">
-                  {mc.caracteristicas.nombre}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          ))}
+        </div>
       )}
     </div>
   );
