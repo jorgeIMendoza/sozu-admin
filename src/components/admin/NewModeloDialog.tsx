@@ -12,7 +12,7 @@ import { z } from "zod";
 import { Home } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { ModelCharacteristicsSection } from "./ModelCharacteristicsSection";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -21,7 +21,6 @@ const formSchema = z.object({
   numero_recamaras: z.string().optional(),
   numero_completo_banos: z.string().optional(),
   numero_medio_bano: z.string().optional(),
-  caracteristicas: z.array(z.string()).default([]),
   habilitar_asignar: z.boolean().default(false),
 });
 
@@ -37,6 +36,7 @@ interface NewModeloDialogProps {
 
 export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogProps) => {
   const [open, setOpen] = useState(false);
+  const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -48,22 +48,7 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
       numero_recamaras: "",
       numero_completo_banos: "",
       numero_medio_bano: "",
-      caracteristicas: [],
       habilitar_asignar: false,
-    },
-  });
-
-  const { data: caracteristicas } = useQuery({
-    queryKey: ["caracteristicas"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("caracteristicas")
-        .select("*")
-        .eq("activo", true)
-        .order("nombre");
-      
-      if (error) throw error;
-      return data;
     },
   });
 
@@ -99,8 +84,8 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
       if (error) throw error;
 
       // Insert characteristic relationships if any selected
-      if (values.caracteristicas && values.caracteristicas.length > 0) {
-        const characteristicRelations = values.caracteristicas.map(caracteristicaId => ({
+      if (selectedCharacteristicIds.length > 0) {
+        const characteristicRelations = selectedCharacteristicIds.map(caracteristicaId => ({
           id_modelo: newModelo.id,
           id_caracteristica: parseInt(caracteristicaId),
         }));
@@ -248,49 +233,9 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="caracteristicas"
-              render={() => (
-                <FormItem>
-                  <div className="grid grid-cols-2 gap-2">
-                    {caracteristicas?.map((caracteristica) => (
-                      <FormField
-                        key={caracteristica.id}
-                        control={form.control}
-                        name="caracteristicas"
-                        render={({ field }) => {
-                          return (
-                            <FormItem
-                              key={caracteristica.id}
-                              className="flex flex-row items-start space-x-3 space-y-0"
-                            >
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(caracteristica.id.toString())}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...field.value, caracteristica.id.toString()])
-                                      : field.onChange(
-                                          field.value?.filter(
-                                            (value) => value !== caracteristica.id.toString()
-                                          )
-                                        )
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="text-sm font-normal">
-                                {caracteristica.nombre}
-                              </FormLabel>
-                            </FormItem>
-                          )
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
+            <ModelCharacteristicsSection
+              selectedCharacteristicIds={selectedCharacteristicIds}
+              onCharacteristicsChange={setSelectedCharacteristicIds}
             />
 
             <FormField

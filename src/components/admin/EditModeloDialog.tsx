@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Edit } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ModelCharacteristicsSection } from "./ModelCharacteristicsSection";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -35,7 +36,6 @@ const formSchema = z.object({
   numero_recamaras: z.number().optional(),
   numero_completo_banos: z.number().optional(),
   numero_medio_bano: z.number().optional(),
-  caracteristicas: z.array(z.string()).default([]),
   habilitar_asignar: z.boolean().default(false),
   id_proyecto: z.string().min(1, "El proyecto es requerido"),
 });
@@ -64,6 +64,7 @@ interface EditModeloDialogProps {
 
 export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditModeloDialogProps) => {
   const [open, setOpen] = useState(false);
+  const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -74,44 +75,9 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
       numero_recamaras: modelo.numero_recamaras || undefined,
       numero_completo_banos: modelo.numero_completo_banos || undefined,
       numero_medio_bano: modelo.numero_medio_bano || undefined,
-      caracteristicas: [],
       habilitar_asignar: modelo.habilitar_asignar || false,
       id_proyecto: modelo.id_proyecto?.toString() || "",
     },
-  });
-
-  // Fetch características for checkboxes
-  const { data: caracteristicas } = useQuery({
-    queryKey: ["caracteristicas"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("caracteristicas")
-        .select("*")
-        .eq("activo", true)
-        .order("nombre");
-
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Fetch current model characteristics
-  const { data: modeloCaracteristicas } = useQuery({
-    queryKey: ["modelo-caracteristicas", modelo.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("modelos_caracteristicas")
-        .select("id_caracteristica")
-        .eq("id_modelo", modelo.id)
-        .eq("activo", true);
-
-      if (error) throw error;
-      
-      const caracteristicaIds = data?.map(item => item.id_caracteristica.toString()) || [];
-      form.setValue("caracteristicas", caracteristicaIds);
-      return caracteristicaIds;
-    },
-    enabled: open,
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>, event?: any) => {
@@ -145,8 +111,8 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
         .update({ activo: false })
         .eq("id_modelo", modelo.id);
 
-      if (values.caracteristicas.length > 0) {
-        const caracteristicasData = values.caracteristicas.map((caracteristicaId) => ({
+      if (selectedCharacteristicIds.length > 0) {
+        const caracteristicasData = selectedCharacteristicIds.map((caracteristicaId) => ({
           id_modelo: modelo.id,
           id_caracteristica: parseInt(caracteristicaId),
           activo: true,
@@ -184,7 +150,7 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
           <Edit className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar Modelo</DialogTitle>
           <DialogDescription>
@@ -315,49 +281,9 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="caracteristicas"
-              render={() => (
-                <FormItem>
-                  <div className="grid grid-cols-2 gap-2">
-                    {caracteristicas?.map((caracteristica) => (
-                      <FormField
-                        key={caracteristica.id}
-                        control={form.control}
-                        name="caracteristicas"
-                        render={({ field }) => {
-                          return (
-                            <FormItem
-                              key={caracteristica.id}
-                              className="flex flex-row items-start space-x-3 space-y-0"
-                            >
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(caracteristica.id.toString())}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...field.value, caracteristica.id.toString()])
-                                      : field.onChange(
-                                          field.value?.filter(
-                                            (value) => value !== caracteristica.id.toString()
-                                          )
-                                        )
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="text-sm font-normal">
-                                {caracteristica.nombre}
-                              </FormLabel>
-                            </FormItem>
-                          )
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
+            <ModelCharacteristicsSection
+              modelId={modelo.id}
+              onCharacteristicsChange={setSelectedCharacteristicIds}
             />
 
             <FormField
