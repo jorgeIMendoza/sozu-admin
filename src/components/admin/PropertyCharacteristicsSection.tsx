@@ -40,7 +40,7 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
     }
   });
 
-  // Fetch property's current characteristics
+  // Fetch property's current characteristics (ALL relations, including activo=false)
   const { data: propertyCharacteristics = [] } = useQuery({
     queryKey: ['propertyCharacteristics', propertyId],
     queryFn: async () => {
@@ -53,8 +53,7 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
             nombre
           )
         `)
-        .eq('id_propiedad', propertyId)
-        .eq('activo', true);
+        .eq('id_propiedad', propertyId);
       
       if (error) throw error;
       return data || [];
@@ -117,61 +116,54 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
     }
   });
 
-  // Mutation to update property characteristics
-  const updateCharacteristicsMutation = useMutation({
-    mutationFn: async (characteristicIds: string[]) => {
-      // First, deactivate all existing characteristics for this property
-      const { error: deactivateError } = await supabase
+  // Mutation to toggle a single characteristic in propiedades_caracteristicas
+  const toggleCharacteristicMutation = useMutation({
+    mutationFn: async ({ caracteristicaId, isActive }: { caracteristicaId: number; isActive: boolean }) => {
+      // Check if relation exists
+      const { data: existing } = await supabase
         .from('propiedades_caracteristicas')
-        .update({ activo: false })
-        .eq('id_propiedad', propertyId);
-      
-      if (deactivateError) throw deactivateError;
+        .select('id, activo')
+        .eq('id_propiedad', propertyId)
+        .eq('id_caracteristica', caracteristicaId)
+        .maybeSingle();
 
-      // Then, add/reactivate selected characteristics
-      for (const characteristicId of characteristicIds) {
-        // Check if relationship already exists
-        const { data: existing } = await supabase
+      if (existing) {
+        // Update activo status
+        const { error } = await supabase
           .from('propiedades_caracteristicas')
-          .select('id')
-          .eq('id_propiedad', propertyId)
-          .eq('id_caracteristica', parseInt(characteristicId))
-          .single();
-
-        if (existing) {
-          // Reactivate existing relationship
-          const { error } = await supabase
-            .from('propiedades_caracteristicas')
-            .update({ activo: true })
-            .eq('id', existing.id);
-          
-          if (error) throw error;
-        } else {
-          // Create new relationship
-          const { error } = await supabase
-            .from('propiedades_caracteristicas')
-            .insert([{
-              id_propiedad: propertyId,
-              id_caracteristica: parseInt(characteristicId)
-            }]);
-          
-          if (error) throw error;
-        }
+          .update({ activo: isActive })
+          .eq('id', existing.id);
+        
+        if (error) throw error;
+      } else {
+        // Create new relation
+        const { error } = await supabase
+          .from('propiedades_caracteristicas')
+          .insert([{
+            id_propiedad: propertyId,
+            id_caracteristica: caracteristicaId,
+            activo: isActive
+          }]);
+        
+        if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['propertyCharacteristics', propertyId] });
-      toast({ title: "Características actualizadas exitosamente" });
+      toast({ title: "Característica actualizada exitosamente" });
     },
-    onError: () => {
-      toast({ title: "Error al actualizar características", variant: "destructive" });
-    }
+    onError: (error) => {
+      console.error('Error toggling characteristic:', error);
+      toast({ title: "Error al actualizar característica", variant: "destructive" });
+    },
   });
 
-  // Get currently selected characteristic IDs
+  // Get currently selected characteristic IDs (only activo=true)
   React.useEffect(() => {
     if (propertyCharacteristics) {
-      const currentIds = propertyCharacteristics.map(pc => pc.id_caracteristica.toString());
+      const currentIds = propertyCharacteristics
+        .filter(pc => pc.activo)
+        .map(pc => pc.id_caracteristica.toString());
       setSelectedCharacteristics(currentIds);
     }
   }, [propertyCharacteristics]);
@@ -184,11 +176,17 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
       newSelected = selectedCharacteristics.filter(id => id !== characteristicId);
     }
     setSelectedCharacteristics(newSelected);
-    updateCharacteristicsMutation.mutate(newSelected);
+    
+    // Save to database immediately
+    toggleCharacteristicMutation.mutate({
+      caracteristicaId: parseInt(characteristicId),
+      isActive: checked
+    });
   };
 
-  const handleAddNewCharacteristic = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddNewCharacteristic = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     if (!newCharacteristicName.trim()) {
       toast({ title: "Por favor ingresa un nombre para la característica", variant: "destructive" });
       return;
@@ -205,8 +203,9 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
     setEditCharacteristicVerEnOferta(characteristic.ver_en_oferta ?? true);
   };
 
-  const handleUpdateCharacteristic = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUpdateCharacteristic = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     if (!editCharacteristicName.trim()) {
       toast({ title: "Por favor ingresa un nombre para la característica", variant: "destructive" });
       return;
@@ -254,7 +253,7 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
               <CardTitle>Nueva Característica</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleAddNewCharacteristic} className="space-y-4">
+              <div className="space-y-4">
                 <div>
                   <Label htmlFor="characteristic-name">Nombre de la Característica</Label>
                   <Input
@@ -278,7 +277,11 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
                 </div>
                 
                 <div className="flex gap-2">
-                  <Button type="submit" disabled={addCharacteristicMutation.isPending}>
+                  <Button 
+                    type="button" 
+                    onClick={(e) => handleAddNewCharacteristic(e)}
+                    disabled={addCharacteristicMutation.isPending}
+                  >
                     {addCharacteristicMutation.isPending ? "Guardando..." : "Guardar"}
                   </Button>
                   <Button 
@@ -293,7 +296,7 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
                     Cancelar
                   </Button>
                 </div>
-              </form>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -306,7 +309,7 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
               editingCharacteristicId === characteristic.id ? (
                 <Card key={characteristic.id} className="col-span-2 border-2 border-primary/20">
                   <CardContent className="pt-4">
-                    <form onSubmit={handleUpdateCharacteristic} className="space-y-3">
+                    <div className="space-y-3">
                       <div>
                         <Label htmlFor="edit-characteristic-name">Nombre de la Característica</Label>
                         <Input
@@ -330,7 +333,12 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
                       </div>
                       
                       <div className="flex gap-2">
-                        <Button type="submit" size="sm" disabled={updateCharacteristicMutation.isPending}>
+                        <Button 
+                          type="button" 
+                          size="sm" 
+                          onClick={(e) => handleUpdateCharacteristic(e)}
+                          disabled={updateCharacteristicMutation.isPending}
+                        >
                           {updateCharacteristicMutation.isPending ? "Guardando..." : "Guardar"}
                         </Button>
                         <Button 
@@ -342,7 +350,7 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
                           Cancelar
                         </Button>
                       </div>
-                    </form>
+                    </div>
                   </CardContent>
                 </Card>
               ) : (
@@ -353,7 +361,7 @@ export function PropertyCharacteristicsSection({ propertyId }: PropertyCharacter
                     onCheckedChange={(checked) => 
                       handleCharacteristicToggle(characteristic.id.toString(), checked as boolean)
                     }
-                    disabled={updateCharacteristicsMutation.isPending}
+                    disabled={toggleCharacteristicMutation.isPending}
                   />
                   <Label 
                     htmlFor={`characteristic-${characteristic.id}`}

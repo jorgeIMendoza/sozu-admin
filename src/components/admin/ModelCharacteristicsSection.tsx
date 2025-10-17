@@ -45,7 +45,7 @@ export function ModelCharacteristicsSection({
     }
   });
 
-  // Fetch model's current characteristics (only if modelId exists - edit mode)
+  // Fetch model's current characteristics (ALL relations, including activo=false)
   const { data: modelCharacteristics = [] } = useQuery({
     queryKey: ['modelo-caracteristicas', modelId],
     queryFn: async () => {
@@ -60,8 +60,7 @@ export function ModelCharacteristicsSection({
             nombre
           )
         `)
-        .eq('id_modelo', modelId)
-        .eq('activo', true);
+        .eq('id_modelo', modelId);
       
       if (error) throw error;
       return data || [];
@@ -124,10 +123,56 @@ export function ModelCharacteristicsSection({
     }
   });
 
-  // Initialize selected IDs from model characteristics or props
+  // Mutation to toggle characteristic in modelos_caracteristicas
+  const toggleCharacteristicMutation = useMutation({
+    mutationFn: async ({ caracteristicaId, isActive }: { caracteristicaId: number; isActive: boolean }) => {
+      if (!modelId) throw new Error('No model ID provided');
+
+      // Check if relation exists
+      const { data: existing } = await supabase
+        .from('modelos_caracteristicas')
+        .select('id, activo')
+        .eq('id_modelo', modelId)
+        .eq('id_caracteristica', caracteristicaId)
+        .maybeSingle();
+
+      if (existing) {
+        // Update activo status
+        const { error } = await supabase
+          .from('modelos_caracteristicas')
+          .update({ activo: isActive })
+          .eq('id', existing.id);
+        
+        if (error) throw error;
+      } else {
+        // Create new relation
+        const { error } = await supabase
+          .from('modelos_caracteristicas')
+          .insert([{
+            id_modelo: modelId,
+            id_caracteristica: caracteristicaId,
+            activo: isActive
+          }]);
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modelo-caracteristicas', modelId] });
+      toast({ title: "Característica actualizada exitosamente" });
+    },
+    onError: (error) => {
+      console.error('Error toggling characteristic:', error);
+      toast({ title: "Error al actualizar característica", variant: "destructive" });
+    },
+  });
+
+  // Initialize selected IDs from model characteristics (only activo=true) or props
   useEffect(() => {
     if (modelCharacteristics.length > 0) {
-      const currentIds = modelCharacteristics.map(mc => mc.id_caracteristica.toString());
+      const currentIds = modelCharacteristics
+        .filter(mc => mc.activo)
+        .map(mc => mc.id_caracteristica.toString());
       setInternalSelectedIds(currentIds);
       if (onCharacteristicsChange) {
         onCharacteristicsChange(currentIds);
@@ -151,14 +196,23 @@ export function ModelCharacteristicsSection({
     }
     setInternalSelectedIds(newSelected);
     
-    // Notify parent component of changes
-    if (onCharacteristicsChange) {
-      onCharacteristicsChange(newSelected);
+    // If in edit mode, save to database immediately
+    if (modelId) {
+      toggleCharacteristicMutation.mutate({
+        caracteristicaId: parseInt(characteristicId),
+        isActive: checked
+      });
+    } else {
+      // In creation mode, just update local state and notify parent
+      if (onCharacteristicsChange) {
+        onCharacteristicsChange(newSelected);
+      }
     }
   };
 
-  const handleAddNewCharacteristic = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddNewCharacteristic = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     if (!newCharacteristicName.trim()) {
       toast({ title: "Por favor ingresa un nombre para la característica", variant: "destructive" });
       return;
@@ -175,8 +229,9 @@ export function ModelCharacteristicsSection({
     setEditCharacteristicVerEnOferta(characteristic.ver_en_oferta ?? true);
   };
 
-  const handleUpdateCharacteristic = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUpdateCharacteristic = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     if (!editCharacteristicName.trim()) {
       toast({ title: "Por favor ingresa un nombre para la característica", variant: "destructive" });
       return;
@@ -223,7 +278,7 @@ export function ModelCharacteristicsSection({
               <CardTitle className="text-base">Nueva Característica</CardTitle>
             </CardHeader>
             <CardContent>
-            <form onSubmit={handleAddNewCharacteristic} className="space-y-4">
+            <div className="space-y-4">
               <div>
                 <Label htmlFor="characteristic-name">Nombre de la Característica</Label>
                 <Input
@@ -247,7 +302,11 @@ export function ModelCharacteristicsSection({
               </div>
               
               <div className="flex gap-2">
-                <Button type="submit" disabled={addCharacteristicMutation.isPending}>
+                <Button 
+                  type="button" 
+                  onClick={(e) => handleAddNewCharacteristic(e)}
+                  disabled={addCharacteristicMutation.isPending}
+                >
                   {addCharacteristicMutation.isPending ? "Guardando..." : "Guardar"}
                 </Button>
                 <Button 
@@ -262,7 +321,7 @@ export function ModelCharacteristicsSection({
                   Cancelar
                 </Button>
               </div>
-            </form>
+            </div>
             </CardContent>
           </Card>
         )}
@@ -275,7 +334,7 @@ export function ModelCharacteristicsSection({
               editingCharacteristicId === characteristic.id ? (
                 <Card key={characteristic.id} className="col-span-2 border-2 border-primary/20">
                   <CardContent className="pt-4">
-                    <form onSubmit={handleUpdateCharacteristic} className="space-y-3">
+                    <div className="space-y-3">
                       <div>
                         <Label htmlFor="edit-characteristic-name">Nombre de la Característica</Label>
                         <Input
@@ -299,7 +358,12 @@ export function ModelCharacteristicsSection({
                       </div>
                       
                       <div className="flex gap-2">
-                        <Button type="submit" size="sm" disabled={updateCharacteristicMutation.isPending}>
+                        <Button 
+                          type="button" 
+                          size="sm" 
+                          onClick={(e) => handleUpdateCharacteristic(e)}
+                          disabled={updateCharacteristicMutation.isPending}
+                        >
                           {updateCharacteristicMutation.isPending ? "Guardando..." : "Guardar"}
                         </Button>
                         <Button 
@@ -311,7 +375,7 @@ export function ModelCharacteristicsSection({
                           Cancelar
                         </Button>
                       </div>
-                    </form>
+                    </div>
                   </CardContent>
                 </Card>
               ) : (
