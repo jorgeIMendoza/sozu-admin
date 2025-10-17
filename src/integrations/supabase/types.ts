@@ -4100,6 +4100,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      execute_safe_query: {
+        Args: { max_rows?: number; query_text: string }
+        Returns: Json
+      }
       get_offers_with_agent: {
         Args: { property_id: number }
         Returns: {
