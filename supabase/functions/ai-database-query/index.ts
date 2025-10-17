@@ -52,6 +52,21 @@ Responde SOLO con un objeto JSON válido (sin markdown, sin backticks):
   }
 }
 
+IMPORTANTE PARA chartData:
+- Cuando tengas datos agrupados por MES (formato "2025-02"), debes:
+  1. Convertir CADA mes a una entrada separada en chartData
+  2. Formatear el mes como "Enero 2025", "Febrero 2025", etc.
+  3. Usar el campo "total" de cada mes como "value"
+  4. Si hay 3 meses de datos, chartData debe tener 3 elementos
+  
+Ejemplo de get_pagos_por_mes con datos de 3 meses:
+Si recibes: [{"mes":"2024-12","total":50000},{"mes":"2025-01","total":75000},{"mes":"2025-02","total":60000}]
+Debes generar chartData: [
+  {"name":"Diciembre 2024","value":50000},
+  {"name":"Enero 2025","value":75000},
+  {"name":"Febrero 2025","value":60000}
+]
+
 REGLAS IMPORTANTES:
 - La explicación debe ser clara y NO técnica
 - NO incluyas JSON dentro de la explicación
