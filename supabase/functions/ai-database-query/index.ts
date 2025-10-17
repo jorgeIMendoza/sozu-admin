@@ -55,7 +55,9 @@ SCHEMA DE LA BASE DE DATOS (CON EJEMPLOS):
 1️⃣ PROPIEDADES (tabla: propiedades)
 Columnas: id, numero_propiedad, numero_piso, m2_reales, m2_interiores, m2_exteriores, precio_lista, id_estatus_disponibilidad, id_tipo_propiedad, id_vista, id_edificio_modelo, id_entidad_relacionada_dueno, activo
 ⚠️ IMPORTANTE: id_estatus_disponibilidad SOLO existe en propiedades
-Ejemplo: SELECT numero_propiedad FROM propiedades WHERE id_estatus_disponibilidad = 5 AND activo = true
+⚠️ CRÍTICO: Para contar propiedades DISPONIBLES usa id_estatus_disponibilidad = 2
+Ejemplo disponibles: SELECT COUNT(*) FROM propiedades WHERE id_estatus_disponibilidad = 2 AND activo = true
+Ejemplo vendidas: SELECT numero_propiedad FROM propiedades WHERE id_estatus_disponibilidad = 5 AND activo = true
 
 2️⃣ PROYECTOS Y EDIFICIOS
 - proyectos: id, nombre, direccion, ciudad, id_estatus_proyecto, precio_m2_actual, activo
@@ -64,7 +66,8 @@ Ejemplo: SELECT numero_propiedad FROM propiedades WHERE id_estatus_disponibilida
 - edificios_modelos: id, id_edificio, id_modelo, activo
 
 3️⃣ CATÁLOGOS
-- estatus_disponibilidad: 1=Disponible, 2=Ofertado, 3=Pre-apartado, 4=Apartado, 5=Vendido, 7=Escrituración, 9=Pagada completamente
+- estatus_disponibilidad: 1=Inventario, 2=Disponible, 4=Apartado, 5=Vendido, 7=Escrituración, 8=Entregado, 9=Pagada completamente
+  ⚠️ ATENCIÓN: "Disponible" es el ID 2, NO el 1
 - tipos_propiedad, vistas, tipos_transaccion
 
 4️⃣ VENTAS Y COBRANZA (TABLAS CRÍTICAS)
@@ -104,7 +107,16 @@ WHERE cc.activo = true
 GROUP BY cc.id, cc.precio_final
 HAVING cc.precio_final <= COALESCE(SUM(ap.monto), 0)
 
-✅ Propiedades vendidas por proyecto:
+✅ Propiedades DISPONIBLES por proyecto:
+SELECT pr.nombre, COUNT(p.id) as total
+FROM proyectos pr
+JOIN edificios e ON pr.id = e.id_proyecto
+JOIN edificios_modelos em ON e.id = em.id_edificio
+JOIN propiedades p ON em.id = p.id_edificio_modelo
+WHERE p.id_estatus_disponibilidad = 2 AND p.activo = true
+GROUP BY pr.nombre
+
+✅ Propiedades VENDIDAS por proyecto:
 SELECT pr.nombre, COUNT(p.id) as total
 FROM proyectos pr
 JOIN edificios e ON pr.id = e.id_proyecto
