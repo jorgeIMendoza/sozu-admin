@@ -322,7 +322,7 @@ export function AIQueryAssistant() {
       <div className="flex items-center gap-2">
         <Bot className="h-8 w-8 text-primary" />
         <div>
-          <h1 className="text-3xl font-bold">Pregunta a CasIA</h1>
+          <h1 className="text-3xl font-bold">Pregunta a Aloris-IA</h1>
           <p className="text-muted-foreground">Pregunta sobre tus datos en lenguaje natural</p>
         </div>
       </div>
