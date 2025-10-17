@@ -39,6 +39,7 @@ export const PropertyMultimediaSection = ({ form, propertyId, onMultimediaChange
   const [uploading, setUploading] = useState(false);
   
   const [multimediaForm, setMultimediaForm] = useState({
+    tipo_multimedia: 'imagen' as 'imagen' | 'video',
     descripcion: '',
     url: '',
     es_imagen: true,
@@ -117,6 +118,7 @@ export const PropertyMultimediaSection = ({ form, propertyId, onMultimediaChange
     
     // Reset form
     setMultimediaForm({
+      tipo_multimedia: 'imagen',
       descripcion: '',
       url: '',
       es_imagen: true,
@@ -422,35 +424,40 @@ export const PropertyMultimediaSection = ({ form, propertyId, onMultimediaChange
         <CardContent className="space-y-4">
           {isAddingMultimedia && (
             <Card>
-              <CardContent className="pt-4">
+              <CardHeader>
+                <CardTitle>Nuevo Multimedia</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="multimedia-desc">Descripción</Label>
-                    <Input
-                      id="multimedia-desc"
-                      value={multimediaForm.descripcion}
-                      onChange={(e) => setMultimediaForm(prev => ({ ...prev, descripcion: e.target.value }))}
-                      placeholder="Ej: Vista desde el balcón"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="multimedia-url">URL (opcional)</Label>
-                    <Input
-                      id="multimedia-url"
-                      value={multimediaForm.url}
-                      onChange={(e) => setMultimediaForm(prev => ({ ...prev, url: e.target.value }))}
-                      placeholder="https://ejemplo.com/imagen.jpg"
-                    />
+                    <Label htmlFor="tipo">Tipo de Multimedia</Label>
+                    <Select
+                      value={multimediaForm.tipo_multimedia}
+                      onValueChange={(value: 'imagen' | 'video') => {
+                        setMultimediaForm(prev => ({ 
+                          ...prev, 
+                          tipo_multimedia: value,
+                          es_imagen: value === 'imagen'
+                        }));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="imagen">Imagen</SelectItem>
+                        <SelectItem value="video">Video</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>
-                    <Label htmlFor="multimedia-file">O sube un archivo</Label>
+                    <Label htmlFor="multimedia-file">Subir Archivo</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         id="multimedia-file"
                         type="file"
-                        accept="image/*,video/*"
+                        accept={multimediaForm.tipo_multimedia === 'imagen' ? "image/*" : "video/*"}
                         onChange={handleFileUpload}
                         disabled={uploading}
                       />
@@ -460,31 +467,58 @@ export const PropertyMultimediaSection = ({ form, propertyId, onMultimediaChange
                         disabled={uploading}
                       >
                         <Upload className="w-4 h-4 mr-2" />
-                        {uploading ? "Cargando..." : "Cargar"}
+                        {uploading ? "Subiendo..." : "Subir"}
                       </Button>
                     </div>
                   </div>
 
+                  <div>
+                    <Label htmlFor="multimedia-url">O ingresa URL directamente</Label>
+                    <Input
+                      id="multimedia-url"
+                      type="url"
+                      value={multimediaForm.url}
+                      onChange={(e) => setMultimediaForm(prev => ({ ...prev, url: e.target.value }))}
+                      placeholder="https://..."
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="multimedia-desc">Descripción (opcional)</Label>
+                    <Input
+                      id="multimedia-desc"
+                      type="text"
+                      value={multimediaForm.descripcion}
+                      onChange={(e) => setMultimediaForm(prev => ({ ...prev, descripcion: e.target.value }))}
+                      placeholder="Descripción del multimedia..."
+                    />
+                  </div>
+
                   {multimediaForm.url && (
-                    <div className="border rounded-md p-2">
-                      {isImageUrl(multimediaForm.url) || multimediaForm.es_imagen ? (
-                        <img 
-                          src={multimediaForm.url} 
-                          alt="Vista previa" 
-                          className="max-w-full h-32 object-contain"
-                          onError={(e) => {
-                            e.currentTarget.src = '/placeholder.svg';
-                          }}
-                        />
-                      ) : isVideoUrl(multimediaForm.url) ? (
-                        <video 
-                          src={multimediaForm.url} 
-                          className="max-w-full h-32 object-contain"
-                          controls
-                        />
-                      ) : (
-                        <p className="text-sm text-muted-foreground">Vista previa no disponible</p>
-                      )}
+                    <div className="mt-4">
+                      <Label>Vista previa:</Label>
+                      <div className="mt-2 border rounded-md p-2">
+                        {isImageUrl(multimediaForm.url) || multimediaForm.tipo_multimedia === 'imagen' ? (
+                          <img 
+                            src={multimediaForm.url} 
+                            alt="Preview" 
+                            className="max-w-full h-48 object-contain"
+                            onError={(e) => {
+                              e.currentTarget.src = '/placeholder.svg';
+                            }}
+                          />
+                        ) : isVideoUrl(multimediaForm.url) || multimediaForm.tipo_multimedia === 'video' ? (
+                          <video 
+                            src={multimediaForm.url} 
+                            controls
+                            className="max-w-full h-48"
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Vista previa no disponible para este tipo de archivo
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
                   
