@@ -242,7 +242,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: '18% 18% 54%', 
+            gridTemplateColumns: '30% 15% 45%', 
             gap: '5%',
             alignItems: 'start'
           }}>
