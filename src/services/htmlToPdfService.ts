@@ -306,12 +306,12 @@ class HTMLToPDFService {
       const canvas = await html2canvas(container, {
         scale: 2,
         useCORS: true,
-        allowTaint: false,
-        logging: false,
+        allowTaint: true,  // Allow external images
+        logging: true,     // Enable logging to debug
         backgroundColor: '#ffffff',
         width: 2550,
         height: 3300,
-        imageTimeout: 0,
+        imageTimeout: 15000,  // Increase timeout for external images
         foreignObjectRendering: false
       });
       
@@ -599,26 +599,11 @@ class HTMLToPDFService {
 
             if (proyecto) {
               console.log('Project data fetched:', proyecto);
-              console.log('Logo URL:', proyecto.url_logo);
+              console.log('Logo URL before conversion:', proyecto.url_logo);
+              console.log('Cover image URL before conversion:', proyecto.url_imagen_portada);
               
-              // Convert logo and cover image to base64 for better PDF rendering
-              if (proyecto.url_logo) {
-                try {
-                  proyecto.url_logo = await this.convertImageToBase64(proyecto.url_logo);
-                  console.log('Logo converted to base64 successfully');
-                } catch (error) {
-                  console.error('Error converting logo to base64:', error);
-                }
-              }
-              
-              if (proyecto.url_imagen_portada) {
-                try {
-                  proyecto.url_imagen_portada = await this.convertImageToBase64(proyecto.url_imagen_portada);
-                  console.log('Cover image converted to base64 successfully');
-                } catch (error) {
-                  console.error('Error converting cover image to base64:', error);
-                }
-              }
+              // Don't convert logo and cover image - html2canvas handles URLs better
+              // The conversion to base64 causes issues with large images
               
               projectData = proyecto;
               
@@ -645,7 +630,7 @@ class HTMLToPDFService {
                       numero_cuenta,
                       cuenta_clabe,
                       cuenta_swift,
-                      bancos:id_banco(nombre)
+                      id_banco
                     `)
                     .eq('id_persona', ownerEntity.id_persona)
                     .eq('activo', true)
@@ -657,14 +642,30 @@ class HTMLToPDFService {
                     console.error('Error fetching STP account:', stpError);
                   }
 
-                  if (stpAccount && stpAccount.bancos) {
+                  if (stpAccount) {
                     console.log('STP account found:', stpAccount);
+                    
+                    // Fetch bank name separately
+                    let bancoNombre = 'Banco no especificado';
+                    if (stpAccount.id_banco) {
+                      const { data: bancoData } = await supabase
+                        .from('bancos')
+                        .select('nombre')
+                        .eq('id', stpAccount.id_banco)
+                        .single();
+                      
+                      if (bancoData) {
+                        bancoNombre = bancoData.nombre;
+                      }
+                    }
+                    
                     ownerStpBankAccount = {
                       numero_cuenta: stpAccount.numero_cuenta,
                       cuenta_clabe: stpAccount.cuenta_clabe,
                       cuenta_swift: stpAccount.cuenta_swift || '',
-                      banco_nombre: stpAccount.bancos.nombre
+                      banco_nombre: bancoNombre
                     };
+                    console.log('Owner STP bank account set:', ownerStpBankAccount);
                   } else {
                     console.warn('No STP account found for person:', ownerEntity.id_persona);
                   }
