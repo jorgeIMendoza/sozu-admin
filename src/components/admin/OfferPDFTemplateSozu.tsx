@@ -404,7 +404,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         {filteredPaymentSchemes.length > 0 && (
           <div style={{ marginBottom: '60px' }}>
             <h2 style={{ 
-              fontSize: '45px', 
+              fontSize: '48px', 
               fontWeight: 'bold', 
               color: '#000000',
               marginBottom: '40px'
@@ -416,7 +416,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               display: 'grid', 
               gridTemplateColumns: '1fr 1fr', 
               gap: '48px',
-              fontSize: '33px'
+              fontSize: '36px'
             }}>
               {filteredPaymentSchemes.map((scheme, index) => {
                 const amounts = calculatePaymentAmounts(scheme);
@@ -435,7 +435,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                     }}
                   >
                     <h3 style={{ 
-                      fontSize: '37px', 
+                      fontSize: '40px', 
                       fontWeight: 'bold', 
                       color: '#000000',
                       marginBottom: '24px'
@@ -447,7 +447,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '16px',
-                      fontSize: '27px',
+                      fontSize: '30px',
                       lineHeight: '1.4'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -517,7 +517,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           marginBottom: '40px'
         }}>
           <h2 style={{ 
-            fontSize: '45px', 
+            fontSize: '48px', 
             fontWeight: 'bold', 
             color: '#000000', 
             marginBottom: '40px'
@@ -542,7 +542,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 borderRadius: '20px'
               }}>
                 <h3 style={{ 
-                  fontSize: '33px', 
+                  fontSize: '36px', 
                   fontWeight: 'bold', 
                   color: '#000000', 
                   marginBottom: '24px',
@@ -550,7 +550,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 }}>
                   Pago por transferencia
                 </h3>
-                <div style={{ fontSize: '29px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
+                <div style={{ fontSize: '32px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
                   <p style={{ color: '#000000', marginBottom: '12px' }}>
                     <span style={{ fontWeight: '400' }}>Banco: </span>
                     <span style={{ fontWeight: '400' }}>Sistema de Transferencias y Pagos (STP)</span>
@@ -579,7 +579,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 borderRadius: '20px'
               }}>
                 <h3 style={{ 
-                  fontSize: '33px', 
+                  fontSize: '36px', 
                   fontWeight: 'bold', 
                   color: '#000000', 
                   marginBottom: '24px',
@@ -587,7 +587,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 }}>
                   Pago en efectivo
                 </h3>
-                <div style={{ fontSize: '29px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
+                <div style={{ fontSize: '32px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
                   <p style={{ color: '#000000', marginBottom: '12px' }}>
                     <span style={{ fontWeight: '400' }}>Banco: </span>
                     <span style={{ fontWeight: '400' }}>
@@ -632,7 +632,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           marginBottom: '40px'
         }}>
           <h2 style={{ 
-            fontSize: '45px', 
+            fontSize: '48px', 
             fontWeight: 'bold', 
             color: '#000000', 
             marginBottom: '40px'
@@ -647,7 +647,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
             {/* Agente */}
             <div>
               <h3 style={{ 
-                fontSize: '33px', 
+                fontSize: '36px', 
                 fontWeight: 'bold', 
                 color: '#000000', 
                 marginBottom: '16px',
@@ -655,7 +655,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               }}>
                 Agente
               </h3>
-              <div style={{ fontSize: '27px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
+              <div style={{ fontSize: '30px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
                 <p style={{ color: '#000000', marginBottom: '8px' }}>
                   <span style={{ fontWeight: '600' }}>Nombre: </span>
                   <span style={{ fontWeight: '400' }}>{creatorInfo?.nombre || creatorInfo?.nombre_legal || offerData.email_creador}</span>
@@ -674,7 +674,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
             {/* Comprador */}
             <div>
               <h3 style={{ 
-                fontSize: '33px', 
+                fontSize: '36px', 
                 fontWeight: 'bold', 
                 color: '#000000', 
                 marginBottom: '16px',
@@ -682,7 +682,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               }}>
                 Comprador
               </h3>
-              <div style={{ fontSize: '27px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
+              <div style={{ fontSize: '30px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif' }}>
                 <p style={{ color: '#000000', marginBottom: '8px' }}>
                   <span style={{ fontWeight: '600' }}>Nombre: </span>
                   <span style={{ fontWeight: '400' }}>{leadInfo?.nombre_legal || offerData.leadName}</span>
