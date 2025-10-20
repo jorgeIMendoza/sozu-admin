@@ -147,11 +147,15 @@ class HTMLToPDFService {
         id_esquema_pago_seleccionado: offerDetails.id_esquema_pago_seleccionado,
       };
 
-      console.log('Property details before PDF generation:', {
-        hasProjectData: !!propertyDetails.projectData,
-        projectName: propertyDetails.projectData?.nombre,
-        logoUrl: propertyDetails.projectData?.url_logo
-      });
+    console.log('Property details before PDF generation:', {
+      hasProjectData: !!propertyDetails.projectData,
+      projectName: propertyDetails.projectData?.nombre,
+      logoUrl: propertyDetails.projectData?.url_logo ? 'Logo converted to base64' : 'No logo',
+      hasOwnerStpAccount: !!propertyDetails.ownerStpBankAccount,
+      ownerStpAccount: propertyDetails.ownerStpBankAccount,
+      hasOwnerData: !!propertyDetails.ownerData,
+      ownerData: propertyDetails.ownerData
+    });
 
       // Generate PDF using the React component
       await this.generatePDFFromHTML(templateOfferData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas);
@@ -601,14 +605,22 @@ class HTMLToPDFService {
               
               // If cash section should be shown, get the STP bank account
               if (proyecto.mostrar_seccion_efectivo_en_oferta && propiedad.id_entidad_relacionada_dueno) {
-                const { data: ownerEntity } = await supabase
+                console.log('Fetching STP bank account for owner entity:', propiedad.id_entidad_relacionada_dueno);
+                
+                const { data: ownerEntity, error: ownerEntityError } = await supabase
                   .from('entidades_relacionadas')
                   .select('id_persona')
                   .eq('id', propiedad.id_entidad_relacionada_dueno)
-                  .single();
+                  .maybeSingle();
+
+                if (ownerEntityError) {
+                  console.error('Error fetching owner entity:', ownerEntityError);
+                }
 
                 if (ownerEntity?.id_persona) {
-                  const { data: stpAccount } = await supabase
+                  console.log('Owner person ID:', ownerEntity.id_persona);
+                  
+                  const { data: stpAccount, error: stpError } = await supabase
                     .from('cuentas_bancarias')
                     .select(`
                       numero_cuenta,
@@ -622,14 +634,23 @@ class HTMLToPDFService {
                     .limit(1)
                     .maybeSingle();
 
-                  if (stpAccount) {
+                  if (stpError) {
+                    console.error('Error fetching STP account:', stpError);
+                  }
+
+                  if (stpAccount && stpAccount.bancos) {
+                    console.log('STP account found:', stpAccount);
                     ownerStpBankAccount = {
                       numero_cuenta: stpAccount.numero_cuenta,
                       cuenta_clabe: stpAccount.cuenta_clabe,
-                      cuenta_swift: stpAccount.cuenta_swift,
-                      banco_nombre: stpAccount.bancos?.nombre
+                      cuenta_swift: stpAccount.cuenta_swift || '',
+                      banco_nombre: stpAccount.bancos.nombre
                     };
+                  } else {
+                    console.warn('No STP account found for person:', ownerEntity.id_persona);
                   }
+                } else {
+                  console.warn('No person found for owner entity:', propiedad.id_entidad_relacionada_dueno);
                 }
               }
             }
@@ -667,7 +688,21 @@ class HTMLToPDFService {
         .order('ver_como_ubicacion_en_oferta', { ascending: false });
 
       if (imagesData && imagesData.length > 0) {
-        modelImages = imagesData;
+        // Convert all model images to base64 for better PDF rendering
+        modelImages = await Promise.all(
+          imagesData.map(async (img) => {
+            try {
+              const base64Url = await this.convertImageToBase64(img.url);
+              return {
+                url: base64Url,
+                ver_como_ubicacion_en_oferta: img.ver_como_ubicacion_en_oferta
+              };
+            } catch (error) {
+              console.error('Error converting model image to base64:', error);
+              return img; // Return original if conversion fails
+            }
+          })
+        );
       }
     }
 
