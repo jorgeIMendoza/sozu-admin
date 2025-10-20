@@ -28,6 +28,7 @@ interface PropertyDetails {
   descripcion: string | null;
   numero_piso?: number | null;
   clabe_stp_tmp_apartado?: string | null;
+  tieneBalcon?: boolean;
   building?: {
     id: number;
     nombre: string;
@@ -689,6 +690,35 @@ class HTMLToPDFService {
       }
     }
 
+    // Check if property has balcony (id_caracteristica = 1)
+    let tieneBalcon = false;
+
+    // First check in propiedades_caracteristicas
+    const { data: propCaracteristicas } = await supabase
+      .from('propiedades_caracteristicas')
+      .select('id_caracteristica')
+      .eq('id_propiedad', propertyId)
+      .eq('id_caracteristica', 1)
+      .eq('activo', true)
+      .maybeSingle();
+
+    if (propCaracteristicas) {
+      tieneBalcon = true;
+    } else if (model?.id) {
+      // If not found in property characteristics, check in model characteristics
+      const { data: modelCaracteristicas } = await supabase
+        .from('modelos_caracteristicas')
+        .select('id_caracteristica')
+        .eq('id_modelo', model.id)
+        .eq('id_caracteristica', 1)
+        .eq('activo', true)
+        .maybeSingle();
+      
+      if (modelCaracteristicas) {
+        tieneBalcon = true;
+      }
+    }
+
     // Get model images
     let modelImages = null;
     if (model?.id) {
@@ -789,6 +819,7 @@ class HTMLToPDFService {
       descripcion: propiedad.descripcion,
       numero_piso: propiedad.numero_piso,
       clabe_stp_tmp_apartado: clabeStp,
+      tieneBalcon,
       building,
       model,
       vista,

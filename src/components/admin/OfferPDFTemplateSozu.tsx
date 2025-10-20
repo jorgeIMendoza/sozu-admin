@@ -4,6 +4,7 @@ import banosIcon from '@/assets/icons/banos.png';
 import mediosBanosIcon from '@/assets/icons/medios-banos.png';
 import estacionamientoIcon from '@/assets/icons/estacionamiento.png';
 import bodegaIcon from '@/assets/icons/bodega.png';
+import balconIcon from '@/assets/icons/balcon.png';
 
 interface OfferData {
   id: number;
@@ -23,6 +24,7 @@ interface PropertyDetails {
   descripcion: string | null;
   numero_piso?: number | null;
   clabe_stp_tmp_apartado?: string | null;
+  tieneBalcon?: boolean;
   building?: {
     id: number;
     nombre: string;
@@ -370,6 +372,20 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                   N/A
                 </div>
               </div>
+              
+              {/* Balcón - Mostrar solo si la propiedad tiene balcón */}
+              {propertyDetails.tieneBalcon && (
+                <div style={{ textAlign: 'center', width: '100%' }}>
+                  <img 
+                    src={balconIcon} 
+                    alt="Balcón"
+                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                  />
+                  <div style={{ fontSize: '25px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                    Sí
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Column 3: Image Only */}
