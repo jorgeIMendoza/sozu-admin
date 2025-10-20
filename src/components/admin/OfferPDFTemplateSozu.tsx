@@ -256,7 +256,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           }}>
             {/* Column 1: Property Data */}
             <div>
-              <div style={{ fontSize: '47px', lineHeight: '1.2', color: '#000000', fontWeight: '600' }}>
+              <div style={{ fontSize: '38px', lineHeight: '1.2', color: '#000000', fontWeight: '600' }}>
                 <div style={{ marginBottom: '4px' }}>
                   <span>Proyecto: </span>
                   <span style={{ fontWeight: '900' }}>{propertyDetails.projectData?.nombre || 'N/A'}</span>
@@ -310,75 +310,78 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               </div>
             </div>
 
-            {/* Column 2: Icons Only */}
+            {/* Column 2: Icons in 2 Columns */}
             <div style={{ 
-              display: 'flex',
-              flexDirection: 'column',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
               gap: '24px',
-              paddingTop: '20px',
-              alignItems: 'center',
-              justifyContent: 'center'
+              paddingTop: '20px'
             }}>
-              {/* Recámara */}
-              <div style={{ textAlign: 'center', width: '100%' }}>
-                <img 
-                  src={recamarasIcon} 
-                  alt="Recámaras"
-                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                />
-                <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                  Una
+              {/* Columna Izquierda */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Recámara */}
+                <div style={{ textAlign: 'center', width: '100%' }}>
+                  <img 
+                    src={recamarasIcon} 
+                    alt="Recámaras"
+                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                  />
+                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                    Una
+                  </div>
+                </div>
+                
+                {/* Baño Completo */}
+                <div style={{ textAlign: 'center', width: '100%' }}>
+                  <img 
+                    src={banosIcon} 
+                    alt="Baños"
+                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                  />
+                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                    Uno
+                  </div>
+                </div>
+                
+                {/* Medio Baño */}
+                <div style={{ textAlign: 'center', width: '100%' }}>
+                  <img 
+                    src={mediosBanosIcon} 
+                    alt="Medios Baños"
+                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                  />
+                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                    Uno
+                  </div>
                 </div>
               </div>
               
-              {/* Baño Completo */}
-              <div style={{ textAlign: 'center', width: '100%' }}>
-                <img 
-                  src={banosIcon} 
-                  alt="Baños"
-                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                />
-                <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                  Uno
+              {/* Columna Derecha */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Estacionamiento */}
+                <div style={{ textAlign: 'center', width: '100%' }}>
+                  <img 
+                    src={estacionamientoIcon} 
+                    alt="Estacionamiento"
+                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                  />
+                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                    1 Normal
+                  </div>
                 </div>
-              </div>
-              
-              {/* Medio Baño */}
-              <div style={{ textAlign: 'center', width: '100%' }}>
-                <img 
-                  src={mediosBanosIcon} 
-                  alt="Medios Baños"
-                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                />
-                <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                  Uno
+                
+                {/* Bodega */}
+                <div style={{ textAlign: 'center', width: '100%' }}>
+                  <img 
+                    src={bodegaIcon} 
+                    alt="Bodega"
+                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                  />
+                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                    N/A
+                  </div>
                 </div>
-              </div>
-              
-              {/* Estacionamiento */}
-              <div style={{ textAlign: 'center', width: '100%' }}>
-                <img 
-                  src={estacionamientoIcon} 
-                  alt="Estacionamiento"
-                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                />
-                <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                  1 Normal
-                </div>
-              </div>
-              
-              {/* Bodega */}
-              <div style={{ textAlign: 'center', width: '100%' }}>
-                <img 
-                  src={bodegaIcon} 
-                  alt="Bodega"
-                  style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                />
-                <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                  N/A
-                </div>
-              </div>
-              
+                
                 {/* Balcón - Mostrar solo si la propiedad tiene balcón */}
                 {propertyDetails.tieneBalcon && (
                   <div style={{ textAlign: 'center', width: '100%' }}>
@@ -392,6 +395,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                     </div>
                   </div>
                 )}
+              </div>
             </div>
 
             {/* Column 3: Image Only */}
@@ -437,7 +441,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
             <div style={{ 
               display: 'grid', 
               gridTemplateColumns: '1fr 1fr', 
-              gap: '48px',
+              gap: '0px',
               fontSize: '36px'
             }}>
               {filteredPaymentSchemes.map((scheme, index) => {
