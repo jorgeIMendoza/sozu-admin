@@ -373,19 +373,19 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 </div>
               </div>
               
-              {/* Balcón - Mostrar solo si la propiedad tiene balcón */}
-              {propertyDetails.tieneBalcon && (
-                <div style={{ textAlign: 'center', width: '100%' }}>
-                  <img 
-                    src={balconIcon} 
-                    alt="Balcón"
-                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                  />
-                  <div style={{ fontSize: '25px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                    Sí
+                {/* Balcón - Mostrar solo si la propiedad tiene balcón */}
+                {propertyDetails.tieneBalcon && (
+                  <div style={{ textAlign: 'center', width: '100%' }}>
+                    <img 
+                      src={balconIcon} 
+                      alt="Balcón"
+                      style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                    />
+                    <div style={{ fontSize: '25px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                      Balcón
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
 
             {/* Column 3: Image Only */}
