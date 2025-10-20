@@ -248,52 +248,52 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
           }}>
             {/* Column 1: Property Data */}
             <div>
-              <div style={{ fontSize: '37px', lineHeight: '1.6', color: '#000000' }}>
+              <div style={{ fontSize: '44px', lineHeight: '1.6', color: '#000000', fontWeight: '600' }}>
                 <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontWeight: '600' }}>Proyecto: </span>
+                  <span>Proyecto: </span>
                   <span style={{ fontWeight: '900' }}>{propertyDetails.projectData?.nombre || 'N/A'}</span>
                 </div>
                 {propertyDetails.building && (
                   <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: '600' }}>Edificio: </span>
+                    <span>Edificio: </span>
                     <span style={{ fontWeight: '900' }}>{propertyDetails.building.nombre}</span>
                   </div>
                 )}
                 {propertyDetails.model && (
                   <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: '600' }}>Modelo: </span>
+                    <span>Modelo: </span>
                     <span style={{ fontWeight: '900' }}>{propertyDetails.model.nombre}</span>
                   </div>
                 )}
                 <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontWeight: '600' }}>Número de propiedad: </span>
+                  <span>Número de propiedad: </span>
                   <span style={{ fontWeight: '900' }}>{propertyDetails.numero_propiedad}</span>
                 </div>
                 {propertyDetails.projectData?.mostrar_piso_en_oferta === true && propertyDetails.numero_piso && (
                   <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: '600' }}>Piso: </span>
+                    <span>Piso: </span>
                     <span style={{ fontWeight: '900' }}>{propertyDetails.numero_piso}</span>
                   </div>
                 )}
                 {propertyDetails.vista && (
                   <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: '600' }}>Vista: </span>
+                    <span>Vista: </span>
                     <span style={{ fontWeight: '900' }}>{propertyDetails.vista.nombre}</span>
                   </div>
                 )}
                 <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontWeight: '600' }}>Área: </span>
+                  <span>Área: </span>
                   <span style={{ fontWeight: '900' }}>
                     {((propertyDetails.m2_interiores || 0) + (propertyDetails.m2_exteriores || 0)).toFixed(2)} m²
                   </span>
                 </div>
                 <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontWeight: '600' }}>Precio de lista: </span>
+                  <span>Precio de lista: </span>
                   <span style={{ fontWeight: '900' }}>{formatCurrency(propertyDetails.precio_lista)}</span>
                 </div>
                 {propertyDetails.projectData?.mostrar_precio_m2_en_oferta === true && (propertyDetails.m2_interiores || propertyDetails.m2_exteriores) && (
                   <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontWeight: '600' }}>Precio por m²: </span>
+                    <span>Precio por m²: </span>
                     <span style={{ fontWeight: '900' }}>
                       {formatCurrency(propertyDetails.precio_lista / ((propertyDetails.m2_interiores || 0) + (propertyDetails.m2_exteriores || 0)))}
                     </span>
