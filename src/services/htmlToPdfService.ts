@@ -18,6 +18,11 @@ interface OfferData {
   creatorEmail: string;
   isProductOffer?: boolean;
   productId?: number;
+  offerOptions?: {
+    mostrar_piso_en_oferta?: boolean;
+    mostrar_precio_m2_en_oferta?: boolean;
+    mostrar_seccion_efectivo_en_oferta?: boolean;
+  };
 }
 
 interface PropertyDetails {
@@ -112,6 +117,16 @@ class HTMLToPDFService {
         throw new Error('Error fetching offer details');
       }
 
+      // Get offer options from parameter or database
+      let offerOptions = offerData.offerOptions;
+      if (!offerOptions) {
+        offerOptions = {
+          mostrar_piso_en_oferta: offerDetails.mostrar_piso_en_oferta ?? true,
+          mostrar_precio_m2_en_oferta: offerDetails.mostrar_precio_m2_en_oferta ?? true,
+          mostrar_seccion_efectivo_en_oferta: offerDetails.mostrar_seccion_efectivo_en_oferta ?? true,
+        };
+      }
+
       // Check if this is a product offer
       if (offerData.isProductOffer && offerData.productId) {
         await this.generateProductOfferPDF(offerData, offerDetails);
@@ -156,7 +171,7 @@ class HTMLToPDFService {
     });
 
       // Generate PDF using the React component
-      await this.generatePDFFromHTML(templateOfferData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas);
+      await this.generatePDFFromHTML(templateOfferData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas, offerOptions);
 
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -251,10 +266,15 @@ class HTMLToPDFService {
     leadInfo: any,
     legalNotices: string[],
     estacionamientos: any[],
-    bodegas: any[]
+    bodegas: any[],
+    offerOptions?: {
+      mostrar_piso_en_oferta?: boolean;
+      mostrar_precio_m2_en_oferta?: boolean;
+      mostrar_seccion_efectivo_en_oferta?: boolean;
+    }
   ): Promise<void> {
     // Always use the new single-page template for all projects
-    await this.generateSozuPDF(offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas);
+    await this.generateSozuPDF(offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas, offerOptions);
   }
 
   private async generateSozuPDF(
@@ -273,8 +293,25 @@ class HTMLToPDFService {
     leadInfo: any,
     legalNotices: string[],
     estacionamientos: any[],
-    bodegas: any[]
+    bodegas: any[],
+    offerOptions?: {
+      mostrar_piso_en_oferta?: boolean;
+      mostrar_precio_m2_en_oferta?: boolean;
+      mostrar_seccion_efectivo_en_oferta?: boolean;
+    }
   ): Promise<void> {
+    // Override project data with offer-specific options
+    const finalPropertyDetails = {
+      ...propertyDetails,
+      projectData: {
+        ...propertyDetails.projectData,
+        // Offer options take precedence over project options
+        mostrar_piso_en_oferta: offerOptions?.mostrar_piso_en_oferta ?? propertyDetails.projectData?.mostrar_piso_en_oferta,
+        mostrar_precio_m2_en_oferta: offerOptions?.mostrar_precio_m2_en_oferta ?? propertyDetails.projectData?.mostrar_precio_m2_en_oferta,
+        mostrar_seccion_efectivo_en_oferta: offerOptions?.mostrar_seccion_efectivo_en_oferta ?? propertyDetails.projectData?.mostrar_seccion_efectivo_en_oferta,
+      }
+    };
+
     const container = this.createContainer();
     // Make container match A4 proportions (2550x3300px)
     container.style.width = '2550px';
@@ -284,7 +321,7 @@ class HTMLToPDFService {
       // Create Sozu template element
       const templateElement = React.createElement(OfferPDFTemplateSozu, {
         offerData,
-        propertyDetails,
+        propertyDetails: finalPropertyDetails,
         paymentSchemes,
         amenities,
         creatorInfo,

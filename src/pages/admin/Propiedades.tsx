@@ -223,7 +223,12 @@ const Propiedades = () => {
         leadName: offer.lead_name || "N/A",
         leadEmail: offer.lead_email || "N/A", 
         leadPhone: offer.lead_telefono || "N/A",
-        creatorEmail: offer.agent_name?.includes('@') ? offer.agent_name : "jorge.mendoza@sozu.com"
+        creatorEmail: offer.agent_name?.includes('@') ? offer.agent_name : "jorge.mendoza@sozu.com",
+        offerOptions: {
+          mostrar_piso_en_oferta: offer.mostrar_piso_en_oferta,
+          mostrar_precio_m2_en_oferta: offer.mostrar_precio_m2_en_oferta,
+          mostrar_seccion_efectivo_en_oferta: offer.mostrar_seccion_efectivo_en_oferta,
+        }
       });
 
       toast({
@@ -643,6 +648,23 @@ const Propiedades = () => {
     // For each offer that has a cuenta_clabe_stp, get the cuenta_cobranza ID and fetch lead RFC
     const enrichedOffers = await Promise.all((offersData || []).map(async (offer: any) => {
       let enrichedOffer = { ...offer };
+      
+      // Get offer display options from ofertas table
+      try {
+        const { data: offerData, error: offerError } = await supabase
+          .from('ofertas')
+          .select('mostrar_piso_en_oferta, mostrar_precio_m2_en_oferta, mostrar_seccion_efectivo_en_oferta')
+          .eq('id', offer.id)
+          .single();
+        
+        if (!offerError && offerData) {
+          enrichedOffer.mostrar_piso_en_oferta = offerData.mostrar_piso_en_oferta;
+          enrichedOffer.mostrar_precio_m2_en_oferta = offerData.mostrar_precio_m2_en_oferta;
+          enrichedOffer.mostrar_seccion_efectivo_en_oferta = offerData.mostrar_seccion_efectivo_en_oferta;
+        }
+      } catch (err) {
+        console.warn('Error fetching display options for offer:', offer.id);
+      }
       
       // Get cuenta_cobranza ID and status if available
       if (offer.cuenta_clabe_stp) {

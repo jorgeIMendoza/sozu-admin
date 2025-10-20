@@ -2218,6 +2218,9 @@ export type Database = {
           id_persona_lead: number
           id_producto: number | null
           id_propiedad: number
+          mostrar_piso_en_oferta: boolean | null
+          mostrar_precio_m2_en_oferta: boolean | null
+          mostrar_seccion_efectivo_en_oferta: boolean | null
         }
         Insert: {
           activo?: boolean
@@ -2231,6 +2234,9 @@ export type Database = {
           id_persona_lead: number
           id_producto?: number | null
           id_propiedad: number
+          mostrar_piso_en_oferta?: boolean | null
+          mostrar_precio_m2_en_oferta?: boolean | null
+          mostrar_seccion_efectivo_en_oferta?: boolean | null
         }
         Update: {
           activo?: boolean
@@ -2244,6 +2250,9 @@ export type Database = {
           id_persona_lead?: number
           id_producto?: number | null
           id_propiedad?: number
+          mostrar_piso_en_oferta?: boolean | null
+          mostrar_precio_m2_en_oferta?: boolean | null
+          mostrar_seccion_efectivo_en_oferta?: boolean | null
         }
         Relationships: [
           {
@@ -3230,10 +3239,6 @@ export type Database = {
           longitud: number | null
           monto_garantia_renta: number
           monto_mensual_cuota_extraordinaria: number
-          mostrar_bodega_en_oferta: boolean
-          mostrar_edificio_en_oferta: boolean
-          mostrar_estacionamientos_en_oferta: boolean
-          mostrar_modelo_en_oferta: boolean
           mostrar_piso_en_oferta: boolean
           mostrar_precio_m2_en_oferta: boolean
           mostrar_seccion_efectivo_en_oferta: boolean
@@ -3266,10 +3271,6 @@ export type Database = {
           longitud?: number | null
           monto_garantia_renta: number
           monto_mensual_cuota_extraordinaria?: number
-          mostrar_bodega_en_oferta?: boolean
-          mostrar_edificio_en_oferta?: boolean
-          mostrar_estacionamientos_en_oferta?: boolean
-          mostrar_modelo_en_oferta?: boolean
           mostrar_piso_en_oferta?: boolean
           mostrar_precio_m2_en_oferta?: boolean
           mostrar_seccion_efectivo_en_oferta?: boolean
@@ -3302,10 +3303,6 @@ export type Database = {
           longitud?: number | null
           monto_garantia_renta?: number
           monto_mensual_cuota_extraordinaria?: number
-          mostrar_bodega_en_oferta?: boolean
-          mostrar_edificio_en_oferta?: boolean
-          mostrar_estacionamientos_en_oferta?: boolean
-          mostrar_modelo_en_oferta?: boolean
           mostrar_piso_en_oferta?: boolean
           mostrar_precio_m2_en_oferta?: boolean
           mostrar_seccion_efectivo_en_oferta?: boolean

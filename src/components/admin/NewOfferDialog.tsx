@@ -41,6 +41,7 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -91,6 +92,10 @@ const formSchema = z.object({
   mode: z.enum(["precargada", "manual"]).default("precargada"),
   selectedPersonId: z.number().optional(),
   ...baseProspectSchema.shape,
+  // Opciones de visualización en PDF
+  mostrar_piso_en_oferta: z.boolean().default(true),
+  mostrar_precio_m2_en_oferta: z.boolean().default(true),
+  mostrar_seccion_efectivo_en_oferta: z.boolean().default(true),
   // Manual payment fields - only validated when mode is "manual"
   porcentaje_enganche: z.string().optional(),
   porcentaje_mensualidades: z.string().optional(),
@@ -159,6 +164,9 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       telefono: "",
       rfc: "",
       curp: "",
+      mostrar_piso_en_oferta: true,
+      mostrar_precio_m2_en_oferta: true,
+      mostrar_seccion_efectivo_en_oferta: true,
       porcentaje_enganche: "",
       porcentaje_mensualidades: "", 
       porcentaje_entrega: "",
@@ -211,6 +219,9 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         telefono: "",
         rfc: "",
         curp: "",
+        mostrar_piso_en_oferta: true,
+        mostrar_precio_m2_en_oferta: true,
+        mostrar_seccion_efectivo_en_oferta: true,
         porcentaje_enganche: "",
         porcentaje_mensualidades: "",
         porcentaje_entrega: "",
@@ -248,6 +259,9 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       telefono: "",
       rfc: "",
       curp: "",
+      mostrar_piso_en_oferta: true,
+      mostrar_precio_m2_en_oferta: true,
+      mostrar_seccion_efectivo_en_oferta: true,
       porcentaje_enganche: "",
       porcentaje_mensualidades: "",
       porcentaje_entrega: "",
@@ -277,7 +291,10 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           entidades_relacionadas!id_entidad_relacionada_dueno(
             proyectos!entidades_relacionadas_id_proyecto_fkey(
               id,
-              nombre
+              nombre,
+              mostrar_piso_en_oferta,
+              mostrar_precio_m2_en_oferta,
+              mostrar_seccion_efectivo_en_oferta
             )
           )
         `)
@@ -288,6 +305,16 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       return data;
     },
   });
+
+  // Update form values when project config loads
+  useEffect(() => {
+    if (propertyDetails?.entidades_relacionadas?.proyectos) {
+      const projectConfig = propertyDetails.entidades_relacionadas.proyectos;
+      form.setValue("mostrar_piso_en_oferta", projectConfig.mostrar_piso_en_oferta ?? true);
+      form.setValue("mostrar_precio_m2_en_oferta", projectConfig.mostrar_precio_m2_en_oferta ?? true);
+      form.setValue("mostrar_seccion_efectivo_en_oferta", projectConfig.mostrar_seccion_efectivo_en_oferta ?? true);
+    }
+  }, [propertyDetails, form]);
 
   const createOfferMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -432,6 +459,9 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         id_propiedad: propertyId,
         id_persona_lead: personId,
         id_esquema_pago_seleccionado: schemeId,
+        mostrar_piso_en_oferta: data.mostrar_piso_en_oferta,
+        mostrar_precio_m2_en_oferta: data.mostrar_precio_m2_en_oferta,
+        mostrar_seccion_efectivo_en_oferta: data.mostrar_seccion_efectivo_en_oferta,
         activo: true,
         email_creador: 'jorge.mendoza@sozu.com' // Fixed user email
         // Remove fecha_generacion to let the database set it with DEFAULT CURRENT_TIMESTAMP
@@ -871,12 +901,82 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                            </FormItem>
                          )}
                        />
-                     )}
-              </div>
-            </div>
+                      )}
+               </div>
+             </div>
 
-            {/* Manual Payment Scheme Section */}
-            {selectedMode === "manual" && (
+             <Separator />
+
+             {/* Opciones de visualización en PDF */}
+             <div className="space-y-4">
+               <h3 className="text-sm font-semibold">Opciones de visualización en PDF</h3>
+               <p className="text-xs text-muted-foreground">
+                 Selecciona qué información deseas mostrar en esta oferta
+               </p>
+               
+               {propertyDetails?.entidades_relacionadas?.proyectos?.mostrar_piso_en_oferta !== false && (
+                 <FormField
+                   control={form.control}
+                   name="mostrar_piso_en_oferta"
+                   render={({ field }) => (
+                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                       <FormControl>
+                         <Checkbox
+                           checked={field.value}
+                           onCheckedChange={field.onChange}
+                         />
+                       </FormControl>
+                       <div className="space-y-1 leading-none">
+                         <FormLabel>Mostrar piso</FormLabel>
+                       </div>
+                     </FormItem>
+                   )}
+                 />
+               )}
+               
+               {propertyDetails?.entidades_relacionadas?.proyectos?.mostrar_precio_m2_en_oferta !== false && (
+                 <FormField
+                   control={form.control}
+                   name="mostrar_precio_m2_en_oferta"
+                   render={({ field }) => (
+                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                       <FormControl>
+                         <Checkbox
+                           checked={field.value}
+                           onCheckedChange={field.onChange}
+                         />
+                       </FormControl>
+                       <div className="space-y-1 leading-none">
+                         <FormLabel>Mostrar precio por m²</FormLabel>
+                       </div>
+                     </FormItem>
+                   )}
+                 />
+               )}
+               
+               {propertyDetails?.entidades_relacionadas?.proyectos?.mostrar_seccion_efectivo_en_oferta !== false && (
+                 <FormField
+                   control={form.control}
+                   name="mostrar_seccion_efectivo_en_oferta"
+                   render={({ field }) => (
+                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                       <FormControl>
+                         <Checkbox
+                           checked={field.value}
+                           onCheckedChange={field.onChange}
+                         />
+                       </FormControl>
+                       <div className="space-y-1 leading-none">
+                         <FormLabel>Mostrar sección de pago en efectivo</FormLabel>
+                       </div>
+                     </FormItem>
+                   )}
+                 />
+               )}
+             </div>
+
+             {/* Manual Payment Scheme Section */}
+             {selectedMode === "manual" && (
               <>
                 <Separator />
                 <div className="space-y-4">
