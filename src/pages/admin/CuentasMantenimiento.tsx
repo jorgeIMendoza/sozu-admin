@@ -87,6 +87,7 @@ interface CuentaCobranza {
   bodegas?: BodegaDetalle[];
   estacionamientos?: EstacionamientoDetalle[];
   productos?: ProductoDetalle[];
+  proxima_fecha_pago?: string | null;
 }
 
 export default function CuentasMantenimiento() {
@@ -414,6 +415,34 @@ export default function CuentasMantenimiento() {
         console.log('🔍 Montos de multas por cuenta:', montosMultasPorCuenta);
       }
 
+      // Get próxima fecha de pago (fecha_pago máxima no pagada) para cada cuenta
+      const { data: proximasFechasPago } = await supabase
+        .from('acuerdos_pago')
+        .select('id_cuenta_cobranza, fecha_pago')
+        .in('id_cuenta_cobranza', cuentaIds)
+        .eq('activo', true)
+        .eq('pago_completado', false)
+        .not('fecha_pago', 'is', null)
+        .order('fecha_pago', { ascending: false });
+
+      // Crear un mapa con la fecha máxima de pago por cuenta
+      const proximaFechaPagoPorCuenta = cuentas.reduce((acc: Record<number, string | null>, cuenta) => {
+        const fechasCuenta = proximasFechasPago?.filter(f => f.id_cuenta_cobranza === cuenta.id) || [];
+        if (fechasCuenta.length > 0) {
+          // Obtener la fecha máxima
+          const fechasOrdenadas = fechasCuenta
+            .map(f => f.fecha_pago)
+            .filter(Boolean)
+            .sort((a, b) => new Date(b!).getTime() - new Date(a!).getTime());
+          acc[cuenta.id] = fechasOrdenadas[0] || null;
+        } else {
+          acc[cuenta.id] = null;
+        }
+        return acc;
+      }, {});
+
+      console.log('🔍 Próximas fechas de pago por cuenta:', proximaFechaPagoPorCuenta);
+
       // Get parent ofertas to fetch property/project/modelo from parent cuenta
       const parentOfertaIds = parentCuentas?.map(pc => pc.id_oferta).filter((id): id is number => id !== null) || [];
       const { data: parentOfertas } = parentOfertaIds.length > 0 ? await supabase
@@ -723,6 +752,7 @@ export default function CuentasMantenimiento() {
           tiene_acuerdos: tieneAcuerdosPorCuenta[cuenta.id],
           tiene_multas_pendientes: multasPendientesPorCuenta[cuenta.id] || false,
           id_propiedad: parentPropiedad?.id,
+          proxima_fecha_pago: proximaFechaPagoPorCuenta[cuenta.id] || null,
           bodegas: parentPropiedad?.id ? (bodegasPorPropiedad[parentPropiedad.id] || []).map((b: any) => ({
             nombre: b.nombre,
             m2: b.m2,
@@ -947,6 +977,7 @@ export default function CuentasMantenimiento() {
                       <TableHead className="text-right">Total Mensual</TableHead>
                       <TableHead className="text-right">Total Pagado</TableHead>
                       <TableHead className="text-right">Saldo Pendiente</TableHead>
+                      <TableHead>Próxima Fecha de Pago</TableHead>
                       <TableHead className="text-center">Complementos</TableHead>
                       <TableHead className="text-center">Acciones</TableHead>
                     </TableRow>
@@ -954,7 +985,7 @@ export default function CuentasMantenimiento() {
                   <TableBody>
                     {filteredCuentas.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                           No se encontraron cuentas de mantenimiento
                         </TableCell>
                       </TableRow>
@@ -1023,6 +1054,19 @@ export default function CuentasMantenimiento() {
                                 ? Math.abs(normalizarSaldo(cuenta.restante)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                                 : '0.00'
                             }
+                          </TableCell>
+                          <TableCell>
+                            {cuenta.proxima_fecha_pago ? (
+                              <Badge variant="outline">
+                                {new Date(cuenta.proxima_fecha_pago).toLocaleDateString('es-MX', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-center">
