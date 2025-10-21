@@ -1483,15 +1483,28 @@ export default function DetalleCuentaCobranza() {
       a.concepto?.toLowerCase() === 'pago a contra entrega'
     );
     
-    // Calculate total contraentrega amount and paid amount
+    // Find non-contraentrega acuerdos
+    const noContraentregaAcuerdos = acuerdosPago.filter(a => 
+      a.concepto?.toLowerCase() !== 'pago a contra entrega'
+    );
+    
+    // Calculate total contraentrega amount and paid amount (excluding fines)
     const totalContraentrega = contraentregaAcuerdos.reduce((sum, a) => sum + a.monto, 0);
     const pagadoContraentrega = contraentregaAcuerdos.reduce((sum, acuerdo) => 
-      sum + (acuerdo.aplicaciones || []).reduce((appSum, app) => appSum + (app?.monto || 0), 0), 0
+      sum + (acuerdo.aplicaciones || [])
+        .filter(app => !app.es_multa)
+        .reduce((appSum, app) => appSum + (app?.monto || 0), 0), 0
     );
-    const pendienteContraentrega = totalContraentrega - pagadoContraentrega;
+    const pendienteContraentrega = Math.max(0, totalContraentrega - pagadoContraentrega);
 
-    // Calculate pending "durante obra" (without contraentrega)
-    const pendienteDuranteObra = Math.max(0, totalPendiente - pendienteContraentrega);
+    // Calculate total "durante obra" amount and paid amount (excluding fines)
+    const totalDuranteObra = noContraentregaAcuerdos.reduce((sum, a) => sum + a.monto, 0);
+    const pagadoDuranteObra = noContraentregaAcuerdos.reduce((sum, acuerdo) => 
+      sum + (acuerdo.aplicaciones || [])
+        .filter(app => !app.es_multa)
+        .reduce((appSum, app) => appSum + (app?.monto || 0), 0), 0
+    );
+    const pendienteDuranteObra = Math.max(0, totalDuranteObra - pagadoDuranteObra);
 
     // Count remaining partial payments (parcialidades not completed)
     const parcialidadesRestantes = acuerdosPago.filter(a => 
@@ -1500,7 +1513,7 @@ export default function DetalleCuentaCobranza() {
 
     return {
       duranteObra: pendienteDuranteObra,
-      aLaEntrega: Math.max(0, pendienteContraentrega),
+      aLaEntrega: pendienteContraentrega,
       parcialidadesRestantes
     };
   })() : null;
