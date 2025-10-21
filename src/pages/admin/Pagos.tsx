@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { EstadoCuentaService } from "@/services/estadoCuentaService";
+import { N8N_WEBHOOK_BASE_URL } from "@/lib/config";
 
 interface Comprador {
   nombre_legal: string;
@@ -756,7 +757,7 @@ export default function Pagos() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/cargarArchivoCep', {
+      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/cargarArchivoCep`, {
         method: 'POST',
         body: formData,
       });
