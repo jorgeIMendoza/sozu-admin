@@ -1504,17 +1504,47 @@ export default function DetalleCuentaCobranza() {
         .filter(app => !app.es_multa)
         .reduce((appSum, app) => appSum + (app?.monto || 0), 0), 0
     );
-    const pendienteDuranteObra = Math.max(0, totalDuranteObra - pagadoDuranteObra);
+    
+    // Calculate total pending fines for durante obra acuerdos
+    const totalMultasPendientesDuranteObra = noContraentregaAcuerdos.reduce((sum, acuerdo) => {
+      const multasAcuerdo = (acuerdo.multas || []).reduce((multaSum, multa) => 
+        multaSum + multa.monto, 0
+      );
+      return sum + multasAcuerdo;
+    }, 0);
+    
+    const pendienteDuranteObra = Math.max(0, totalDuranteObra - pagadoDuranteObra + totalMultasPendientesDuranteObra);
 
     // Count remaining partial payments (parcialidades not completed)
     const parcialidadesRestantes = acuerdosPago.filter(a => 
       a.concepto?.toLowerCase() === 'parcialidad' && !a.pago_completado
     ).length;
 
+    // Debug info
+    console.log('Durante Obra Calculation:', {
+      totalDuranteObra,
+      pagadoDuranteObra,
+      totalMultasPendientesDuranteObra,
+      pendienteDuranteObra,
+      noContraentregaAcuerdos: noContraentregaAcuerdos.map(a => ({
+        id: a.id,
+        concepto: a.concepto,
+        monto: a.monto,
+        completado: a.pago_completado,
+        pagado: (a.aplicaciones || []).filter(app => !app.es_multa).reduce((s, app) => s + app.monto, 0),
+        multasPendientes: (a.multas || []).reduce((s, m) => s + m.monto, 0)
+      }))
+    });
+
     return {
       duranteObra: pendienteDuranteObra,
       aLaEntrega: pendienteContraentrega,
-      parcialidadesRestantes
+      parcialidadesRestantes,
+      debug: {
+        totalDuranteObra,
+        pagadoDuranteObra,
+        totalMultasPendientesDuranteObra
+      }
     };
   })() : null;
 
