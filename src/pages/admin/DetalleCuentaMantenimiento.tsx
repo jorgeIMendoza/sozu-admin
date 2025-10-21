@@ -113,27 +113,6 @@ export default function DetalleCuentaMantenimiento() {
             .maybeSingle()
         : { data: null };
 
-      // Get m2 de bodegas asociadas a la propiedad
-      const { data: bodegasM2 } = oferta?.propiedades?.id 
-        ? await supabase
-            .from('bodegas')
-            .select('m2')
-            .eq('id_propiedad', oferta.propiedades.id)
-            .eq('activo', true)
-        : { data: [] };
-      
-      const totalM2Bodegas = (bodegasM2 || []).reduce<number>((sum, b) => sum + (Number(b.m2) || 0), 0);
-
-      // Get m2 de estacionamientos asociados a la propiedad
-      const { data: estacionamientosM2 } = oferta?.propiedades?.id 
-        ? await supabase
-            .from('estacionamientos')
-            .select('m2')
-            .eq('id_propiedad', oferta.propiedades.id)
-            .eq('activo', true)
-        : { data: [] };
-      
-      const totalM2Estacionamientos = (estacionamientosM2 || []).reduce<number>((sum, e) => sum + (Number(e.m2) || 0), 0);
 
       // Get propietarios (from parent cuenta_cobranza if exists)
       let propietarios: Propietario[] = [];
@@ -236,9 +215,7 @@ export default function DetalleCuentaMantenimiento() {
         proyecto_nombre: proyectoNombre,
         m2_exteriores: (
           (oferta?.propiedades?.m2_interiores || 0) + 
-          (oferta?.propiedades?.m2_exteriores || 0) +
-          totalM2Bodegas +
-          totalM2Estacionamientos
+          (oferta?.propiedades?.m2_exteriores || 0)
         ) || null,
         costo_mantenimiento_m2: costoMantenimientoM2
       };
@@ -648,7 +625,7 @@ export default function DetalleCuentaMantenimiento() {
                 {cuentaDetalle.m2_exteriores ? `${cuentaDetalle.m2_exteriores} m²` : 'N/A'}
               </p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                Incluye departamento (interior + exterior) + bodegas + estacionamientos
+                Interior + Exterior del departamento
               </p>
             </div>
             <div>
