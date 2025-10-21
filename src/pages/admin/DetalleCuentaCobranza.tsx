@@ -2861,6 +2861,30 @@ export default function DetalleCuentaCobranza() {
                                     </div>
                                   </div>
                                 ))}
+                                {/* Total de multas */}
+                                <div className="flex justify-end p-3 border-t border-warning/30 bg-warning/10 rounded-lg mt-3">
+                                  <div className="text-right space-y-1">
+                                    <div className="text-sm font-semibold text-warning">
+                                      Total Multas: {formatCurrency(
+                                        acuerdo.multas.reduce((sum, m) => sum + (m.montoOriginal || m.monto), 0)
+                                      )}
+                                    </div>
+                                    {acuerdo.multas.some(m => m.pagosAplicados > 0) && (
+                                      <>
+                                        <div className="text-xs text-muted-foreground">
+                                          Total Pagado: {formatCurrency(
+                                            acuerdo.multas.reduce((sum, m) => sum + (m.pagosAplicados || 0), 0)
+                                          )}
+                                        </div>
+                                        <div className="text-xs font-medium text-warning">
+                                          Total Pendiente: {formatCurrency(
+                                            acuerdo.multas.reduce((sum, m) => sum + m.monto, 0)
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             ) : (
                               <div className="text-center py-4 text-muted-foreground">
