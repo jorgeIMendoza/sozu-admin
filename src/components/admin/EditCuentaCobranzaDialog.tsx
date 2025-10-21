@@ -1138,7 +1138,63 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       
       if (!esquema || !cuentaDetalle) throw new Error('Esquema o cuenta no encontrada');
       
-      const precioFinal = cuentaDetalle.precio_final;
+      // ✅ VALIDACIÓN: Si precio_final es 0 o null, calcularlo y actualizarlo
+      let precioFinal = cuentaDetalle.precio_final;
+      
+      if (!precioFinal || precioFinal === 0) {
+        console.warn('⚠️ precio_final es 0, calculando automáticamente...');
+        
+        // Obtener oferta y datos relacionados
+        const { data: oferta, error: ofertaError } = await supabase
+          .from('ofertas')
+          .select(`
+            id_propiedad,
+            id_producto,
+            id_esquema_pago_seleccionado,
+            propiedades!id_propiedad(precio_lista),
+            productos_servicios!id_producto(precio_lista),
+            esquemas_pago!id_esquema_pago_seleccionado(porcentaje_descuento_aumento)
+          `)
+          .eq('id', cuentaDetalle.id_oferta)
+          .single();
+        
+        if (ofertaError) throw ofertaError;
+        if (!oferta) throw new Error('Oferta no encontrada');
+        
+        // Determinar precio_lista
+        const precioLista = Number(
+          oferta.propiedades?.precio_lista || 
+          oferta.productos_servicios?.precio_lista || 
+          0
+        );
+        
+        if (precioLista <= 0) {
+          throw new Error('No se pudo calcular precio_final. Verifica que la propiedad/producto tenga precio_lista.');
+        }
+        
+        // Calcular precio_final
+        const porcentaje = Number(oferta.esquemas_pago?.porcentaje_descuento_aumento || 0);
+        const precioFinalCalculado = precioLista * (1 + porcentaje / 100);
+        
+        // Actualizar precio_final en la base de datos
+        const { error: updateError } = await supabase
+          .from('cuentas_cobranza')
+          .update({ 
+            precio_final: precioFinalCalculado,
+            fecha_actualizacion: new Date().toISOString()
+          })
+          .eq('id', cuenta.id);
+        
+        if (updateError) {
+          console.error('Error updating precio_final:', updateError);
+          throw updateError;
+        }
+        
+        // Usar el precio_final recién calculado
+        precioFinal = precioFinalCalculado;
+        
+        console.log('✅ precio_final actualizado a:', precioFinal);
+      }
       
       // Calculate payment amounts
       const montoApartado = 20000; // Fixed amount

@@ -100,6 +100,7 @@ interface OfferData {
   id: number;
   id_esquema_pago_seleccionado: number | null;
   id_propiedad: number;
+  id_producto?: number | null;
   esquema_nombre?: string;
   es_manual?: boolean;
   clabe_stp_tmp_apartado?: string | null;
@@ -616,6 +617,7 @@ export default function DetalleCuentaCobranza() {
           id,
           id_esquema_pago_seleccionado,
           id_propiedad,
+          id_producto,
           id_persona_lead,
           esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(
             nombre,
@@ -639,6 +641,7 @@ export default function DetalleCuentaCobranza() {
         id: offer.id,
         id_esquema_pago_seleccionado: offer.id_esquema_pago_seleccionado,
         id_propiedad: offer.id_propiedad,
+        id_producto: offer.id_producto,
         esquema_nombre: offer.esquemas_pago?.nombre || null,
         es_manual: offer.esquemas_pago?.es_manual || false,
         clabe_stp_tmp_apartado: offer.propiedades?.clabe_stp_tmp_apartado || null,
@@ -691,7 +694,58 @@ export default function DetalleCuentaCobranza() {
     if (!cuentaDetalle || !offerData) return;
 
     try {
-      // Update the offer with the selected payment scheme
+      // 1. Obtener el esquema seleccionado para acceder a porcentaje_descuento_aumento
+      const { data: esquema, error: esquemaError } = await supabase
+        .from('esquemas_pago')
+        .select('porcentaje_descuento_aumento')
+        .eq('id', schemeId)
+        .single();
+
+      if (esquemaError) throw esquemaError;
+
+      // 2. Determinar precio_lista (propiedad o producto)
+      let precioLista = 0;
+      if (offerData.id_propiedad) {
+        const { data: propiedad, error: propError } = await supabase
+          .from('propiedades')
+          .select('precio_lista')
+          .eq('id', offerData.id_propiedad)
+          .single();
+        
+        if (propError) throw propError;
+        precioLista = Number(propiedad?.precio_lista || 0);
+      } else if (offerData.id_producto) {
+        const { data: producto, error: prodError } = await supabase
+          .from('productos_servicios')
+          .select('precio_lista')
+          .eq('id', offerData.id_producto)
+          .single();
+        
+        if (prodError) throw prodError;
+        precioLista = Number(producto?.precio_lista || 0);
+      }
+
+      // 3. Calcular precio_final
+      const porcentajeAjuste = Number(esquema?.porcentaje_descuento_aumento || 0);
+      const precioFinal = precioLista * (1 + porcentajeAjuste / 100);
+
+      // 4. Actualizar precio_final en cuenta_cobranza
+      if (precioFinal > 0) {
+        const { error: updatePrecioError } = await supabase
+          .from('cuentas_cobranza')
+          .update({ 
+            precio_final: precioFinal,
+            fecha_actualizacion: new Date().toISOString()
+          })
+          .eq('id', cuentaDetalle.id);
+
+        if (updatePrecioError) {
+          console.error('Error updating precio_final:', updatePrecioError);
+          throw updatePrecioError;
+        }
+      }
+
+      // 5. Actualizar el esquema en la oferta
       const { error: updateError } = await supabase
         .from('ofertas')
         .update({ id_esquema_pago_seleccionado: schemeId })
