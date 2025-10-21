@@ -1497,8 +1497,19 @@ export default function DetalleCuentaCobranza() {
     );
     const pendienteContraentrega = Math.max(0, totalContraentrega - pagadoContraentrega);
 
-    // Calculate total "durante obra" amount and paid amount (excluding fines)
-    const totalDuranteObra = noContraentregaAcuerdos.reduce((sum, a) => sum + a.monto, 0);
+    // Calculate total "durante obra" pending amount for incomplete acuerdos only
+    const totalDuranteObra = noContraentregaAcuerdos
+      .filter(a => !a.pago_completado)
+      .reduce((sum, acuerdo) => {
+        const montoAcuerdo = Number(acuerdo.monto);
+        const aplicado = (acuerdo.aplicaciones || [])
+          .filter(app => !app.es_multa)
+          .reduce((appSum, app) => appSum + Number(app?.monto || 0), 0);
+        const pendiente = montoAcuerdo - aplicado;
+        return sum + pendiente;
+      }, 0);
+    
+    // Calculate total paid amount for all durante obra acuerdos (excluding fines)
     const pagadoDuranteObra = noContraentregaAcuerdos.reduce((sum, acuerdo) => 
       sum + (acuerdo.aplicaciones || [])
         .filter(app => !app.es_multa)
@@ -1513,7 +1524,8 @@ export default function DetalleCuentaCobranza() {
       return sum + multasAcuerdo;
     }, 0);
     
-    const pendienteDuranteObra = Math.max(0, totalDuranteObra - pagadoDuranteObra + totalMultasPendientesDuranteObra);
+    // Total pending durante obra = pending acuerdos + pending fines
+    const pendienteDuranteObra = Math.max(0, totalDuranteObra + totalMultasPendientesDuranteObra);
 
     // Count remaining partial payments (parcialidades not completed)
     const parcialidadesRestantes = acuerdosPago.filter(a => 
