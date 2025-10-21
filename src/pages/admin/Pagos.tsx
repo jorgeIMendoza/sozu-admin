@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -98,6 +98,7 @@ export default function Pagos() {
     isOpen: false,
     cuenta: null
   });
+  const [uploadingCep, setUploadingCep] = useState(false);
   const [isGeneratingEstadoCuenta, setIsGeneratingEstadoCuenta] = useState<number | null>(null);
 
   const { toast } = useToast();
@@ -736,13 +737,91 @@ export default function Pagos() {
     }
   };
 
+  const handleCepUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.name.endsWith('.zip')) {
+      toast({
+        title: "Error",
+        description: "Solo se permiten archivos .zip",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadingCep(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/cargarArchivoCep', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al cargar el archivo');
+      }
+
+      toast({
+        title: "Éxito",
+        description: "CEPs cargados correctamente",
+      });
+
+      // Reset the input
+      event.target.value = '';
+      
+      // Refresh the data
+      queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
+    } catch (error) {
+      console.error("Error uploading CEPs:", error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los CEPs",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingCep(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Cuentas de Cobranza</h1>
-        <p className="text-muted-foreground">
-          Listado de cuentas de cobranza registradas en el sistema
-        </p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold">Cuentas de Cobranza</h1>
+          <p className="text-muted-foreground">
+            Listado de cuentas de cobranza registradas en el sistema
+          </p>
+        </div>
+        <div>
+          <input
+            type="file"
+            id="cep-upload"
+            accept=".zip"
+            className="hidden"
+            onChange={handleCepUpload}
+            disabled={uploadingCep}
+          />
+          <Button
+            onClick={() => document.getElementById('cep-upload')?.click()}
+            disabled={uploadingCep}
+          >
+            {uploadingCep ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Subiendo...
+              </>
+            ) : (
+              <>
+                <Upload className="mr-2 h-4 w-4" />
+                Subir Cep's
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
