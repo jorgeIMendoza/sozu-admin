@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, Plus } from "lucide-react";
+import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, Plus, Calendar } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { TransferPaymentDialog } from "@/components/admin/TransferPaymentDialog";
 import { NewMultaMantenimientoDialog } from "@/components/admin/NewMultaMantenimientoDialog";
+import { NewReservaDialog } from "@/components/admin/NewReservaDialog";
 import { Progress } from "@/components/ui/progress";
 
 interface AcuerdoPago {
@@ -73,6 +74,7 @@ export default function DetalleCuentaMantenimiento() {
   const [propietariosOpen, setPropietariosOpen] = useState(false);
   const [visibleAcuerdos, setVisibleAcuerdos] = useState(5);
   const [multaDialog, setMultaDialog] = useState(false);
+  const [reservaDialog, setReservaDialog] = useState(false);
 
   const { data: cuentaDetalle, isLoading: cuentaLoading } = useQuery({
     queryKey: ["cuenta_mantenimiento_detalle", cuentaId],
@@ -604,6 +606,13 @@ export default function DetalleCuentaMantenimiento() {
             <Plus className="h-4 w-4 mr-2" />
             Agregar Multa
           </Button>
+          <Button 
+            onClick={() => setReservaDialog(true)}
+            variant="outline"
+          >
+            <Calendar className="h-4 w-4 mr-2" />
+            Agregar Reserva
+          </Button>
         </div>
       </div>
 
@@ -1074,6 +1083,12 @@ export default function DetalleCuentaMantenimiento() {
         open={multaDialog}
         onOpenChange={setMultaDialog}
         cuentaId={cuentaId}
+      />
+
+      <NewReservaDialog
+        open={reservaDialog}
+        onOpenChange={setReservaDialog}
+        preselectedCuentaMantenimientoId={cuentaId}
       />
     </div>
   );
