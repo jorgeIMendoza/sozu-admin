@@ -4,9 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+interface TipoMulta {
+  id: number;
+  nombre: string;
+  activo: boolean;
+}
 
 interface NewMultaDialogProps {
   open: boolean;
@@ -20,17 +27,33 @@ interface NewMultaDialogProps {
 export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId, acuerdoMonto, existingMultas }: NewMultaDialogProps) {
   const [monto, setMonto] = useState("");
   const [descripcion, setDescripcion] = useState("");
+  const [idTipoMulta, setIdTipoMulta] = useState<string>("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const { data: tiposMulta = [] } = useQuery<TipoMulta[]>({
+    queryKey: ["tipos_multa"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .rpc('execute_safe_query', {
+          query_text: 'SELECT id, nombre, activo FROM tipos_multa WHERE activo = true ORDER BY nombre',
+          max_rows: 100
+        });
+      
+      if (error) throw error;
+      return (data as unknown as TipoMulta[]) || [];
+    },
+  });
+
   const createMultaMutation = useMutation({
-    mutationFn: async ({ monto, descripcion }: { monto: number; descripcion: string }) => {
+    mutationFn: async ({ monto, descripcion, idTipoMulta }: { monto: number; descripcion: string; idTipoMulta: number }) => {
       const { error } = await supabase
         .from('multas')
         .insert({
           id_acuerdo_pago: acuerdoId,
           monto,
-          descripcion
+          descripcion,
+          id_tipo_multa: idTipoMulta
         });
       
       if (error) throw error;
@@ -88,12 +111,26 @@ export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId, acuerd
       return;
     }
 
-    createMultaMutation.mutate({ monto: montoNumber, descripcion: descripcion.trim() });
+    if (!idTipoMulta) {
+      toast({
+        title: "Error",
+        description: "Debe seleccionar un tipo de multa",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createMultaMutation.mutate({ 
+      monto: montoNumber, 
+      descripcion: descripcion.trim(),
+      idTipoMulta: parseInt(idTipoMulta)
+    });
   };
 
   const handleClose = () => {
     setMonto("");
     setDescripcion("");
+    setIdTipoMulta("");
     onOpenChange(false);
   };
 
@@ -108,6 +145,25 @@ export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId, acuerd
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="tipo" className="text-right">
+                Tipo *
+              </Label>
+              <div className="col-span-3">
+                <Select value={idTipoMulta} onValueChange={setIdTipoMulta} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccione el tipo de multa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tiposMulta.map((tipo) => (
+                      <SelectItem key={tipo.id} value={tipo.id.toString()}>
+                        {tipo.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="monto" className="text-right">
                 Monto *
