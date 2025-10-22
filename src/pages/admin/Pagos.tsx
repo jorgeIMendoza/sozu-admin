@@ -209,10 +209,44 @@ export default function Pagos() {
         .eq('activo', true)
         .eq('es_multa', false);
 
+      // Calculate cash paid per cuenta, including complementary units
       const pagadoEfectivoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const totalEfectivo = aplicacionesCash
+        const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
+        const propiedadId = oferta?.propiedades?.id;
+        
+        // 1. Cash paid for main property account
+        let totalEfectivo = aplicacionesCash
           ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
           ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+        
+        // 2. Add cash paid for non-included bodegas (only for property accounts)
+        if (propiedadId && bodegaProductosPorPropiedad.has(propiedadId)) {
+          const bodegaProductos = bodegaProductosPorPropiedad.get(propiedadId) || [];
+          bodegaProductos.forEach(productoId => {
+            const cuentaComplementariaId = productoToCuentaMap.get(productoId);
+            if (cuentaComplementariaId) {
+              const efectivoBodega = aplicacionesCash
+                ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId)
+                ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+              totalEfectivo += efectivoBodega;
+            }
+          });
+        }
+        
+        // 3. Add cash paid for non-included estacionamientos (only for property accounts)
+        if (propiedadId && estacionamientoProductosPorPropiedad.has(propiedadId)) {
+          const estacionamientoProductos = estacionamientoProductosPorPropiedad.get(propiedadId) || [];
+          estacionamientoProductos.forEach(productoId => {
+            const cuentaComplementariaId = productoToCuentaMap.get(productoId);
+            if (cuentaComplementariaId) {
+              const efectivoEstacionamiento = aplicacionesCash
+                ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId)
+                ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+              totalEfectivo += efectivoEstacionamiento;
+            }
+          });
+        }
+        
         acc[cuenta.id] = totalEfectivo;
         return acc;
       }, {});
@@ -378,6 +412,96 @@ export default function Pagos() {
         console.error('Error fetching ofertas:', ofertasError);
         return [];
       }
+
+      // Get property IDs to find non-included bodegas and estacionamientos
+      const propiedadIds = ofertas
+        ?.filter(o => o.id_propiedad)
+        ?.map(o => o.id_propiedad) || [];
+
+      // Get bodegas not included for these properties
+      const { data: bodegasNoIncluidas } = propiedadIds.length > 0 ? await supabase
+        .from('bodegas')
+        .select('id, id_propiedad, id_producto, es_incluido')
+        .in('id_propiedad', propiedadIds)
+        .eq('es_incluido', false)
+        .eq('activo', true) : { data: [] };
+
+      // Get estacionamientos not included for these properties
+      const { data: estacionamientosNoIncluidos } = propiedadIds.length > 0 ? await supabase
+        .from('estacionamientos')
+        .select('id, id_propiedad, id_producto, es_incluido')
+        .in('id_propiedad', propiedadIds)
+        .eq('es_incluido', false)
+        .eq('activo', true) : { data: [] };
+
+      // Create maps: propiedad_id -> [producto_ids]
+      const bodegaProductosPorPropiedad = new Map<number, number[]>();
+      const estacionamientoProductosPorPropiedad = new Map<number, number[]>();
+
+      bodegasNoIncluidas?.forEach(b => {
+        if (b.id_producto && b.id_propiedad) {
+          if (!bodegaProductosPorPropiedad.has(b.id_propiedad)) {
+            bodegaProductosPorPropiedad.set(b.id_propiedad, []);
+          }
+          bodegaProductosPorPropiedad.get(b.id_propiedad)!.push(b.id_producto);
+        }
+      });
+
+      estacionamientosNoIncluidos?.forEach(e => {
+        if (e.id_producto && e.id_propiedad) {
+          if (!estacionamientoProductosPorPropiedad.has(e.id_propiedad)) {
+            estacionamientoProductosPorPropiedad.set(e.id_propiedad, []);
+          }
+          estacionamientoProductosPorPropiedad.get(e.id_propiedad)!.push(e.id_producto);
+        }
+      });
+
+      // Get all complementary product IDs
+      const complementarioProductIds = [
+        ...(bodegasNoIncluidas?.map(b => b.id_producto).filter(Boolean) || []),
+        ...(estacionamientosNoIncluidos?.map(e => e.id_producto).filter(Boolean) || [])
+      ];
+
+      // Get ofertas for complementary products
+      let ofertasComplementarias: any[] = [];
+      let cuentasComplementarias: any[] = [];
+
+      if (complementarioProductIds.length > 0) {
+        const { data: ofertasComp } = await supabase
+          .from('ofertas')
+          .select('id, id_producto')
+          .in('id_producto', complementarioProductIds)
+          .eq('activo', true);
+        
+        ofertasComplementarias = ofertasComp || [];
+        
+        if (ofertasComplementarias.length > 0) {
+          const ofertaCompIds = ofertasComplementarias.map(o => o.id);
+          
+          const { data: cuentasComp } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_oferta')
+            .in('id_oferta', ofertaCompIds)
+            .eq('activo', true);
+          
+          cuentasComplementarias = cuentasComp || [];
+        }
+      }
+
+      // Create map: oferta_id -> cuenta_id
+      const ofertaToCuentaCompMap = new Map<number, number>();
+      cuentasComplementarias.forEach(c => {
+        ofertaToCuentaCompMap.set(c.id_oferta, c.id);
+      });
+
+      // Create map: producto_id -> cuenta_id
+      const productoToCuentaMap = new Map<number, number>();
+      ofertasComplementarias.forEach(o => {
+        const cuentaId = ofertaToCuentaCompMap.get(o.id);
+        if (cuentaId && o.id_producto) {
+          productoToCuentaMap.set(o.id_producto, cuentaId);
+        }
+      });
 
       // Get compradores
       const { data: compradores } = await supabase
