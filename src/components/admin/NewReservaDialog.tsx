@@ -37,7 +37,6 @@ const formSchema = z.object({
   id_espacio_reservable_edificio: z.string().min(1, "Seleccione un espacio"),
   fecha_reserva: z.string().min(1, "Seleccione una fecha"),
   hora_reserva: z.string().min(1, "Seleccione una hora"),
-  id_estatus_reserva: z.string().min(1, "Seleccione un estatus"),
 });
 
 interface NewReservaDialogProps {
@@ -61,7 +60,6 @@ export const NewReservaDialog = ({
       id_espacio_reservable_edificio: "",
       fecha_reserva: format(new Date(), "yyyy-MM-dd"),
       hora_reserva: "09:00",
-      id_estatus_reserva: "1",
     },
   });
 
@@ -136,7 +134,6 @@ export const NewReservaDialog = ({
     },
   });
 
-  // @ts-ignore - Tablas no están en types aún
   const { data: espacios } = useQuery({
     queryKey: ["espacios_reservables"],
     queryFn: async () => {
@@ -144,8 +141,8 @@ export const NewReservaDialog = ({
         .from("espacios_reservables_edificio")
         .select(`
           *,
-          edificios(id, nombre, proyectos(id, nombre)),
-          tipos_espacio_reservables(id, nombre)
+          edificios!espacios_reservables_edificio_id_edificio_fkey(id, nombre, proyectos!edificios_id_proyecto_fkey(id, nombre)),
+          tipos_espacio_reservables!espacios_reservables_edificio_id_tipo_espacio_reservable_fkey(id, nombre)
         `)
         .eq("activo", true);
       if (error) throw error;
@@ -153,18 +150,6 @@ export const NewReservaDialog = ({
     },
   });
 
-  // @ts-ignore - Tablas no están en types aún
-  const { data: estatusReserva } = useQuery({
-    queryKey: ["estatus_reserva"],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("estatus_reserva")
-        .select("*")
-        .eq("activo", true);
-      if (error) throw error;
-      return data as any[];
-    },
-  });
 
   const createMutation = useMutation({
     mutationFn: async (values: z.infer<typeof formSchema>) => {
@@ -193,7 +178,7 @@ export const NewReservaDialog = ({
 
       if (acuerdoError) throw acuerdoError;
 
-      // Then create the reserva
+      // Then create the reserva with default status "Agendada" (1)
       const { data, error } = await (supabase as any)
         .from("reservas")
         .insert([{
@@ -202,7 +187,7 @@ export const NewReservaDialog = ({
           fecha_reserva: values.fecha_reserva,
           hora_reserva: values.hora_reserva,
           costo_final: costoFinal,
-          id_estatus_reserva: parseInt(values.id_estatus_reserva),
+          id_estatus_reserva: 1,
         }])
         .select()
         .single();
@@ -234,7 +219,7 @@ export const NewReservaDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nueva Reserva</DialogTitle>
         </DialogHeader>
@@ -330,31 +315,6 @@ export const NewReservaDialog = ({
                 )}
               />
             </div>
-
-            <FormField
-              control={form.control}
-              name="id_estatus_reserva"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Estatus</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar estatus" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {estatusReserva?.map((estatus: any) => (
-                        <SelectItem key={estatus.id} value={estatus.id.toString()}>
-                          {estatus.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
