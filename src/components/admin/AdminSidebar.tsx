@@ -115,6 +115,7 @@ const navigationItems = [
     icon: Wrench,
     children: [
       { title: "Cuentas de mantenimientos", href: "/admin/cuentas-mantenimiento", icon: Wrench },
+      { title: "Reservas de espacios", href: "/admin/reservas", icon: Calendar },
     ]
   },
   {

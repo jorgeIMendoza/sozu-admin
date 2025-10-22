@@ -44,6 +44,7 @@ const CuentasMantenimiento = lazy(() => import("./pages/admin/CuentasMantenimien
 const ComingSoon = lazy(() => import("./pages/admin/ComingSoon"));
 const RevisionDocumentacion = lazy(() => import("./pages/admin/RevisionDocumentacion"));
 const ConsultasIA = lazy(() => import("./pages/admin/ConsultasIA"));
+const Reservas = lazy(() => import("./pages/admin/Reservas"));
 
 const queryClient = new QueryClient();
 
@@ -104,6 +105,7 @@ const App = () => (
             <Route path="documentos" element={<ComingSoon title="Documentos" />} />
             <Route path="notarios/revision-documentacion" element={<RevisionDocumentacion />} />
             <Route path="consultas-ia" element={<ConsultasIA />} />
+            <Route path="reservas" element={<Reservas />} />
           </Route>
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
