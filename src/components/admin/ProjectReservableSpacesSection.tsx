@@ -132,8 +132,11 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
         title: "Espacio creado",
         description: "El espacio reservable ha sido creado exitosamente.",
       });
-      setOpen(false);
-      form.reset();
+      // Use setTimeout to prevent event propagation to parent dialog
+      setTimeout(() => {
+        setOpen(false);
+        form.reset();
+      }, 0);
     },
     onError: (error: any) => {
       toast({
@@ -172,9 +175,12 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
         title: "Espacio actualizado",
         description: "El espacio reservable ha sido actualizado exitosamente.",
       });
-      setOpen(false);
-      setEditingSpace(null);
-      form.reset();
+      // Use setTimeout to prevent event propagation to parent dialog
+      setTimeout(() => {
+        setOpen(false);
+        setEditingSpace(null);
+        form.reset();
+      }, 0);
     },
     onError: (error: any) => {
       toast({
@@ -211,12 +217,17 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
     },
   });
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
-    if (editingSpace) {
-      updateMutation.mutate({ id: editingSpace.id, values });
-    } else {
-      createMutation.mutate(values);
-    }
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    form.handleSubmit((values) => {
+      if (editingSpace) {
+        updateMutation.mutate({ id: editingSpace.id, values });
+      } else {
+        createMutation.mutate(values);
+      }
+    })(e);
   };
 
   const handleEdit = (space: any) => {
@@ -294,7 +305,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
                 </DialogTitle>
               </DialogHeader>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <form onSubmit={onSubmit} className="space-y-4">
                   <FormField
                     control={form.control}
                     name="id_edificio"
