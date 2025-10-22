@@ -14,6 +14,7 @@ import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { TransferPaymentDialog } from "@/components/admin/TransferPaymentDialog";
+import { Progress } from "@/components/ui/progress";
 
 interface AcuerdoPago {
   id: number;
@@ -721,9 +722,9 @@ export default function DetalleCuentaMantenimiento() {
                       <Collapsible key={acuerdo.id} open={isOpen} onOpenChange={() => toggleAcuerdo(acuerdo.id)}>
                         <div className="border rounded-lg">
                           <CollapsibleTrigger asChild>
-                            <div className="w-full p-3 flex items-center justify-between hover:bg-muted/50 cursor-pointer">
-                              <div className="flex items-center gap-4">
-                                <div className="flex flex-col gap-1">
+                            <div className="w-full p-3 hover:bg-muted/50 cursor-pointer">
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex flex-col gap-1 flex-1">
                                   <span className="text-sm font-medium">{formatConcepto(acuerdo.concepto, acuerdo.fecha_pago)}</span>
                                   {conRecargos() && cuentaDetalle?.monto_mensual_cuota_extraordinaria ? (
                                     <>
@@ -754,12 +755,28 @@ export default function DetalleCuentaMantenimiento() {
                                     </div>
                                   )}
                                 </div>
+                                <div className="flex items-center gap-3">
+                                  <Badge variant={acuerdo.pago_completado ? "default" : totalAplicado > 0 ? "secondary" : "outline"}>
+                                    {acuerdo.pago_completado ? "Pagado" : totalAplicado > 0 ? "Parcial" : "Pendiente"}
+                                  </Badge>
+                                  {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <Badge variant={acuerdo.pago_completado ? "default" : totalAplicado > 0 ? "secondary" : "outline"}>
-                                  {acuerdo.pago_completado ? "Pagado" : totalAplicado > 0 ? "Parcial" : "Pendiente"}
-                                </Badge>
-                                {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+
+                              {/* Barra de progreso visual */}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">
+                                    Pagado: <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(totalAplicado)}</span>
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    Pendiente: <span className="font-semibold text-orange-600 dark:text-orange-400">{formatCurrency(acuerdo.monto - totalAplicado)}</span>
+                                  </span>
+                                </div>
+                                <Progress 
+                                  value={(totalAplicado / acuerdo.monto) * 100} 
+                                  className="h-2"
+                                />
                               </div>
                             </div>
                           </CollapsibleTrigger>
