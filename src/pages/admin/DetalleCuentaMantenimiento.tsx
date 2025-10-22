@@ -773,10 +773,17 @@ export default function DetalleCuentaMantenimiento() {
                                     Pendiente: <span className="font-semibold text-orange-600 dark:text-orange-400">{formatCurrency(acuerdo.monto - totalAplicado)}</span>
                                   </span>
                                 </div>
-                                <Progress 
-                                  value={(totalAplicado / acuerdo.monto) * 100} 
-                                  className="h-2"
-                                />
+                                <div className="relative">
+                                  <Progress 
+                                    value={(totalAplicado / acuerdo.monto) * 100} 
+                                    className="h-2"
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="text-[10px] font-semibold text-foreground drop-shadow-sm">
+                                      {((totalAplicado / acuerdo.monto) * 100).toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </CollapsibleTrigger>
