@@ -483,7 +483,14 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
                   {spaces.map((space: any) => (
                     <Card key={space.id}>
                       <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
+                        <div className="flex items-start justify-between gap-4">
+                          {space.url_imagen && (
+                            <img 
+                              src={space.url_imagen} 
+                              alt={space.tipos_espacio_reservables?.nombre}
+                              className="w-20 h-20 object-cover rounded-md flex-shrink-0"
+                            />
+                          )}
                           <div className="flex-1 space-y-1">
                             <div className="flex items-center gap-2">
                               <h5 className="font-medium">
@@ -505,7 +512,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <Button
                               size="sm"
                               variant="ghost"
