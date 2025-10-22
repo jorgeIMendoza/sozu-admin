@@ -17,6 +17,7 @@ import { BuildingManagement } from "./BuildingManagement";
 import { PaymentSchemeManagement } from "./PaymentSchemeManagement";
 import { ProjectLegalEntitiesSection } from "./ProjectLegalEntitiesSection";
 import { ProjectMultimediaSection } from "./ProjectMultimediaSection";
+import { ProjectReservableSpacesSection } from "./ProjectReservableSpacesSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { GoogleMapComponent } from "./GoogleMapComponent";
@@ -403,11 +404,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" id="edit-project-form">
               <Tabs defaultValue="information" className="w-full">
-                <TabsList className={`grid w-full ${isSpecialProject ? 'grid-cols-2' : 'grid-cols-5'}`}>
+                <TabsList className={`grid w-full ${isSpecialProject ? 'grid-cols-2' : 'grid-cols-6'}`}>
                   <TabsTrigger value="information">Información</TabsTrigger>
                   {!isSpecialProject && <TabsTrigger value="images">Configuración general</TabsTrigger>}
                   {!isSpecialProject && <TabsTrigger value="multimedia">Multimedia</TabsTrigger>}
                   <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
+                  {!isSpecialProject && <TabsTrigger value="reservable-spaces">Espacios para reservar</TabsTrigger>}
                   {!isSpecialProject && <TabsTrigger value="offer-config">Configuración de oferta</TabsTrigger>}
                 </TabsList>
                 
@@ -945,6 +947,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                 
                 <TabsContent value="legal-entities" className="mt-6">
                   <ProjectLegalEntitiesSection projectId={projectId} isProductosOrServicios={isSpecialProject} />
+                </TabsContent>
+                
+                <TabsContent value="reservable-spaces" className="mt-6">
+                  <ProjectReservableSpacesSection projectId={projectId} />
                 </TabsContent>
                 
                 <TabsContent value="offer-config" className="mt-6 space-y-6">
