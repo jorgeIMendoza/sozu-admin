@@ -185,6 +185,7 @@ export default function Pagos() {
       console.log('Pagado por cuenta:', pagadoPorCuenta);
 
       // Get cash payments (id_metodos_pago = 1) for all accounts using aplicaciones_pago
+      // Note: Will calculate pagadoEfectivoPorCuenta and pagosCashPorCuenta after fetching ofertas and complementary data
       const { data: pagosCash } = await supabase
         .from('pagos')
         .select('id, fecha_pago, id_metodos_pago, activo')
@@ -208,73 +209,6 @@ export default function Pagos() {
         .in('id_acuerdo_pago', acuerdoIdsForPagos)
         .eq('activo', true)
         .eq('es_multa', false);
-
-      // Calculate cash paid per cuenta, including complementary units
-      const pagadoEfectivoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
-        const propiedadId = oferta?.propiedades?.id;
-        
-        // 1. Cash paid for main property account
-        let totalEfectivo = aplicacionesCash
-          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
-          ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
-        
-        // 2. Add cash paid for non-included bodegas (only for property accounts)
-        if (propiedadId && bodegaProductosPorPropiedad.has(propiedadId)) {
-          const bodegaProductos = bodegaProductosPorPropiedad.get(propiedadId) || [];
-          bodegaProductos.forEach(productoId => {
-            const cuentaComplementariaId = productoToCuentaMap.get(productoId);
-            if (cuentaComplementariaId) {
-              const efectivoBodega = aplicacionesCash
-                ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId)
-                ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
-              totalEfectivo += efectivoBodega;
-            }
-          });
-        }
-        
-        // 3. Add cash paid for non-included estacionamientos (only for property accounts)
-        if (propiedadId && estacionamientoProductosPorPropiedad.has(propiedadId)) {
-          const estacionamientoProductos = estacionamientoProductosPorPropiedad.get(propiedadId) || [];
-          estacionamientoProductos.forEach(productoId => {
-            const cuentaComplementariaId = productoToCuentaMap.get(productoId);
-            if (cuentaComplementariaId) {
-              const efectivoEstacionamiento = aplicacionesCash
-                ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId)
-                ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
-              totalEfectivo += efectivoEstacionamiento;
-            }
-          });
-        }
-        
-        acc[cuenta.id] = totalEfectivo;
-        return acc;
-      }, {});
-
-      // Create a map of individual cash payments per account with aggregated amounts
-      const pagosCashPorCuenta = cuentas.reduce((acc: Record<number, CashPayment[]>, cuenta) => {
-        // Get all cash payment IDs for this cuenta through aplicaciones
-        const aplicacionesForCuenta = aplicacionesCash
-          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id) || [];
-        
-        // Group by payment ID and sum amounts
-        const pagoAggregated = aplicacionesForCuenta.reduce((pagoAcc: Record<number, number>, ap) => {
-          pagoAcc[ap.id_pago] = (pagoAcc[ap.id_pago] || 0) + (ap.monto || 0);
-          return pagoAcc;
-        }, {});
-        
-        // Map to payment details
-        const pagos = Object.entries(pagoAggregated).map(([pagoId, monto]) => {
-          const pago = pagosCash?.find(p => p.id === parseInt(pagoId));
-          return {
-            fecha_pago: pago?.fecha_pago || '',
-            monto: monto as number
-          };
-        }).filter(p => p.fecha_pago);
-        
-        acc[cuenta.id] = pagos;
-        return acc;
-      }, {});
 
       // Get acuerdos_pago to check if "Apartado" or "Enganche" is paid
       const { data: acuerdosPago } = await supabase
@@ -502,6 +436,73 @@ export default function Pagos() {
           productoToCuentaMap.set(o.id_producto, cuentaId);
         }
       });
+
+      // Calculate cash paid per cuenta, including complementary units
+      const pagadoEfectivoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
+        const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
+        const propiedadId = oferta?.id_propiedad;
+        
+        // 1. Cash paid for main property account
+        let totalEfectivo = aplicacionesCash
+          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
+          ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+        
+        // 2. Add cash paid for non-included bodegas (only for property accounts)
+        if (propiedadId && bodegaProductosPorPropiedad.has(propiedadId)) {
+          const bodegaProductos = bodegaProductosPorPropiedad.get(propiedadId) || [];
+          bodegaProductos.forEach(productoId => {
+            const cuentaComplementariaId = productoToCuentaMap.get(productoId);
+            if (cuentaComplementariaId) {
+              const efectivoBodega = aplicacionesCash
+                ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId)
+                ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+              totalEfectivo += efectivoBodega;
+            }
+          });
+        }
+        
+        // 3. Add cash paid for non-included estacionamientos (only for property accounts)
+        if (propiedadId && estacionamientoProductosPorPropiedad.has(propiedadId)) {
+          const estacionamientoProductos = estacionamientoProductosPorPropiedad.get(propiedadId) || [];
+          estacionamientoProductos.forEach(productoId => {
+            const cuentaComplementariaId = productoToCuentaMap.get(productoId);
+            if (cuentaComplementariaId) {
+              const efectivoEstacionamiento = aplicacionesCash
+                ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId)
+                ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+              totalEfectivo += efectivoEstacionamiento;
+            }
+          });
+        }
+        
+        acc[cuenta.id] = totalEfectivo;
+        return acc;
+      }, {});
+
+      // Create a map of individual cash payments per account with aggregated amounts
+      const pagosCashPorCuenta = cuentas.reduce((acc: Record<number, CashPayment[]>, cuenta) => {
+        // Get all cash payment IDs for this cuenta through aplicaciones
+        const aplicacionesForCuenta = aplicacionesCash
+          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id) || [];
+        
+        // Group by payment ID and sum amounts
+        const pagoAggregated = aplicacionesForCuenta.reduce((pagoAcc: Record<number, number>, ap) => {
+          pagoAcc[ap.id_pago] = (pagoAcc[ap.id_pago] || 0) + (ap.monto || 0);
+          return pagoAcc;
+        }, {});
+        
+        // Map to payment details
+        const pagos = Object.entries(pagoAggregated).map(([pagoId, monto]) => {
+          const pago = pagosCash?.find(p => p.id === parseInt(pagoId));
+          return {
+            fecha_pago: pago?.fecha_pago || '',
+            monto: monto as number
+          };
+        }).filter(p => p.fecha_pago);
+        
+        acc[cuenta.id] = pagos;
+        return acc;
+      }, {});
 
       // Get compradores
       const { data: compradores } = await supabase
