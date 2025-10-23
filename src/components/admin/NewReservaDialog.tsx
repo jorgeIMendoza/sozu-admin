@@ -70,6 +70,76 @@ export const NewReservaDialog = ({
     },
   });
 
+  // Query para obtener datos de la cuenta de mantenimiento preseleccionada
+  const { data: cuentaMantenimientoData } = useQuery({
+    queryKey: ["cuenta_mantenimiento_prellenado", preselectedCuentaMantenimientoId],
+    queryFn: async () => {
+      if (!preselectedCuentaMantenimientoId) return null;
+
+      // Get cuenta mantenimiento
+      const { data: cuentaMant, error: cuentaError } = await supabase
+        .from('cuentas_cobranza')
+        .select('id, id_cuenta_cobranza_padre')
+        .eq('id', preselectedCuentaMantenimientoId)
+        .maybeSingle();
+
+      if (cuentaError || !cuentaMant?.id_cuenta_cobranza_padre) return null;
+
+      // Get cuenta padre with oferta
+      const { data: cuentaPadre, error: padreError } = await supabase
+        .from('cuentas_cobranza')
+        .select('id_oferta')
+        .eq('id', cuentaMant.id_cuenta_cobranza_padre)
+        .maybeSingle();
+
+      if (padreError || !cuentaPadre?.id_oferta) return null;
+
+      // Get oferta with propiedad
+      const { data: oferta, error: ofertaError } = await supabase
+        .from('ofertas')
+        .select('id_propiedad')
+        .eq('id', cuentaPadre.id_oferta)
+        .maybeSingle();
+
+      if (ofertaError || !oferta?.id_propiedad) return null;
+
+      // Get propiedad with edificio_modelo
+      const { data: propiedad, error: propiedadError } = await supabase
+        .from('propiedades')
+        .select('id, id_edificio_modelo')
+        .eq('id', oferta.id_propiedad)
+        .maybeSingle();
+
+      if (propiedadError || !propiedad?.id_edificio_modelo) return null;
+
+      // Get edificio_modelo with edificio
+      const { data: edificioModelo, error: edificioModeloError } = await supabase
+        .from('edificios_modelos')
+        .select('id_edificio')
+        .eq('id', propiedad.id_edificio_modelo)
+        .maybeSingle();
+
+      if (edificioModeloError || !edificioModelo?.id_edificio) return null;
+
+      // Get edificio with proyecto
+      const { data: edificio, error: edificioError } = await supabase
+        .from('edificios')
+        .select('id, id_proyecto')
+        .eq('id', edificioModelo.id_edificio)
+        .maybeSingle();
+
+      if (edificioError || !edificio?.id_proyecto) return null;
+
+      return {
+        id_cuenta_mantenimiento: cuentaMant.id,
+        id_propiedad: propiedad.id,
+        id_edificio: edificio.id,
+        id_proyecto: edificio.id_proyecto,
+      };
+    },
+    enabled: !!preselectedCuentaMantenimientoId && open,
+  });
+
   // Fetch proyectos
   const { data: proyectos } = useQuery({
     queryKey: ["proyectos_activos"],
@@ -471,19 +541,34 @@ export const NewReservaDialog = ({
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
-      form.reset({
-        id_proyecto: "",
-        id_edificio: "",
-        id_propiedad: "",
-        id_comprador: "",
-        id_espacio_reservable_edificio: "",
-        fecha_reserva: format(new Date(), "yyyy-MM-dd"),
-        hora_reserva: "09:00",
-      });
+      if (cuentaMantenimientoData) {
+        // Si hay datos preseleccionados, llenar el formulario
+        form.reset({
+          id_proyecto: cuentaMantenimientoData.id_proyecto.toString(),
+          id_edificio: cuentaMantenimientoData.id_edificio.toString(),
+          id_propiedad: cuentaMantenimientoData.id_propiedad.toString(),
+          id_comprador: "",
+          id_espacio_reservable_edificio: "",
+          fecha_reserva: format(new Date(), "yyyy-MM-dd"),
+          hora_reserva: "09:00",
+        });
+        setSelectedCuentaMantenimiento({ id: cuentaMantenimientoData.id_cuenta_mantenimiento });
+      } else {
+        // Si no hay datos preseleccionados, resetear todo
+        form.reset({
+          id_proyecto: "",
+          id_edificio: "",
+          id_propiedad: "",
+          id_comprador: "",
+          id_espacio_reservable_edificio: "",
+          fecha_reserva: format(new Date(), "yyyy-MM-dd"),
+          hora_reserva: "09:00",
+        });
+        setSelectedCuentaMantenimiento(null);
+      }
       setSelectedEspacio(null);
-      setSelectedCuentaMantenimiento(null);
     }
-  }, [open, form]);
+  }, [open, form, cuentaMantenimientoData]);
 
   // Auto-select persona if only one exists
   useEffect(() => {
