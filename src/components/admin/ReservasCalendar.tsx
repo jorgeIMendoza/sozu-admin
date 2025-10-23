@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, CheckCheck, Loader2, Ban } from "lucide-react";
-import { format, startOfWeek, addDays, isSameDay, parseISO, addWeeks, subWeeks } from "date-fns";
+import { format, startOfWeek, addDays, isSameDay, parseISO, addWeeks, subWeeks, isBefore, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import {
@@ -12,6 +12,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { EditReservaDialog } from "./EditReservaDialog";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface ReservasCalendarProps {
   reservas: any[];
@@ -22,7 +25,10 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [editReservaId, setEditReservaId] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [draggedReserva, setDraggedReserva] = useState<any | null>(null);
+  const [dragOverSlot, setDragOverSlot] = useState<{ day: Date; hour: number; minute: number } | null>(null);
   
+  const queryClient = useQueryClient();
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 }); // Lunes
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   
@@ -36,6 +42,110 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
     }, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Mutación para actualizar fecha y hora de reserva
+  const updateReservaMutation = useMutation({
+    mutationFn: async ({ reservaId, fecha, hora }: { reservaId: number; fecha: string; hora: string }) => {
+      const { error } = await supabase
+        .from('reservas')
+        .update({
+          fecha_reserva: fecha,
+          hora_reserva: hora,
+        })
+        .eq('id', reservaId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reservas"] });
+      toast.success("Reserva movida exitosamente");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Error al mover reserva");
+    },
+  });
+
+  // Verificar si un slot está en el pasado
+  const isSlotInPast = (day: Date, hour: number, minute: number = 0) => {
+    const slotDateTime = new Date(day);
+    slotDateTime.setHours(hour, minute, 0, 0);
+    return isBefore(slotDateTime, currentTime);
+  };
+
+  // Handlers de drag and drop
+  const handleDragStart = (e: React.DragEvent, reserva: any) => {
+    // Solo permitir arrastrar si es editable (estatus <= 2)
+    if (reserva.id_estatus_reserva > 2) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedReserva(reserva);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDraggedReserva(null);
+    setDragOverSlot(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, day: Date, hour: number) => {
+    e.preventDefault();
+    
+    if (!draggedReserva) return;
+    
+    // Calcular minutos basados en la posición del mouse dentro del slot
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const minute = Math.floor((y / 60) * 60); // 60px = 60 minutos
+    
+    // No permitir drop en el pasado
+    if (isSlotInPast(day, hour, minute)) {
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverSlot({ day, hour, minute });
+  };
+
+  const handleDragLeave = () => {
+    setDragOverSlot(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, day: Date, hour: number) => {
+    e.preventDefault();
+    
+    if (!draggedReserva || !dragOverSlot) return;
+    
+    const minute = dragOverSlot.minute;
+    
+    // Validar que no sea en el pasado
+    if (isSlotInPast(day, hour, minute)) {
+      toast.error("No se puede mover a un horario pasado");
+      setDraggedReserva(null);
+      setDragOverSlot(null);
+      return;
+    }
+    
+    const nuevaFecha = format(day, 'yyyy-MM-dd');
+    const nuevaHora = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    
+    // Verificar si es diferente a la actual
+    if (nuevaFecha === draggedReserva.fecha_reserva && nuevaHora === draggedReserva.hora_reserva) {
+      setDraggedReserva(null);
+      setDragOverSlot(null);
+      return;
+    }
+    
+    updateReservaMutation.mutate({
+      reservaId: draggedReserva.id,
+      fecha: nuevaFecha,
+      hora: nuevaHora,
+    });
+    
+    setDraggedReserva(null);
+    setDragOverSlot(null);
+  };
 
   const estatusConfig = {
     1: { nombre: "Agendada", icon: Clock, color: "bg-blue-500/20 border-blue-500 text-blue-700", iconColor: "text-blue-600" },
@@ -182,7 +292,7 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
         </div>
 
         {/* Leyenda de estatus */}
-        <div className="flex items-center gap-4 p-3 bg-muted/30 rounded-lg">
+        <div className="flex items-center gap-4 p-3 bg-muted/30 rounded-lg flex-wrap">
           <span className="text-sm font-medium">Estatus:</span>
           {Object.entries(estatusConfig).map(([id, config]) => {
             const IconComponent = config.icon;
@@ -193,6 +303,9 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
               </div>
             );
           })}
+          <div className="ml-auto text-xs text-muted-foreground italic">
+            💡 Arrastra y suelta las reservas editables para cambiar su horario
+          </div>
         </div>
 
         {/* Calendario */}
@@ -203,13 +316,19 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
             {weekDays.map((day, i) => {
               const reservasPorEstatus = getReservasByEstatusForDay(day);
               const tieneReservas = Object.keys(reservasPorEstatus).length > 0;
+              const isDayInPast = isBefore(startOfDay(day), startOfDay(currentTime));
               
               return (
-                <div key={i} className="border-b border-l p-2 text-center bg-muted/50">
+                <div key={i} className={`border-b border-l p-2 text-center ${
+                  isDayInPast ? 'bg-muted/70 opacity-60' : 'bg-muted/50'
+                }`}>
                   <div className="font-semibold text-sm">
                     {format(day, "EEE", { locale: es }).toUpperCase()}
                   </div>
                   <div className="text-2xl font-bold">{format(day, "d")}</div>
+                  {isDayInPast && (
+                    <div className="text-xs text-muted-foreground mt-1 italic">Pasado</div>
+                  )}
                   {tieneReservas && (
                     <div className="flex gap-1.5 justify-center mt-1 flex-wrap">
                       {Object.entries(reservasPorEstatus).map(([estatusId, count]) => {
@@ -258,11 +377,19 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
                   const dayReservas = getReservasForDayAndTime(day, hour);
                   const isOccupied = isSlotOccupied(day, hour);
                   const isToday = isSameDay(day, new Date());
+                  const isPastSlot = isSlotInPast(day, hour);
+                  const isDayInPast = isBefore(startOfDay(day), startOfDay(currentTime));
+                  const isDropTarget = dragOverSlot?.day && isSameDay(dragOverSlot.day, day) && dragOverSlot.hour === hour;
                   
                   return (
                     <div
                       key={`${dayIndex}-${hour}`}
-                      className="border-b border-l p-1 min-h-[60px] relative"
+                      className={`border-b border-l p-1 min-h-[60px] relative transition-colors ${
+                        isPastSlot ? 'bg-muted/40' : ''
+                      } ${isDropTarget ? 'bg-primary/10 ring-2 ring-primary' : ''}`}
+                      onDragOver={(e) => handleDragOver(e, day, hour)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, day, hour)}
                     >
                       {/* Línea de hora actual */}
                       {isToday && currentTimePosition !== null && hour === currentHour && (
@@ -304,23 +431,31 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
                         
                         // Verificar si es editable (estatus <= 2)
                         const isEditable = reserva.id_estatus_reserva <= 2;
+                        const isDragging = draggedReserva?.id === reserva.id;
                         
                         return (
                           <HoverCard key={idx} openDelay={200}>
                             <HoverCardTrigger asChild>
                               <div
-                                className={`rounded border p-2 transition-opacity absolute ${estatusInfo?.color} ${
-                                  isEditable ? 'cursor-pointer hover:opacity-80' : 'cursor-default opacity-70'
-                                }`}
+                                draggable={isEditable}
+                                onDragStart={(e) => handleDragStart(e, reserva)}
+                                onDragEnd={handleDragEnd}
+                                className={`rounded border p-2 transition-all absolute ${estatusInfo?.color} ${
+                                  isEditable ? 'cursor-move hover:opacity-80 hover:shadow-lg' : 'cursor-default opacity-70'
+                                } ${isDragging ? 'opacity-30 scale-95' : ''}`}
                                 style={{ 
                                   height: `${heightInPixels}px`,
                                   top: `${topOffsetPixels}px`,
-                                  zIndex: 10,
+                                  zIndex: isDragging ? 5 : 10,
                                   left: `${leftPercent}%`,
                                   width: `calc(${widthPercent}% - 4px)`,
                                   marginLeft: '2px'
                                 }}
-                                onClick={() => isEditable && setEditReservaId(reserva.id)}
+                                onClick={(e) => {
+                                  if (!isDragging && isEditable) {
+                                    setEditReservaId(reserva.id);
+                                  }
+                                }}
                               >
                                 <div className="flex items-center justify-center">
                                   {IconComponent && <IconComponent className={`h-3.5 w-3.5 ${estatusInfo.iconColor}`} />}
