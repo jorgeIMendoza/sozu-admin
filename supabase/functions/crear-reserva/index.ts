@@ -47,6 +47,70 @@ Deno.serve(async (req) => {
 
     const nuevoOrden = (maxOrdenData?.orden || 0) + 1;
 
+    // Validar que la cuenta esté al corriente (sin adeudos)
+    // Obtener todos los acuerdos de pago de la cuenta
+    const { data: acuerdos, error: acuerdosError } = await supabase
+      .from('acuerdos_pago')
+      .select('id, monto')
+      .eq('id_cuenta_cobranza', id_cuenta_mantenimiento)
+      .eq('activo', true);
+
+    if (acuerdosError) {
+      console.error('Error al obtener acuerdos:', acuerdosError);
+      return new Response(
+        JSON.stringify({ error: acuerdosError.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    // Calcular total a pagar (incluye multas)
+    let totalAPagar = 0;
+    const acuerdoIds = acuerdos?.map(a => a.id) || [];
+
+    // Sumar montos de acuerdos normales
+    for (const acuerdo of acuerdos || []) {
+      totalAPagar += Number(acuerdo.monto);
+    }
+
+    // Agregar multas al total a pagar
+    if (acuerdoIds.length > 0) {
+      const { data: multas } = await supabase
+        .from('multas')
+        .select('monto')
+        .in('id_acuerdo_pago', acuerdoIds)
+        .eq('activo', true);
+
+      for (const multa of multas || []) {
+        totalAPagar += Number(multa.monto);
+      }
+    }
+
+    // Calcular total pagado
+    let totalPagado = 0;
+    if (acuerdoIds.length > 0) {
+      const { data: aplicaciones } = await supabase
+        .from('aplicaciones_pago')
+        .select('monto')
+        .in('id_acuerdo_pago', acuerdoIds)
+        .eq('activo', true);
+
+      for (const aplicacion of aplicaciones || []) {
+        totalPagado += Number(aplicacion.monto);
+      }
+    }
+
+    // Validar que no haya adeudo
+    const saldoPendiente = totalAPagar - totalPagado;
+    if (saldoPendiente > 0.01) { // Tolerancia de 1 centavo por redondeo
+      return new Response(
+        JSON.stringify({ 
+          error: 'No se puede crear la reserva. La cuenta de mantenimiento tiene un saldo pendiente de $' + saldoPendiente.toFixed(2),
+          saldo_pendiente: saldoPendiente
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
     // Usar una transacción para crear acuerdo_pago y reserva
     const { data: acuerdo, error: acuerdoError } = await supabase
       .from('acuerdos_pago')

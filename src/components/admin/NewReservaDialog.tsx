@@ -428,7 +428,11 @@ export const NewReservaDialog = ({
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Extraer el mensaje de error del contexto si está disponible
+        const errorMessage = error.context?.error || error.message || 'Error al crear reserva';
+        throw new Error(errorMessage);
+      }
       if (!data.success) throw new Error(data.error || 'Error al crear reserva');
       
       return data.data;
