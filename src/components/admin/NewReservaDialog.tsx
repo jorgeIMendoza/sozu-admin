@@ -387,6 +387,7 @@ export const NewReservaDialog = ({
           hora_reserva: values.hora_reserva,
           costo_final: costoFinal,
           id_estatus_reserva: 1,
+          id_persona_que_reserva: parseInt(values.id_comprador),
         }])
         .select()
         .single();
