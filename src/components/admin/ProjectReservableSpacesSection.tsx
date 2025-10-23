@@ -557,7 +557,11 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => handleEdit(space)}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleEdit(space);
+                                  }}
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
