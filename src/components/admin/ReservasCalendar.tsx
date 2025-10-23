@@ -192,6 +192,8 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
                                   <div>
                                     <span className="font-medium">Espacio reservado:</span>
                                     <p className="text-muted-foreground">
+                                      {reserva.espacios_reservables_edificio?.edificios?.proyectos?.nombre || "N/A"}-
+                                      {reserva.espacios_reservables_edificio?.edificios?.nombre || "N/A"}-
                                       {reserva.espacios_reservables_edificio?.descripcion || "N/A"}
                                     </p>
                                   </div>
