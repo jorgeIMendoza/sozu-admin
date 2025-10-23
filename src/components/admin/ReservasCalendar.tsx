@@ -29,11 +29,18 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
   };
 
   const getReservasForDayAndTime = (day: Date, hour: number) => {
-    return reservas.filter((reserva) => {
+    const reservasEnSlot = reservas.filter((reserva) => {
       const reservaDate = parseISO(reserva.fecha_reserva);
       const reservaHour = parseInt(reserva.hora_reserva.split(":")[0]);
       return isSameDay(reservaDate, day) && reservaHour === hour;
     });
+    
+    // Asignar posición horizontal a cada reserva
+    return reservasEnSlot.map((reserva, index) => ({
+      ...reserva,
+      horizontalIndex: index,
+      totalInSlot: reservasEnSlot.length
+    }));
   };
 
   const calculateReservaDuration = (reserva: any) => {
@@ -200,14 +207,22 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
                         const IconComponent = estatusInfo?.icon;
                         const heightInPixels = duration * 60 - 8; // Cada hora = 60px, menos padding
                         
+                        // Calcular posición horizontal
+                        const totalReservas = reserva.totalInSlot || 1;
+                        const widthPercent = 100 / totalReservas;
+                        const leftPercent = (reserva.horizontalIndex || 0) * widthPercent;
+                        
                         return (
                           <HoverCard key={idx}>
                             <HoverCardTrigger asChild>
                               <div
-                                className={`rounded border p-2 cursor-pointer hover:opacity-80 transition-opacity absolute left-1 right-1 ${estatusInfo?.color}`}
+                                className={`rounded border p-2 cursor-pointer hover:opacity-80 transition-opacity absolute ${estatusInfo?.color}`}
                                 style={{ 
                                   height: `${heightInPixels}px`,
-                                  zIndex: 10
+                                  zIndex: 10,
+                                  left: `${leftPercent}%`,
+                                  width: `calc(${widthPercent}% - 4px)`,
+                                  marginLeft: '2px'
                                 }}
                               >
                                 <div className="flex items-center gap-1.5">

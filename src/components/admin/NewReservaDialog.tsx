@@ -361,13 +361,12 @@ export const NewReservaDialog = ({
     enabled: !!edificioIdSelected && !!fechaReserva && !!horaReserva,
   });
 
-  // Filtrar espacios disponibles según las reservas existentes
-  const espaciosDisponibles = espacios?.filter((espacio) => {
-    if (!reservasExistentes || reservasExistentes.length === 0) return true;
+  // Función para verificar si un espacio está ocupado
+  const verificarEspacioOcupado = (espacioId: number) => {
+    if (!reservasExistentes || reservasExistentes.length === 0 || !horaReserva) return false;
 
-    // Verificar si este espacio ya está reservado en un horario que se solapa
-    const espacioReservado = reservasExistentes.some((reserva: any) => {
-      if (reserva.id_espacio_reservable_edificio !== espacio.id) return false;
+    return reservasExistentes.some((reserva: any) => {
+      if (reserva.id_espacio_reservable_edificio !== espacioId) return false;
 
       // Parsear hora de la reserva existente
       const [horaExistenteHr, horaExistenteMin] = reserva.hora_reserva.split(":").map(Number);
@@ -383,7 +382,8 @@ export const NewReservaDialog = ({
       const horaNuevaEnMinutos = horaNuevaHr * 60 + horaNuevaMin;
 
       // Parsear duración del espacio actual
-      const duracionEspacio = espacio.duracion_reserva || "01:00:00";
+      const espacio = espacios?.find(e => e.id === espacioId);
+      const duracionEspacio = espacio?.duracion_reserva || "01:00:00";
       const duracionEspacioHoras = parseInt(duracionEspacio.split(":")[0]);
       const duracionEspacioEnMinutos = duracionEspacioHoras * 60;
 
@@ -397,9 +397,7 @@ export const NewReservaDialog = ({
         (horaNuevaEnMinutos <= horaExistenteEnMinutos && finNueva >= finExistente)
       );
     });
-
-    return !espacioReservado;
-  }) || [];
+  };
 
 
   const createMutation = useMutation({
@@ -653,18 +651,40 @@ export const NewReservaDialog = ({
                 <FormItem>
                   <FormLabel>Espacio a reservar</FormLabel>
                   <FormControl>
-                    <Combobox
+                    <Select 
+                      onValueChange={handleEspacioChange} 
                       value={field.value}
-                      onValueChange={handleEspacioChange}
-                      options={(espaciosDisponibles || []).map((espacio: any) => ({
-                        value: espacio.id.toString(),
-                        label: espacio.descripcion || espacio.tipos_espacio_reservables?.nombre || "Sin descripción",
-                      }))}
-                      placeholder="Seleccionar espacio"
-                      searchPlaceholder="Buscar espacio..."
-                      emptyText={!fechaReserva || !horaReserva ? "Seleccione fecha y hora primero" : "No hay espacios disponibles para este horario"}
                       disabled={!form.watch("id_edificio") || !fechaReserva || !horaReserva}
-                    />
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar espacio" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {!fechaReserva || !horaReserva ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            Seleccione fecha y hora primero
+                          </div>
+                        ) : (espacios || []).length === 0 ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            No hay espacios disponibles
+                          </div>
+                        ) : (
+                          (espacios || []).map((espacio: any) => {
+                            const ocupado = verificarEspacioOcupado(espacio.id);
+                            const label = espacio.descripcion || espacio.tipos_espacio_reservables?.nombre || "Sin descripción";
+                            return (
+                              <SelectItem 
+                                key={espacio.id} 
+                                value={espacio.id.toString()}
+                                disabled={ocupado}
+                              >
+                                {label} {ocupado ? "(ocupado)" : ""}
+                              </SelectItem>
+                            );
+                          })
+                        )}
+                      </SelectContent>
+                    </Select>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
