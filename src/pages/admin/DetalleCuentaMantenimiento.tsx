@@ -661,7 +661,7 @@ export default function DetalleCuentaMantenimiento() {
               </TooltipTrigger>
               {saldoPendiente > 0.01 && (
                 <TooltipContent>
-                  <p>No se pueden crear reservas con saldo pendiente de {formatCurrency(saldoPendiente)}</p>
+                  <p>Hay saldo pendiente, no se pueden agregar reservas</p>
                 </TooltipContent>
               )}
             </Tooltip>
