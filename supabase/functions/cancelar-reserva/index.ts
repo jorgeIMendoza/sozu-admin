@@ -95,54 +95,34 @@ Deno.serve(async (req) => {
         );
       }
 
-      const acuerdoPago = reserva.acuerdos_pago[0];
+      const acuerdoPagoOriginal = reserva.acuerdos_pago[0];
       
-      // Iniciar transacción cambiando estatus y creando nueva reserva
-      const { error: updateError } = await supabase
+      // TRANSACCIÓN: 3 operaciones atómicas
+      // 1. Desasociar el acuerdo de pago de la reserva original y cambiar estatus
+      const { error: updateReservaError } = await supabase
         .from('reservas')
-        .update({ id_estatus_reserva: 6 }) // Reagendada
+        .update({ 
+          id_estatus_reserva: 6, // Reagendada
+          id_acuerdo_pago: null // Desasociar el acuerdo
+        })
         .eq('id', reserva_id);
 
-      if (updateError) {
-        console.error('Error al actualizar estatus:', updateError);
-        throw updateError;
+      if (updateReservaError) {
+        console.error('Error al actualizar estatus de reserva original:', updateReservaError);
+        throw updateReservaError;
       }
 
-      // Crear nuevo acuerdo de pago para la nueva reserva
-      const { data: nuevoAcuerdo, error: acuerdoError } = await supabase
-        .from('acuerdos_pago')
-        .insert({
-          id_concepto: 1, // Concepto de reserva
-          id_cuenta_cobranza: acuerdoPago.id_cuenta_cobranza,
-          orden: 999, // Se actualizará después
-          monto: acuerdoPago.monto,
-          pago_completado: true, // Ya está pagado
-        })
-        .select()
-        .single();
-
-      if (acuerdoError || !nuevoAcuerdo) {
-        console.error('Error al crear nuevo acuerdo:', acuerdoError);
-        // Revertir el cambio de estatus
-        await supabase
-          .from('reservas')
-          .update({ id_estatus_reserva: 2 })
-          .eq('id', reserva_id);
-        
-        throw acuerdoError;
-      }
-
-      // Crear la nueva reserva con estatus Pagado
+      // 2. Crear la nueva reserva con el mismo espacio y asignar el acuerdo de pago original
       const { data: nuevaReserva, error: nuevaReservaError } = await supabase
         .from('reservas')
         .insert({
-          id_espacio_reservable_edificio: reserva.id_espacio_reservable_edificio,
+          id_espacio_reservable_edificio: reserva.id_espacio_reservable_edificio, // Mismo espacio
           id_persona_que_reserva: reserva.id_persona_que_reserva,
-          fecha_reserva: reserva.fecha_reserva,
-          hora_reserva: reserva.hora_reserva,
+          fecha_reserva: reserva.fecha_reserva, // Mantener misma fecha inicialmente
+          hora_reserva: reserva.hora_reserva, // Mantener misma hora inicialmente
           costo_final: reserva.costo_final,
-          id_acuerdo_pago: nuevoAcuerdo.id,
-          id_estatus_reserva: 2, // Pagada
+          id_acuerdo_pago: acuerdoPagoOriginal.id, // Asignar acuerdo original
+          id_estatus_reserva: 2, // Pagada (porque el acuerdo ya está pagado)
           activo: true,
         })
         .select()
@@ -150,28 +130,28 @@ Deno.serve(async (req) => {
 
       if (nuevaReservaError || !nuevaReserva) {
         console.error('Error al crear nueva reserva:', nuevaReservaError);
-        // Revertir cambios
+        // ROLLBACK: Revertir el cambio de estatus y reasociar el acuerdo
         await supabase
           .from('reservas')
-          .update({ id_estatus_reserva: 2 })
+          .update({ 
+            id_estatus_reserva: 2,
+            id_acuerdo_pago: acuerdoPagoOriginal.id
+          })
           .eq('id', reserva_id);
-        
-        await supabase
-          .from('acuerdos_pago')
-          .delete()
-          .eq('id', nuevoAcuerdo.id);
         
         throw nuevaReservaError;
       }
 
       console.log('Nueva reserva creada:', nuevaReserva.id);
+      console.log('Acuerdo de pago original reasignado:', acuerdoPagoOriginal.id);
 
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: 'Reserva reagendada exitosamente. Se creó una nueva reserva con el pago aplicado.',
+          message: 'Reserva reagendada exitosamente. Se creó una nueva reserva con el mismo pago aplicado para el mismo espacio.',
           nuevo_estatus: 6,
-          nueva_reserva_id: nuevaReserva.id
+          nueva_reserva_id: nuevaReserva.id,
+          acuerdo_pago_id: acuerdoPagoOriginal.id
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
