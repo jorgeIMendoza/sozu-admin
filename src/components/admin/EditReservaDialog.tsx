@@ -18,13 +18,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -43,7 +36,6 @@ import {
 const formSchema = z.object({
   fecha_reserva: z.string().min(1, "Seleccione una fecha"),
   hora_reserva: z.string().min(1, "Seleccione una hora"),
-  id_estatus_reserva: z.string().min(1, "Seleccione un estatus"),
 });
 
 interface EditReservaDialogProps {
@@ -89,27 +81,12 @@ export const EditReservaDialog = ({
     enabled: !!reservaId && open,
   });
 
-  // Obtener estatus de reserva
-  const { data: estatusReserva } = useQuery({
-    queryKey: ["estatus_reserva"],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("estatus_reserva")
-        .select("*")
-        .eq("activo", true)
-        .order("id");
-
-      if (error) throw error;
-      return data;
-    },
-  });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       fecha_reserva: "",
       hora_reserva: "",
-      id_estatus_reserva: "",
     },
   });
 
@@ -118,7 +95,6 @@ export const EditReservaDialog = ({
       form.reset({
         fecha_reserva: reserva.fecha_reserva,
         hora_reserva: reserva.hora_reserva,
-        id_estatus_reserva: reserva.id_estatus_reserva?.toString() || "",
       });
     }
   }, [reserva, open, form]);
@@ -140,7 +116,6 @@ export const EditReservaDialog = ({
         .update({
           fecha_reserva: values.fecha_reserva,
           hora_reserva: values.hora_reserva,
-          id_estatus_reserva: parseInt(values.id_estatus_reserva),
         })
         .eq("id", reservaId);
 
@@ -294,37 +269,6 @@ export const EditReservaDialog = ({
                     </FormItem>
                   )}
                 />
-
-                {reserva.id_estatus_reserva !== 2 && (
-                  <FormField
-                    control={form.control}
-                    name="id_estatus_reserva"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Estatus</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          disabled={!canEdit}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccione un estatus" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {estatusReserva?.map((estatus: any) => (
-                              <SelectItem key={estatus.id} value={estatus.id.toString()}>
-                                {estatus.nombre}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
 
                 <div className="flex justify-between gap-2 pt-4">
                   <div>
