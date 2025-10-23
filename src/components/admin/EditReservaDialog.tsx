@@ -226,7 +226,7 @@ export const EditReservaDialog = ({
             {reserva.id_estatus_reserva > 2 && (
               <div className="p-3 bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-800 rounded-lg">
                 <p className="text-sm text-gray-800 dark:text-gray-200">
-                  Esta reserva no se puede editar porque ya está en progreso o terminada.
+                  Esta reserva es de solo lectura y no se puede editar porque ya está {reserva.estatus_reserva?.nombre?.toLowerCase() || 'finalizada'}.
                 </p>
               </div>
             )}

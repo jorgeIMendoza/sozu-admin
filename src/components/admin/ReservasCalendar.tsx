@@ -293,11 +293,16 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
                         const widthPercent = 100 / totalReservas;
                         const leftPercent = (reserva.horizontalIndex || 0) * widthPercent;
                         
+                        // Verificar si es editable (estatus <= 2)
+                        const isEditable = reserva.id_estatus_reserva <= 2;
+                        
                         return (
                           <HoverCard key={idx} openDelay={200}>
                             <HoverCardTrigger asChild>
                               <div
-                                className={`rounded border p-2 cursor-pointer hover:opacity-80 transition-opacity absolute ${estatusInfo?.color}`}
+                                className={`rounded border p-2 transition-opacity absolute ${estatusInfo?.color} ${
+                                  isEditable ? 'cursor-pointer hover:opacity-80' : 'cursor-default opacity-70'
+                                }`}
                                 style={{ 
                                   height: `${heightInPixels}px`,
                                   top: `${topOffsetPixels}px`,
@@ -306,7 +311,7 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
                                   width: `calc(${widthPercent}% - 4px)`,
                                   marginLeft: '2px'
                                 }}
-                                onClick={() => setEditReservaId(reserva.id)}
+                                onClick={() => isEditable && setEditReservaId(reserva.id)}
                               >
                                 <div className="flex items-center justify-center">
                                   {IconComponent && <IconComponent className={`h-3.5 w-3.5 ${estatusInfo.iconColor}`} />}
@@ -319,6 +324,11 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
                                   {IconComponent && <IconComponent className={`h-4 w-4 ${estatusInfo.iconColor}`} />}
                                   <h4 className="text-sm font-semibold">{estatusInfo?.nombre}</h4>
                                 </div>
+                                {!isEditable && (
+                                  <div className="text-xs text-muted-foreground italic">
+                                    Solo lectura - No se puede editar
+                                  </div>
+                                )}
                                 <div className="space-y-1.5 text-sm">
                                   <div>
                                     <span className="font-medium">Persona que reservó:</span>
