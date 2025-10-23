@@ -1052,26 +1052,23 @@ export default function CuentasMantenimiento() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-center">
-                              {cuenta.residentes.length > 0 ? (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon"
-                                        onClick={() => setResidentesDialog({ isOpen: true, residentes: cuenta.residentes })}
-                                      >
-                                        <Eye className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Ver detalle de residentes</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              ) : (
-                                <span className="text-muted-foreground text-sm">sin asignar</span>
-                              )}
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon"
+                                      onClick={() => cuenta.residentes.length > 0 && setResidentesDialog({ isOpen: true, residentes: cuenta.residentes })}
+                                      disabled={cuenta.residentes.length === 0}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{cuenta.residentes.length > 0 ? "Ver detalle de residentes" : "Sin asignar"}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             </div>
                           </TableCell>
                           <TableCell 
