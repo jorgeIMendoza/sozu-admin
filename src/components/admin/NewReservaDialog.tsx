@@ -395,7 +395,7 @@ export const NewReservaDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nueva Reserva</DialogTitle>
         </DialogHeader>
@@ -487,32 +487,34 @@ export const NewReservaDialog = ({
               )}
             />
 
-            {compradores && compradores.length > 0 && (
-              <FormField
-                control={form.control}
-                name="id_comprador"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Propietario</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar propietario" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {compradores.map((comprador: any) => (
-                            <SelectItem key={comprador.id_persona} value={comprador.id_persona.toString()}>
-                              {comprador.personas?.nombre_legal} ({comprador.porcentaje_copropiedad}%)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+            <FormField
+              control={form.control}
+              name="id_comprador"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Propietario</FormLabel>
+                  <FormControl>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      value={field.value}
+                      disabled={!compradores || compradores.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar propietario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {compradores && compradores.map((comprador: any) => (
+                          <SelectItem key={comprador.id_persona} value={comprador.id_persona.toString()}>
+                            {comprador.personas?.nombre_legal} ({comprador.porcentaje_copropiedad}%)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
