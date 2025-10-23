@@ -42,6 +42,7 @@ export const AddResidenteDialog = ({
         .select(`
           id,
           id_persona,
+          activo,
           personas!residentes_id_persona_fkey(
             id,
             nombre_legal
@@ -55,6 +56,9 @@ export const AddResidenteDialog = ({
     },
     enabled: open,
   });
+
+  // Obtener los id_persona de los residentes activos para deshabilitar esos propietarios
+  const residentesActivosIds = residentesActivos.map(r => r.id_persona);
 
   // Mutation para asignar propietario como residente
   const asignarPropietarioMutation = useMutation({
@@ -152,10 +156,12 @@ export const AddResidenteDialog = ({
         if (deactivateError) throw deactivateError;
       }
 
-      // 2. Crear la persona
+      // 2. Crear la persona - Eliminar campos que no existen en la tabla personas
+      const { entityType, representativeId, pendingDocuments, tempBankAccounts, tempBeneficiaries, ...cleanPersonData } = personData;
+      
       const { data: persona, error: personaError } = await supabase
         .from("personas")
-        .insert(personData)
+        .insert(cleanPersonData)
         .select()
         .single();
 
@@ -232,26 +238,41 @@ export const AddResidenteDialog = ({
                 Seleccionar Propietario Existente
               </h3>
               <div className="grid gap-2">
-                {compradores.map((comprador) => (
-                  <div
-                    key={comprador.id_persona}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="space-y-1">
-                      <p className="font-medium">{comprador.nombre_legal}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {comprador.porcentaje_copropiedad.toFixed(2)}% propiedad
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleAsignarPropietario(comprador.id_persona)}
-                      disabled={asignarPropietarioMutation.isPending}
+                {compradores.map((comprador) => {
+                  const yaEsResidente = residentesActivosIds.includes(comprador.id_persona);
+                  
+                  return (
+                    <div
+                      key={comprador.id_persona}
+                      className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
+                        yaEsResidente 
+                          ? 'opacity-50 bg-muted cursor-not-allowed' 
+                          : 'hover:bg-muted/50'
+                      }`}
                     >
-                      Asignar
-                    </Button>
-                  </div>
-                ))}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{comprador.nombre_legal}</p>
+                          {yaEsResidente && (
+                            <Badge variant="secondary" className="text-xs">
+                              Ya es residente
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {comprador.porcentaje_copropiedad.toFixed(2)}% propiedad
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAsignarPropietario(comprador.id_persona)}
+                        disabled={asignarPropietarioMutation.isPending || yaEsResidente}
+                      >
+                        Asignar
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
