@@ -33,7 +33,9 @@ import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
 import { format } from "date-fns";
 
 const formSchema = z.object({
-  id_cuenta_mantenimiento: z.string().min(1, "Seleccione un departamento"),
+  id_proyecto: z.string().min(1, "Seleccione un proyecto"),
+  id_edificio: z.string().min(1, "Seleccione un edificio"),
+  id_propiedad: z.string().min(1, "Seleccione una propiedad"),
   id_espacio_reservable_edificio: z.string().min(1, "Seleccione un espacio"),
   fecha_reserva: z.string().min(1, "Seleccione una fecha"),
   hora_reserva: z.string().min(1, "Seleccione una hora"),
@@ -51,159 +53,161 @@ export const NewReservaDialog = ({
   preselectedCuentaMantenimientoId 
 }: NewReservaDialogProps) => {
   const [selectedEspacio, setSelectedEspacio] = useState<any>(null);
+  const [selectedCuentaMantenimiento, setSelectedCuentaMantenimiento] = useState<any>(null);
   const queryClient = useQueryClient();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      id_cuenta_mantenimiento: preselectedCuentaMantenimientoId?.toString() || "",
+      id_proyecto: "",
+      id_edificio: "",
+      id_propiedad: "",
       id_espacio_reservable_edificio: "",
       fecha_reserva: format(new Date(), "yyyy-MM-dd"),
       hora_reserva: "09:00",
     },
   });
 
-  // Update form when preselectedCuentaMantenimientoId changes
-  useEffect(() => {
-    if (preselectedCuentaMantenimientoId) {
-      form.setValue("id_cuenta_mantenimiento", preselectedCuentaMantenimientoId.toString());
-    }
-  }, [preselectedCuentaMantenimientoId, form]);
-
-  // Fetch cuentas de mantenimiento con info de departamento y propietarios
-  const { data: cuentasMantenimiento } = useQuery({
-    queryKey: ["cuentas_mantenimiento_para_reservas"],
+  // Fetch proyectos
+  const { data: proyectos } = useQuery({
+    queryKey: ["proyectos_activos"],
     queryFn: async () => {
-      // Get all cuentas de mantenimiento (those with id_cuenta_cobranza_padre)
-      const { data: cuentas, error } = await (supabase as any)
-        .from("cuentas_cobranza")
-        .select("id, id_cuenta_cobranza_padre")
-        .not("id_cuenta_cobranza_padre", "is", null)
-        .eq("activo", true);
+      const { data, error } = await supabase
+        .from("proyectos")
+        .select("id, nombre")
+        .eq("activo", true)
+        .order("nombre");
 
       if (error) throw error;
+      return data;
+    },
+  });
 
-      // For each cuenta, get property and owners info
-      const cuentasConInfo = await Promise.all(
-        (cuentas || []).map(async (cuenta: any) => {
-          let numeroDepartamento = "Sin número";
-          let propietarios: string[] = [];
+  // Fetch edificios filtrados por proyecto
+  const { data: edificios } = useQuery({
+    queryKey: ["edificios_por_proyecto", form.watch("id_proyecto")],
+    queryFn: async () => {
+      const proyectoId = form.watch("id_proyecto");
+      if (!proyectoId) return [];
 
-          if (cuenta.id_cuenta_cobranza_padre) {
-            // Get parent cuenta to get oferta
-            const { data: parentCuenta } = await (supabase as any)
-              .from("cuentas_cobranza")
-              .select("id_oferta")
-              .eq("id", cuenta.id_cuenta_cobranza_padre)
-              .maybeSingle();
+      const { data, error } = await supabase
+        .from("edificios")
+        .select("id, nombre")
+        .eq("id_proyecto", parseInt(proyectoId))
+        .eq("activo", true)
+        .order("nombre");
 
-            if (parentCuenta?.id_oferta) {
-              // Get propiedad from oferta
-              const { data: oferta } = await (supabase as any)
-                .from("ofertas")
-                .select(`
-                  propiedades!ofertas_id_propiedad_fkey(numero_propiedad)
-                `)
-                .eq("id", parentCuenta.id_oferta)
-                .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!form.watch("id_proyecto"),
+  });
 
-              numeroDepartamento = oferta?.propiedades?.numero_propiedad || "Sin número";
+  // Fetch propiedades filtradas por edificio con cuenta de mantenimiento
+  const { data: propiedades } = useQuery({
+    queryKey: ["propiedades_por_edificio", form.watch("id_edificio")],
+    queryFn: async () => {
+      const edificioId = form.watch("id_edificio");
+      if (!edificioId) return [];
 
-              // Get propietarios (compradores)
-              const { data: compradores } = await (supabase as any)
-                .from("compradores")
-                .select(`
-                  personas!compradores_id_persona_fkey(nombre_legal)
-                `)
-                .eq("id_cuenta_cobranza", cuenta.id_cuenta_cobranza_padre)
-                .eq("activo", true);
+      // Get propiedades through edificios_modelos
+      const { data: propiedadesData, error: propError } = await supabase
+        .from("propiedades")
+        .select(`
+          id,
+          numero_propiedad,
+          id_edificio_modelo,
+          edificios_modelos!propiedades_id_edificio_modelo_fkey(
+            id_edificio
+          )
+        `)
+        .eq("activo", true);
 
-              propietarios = compradores?.map((c: any) => c.personas?.nombre_legal).filter(Boolean) || [];
-            }
-          }
+      if (propError) throw propError;
+
+      // Filter by edificio
+      const propiedadesEdificio = (propiedadesData || []).filter(
+        (p: any) => p.edificios_modelos?.id_edificio === parseInt(edificioId)
+      );
+
+      // For each propiedad, get cuenta de mantenimiento
+      const propiedadesConCuenta = await Promise.all(
+        propiedadesEdificio.map(async (prop: any) => {
+          // Get oferta for this propiedad
+          const { data: oferta } = await supabase
+            .from("ofertas")
+            .select("id")
+            .eq("id_propiedad", prop.id)
+            .eq("activo", true)
+            .maybeSingle();
+
+          if (!oferta) return null;
+
+          // Get cuenta de cobranza (parent)
+          const { data: cuentaPadre } = await supabase
+            .from("cuentas_cobranza")
+            .select("id")
+            .eq("id_oferta", oferta.id)
+            .eq("activo", true)
+            .is("id_cuenta_cobranza_padre", null)
+            .maybeSingle();
+
+          if (!cuentaPadre) return null;
+
+          // Get cuenta de mantenimiento (child with id_cuenta_cobranza_padre)
+          const { data: cuentaMantenimiento } = await supabase
+            .from("cuentas_cobranza")
+            .select("id")
+            .eq("id_cuenta_cobranza_padre", cuentaPadre.id)
+            .eq("activo", true)
+            .maybeSingle();
+
+          if (!cuentaMantenimiento) return null;
 
           return {
-            id: cuenta.id,
-            numero_departamento: numeroDepartamento,
-            propietarios: propietarios.join(", ") || "Sin propietario",
+            id: prop.id,
+            numero_propiedad: prop.numero_propiedad,
+            id_cuenta_mantenimiento: cuentaMantenimiento.id,
           };
         })
       );
 
-      return cuentasConInfo;
+      return propiedadesConCuenta.filter(Boolean);
     },
+    enabled: !!form.watch("id_edificio"),
   });
 
-  // Get proyecto from selected cuenta de mantenimiento
-  const { data: proyectoData } = useQuery({
-    queryKey: ["proyecto_from_cuenta", form.watch("id_cuenta_mantenimiento")],
+  // Fetch compradores de la cuenta de mantenimiento seleccionada
+  const { data: compradores } = useQuery({
+    queryKey: ["compradores_cuenta", selectedCuentaMantenimiento?.id],
     queryFn: async () => {
-      const cuentaId = form.watch("id_cuenta_mantenimiento");
-      if (!cuentaId) return null;
+      if (!selectedCuentaMantenimiento?.id) return [];
 
-      // Get cuenta padre
-      const { data: cuentaMantenimiento, error: errorCuenta } = await (supabase as any)
-        .from("cuentas_cobranza")
-        .select("id_cuenta_cobranza_padre")
-        .eq("id", parseInt(cuentaId))
-        .maybeSingle();
+      const { data, error } = await supabase
+        .from("compradores")
+        .select(`
+          id,
+          porcentaje_copropiedad,
+          personas!compradores_id_persona_fkey(
+            nombre_legal
+          )
+        `)
+        .eq("id_cuenta_cobranza", selectedCuentaMantenimiento.id)
+        .eq("activo", true);
 
-      if (errorCuenta || !cuentaMantenimiento?.id_cuenta_cobranza_padre) return null;
-
-      // Get oferta from cuenta padre
-      const { data: cuentaPadre, error: errorPadre } = await (supabase as any)
-        .from("cuentas_cobranza")
-        .select("id_oferta")
-        .eq("id", cuentaMantenimiento.id_cuenta_cobranza_padre)
-        .maybeSingle();
-
-      if (errorPadre || !cuentaPadre?.id_oferta) return null;
-
-      // Get propiedad from oferta
-      const { data: oferta, error: errorOferta } = await (supabase as any)
-        .from("ofertas")
-        .select("id_propiedad")
-        .eq("id", cuentaPadre.id_oferta)
-        .maybeSingle();
-
-      if (errorOferta || !oferta?.id_propiedad) return null;
-
-      // Get edificio_modelo from propiedad
-      const { data: propiedad, error: errorPropiedad } = await (supabase as any)
-        .from("propiedades")
-        .select("id_edificio_modelo")
-        .eq("id", oferta.id_propiedad)
-        .maybeSingle();
-
-      if (errorPropiedad || !propiedad?.id_edificio_modelo) return null;
-
-      // Get edificio from edificio_modelo
-      const { data: edificioModelo, error: errorEdificioModelo } = await (supabase as any)
-        .from("edificios_modelos")
-        .select("id_edificio")
-        .eq("id", propiedad.id_edificio_modelo)
-        .maybeSingle();
-
-      if (errorEdificioModelo || !edificioModelo?.id_edificio) return null;
-
-      // Get proyecto from edificio
-      const { data: edificio, error: errorEdificio } = await (supabase as any)
-        .from("edificios")
-        .select("id_proyecto")
-        .eq("id", edificioModelo.id_edificio)
-        .maybeSingle();
-
-      if (errorEdificio) return null;
-
-      return edificio?.id_proyecto;
+      if (error) throw error;
+      return data;
     },
-    enabled: !!form.watch("id_cuenta_mantenimiento"),
+    enabled: !!selectedCuentaMantenimiento?.id,
   });
+
+  // Fetch espacios reservables filtrados por proyecto
+  const proyectoIdSelected = form.watch("id_proyecto");
 
   const { data: espacios } = useQuery({
-    queryKey: ["espacios_reservables", proyectoData],
+    queryKey: ["espacios_reservables", proyectoIdSelected],
     queryFn: async () => {
-      if (!proyectoData) return [];
+      if (!proyectoIdSelected) return [];
 
       const { data, error } = await (supabase as any)
         .from("espacios_reservables_edificio")
@@ -223,17 +227,21 @@ export const NewReservaDialog = ({
 
       // Filter by proyecto
       const filtered = (data || []).filter((espacio: any) => 
-        espacio.edificios?.id_proyecto === proyectoData
+        espacio.edificios?.id_proyecto === parseInt(proyectoIdSelected)
       );
 
       return filtered as any[];
     },
-    enabled: !!proyectoData,
+    enabled: !!proyectoIdSelected,
   });
 
 
   const createMutation = useMutation({
     mutationFn: async (values: z.infer<typeof formSchema>) => {
+      if (!selectedCuentaMantenimiento) {
+        throw new Error("No se encontró la cuenta de mantenimiento");
+      }
+
       // Calcular costo final basado en duración y costo por hora
       let costoFinal = 0;
       if (selectedEspacio) {
@@ -245,10 +253,10 @@ export const NewReservaDialog = ({
       }
 
       // First, create an acuerdo_pago for this reserva
-      const { data: acuerdo, error: acuerdoError } = await (supabase as any)
+      const { data: acuerdo, error: acuerdoError } = await supabase
         .from("acuerdos_pago")
         .insert({
-          id_cuenta_cobranza: parseInt(values.id_cuenta_mantenimiento),
+          id_cuenta_cobranza: selectedCuentaMantenimiento.id,
           id_concepto: 1, // Default concept for reservations
           monto: costoFinal,
           fecha_pago: values.fecha_reserva,
@@ -298,6 +306,14 @@ export const NewReservaDialog = ({
     form.setValue("id_espacio_reservable_edificio", espacioId);
   };
 
+  const handlePropiedadChange = (propiedadId: string) => {
+    const propiedad = propiedades?.find((p: any) => p.id.toString() === propiedadId);
+    if (propiedad) {
+      setSelectedCuentaMantenimiento({ id: propiedad.id_cuenta_mantenimiento });
+    }
+    form.setValue("id_propiedad", propiedadId);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -308,22 +324,27 @@ export const NewReservaDialog = ({
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
-              name="id_cuenta_mantenimiento"
+              name="id_proyecto"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Departamento</FormLabel>
+                  <FormLabel>Proyecto</FormLabel>
                   <FormControl>
                     <Combobox
                       value={field.value}
-                      onValueChange={field.onChange}
-                      options={(cuentasMantenimiento || []).map((cuenta: any) => ({
-                        value: cuenta.id.toString(),
-                        label: `${cuenta.numero_departamento} - ${formatCuentaMantenimientoId(cuenta.id)} - ${cuenta.propietarios}`,
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        form.setValue("id_edificio", "");
+                        form.setValue("id_propiedad", "");
+                        form.setValue("id_espacio_reservable_edificio", "");
+                        setSelectedCuentaMantenimiento(null);
+                      }}
+                      options={(proyectos || []).map((proyecto: any) => ({
+                        value: proyecto.id.toString(),
+                        label: proyecto.nombre,
                       }))}
-                      placeholder="Seleccionar departamento"
-                      searchPlaceholder="Buscar por número, cuenta o propietario..."
-                      emptyText="No se encontraron departamentos"
-                      disabled={!!preselectedCuentaMantenimientoId}
+                      placeholder="Seleccionar proyecto"
+                      searchPlaceholder="Buscar proyecto..."
+                      emptyText="No se encontraron proyectos"
                     />
                   </FormControl>
                   <FormMessage />
@@ -333,25 +354,89 @@ export const NewReservaDialog = ({
 
             <FormField
               control={form.control}
+              name="id_edificio"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Edificio</FormLabel>
+                  <FormControl>
+                    <Combobox
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        form.setValue("id_propiedad", "");
+                        setSelectedCuentaMantenimiento(null);
+                      }}
+                      options={(edificios || []).map((edificio: any) => ({
+                        value: edificio.id.toString(),
+                        label: edificio.nombre,
+                      }))}
+                      placeholder="Seleccionar edificio"
+                      searchPlaceholder="Buscar edificio..."
+                      emptyText="No se encontraron edificios"
+                      disabled={!form.watch("id_proyecto")}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="id_propiedad"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Propiedad</FormLabel>
+                  <FormControl>
+                    <Combobox
+                      value={field.value}
+                      onValueChange={handlePropiedadChange}
+                      options={(propiedades || []).map((propiedad: any) => ({
+                        value: propiedad.id.toString(),
+                        label: `${propiedad.numero_propiedad} - ${formatCuentaMantenimientoId(propiedad.id_cuenta_mantenimiento)}`,
+                      }))}
+                      placeholder="Seleccionar propiedad"
+                      searchPlaceholder="Buscar por número o cuenta..."
+                      emptyText="No se encontraron propiedades"
+                      disabled={!form.watch("id_edificio")}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {compradores && compradores.length > 0 && (
+              <div className="bg-muted p-4 rounded-lg space-y-2">
+                <p className="text-sm font-semibold">Compradores:</p>
+                {compradores.map((comprador: any) => (
+                  <p key={comprador.id} className="text-sm">
+                    • {comprador.personas?.nombre_legal} ({comprador.porcentaje_copropiedad}%)
+                  </p>
+                ))}
+              </div>
+            )}
+
+            <FormField
+              control={form.control}
               name="id_espacio_reservable_edificio"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Espacio</FormLabel>
-                  <Select onValueChange={handleEspacioChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar espacio" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {espacios?.map((espacio: any) => (
-                        <SelectItem key={espacio.id} value={espacio.id.toString()}>
-                          {espacio.tipos_espacio_reservables?.nombre || "Sin tipo"} - {espacio.edificios?.nombre || "Sin edificio"} 
-                          ({espacio.edificios?.proyectos?.nombre || "Sin proyecto"})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Espacio Reservable</FormLabel>
+                  <FormControl>
+                    <Combobox
+                      value={field.value}
+                      onValueChange={handleEspacioChange}
+                      options={(espacios || []).map((espacio: any) => ({
+                        value: espacio.id.toString(),
+                        label: `${espacio.tipos_espacio_reservables?.nombre || "Sin tipo"} - ${espacio.edificios?.nombre || "Sin edificio"}`,
+                      }))}
+                      placeholder="Seleccionar espacio"
+                      searchPlaceholder="Buscar espacio..."
+                      emptyText="No se encontraron espacios"
+                      disabled={!form.watch("id_proyecto")}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
