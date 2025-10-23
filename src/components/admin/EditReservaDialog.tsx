@@ -45,6 +45,11 @@ const formSchema = z.object({
   hora_reserva: z.string().min(1, "Seleccione una hora"),
 });
 
+const reagendarFormSchema = z.object({
+  nueva_fecha_reserva: z.string().min(1, "Seleccione una fecha"),
+  nueva_hora_reserva: z.string().min(1, "Seleccione una hora"),
+});
+
 interface EditReservaDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -57,6 +62,7 @@ export const EditReservaDialog = ({
   reservaId,
 }: EditReservaDialogProps) => {
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showReagendarDialog, setShowReagendarDialog] = useState(false);
   const queryClient = useQueryClient();
 
   // Obtener datos de la reserva
@@ -94,6 +100,14 @@ export const EditReservaDialog = ({
     defaultValues: {
       fecha_reserva: "",
       hora_reserva: "",
+    },
+  });
+
+  const reagendarForm = useForm<z.infer<typeof reagendarFormSchema>>({
+    resolver: zodResolver(reagendarFormSchema),
+    defaultValues: {
+      nueva_fecha_reserva: "",
+      nueva_hora_reserva: "",
     },
   });
 
@@ -140,11 +154,15 @@ export const EditReservaDialog = ({
   });
 
   const cancelMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params?: { nueva_fecha_reserva?: string; nueva_hora_reserva?: string }) => {
       if (!reservaId) throw new Error("No hay reserva seleccionada");
 
       const { data, error } = await supabase.functions.invoke('cancelar-reserva', {
-        body: { reserva_id: reservaId }
+        body: { 
+          reserva_id: reservaId,
+          nueva_fecha_reserva: params?.nueva_fecha_reserva,
+          nueva_hora_reserva: params?.nueva_hora_reserva
+        }
       });
 
       if (error) throw error;
@@ -157,11 +175,13 @@ export const EditReservaDialog = ({
       queryClient.invalidateQueries({ queryKey: ["reserva", reservaId] });
       toast.success(data.message || "Operación exitosa");
       setShowCancelDialog(false);
+      setShowReagendarDialog(false);
       onOpenChange(false);
     },
     onError: (error: any) => {
       toast.error(error.message || "Error al cancelar reserva");
       setShowCancelDialog(false);
+      setShowReagendarDialog(false);
     },
   });
 
@@ -174,7 +194,35 @@ export const EditReservaDialog = ({
   };
 
   const confirmCancel = () => {
-    cancelMutation.mutate();
+    // Si es reserva pagada, mostrar dialog de reagendación
+    if (reserva?.id_estatus_reserva === 2) {
+      setShowCancelDialog(false);
+      setShowReagendarDialog(true);
+    } else {
+      // Si es reserva agendada, cancelar directamente
+      cancelMutation.mutate(undefined);
+    }
+  };
+
+  const confirmReagendar = (values: z.infer<typeof reagendarFormSchema>) => {
+    // Validar fecha y hora
+    const now = new Date();
+    const selectedDateTime = new Date(`${values.nueva_fecha_reserva}T${values.nueva_hora_reserva}`);
+    
+    if (selectedDateTime < now) {
+      toast.error("No se puede programar una reserva en el pasado");
+      return;
+    }
+
+    cancelMutation.mutate({
+      nueva_fecha_reserva: values.nueva_fecha_reserva,
+      nueva_hora_reserva: values.nueva_hora_reserva
+    });
+  };
+
+  const handleCancelReagendar = () => {
+    setShowReagendarDialog(false);
+    reagendarForm.reset();
   };
 
   const canEdit = reserva && reserva.id_estatus_reserva <= 2;
@@ -322,7 +370,7 @@ export const EditReservaDialog = ({
               {reserva?.id_estatus_reserva === 2 && (
                 <span>
                   Como esta reserva está <strong>Pagada</strong>, se marcará como <strong>Reagendada</strong> y 
-                  se creará una nueva reserva con el mismo monto pagado para que pueda ser reprogramada.
+                  se creará una nueva reserva con el mismo monto pagado. A continuación deberás seleccionar el nuevo horario.
                 </span>
               )}
             </AlertDialogDescription>
@@ -330,11 +378,84 @@ export const EditReservaDialog = ({
           <AlertDialogFooter>
             <AlertDialogCancel>No, mantener</AlertDialogCancel>
             <AlertDialogAction onClick={confirmCancel} disabled={cancelMutation.isPending}>
-              {cancelMutation.isPending ? "Procesando..." : "Sí, cancelar"}
+              {cancelMutation.isPending ? "Procesando..." : "Sí, continuar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={showReagendarDialog} onOpenChange={(_open) => {}}>
+        <DialogContent 
+          className="max-w-md"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Seleccionar nuevo horario</DialogTitle>
+          </DialogHeader>
+
+          <Form {...reagendarForm}>
+            <form onSubmit={reagendarForm.handleSubmit(confirmReagendar)} className="space-y-4">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg mb-4">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  Selecciona la nueva fecha y hora para la reserva. El pago ya realizado se aplicará automáticamente.
+                </p>
+              </div>
+
+              <FormField
+                control={reagendarForm.control}
+                name="nueva_fecha_reserva"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nueva Fecha</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="date" 
+                        {...field}
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={reagendarForm.control}
+                name="nueva_hora_reserva"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nueva Hora</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="time" 
+                        {...field}
+                        min="08:00"
+                        max="20:00"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={handleCancelReagendar}
+                  disabled={cancelMutation.isPending}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={cancelMutation.isPending}>
+                  {cancelMutation.isPending ? "Procesando..." : "Confirmar Reagendación"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

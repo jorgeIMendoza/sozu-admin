@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { reserva_id } = await req.json();
+    const { reserva_id, nueva_fecha_reserva, nueva_hora_reserva } = await req.json();
 
     if (!reserva_id) {
       return new Response(
@@ -98,6 +98,25 @@ Deno.serve(async (req) => {
 
       const acuerdoPagoOriginal = reserva.acuerdos_pago;
       console.log('Acuerdo de pago original:', acuerdoPagoOriginal);
+
+      // Validar que se proporcionen fecha y hora para la reagendación
+      if (!nueva_fecha_reserva || !nueva_hora_reserva) {
+        return new Response(
+          JSON.stringify({ error: 'Se requiere nueva fecha y hora para reagendar' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Validar que la nueva fecha/hora no sea en el pasado
+      const now = new Date();
+      const nuevaFechaHora = new Date(`${nueva_fecha_reserva}T${nueva_hora_reserva}`);
+      
+      if (nuevaFechaHora < now) {
+        return new Response(
+          JSON.stringify({ error: 'No se puede programar una reserva en el pasado' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       
       // TRANSACCIÓN: 2 operaciones atómicas
       // 1. Cambiar estatus de la reserva original a Reagendada
@@ -119,8 +138,8 @@ Deno.serve(async (req) => {
         .insert({
           id_espacio_reservable_edificio: reserva.id_espacio_reservable_edificio, // Mismo espacio
           id_persona_que_reserva: reserva.id_persona_que_reserva,
-          fecha_reserva: reserva.fecha_reserva, // Mantener misma fecha inicialmente
-          hora_reserva: reserva.hora_reserva, // Mantener misma hora inicialmente
+          fecha_reserva: nueva_fecha_reserva, // Nueva fecha seleccionada
+          hora_reserva: nueva_hora_reserva, // Nueva hora seleccionada
           costo_final: reserva.costo_final,
           id_acuerdo_pago: acuerdoPagoOriginal.id, // Usar mismo acuerdo de pago
           id_estatus_reserva: 2, // Pagada (porque el acuerdo ya está pagado)
