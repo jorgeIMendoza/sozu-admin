@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, CheckCheck, Loader2, Ban } from "lucide-react";
@@ -21,12 +21,21 @@ interface ReservasCalendarProps {
 export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps) => {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [editReservaId, setEditReservaId] = useState<number | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
   
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 }); // Lunes
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   
   // Generar horarios de 8:00 a 20:00
   const timeSlots = Array.from({ length: 13 }, (_, i) => i + 8);
+
+  // Actualizar hora actual cada minuto
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const estatusConfig = {
     1: { nombre: "Agendada", icon: Clock, color: "bg-blue-500/20 border-blue-500 text-blue-700", iconColor: "text-blue-600" },
@@ -113,6 +122,27 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
     
     return countByEstatus;
   };
+
+  // Calcular posición de la línea de hora actual
+  const getCurrentTimePosition = () => {
+    const now = currentTime;
+    const hour = now.getHours();
+    const minutes = now.getMinutes();
+    
+    // Solo mostrar si está dentro del rango de 8:00 a 20:00
+    if (hour < 8 || hour >= 21) return null;
+    
+    // Calcular posición en píxeles (cada hora = 60px)
+    const hourOffset = (hour - 8) * 60; // Offset desde las 8am
+    const minuteOffset = (minutes / 60) * 60; // Offset de minutos
+    
+    return hourOffset + minuteOffset;
+  };
+
+  const currentTimePosition = getCurrentTimePosition();
+  const currentHour = currentTime.getHours();
+  const currentMinutes = currentTime.getMinutes();
+  const isCurrentTimeVisible = currentHour >= 8 && currentHour < 21;
 
   if (isLoading) {
     return <Card className="p-8 text-center">Cargando calendario...</Card>;
@@ -210,18 +240,42 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
             {/* Filas de horarios */}
             {timeSlots.map((hour) => (
               <>
-                <div key={`time-${hour}`} className="border-b border-r p-2 text-sm font-medium bg-muted/30 flex items-start">
+                <div key={`time-${hour}`} className="border-b border-r p-2 text-sm font-medium bg-muted/30 flex items-start relative">
                   {hour}:00
+                  {/* Indicador de hora actual */}
+                  {isCurrentTimeVisible && currentHour === hour && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                        <span className="text-xs font-bold text-primary">
+                          {currentHour}:{currentMinutes.toString().padStart(2, '0')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 {weekDays.map((day, dayIndex) => {
                   const dayReservas = getReservasForDayAndTime(day, hour);
                   const isOccupied = isSlotOccupied(day, hour);
+                  const isToday = isSameDay(day, new Date());
                   
                   return (
                     <div
                       key={`${dayIndex}-${hour}`}
                       className="border-b border-l p-1 min-h-[60px] relative"
                     >
+                      {/* Línea de hora actual */}
+                      {isToday && currentTimePosition !== null && hour === currentHour && (
+                        <div 
+                          className="absolute left-0 right-0 z-20 flex items-center"
+                          style={{ top: `${currentMinutes}px` }}
+                        >
+                          <div className="w-full h-0.5 bg-primary shadow-lg" />
+                          <div className="absolute -left-1 w-2 h-2 bg-primary rounded-full" />
+                          <div className="absolute -right-1 w-2 h-2 bg-primary rounded-full" />
+                        </div>
+                      )}
+                      
                       {!isOccupied && dayReservas.map((reserva, idx) => {
                         const duration = calculateReservaDuration(reserva);
                         const estatusInfo = estatusConfig[reserva.id_estatus_reserva as keyof typeof estatusConfig];
