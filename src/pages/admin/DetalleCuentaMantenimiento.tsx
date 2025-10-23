@@ -346,32 +346,19 @@ export default function DetalleCuentaMantenimiento() {
           if (espacioIds.length > 0) {
             const { data: espacios } = await supabase
               .from('espacios_reservables_edificio' as any)
-              .select('id, id_tipo_espacio_reservable')
+              .select('id, descripcion')
               .in('id', espacioIds) as any;
 
-            const tipoIds = espacios?.map((e: any) => e.id_tipo_espacio_reservable).filter(Boolean) || [];
-            
-            if (tipoIds.length > 0) {
-              const { data: tipos } = await supabase
-                .from('tipos_espacios_reservables' as any)
-                .select('id, nombre')
-                .in('id', tipoIds) as any;
+            const espaciosMap = new Map<number, string>();
+            espacios?.forEach((e: any) => espaciosMap.set(e.id, e.descripcion || 'Sin descripción'));
 
-              const tiposMap = new Map<number, string>();
-              tipos?.forEach((t: any) => tiposMap.set(t.id, t.nombre));
-
-              const espaciosMap = new Map<number, number>();
-              espacios?.forEach((e: any) => espaciosMap.set(e.id, e.id_tipo_espacio_reservable));
-
-              reservas?.forEach((r: any) => {
-                const tipoEspacioId = espaciosMap.get(r.id_espacio_reservable_edificio);
-                const nombreEspacio = tipoEspacioId ? tiposMap.get(tipoEspacioId) : null;
-                
-                reservasMap.set(r.id_acuerdo_pago, {
-                  espacio_nombre: nombreEspacio || 'N/A'
-                });
+            reservas?.forEach((r: any) => {
+              const descripcionEspacio = espaciosMap.get(r.id_espacio_reservable_edificio);
+              
+              reservasMap.set(r.id_acuerdo_pago, {
+                espacio_nombre: descripcionEspacio || 'N/A'
               });
-            }
+            });
           }
         }
       }

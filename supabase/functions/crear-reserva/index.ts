@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
         monto: costo_final,
         fecha_pago: fecha_reserva,
         orden: nuevoOrden,
+        pago_completado: costo_final === 0, // Marcar como completado si el monto es 0
       })
       .select()
       .single();
