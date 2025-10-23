@@ -99,13 +99,12 @@ Deno.serve(async (req) => {
       const acuerdoPagoOriginal = reserva.acuerdos_pago;
       console.log('Acuerdo de pago original:', acuerdoPagoOriginal);
       
-      // TRANSACCIÓN: 3 operaciones atómicas
-      // 1. Desasociar el acuerdo de pago de la reserva original y cambiar estatus
+      // TRANSACCIÓN: 2 operaciones atómicas
+      // 1. Cambiar estatus de la reserva original a Reagendada
       const { error: updateReservaError } = await supabase
         .from('reservas')
         .update({ 
-          id_estatus_reserva: 6, // Reagendada
-          id_acuerdo_pago: null // Desasociar el acuerdo
+          id_estatus_reserva: 6 // Reagendada
         })
         .eq('id', reserva_id);
 
@@ -114,7 +113,7 @@ Deno.serve(async (req) => {
         throw updateReservaError;
       }
 
-      // 2. Crear la nueva reserva con el mismo espacio y asignar el acuerdo de pago original
+      // 2. Crear la nueva reserva con el mismo espacio y mismo acuerdo de pago
       const { data: nuevaReserva, error: nuevaReservaError } = await supabase
         .from('reservas')
         .insert({
@@ -123,7 +122,7 @@ Deno.serve(async (req) => {
           fecha_reserva: reserva.fecha_reserva, // Mantener misma fecha inicialmente
           hora_reserva: reserva.hora_reserva, // Mantener misma hora inicialmente
           costo_final: reserva.costo_final,
-          id_acuerdo_pago: acuerdoPagoOriginal.id, // Asignar acuerdo original
+          id_acuerdo_pago: acuerdoPagoOriginal.id, // Usar mismo acuerdo de pago
           id_estatus_reserva: 2, // Pagada (porque el acuerdo ya está pagado)
           activo: true,
         })
@@ -132,12 +131,11 @@ Deno.serve(async (req) => {
 
       if (nuevaReservaError || !nuevaReserva) {
         console.error('Error al crear nueva reserva:', nuevaReservaError);
-        // ROLLBACK: Revertir el cambio de estatus y reasociar el acuerdo
+        // ROLLBACK: Revertir el cambio de estatus
         await supabase
           .from('reservas')
           .update({ 
-            id_estatus_reserva: 2,
-            id_acuerdo_pago: acuerdoPagoOriginal.id
+            id_estatus_reserva: 2
           })
           .eq('id', reserva_id);
         
