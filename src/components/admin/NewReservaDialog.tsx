@@ -213,7 +213,7 @@ export const NewReservaDialog = ({
             id, 
             nombre, 
             id_proyecto,
-            proyectos(id, nombre)
+            proyectos!edificios_id_proyecto_fkey(id, nombre)
           ),
           tipos_espacio_reservables(id, nombre)
         `)
