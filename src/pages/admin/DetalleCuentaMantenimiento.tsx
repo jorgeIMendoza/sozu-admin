@@ -919,25 +919,30 @@ export default function DetalleCuentaMantenimiento() {
                                     Pendiente: <span className="font-semibold text-orange-600 dark:text-orange-400">{formatCurrency((esAcuerdoMulta && multaAsociada ? multaAsociada.monto : acuerdo.monto) - totalAplicado)}</span>
                                   </span>
                                 </div>
-                                <div className="relative">
-                                  {(() => {
-                                    const montoTotal = esAcuerdoMulta && multaAsociada ? multaAsociada.monto : acuerdo.monto;
-                                    const porcentaje = montoTotal > 0 ? (totalAplicado / montoTotal) * 100 : 0;
-                                    return (
-                                      <>
-                                        <Progress 
-                                          value={porcentaje} 
-                                          className="h-6"
-                                        />
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                          <span className="text-xs font-bold bg-background/80 px-2 py-0.5 rounded">
-                                            {porcentaje.toFixed(1)}%
-                                          </span>
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                </div>
+                                 <div className="relative">
+                                   {(() => {
+                                     const montoTotal = esAcuerdoMulta && multaAsociada ? multaAsociada.monto : acuerdo.monto;
+                                     // Si el monto es 0 y está completado, mostrar 100%
+                                     // Si el monto es 0 y no está completado, mostrar 0%
+                                     // Si el monto es mayor a 0, calcular normalmente
+                                     const porcentaje = montoTotal === 0 
+                                       ? (acuerdo.pago_completado ? 100 : 0)
+                                       : (totalAplicado / montoTotal) * 100;
+                                     return (
+                                       <>
+                                         <Progress 
+                                           value={porcentaje} 
+                                           className="h-6"
+                                         />
+                                         <div className="absolute inset-0 flex items-center justify-center">
+                                           <span className="text-xs font-bold bg-background/80 px-2 py-0.5 rounded">
+                                             {porcentaje.toFixed(1)}%
+                                           </span>
+                                         </div>
+                                       </>
+                                     );
+                                   })()}
+                                 </div>
                               </div>
                             </div>
                           </CollapsibleTrigger>
