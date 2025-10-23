@@ -279,7 +279,8 @@ export const NewReservaDialog = ({
   });
 
   // Combinar compradores y residentes
-  const personasQueReservan = [
+  // Si un residente es el mismo propietario, solo mostrar el de residente
+  const personasQueReservanTemp = [
     ...(compradores || []).map((c: any) => ({
       id_persona: c.id_persona,
       nombre: c.personas?.nombre_legal,
@@ -291,6 +292,17 @@ export const NewReservaDialog = ({
       tipo: 'Residente'
     }))
   ];
+
+  // Filtrar para que si hay un residente que es también propietario, solo mostrar el residente
+  const personasQueReservan = personasQueReservanTemp.filter((persona, index, self) => {
+    // Si es propietario, verificar que no exista como residente
+    if (persona.tipo === 'Propietario') {
+      const existeComoResidente = self.some(p => p.id_persona === persona.id_persona && p.tipo === 'Residente');
+      return !existeComoResidente;
+    }
+    // Si es residente, siempre incluirlo
+    return true;
+  });
 
   // Fetch espacios reservables filtrados por edificio
   const edificioIdSelected = form.watch("id_edificio");
@@ -539,7 +551,7 @@ export const NewReservaDialog = ({
                       <SelectContent>
                         {personasQueReservan && personasQueReservan.map((persona: any) => (
                           <SelectItem key={persona.id_persona} value={persona.id_persona.toString()}>
-                            {persona.nombre}
+                            {persona.nombre} ({persona.tipo})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -579,9 +591,12 @@ export const NewReservaDialog = ({
               <div className="bg-muted p-4 rounded-lg space-y-2">
                 <p className="text-sm"><strong>Costo por hora:</strong> ${Number(selectedEspacio.costo_por_hr || 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                 <p className="text-sm"><strong>Duración de reserva:</strong> {selectedEspacio.duracion_reserva || "No definida"}</p>
-                {selectedEspacio.descripcion && (
-                  <p className="text-sm"><strong>Descripción:</strong> {selectedEspacio.descripcion}</p>
-                )}
+                <p className="text-sm"><strong>Costo total:</strong> ${(() => {
+                  const costoPorHr = Number(selectedEspacio.costo_por_hr || 0);
+                  const duracion = selectedEspacio.duracion_reserva || "01:00:00";
+                  const horas = parseFloat(duracion.split(":")[0]) + parseFloat(duracion.split(":")[1]) / 60;
+                  return (costoPorHr * horas).toLocaleString("es-MX", { minimumFractionDigits: 2 });
+                })()}</p>
               </div>
             )}
 
