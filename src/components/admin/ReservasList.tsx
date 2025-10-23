@@ -110,30 +110,31 @@ export const ReservasList = ({ reservas, isLoading, onDelete, showDeleted }: Res
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Espacio</TableHead>
+                <TableHead>Persona que reserva</TableHead>
+                <TableHead>Espacio reservado</TableHead>
                 <TableHead>Fecha y Hora</TableHead>
                 <TableHead>Costo</TableHead>
                 <TableHead>Estatus</TableHead>
-                <TableHead>Notas</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredReservas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     No se encontraron reservas
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredReservas.map((reserva) => (
                   <TableRow key={reserva.id}>
-                  <TableCell className="font-medium">
+                    <TableCell className="font-medium">
                       {reserva.acuerdos_pago?.cuentas_cobranza?.ofertas?.personas?.nombre || "N/A"}{" "}
                       {reserva.acuerdos_pago?.cuentas_cobranza?.ofertas?.personas?.apellido_paterno || ""}
                     </TableCell>
-                    <TableCell>{reserva.espacios_reservables_edificio?.tipos_espacio_reservables?.nombre || "N/A"}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">
+                      {reserva.espacios_reservables_edificio?.descripcion || "-"}
+                    </TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <div>{format(parseISO(reserva.fecha_reserva), "dd/MMM/yyyy", { locale: es })}</div>
@@ -149,9 +150,6 @@ export const ReservasList = ({ reservas, isLoading, onDelete, showDeleted }: Res
                       <Badge variant="outline" className={getEstatusColor(reserva.estatus_reserva?.nombre || "")}>
                         {reserva.estatus_reserva?.nombre || "N/A"}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-[200px] truncate">
-                      {reserva.espacios_reservables_edificio?.descripcion || "-"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
