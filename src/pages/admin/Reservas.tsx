@@ -42,7 +42,7 @@ const Reservas = () => {
               id,
               ofertas!fk_cuentas_cobranza_oferta(
                 id,
-                propiedades(numero_propiedad),
+                propiedades!ofertas_id_propiedad_fkey(numero_propiedad),
                 personas(id, nombre_legal)
               )
             )
