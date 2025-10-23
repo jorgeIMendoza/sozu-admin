@@ -38,7 +38,7 @@ const Reservas = () => {
           estatus_reserva(id, nombre),
           acuerdos_pago(
             id,
-            cuentas_cobranza!acuerdos_pago_id_cuenta_cobranza_fkey(
+            cuentas_cobranza(
               id,
               ofertas(
                 id,
