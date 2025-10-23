@@ -241,7 +241,6 @@ export const NewReservaDialog = ({
         .select(`
           id_persona,
           id_cuenta_cobranza,
-          porcentaje_copropiedad,
           personas!compradores_id_persona_fkey(
             nombre_legal
           )
@@ -254,6 +253,44 @@ export const NewReservaDialog = ({
     },
     enabled: !!selectedCuentaMantenimiento?.id,
   });
+
+  // Fetch residentes de la cuenta de mantenimiento seleccionada
+  const { data: residentes } = useQuery({
+    queryKey: ["residentes_cuenta", selectedCuentaMantenimiento?.id],
+    queryFn: async () => {
+      if (!selectedCuentaMantenimiento?.id) return [];
+
+      const { data, error } = await (supabase as any)
+        .from("residentes")
+        .select(`
+          id_persona,
+          id_cuenta_cobranza,
+          personas!residentes_id_persona_fkey(
+            nombre_legal
+          )
+        `)
+        .eq("id_cuenta_cobranza", selectedCuentaMantenimiento.id)
+        .eq("activo", true);
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedCuentaMantenimiento?.id,
+  });
+
+  // Combinar compradores y residentes
+  const personasQueReservan = [
+    ...(compradores || []).map((c: any) => ({
+      id_persona: c.id_persona,
+      nombre: c.personas?.nombre_legal,
+      tipo: 'Propietario'
+    })),
+    ...(residentes || []).map((r: any) => ({
+      id_persona: r.id_persona,
+      nombre: r.personas?.nombre_legal,
+      tipo: 'Residente'
+    }))
+  ];
 
   // Fetch espacios reservables filtrados por edificio
   const edificioIdSelected = form.watch("id_edificio");
@@ -380,12 +417,12 @@ export const NewReservaDialog = ({
     }
   }, [open, form]);
 
-  // Auto-select comprador if only one exists
+  // Auto-select persona if only one exists
   useEffect(() => {
-    if (compradores && compradores.length === 1) {
-      form.setValue("id_comprador", compradores[0].id_persona.toString());
+    if (personasQueReservan && personasQueReservan.length === 1) {
+      form.setValue("id_comprador", personasQueReservan[0].id_persona.toString());
     }
-  }, [compradores, form]);
+  }, [personasQueReservan, form]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -489,20 +526,20 @@ export const NewReservaDialog = ({
               name="id_comprador"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Propietario</FormLabel>
+                  <FormLabel>Persona que reserva</FormLabel>
                   <FormControl>
                     <Select 
                       onValueChange={field.onChange} 
                       value={field.value}
-                      disabled={!compradores || compradores.length === 0}
+                      disabled={!personasQueReservan || personasQueReservan.length === 0}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar propietario" />
+                        <SelectValue placeholder="Seleccionar persona" />
                       </SelectTrigger>
                       <SelectContent>
-                        {compradores && compradores.map((comprador: any) => (
-                          <SelectItem key={comprador.id_persona} value={comprador.id_persona.toString()}>
-                            {comprador.personas?.nombre_legal} ({comprador.porcentaje_copropiedad}%)
+                        {personasQueReservan && personasQueReservan.map((persona: any) => (
+                          <SelectItem key={persona.id_persona} value={persona.id_persona.toString()}>
+                            {persona.nombre}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -518,14 +555,14 @@ export const NewReservaDialog = ({
               name="id_espacio_reservable_edificio"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Espacio Reservable</FormLabel>
+                  <FormLabel>Espacio a reservar</FormLabel>
                   <FormControl>
                     <Combobox
                       value={field.value}
                       onValueChange={handleEspacioChange}
                       options={(espacios || []).map((espacio: any) => ({
                         value: espacio.id.toString(),
-                        label: `${espacio.tipos_espacio_reservables?.nombre || "Sin tipo"} - ${espacio.edificios?.nombre || "Sin edificio"}`,
+                        label: espacio.descripcion || espacio.tipos_espacio_reservables?.nombre || "Sin descripción",
                       }))}
                       placeholder="Seleccionar espacio"
                       searchPlaceholder="Buscar espacio..."
