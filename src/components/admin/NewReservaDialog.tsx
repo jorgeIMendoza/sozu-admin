@@ -255,13 +255,13 @@ export const NewReservaDialog = ({
     enabled: !!selectedCuentaMantenimiento?.id,
   });
 
-  // Fetch espacios reservables filtrados por proyecto
-  const proyectoIdSelected = form.watch("id_proyecto");
+  // Fetch espacios reservables filtrados por edificio
+  const edificioIdSelected = form.watch("id_edificio");
 
   const { data: espacios } = useQuery({
-    queryKey: ["espacios_reservables", proyectoIdSelected],
+    queryKey: ["espacios_reservables", edificioIdSelected],
     queryFn: async () => {
-      if (!proyectoIdSelected) return [];
+      if (!edificioIdSelected) return [];
 
       const { data, error } = await (supabase as any)
         .from("espacios_reservables_edificio")
@@ -269,24 +269,18 @@ export const NewReservaDialog = ({
           *,
           edificios(
             id, 
-            nombre, 
-            id_proyecto,
-            proyectos!fk_edificios_proyecto(id, nombre)
+            nombre
           ),
           tipos_espacio_reservables(id, nombre)
         `)
+        .eq("id_edificio", parseInt(edificioIdSelected))
         .eq("activo", true);
 
       if (error) throw error;
 
-      // Filter by proyecto
-      const filtered = (data || []).filter((espacio: any) => 
-        espacio.edificios?.id_proyecto === parseInt(proyectoIdSelected)
-      );
-
-      return filtered as any[];
+      return data as any[];
     },
-    enabled: !!proyectoIdSelected,
+    enabled: !!edificioIdSelected,
   });
 
 
@@ -417,6 +411,7 @@ export const NewReservaDialog = ({
                         form.setValue("id_comprador", "");
                         form.setValue("id_espacio_reservable_edificio", "");
                         setSelectedCuentaMantenimiento(null);
+                        setSelectedEspacio(null);
                       }}
                       options={(proyectos || []).map((proyecto: any) => ({
                         value: proyecto.id.toString(),
@@ -445,7 +440,9 @@ export const NewReservaDialog = ({
                         field.onChange(value);
                         form.setValue("id_propiedad", "");
                         form.setValue("id_comprador", "");
+                        form.setValue("id_espacio_reservable_edificio", "");
                         setSelectedCuentaMantenimiento(null);
+                        setSelectedEspacio(null);
                       }}
                       options={(edificios || []).map((edificio: any) => ({
                         value: edificio.id.toString(),
@@ -533,7 +530,7 @@ export const NewReservaDialog = ({
                       placeholder="Seleccionar espacio"
                       searchPlaceholder="Buscar espacio..."
                       emptyText="No se encontraron espacios"
-                      disabled={!form.watch("id_proyecto")}
+                      disabled={!form.watch("id_edificio")}
                     />
                   </FormControl>
                   <FormMessage />
