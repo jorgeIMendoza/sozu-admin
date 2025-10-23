@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Pencil, Trash2, X } from "lucide-react";
+import { Search, Pencil, Trash2, X, Filter } from "lucide-react";
 import { format, parseISO, isToday, isFuture } from "date-fns";
 import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -16,12 +16,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface ReservasListProps {
   reservas: any[];
@@ -34,7 +33,7 @@ interface ReservasListProps {
 export const ReservasList = ({ reservas, isLoading, onDelete, showDeleted, estatusReserva = [] }: ReservasListProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSubTab, setActiveSubTab] = useState<"todas" | "hoy" | "proximas">("todas");
-  const [selectedEstatus, setSelectedEstatus] = useState<string>("");
+  const [selectedEstatus, setSelectedEstatus] = useState<string[]>([]);
 
   const getFilteredReservas = () => {
     let filtered = reservas;
@@ -49,9 +48,11 @@ export const ReservasList = ({ reservas, isLoading, onDelete, showDeleted, estat
       });
     }
 
-    // Filtrar por estatus
-    if (selectedEstatus) {
-      filtered = filtered.filter((r: any) => r.id_estatus_reserva?.toString() === selectedEstatus);
+    // Filtrar por estatus (múltiples)
+    if (selectedEstatus.length > 0) {
+      filtered = filtered.filter((r: any) => 
+        selectedEstatus.includes(r.id_estatus_reserva?.toString())
+      );
     }
 
     // Filtrar por sub-tab
@@ -65,6 +66,18 @@ export const ReservasList = ({ reservas, isLoading, onDelete, showDeleted, estat
     }
 
     return filtered;
+  };
+
+  const handleEstatusToggle = (estatusId: string) => {
+    setSelectedEstatus(prev => 
+      prev.includes(estatusId)
+        ? prev.filter(id => id !== estatusId)
+        : [...prev, estatusId]
+    );
+  };
+
+  const clearEstatusFilters = () => {
+    setSelectedEstatus([]);
   };
 
   const filteredReservas = getFilteredReservas();
@@ -102,39 +115,82 @@ export const ReservasList = ({ reservas, isLoading, onDelete, showDeleted, estat
           </Tabs>
         )}
 
-        <div className="flex gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por persona que reservó o espacio reservado..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+        <div className="space-y-3">
+          <div className="flex gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por persona que reservó o espacio reservado..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            {!showDeleted && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline">
+                    <Filter className="h-4 w-4 mr-2" />
+                    Filtrar por estatus
+                    {selectedEstatus.length > 0 && (
+                      <Badge variant="secondary" className="ml-2">
+                        {selectedEstatus.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[250px]" align="end">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm">Estatus de Reserva</h4>
+                      {selectedEstatus.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearEstatusFilters}
+                          className="h-auto p-1 text-xs"
+                        >
+                          Limpiar
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {estatusReserva.map((estatus: any) => (
+                        <div key={estatus.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`estatus-${estatus.id}`}
+                            checked={selectedEstatus.includes(estatus.id.toString())}
+                            onCheckedChange={() => handleEstatusToggle(estatus.id.toString())}
+                          />
+                          <label
+                            htmlFor={`estatus-${estatus.id}`}
+                            className="text-sm font-normal cursor-pointer"
+                          >
+                            {estatus.nombre}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
-          {!showDeleted && (
-            <div className="flex gap-2">
-              <Select value={selectedEstatus} onValueChange={setSelectedEstatus}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Filtrar por estatus" />
-                </SelectTrigger>
-                <SelectContent>
-                  {estatusReserva.map((estatus: any) => (
-                    <SelectItem key={estatus.id} value={estatus.id.toString()}>
-                      {estatus.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedEstatus && (
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setSelectedEstatus("")}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
+          
+          {selectedEstatus.length > 0 && !showDeleted && (
+            <div className="flex gap-2 flex-wrap">
+              {selectedEstatus.map((estatusId) => {
+                const estatus = estatusReserva.find((e: any) => e.id.toString() === estatusId);
+                return (
+                  <Badge key={estatusId} variant="secondary" className="gap-1">
+                    {estatus?.nombre}
+                    <X 
+                      className="h-3 w-3 cursor-pointer" 
+                      onClick={() => handleEstatusToggle(estatusId)}
+                    />
+                  </Badge>
+                );
+              })}
             </div>
           )}
         </div>
