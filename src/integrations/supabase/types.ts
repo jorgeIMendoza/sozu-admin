@@ -1347,6 +1347,63 @@ export type Database = {
           },
         ]
       }
+      espacios_reservables_edificio: {
+        Row: {
+          activo: boolean
+          costo_por_hr: number
+          descripcion: string | null
+          duracion_reserva: unknown
+          fecha_actualizacion: string | null
+          fecha_creacion: string | null
+          id: number
+          id_edificio: number
+          id_tipo_espacio_reservable: number
+          permitir_reservas_recurrentes: boolean
+          url_imagen: string | null
+        }
+        Insert: {
+          activo?: boolean
+          costo_por_hr?: number
+          descripcion?: string | null
+          duracion_reserva?: unknown
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
+          id?: number
+          id_edificio: number
+          id_tipo_espacio_reservable: number
+          permitir_reservas_recurrentes?: boolean
+          url_imagen?: string | null
+        }
+        Update: {
+          activo?: boolean
+          costo_por_hr?: number
+          descripcion?: string | null
+          duracion_reserva?: unknown
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
+          id?: number
+          id_edificio?: number
+          id_tipo_espacio_reservable?: number
+          permitir_reservas_recurrentes?: boolean
+          url_imagen?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "espacios_rentables_edificio_id_edificio_fkey"
+            columns: ["id_edificio"]
+            isOneToOne: false
+            referencedRelation: "edificios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "espacios_reservables_edificio_id_tipo_espacio_reservable_fkey"
+            columns: ["id_tipo_espacio_reservable"]
+            isOneToOne: false
+            referencedRelation: "tipos_espacio_reservables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       esquemas_pago: {
         Row: {
           activo: boolean
@@ -1689,6 +1746,30 @@ export type Database = {
         }
         Relationships: []
       }
+      estatus_reserva: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre?: string
+        }
+        Relationships: []
+      }
       logs_actividad: {
         Row: {
           actividad_id: number
@@ -1958,6 +2039,7 @@ export type Database = {
           fecha_creacion: string
           id: number
           id_acuerdo_pago: number
+          id_tipo_multa: number
           monto: number
         }
         Insert: {
@@ -1968,6 +2050,7 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           id_acuerdo_pago: number
+          id_tipo_multa: number
           monto: number
         }
         Update: {
@@ -1978,6 +2061,7 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           id_acuerdo_pago?: number
+          id_tipo_multa?: number
           monto?: number
         }
         Relationships: [
@@ -1993,6 +2077,13 @@ export type Database = {
             columns: ["id_acuerdo_pago"]
             isOneToOne: false
             referencedRelation: "acuerdos_pago"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "multas_id_tipo_multa_fkey"
+            columns: ["id_tipo_multa"]
+            isOneToOne: false
+            referencedRelation: "tipos_multa"
             referencedColumns: ["id"]
           },
         ]
@@ -3495,6 +3586,77 @@ export type Database = {
         }
         Relationships: []
       }
+      reservas: {
+        Row: {
+          activo: boolean
+          costo_final: number | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_reserva: string
+          hora_reserva: string
+          id: number
+          "id_acuerdo_pago: int": number
+          id_espacio_reservable_edificio: number
+          id_estatus_reserva: number
+          id_persona_que_reserva: number
+        }
+        Insert: {
+          activo?: boolean
+          costo_final?: number | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_reserva: string
+          hora_reserva: string
+          id?: number
+          "id_acuerdo_pago: int": number
+          id_espacio_reservable_edificio: number
+          id_estatus_reserva?: number
+          id_persona_que_reserva: number
+        }
+        Update: {
+          activo?: boolean
+          costo_final?: number | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_reserva?: string
+          hora_reserva?: string
+          id?: number
+          "id_acuerdo_pago: int"?: number
+          id_espacio_reservable_edificio?: number
+          id_estatus_reserva?: number
+          id_persona_que_reserva?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservas_id_acuerdo_pago: int_fkey"
+            columns: ["id_acuerdo_pago: int"]
+            isOneToOne: false
+            referencedRelation: "acuerdos_pago"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservas_id_espacio_reservable_edificio_fkey"
+            columns: ["id_espacio_reservable_edificio"]
+            isOneToOne: false
+            referencedRelation: "espacios_reservables_edificio"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservas_id_estatus_reserva_fkey"
+            columns: ["id_estatus_reserva"]
+            isOneToOne: false
+            referencedRelation: "estatus_reserva"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservas_id_persona_que_reserva_fkey"
+            columns: ["id_persona_que_reserva"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       roles: {
         Row: {
           activo: boolean | null
@@ -3744,6 +3906,30 @@ export type Database = {
         }
         Relationships: []
       }
+      tipos_espacio_reservables: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string | null
+          fecha_creacion: string | null
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
+          id?: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
+          id?: number
+          nombre?: string
+        }
+        Relationships: []
+      }
       tipos_estacionamiento: {
         Row: {
           activo: boolean
@@ -3763,6 +3949,30 @@ export type Database = {
           activo?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
+          id?: number
+          nombre?: string
+        }
+        Relationships: []
+      }
+      tipos_multa: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string | null
+          fecha_creacion: string | null
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
+          id?: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
           id?: number
           nombre?: string
         }
@@ -4097,18 +4307,9 @@ export type Database = {
         Args: { id_er_dueno: number }
         Returns: string
       }
-      etl_bodegas: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
-      etl_estacionamientos: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
-      etl_propiedades: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
+      etl_bodegas: { Args: never; Returns: boolean }
+      etl_estacionamientos: { Args: never; Returns: boolean }
+      etl_propiedades: { Args: never; Returns: boolean }
       execute_safe_query: {
         Args: { max_rows?: number; query_text: string }
         Returns: Json
@@ -4138,7 +4339,7 @@ export type Database = {
         }[]
       }
       get_properties_with_details: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           activo: boolean
           clabe_stp: string
@@ -4155,10 +4356,7 @@ export type Database = {
           vista: string
         }[]
       }
-      incrementar_precio_m2_mensual: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      incrementar_precio_m2_mensual: { Args: never; Returns: undefined }
       insertar_pago_stp: {
         Args: {
           p_claverastreo: string

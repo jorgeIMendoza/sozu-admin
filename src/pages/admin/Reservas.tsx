@@ -33,7 +33,7 @@ const Reservas = () => {
               nombre,
               proyectos!fk_edificios_proyecto(id, nombre)
             ),
-            tipos_espacio_reservables!espacios_rentables_edificio_id_tipo_espacio_rentable_fkey(id, nombre)
+            tipos_espacio_reservables!espacios_reservables_edificio_id_tipo_espacio_reservable_fkey(id, nombre)
           ),
           estatus_reserva(id, nombre),
           acuerdos_pago(

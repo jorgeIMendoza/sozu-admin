@@ -19,7 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 const formSchema = z.object({
   id_edificio: z.string().min(1, "El edificio es requerido"),
-  id_tipo_espacio_rentable: z.string().min(1, "El tipo de espacio es requerido"),
+  id_tipo_espacio_reservable: z.string().min(1, "El tipo de espacio es requerido"),
   descripcion: z.string().optional(),
   costo_por_hr: z.string().default("0"),
   permitir_reservas_recurrentes: z.boolean().default(false),
@@ -41,7 +41,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
     resolver: zodResolver(formSchema),
     defaultValues: {
       id_edificio: "",
-      id_tipo_espacio_rentable: "",
+      id_tipo_espacio_reservable: "",
       descripcion: "",
       costo_por_hr: "0",
       permitir_reservas_recurrentes: false,
@@ -93,7 +93,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
         .select(`
           *,
           edificios:id_edificio(id, nombre),
-          tipos_espacio_reservables:id_tipo_espacio_rentable(id, nombre)
+          tipos_espacio_reservables:id_tipo_espacio_reservable(id, nombre)
         `)
         .in("id_edificio", edificioIds)
         .eq("activo", true)
@@ -112,7 +112,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
         .from("espacios_reservables_edificio" as any)
         .insert({
           id_edificio: parseInt(values.id_edificio),
-          id_tipo_espacio_rentable: parseInt(values.id_tipo_espacio_rentable),
+          id_tipo_espacio_reservable: parseInt(values.id_tipo_espacio_reservable),
           descripcion: values.descripcion || null,
           costo_por_hr: parseFloat(values.costo_por_hr),
           permitir_reservas_recurrentes: values.permitir_reservas_recurrentes,
@@ -154,7 +154,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
         .from("espacios_reservables_edificio" as any)
         .update({
           id_edificio: parseInt(values.id_edificio),
-          id_tipo_espacio_rentable: parseInt(values.id_tipo_espacio_rentable),
+          id_tipo_espacio_reservable: parseInt(values.id_tipo_espacio_reservable),
           descripcion: values.descripcion || null,
           costo_por_hr: parseFloat(values.costo_por_hr),
           permitir_reservas_recurrentes: values.permitir_reservas_recurrentes,
@@ -234,7 +234,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
     setEditingSpace(space);
     form.reset({
       id_edificio: space.id_edificio?.toString() || "",
-      id_tipo_espacio_rentable: space.id_tipo_espacio_rentable?.toString() || "",
+      id_tipo_espacio_reservable: space.id_tipo_espacio_reservable?.toString() || "",
       descripcion: space.descripcion || "",
       costo_por_hr: space.costo_por_hr?.toString() || "0",
       permitir_reservas_recurrentes: space.permitir_reservas_recurrentes || false,
@@ -333,7 +333,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
 
                   <FormField
                     control={form.control}
-                    name="id_tipo_espacio_rentable"
+                    name="id_tipo_espacio_reservable"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tipo de Espacio</FormLabel>
