@@ -93,7 +93,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
         .select(`
           *,
           edificios:id_edificio(id, nombre),
-          tipos_espacio_reservables:id_tipo_espacio_reservable(id, nombre)
+          tipos_espacio_reservables(id, nombre)
         `)
         .in("id_edificio", edificioIds)
         .eq("activo", true)
