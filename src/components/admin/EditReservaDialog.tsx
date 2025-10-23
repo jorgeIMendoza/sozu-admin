@@ -218,7 +218,7 @@ export const EditReservaDialog = ({
             {reserva.id_estatus_reserva === 2 && (
               <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  Esta reserva está pagada. No se puede modificar el estatus manualmente.
+                  Esta reserva está pagada. Si cancelas tendrías que reagendar en otra fecha, no hay devolución de dinero.
                 </p>
               </div>
             )}
