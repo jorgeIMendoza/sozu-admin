@@ -349,51 +349,22 @@ export const NewReservaDialog = ({
         costoFinal = costoPorHr * horas;
       }
 
-      // Obtener el máximo orden existente para esta cuenta de cobranza
-      const { data: maxOrdenData, error: maxOrdenError } = await supabase
-        .from("acuerdos_pago")
-        .select("orden")
-        .eq("id_cuenta_cobranza", selectedCuentaMantenimiento.id)
-        .order("orden", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (maxOrdenError) throw maxOrdenError;
-
-      const nuevoOrden = (maxOrdenData?.orden || 0) + 1;
-
-      // First, create an acuerdo_pago for this reserva
-      const { data: acuerdo, error: acuerdoError } = await supabase
-        .from("acuerdos_pago")
-        .insert({
-          id_cuenta_cobranza: selectedCuentaMantenimiento.id,
-          id_concepto: 14, // Concepto para reservas
-          monto: costoFinal,
-          fecha_pago: values.fecha_reserva,
-          orden: nuevoOrden,
-        })
-        .select()
-        .single();
-
-      if (acuerdoError) throw acuerdoError;
-
-      // Then create the reserva with default status "Agendada" (1)
-      const { data, error } = await (supabase as any)
-        .from("reservas")
-        .insert([{
-          id_acuerdo_pago: acuerdo.id,
-          id_espacio_reservable_edificio: parseInt(values.id_espacio_reservable_edificio),
+      // Llamar a la Edge Function para crear la reserva de forma transaccional
+      const { data, error } = await supabase.functions.invoke('crear-reserva', {
+        body: {
+          id_cuenta_mantenimiento: selectedCuentaMantenimiento.id,
+          id_espacio_reservable_edificio: values.id_espacio_reservable_edificio,
+          id_persona_que_reserva: values.id_comprador,
           fecha_reserva: values.fecha_reserva,
           hora_reserva: values.hora_reserva,
           costo_final: costoFinal,
-          id_estatus_reserva: 1,
-          id_persona_que_reserva: parseInt(values.id_comprador),
-        }])
-        .select()
-        .single();
+        },
+      });
 
       if (error) throw error;
-      return data as any;
+      if (!data.success) throw new Error(data.error || 'Error al crear reserva');
+      
+      return data.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reservas"] });
