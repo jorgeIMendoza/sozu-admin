@@ -232,18 +232,27 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
     })(e);
   };
 
-  const handleEdit = (space: any) => {
+  const handleEdit = (space: any, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     setEditingSpace(space);
-    form.reset({
-      id_edificio: space.id_edificio?.toString() || "",
-      id_tipo_espacio_reservable: space.id_tipo_espacio_reservable?.toString() || "",
-      descripcion: space.descripcion || "",
-      costo_por_hr: space.costo_por_hr?.toString() || "0",
-      permitir_reservas_recurrentes: space.permitir_reservas_recurrentes || false,
-      duracion_reserva: space.duracion_reserva || "",
-      url_imagen: space.url_imagen || "",
-    });
-    setOpen(true);
+    
+    // Use setTimeout to ensure state is set before opening dialog
+    setTimeout(() => {
+      form.reset({
+        id_edificio: space.id_edificio?.toString() || "",
+        id_tipo_espacio_reservable: space.id_tipo_espacio_reservable?.toString() || "",
+        descripcion: space.descripcion || "",
+        costo_por_hr: space.costo_por_hr?.toString() || "0",
+        permitir_reservas_recurrentes: space.permitir_reservas_recurrentes || false,
+        duracion_reserva: space.duracion_reserva || "",
+        url_imagen: space.url_imagen || "",
+      });
+      setOpen(true);
+    }, 0);
   };
 
   const handleDialogClose = (isOpen: boolean) => {
@@ -555,13 +564,10 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <Button
+                                  type="button"
                                   size="sm"
                                   variant="ghost"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleEdit(space);
-                                  }}
+                                  onClick={(e) => handleEdit(space, e)}
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
