@@ -11,6 +11,8 @@ import { NewReservaDialog } from "@/components/admin/NewReservaDialog";
 const Reservas = () => {
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [activeView, setActiveView] = useState<"calendario" | "activos">("calendario");
+  const [preselectedFecha, setPreselectedFecha] = useState<string | undefined>(undefined);
+  const [preselectedHora, setPreselectedHora] = useState<string | undefined>(undefined);
   const queryClient = useQueryClient();
 
   // Actualizar estatus automáticamente cada minuto
@@ -92,6 +94,12 @@ const Reservas = () => {
 
   const reservasActivas = reservas?.filter((r: any) => r.activo) || [];
 
+  const handleSlotClick = (fecha: string, hora: string) => {
+    setPreselectedFecha(fecha);
+    setPreselectedHora(hora);
+    setNewDialogOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -122,7 +130,11 @@ const Reservas = () => {
           </TabsList>
 
           <TabsContent value="calendario" className="mt-6">
-            <ReservasCalendar reservas={reservasActivas} isLoading={isLoading} />
+            <ReservasCalendar 
+              reservas={reservasActivas} 
+              isLoading={isLoading}
+              onSlotClick={handleSlotClick}
+            />
           </TabsContent>
 
           <TabsContent value="activos" className="mt-6">
@@ -134,7 +146,18 @@ const Reservas = () => {
           </TabsContent>
         </Tabs>
 
-        <NewReservaDialog open={newDialogOpen} onOpenChange={setNewDialogOpen} />
+        <NewReservaDialog 
+          open={newDialogOpen} 
+          onOpenChange={(open) => {
+            setNewDialogOpen(open);
+            if (!open) {
+              setPreselectedFecha(undefined);
+              setPreselectedHora(undefined);
+            }
+          }}
+          preselectedFecha={preselectedFecha}
+          preselectedHora={preselectedHora}
+        />
       </div>
   );
 };

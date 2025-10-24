@@ -19,9 +19,10 @@ import { toast } from "sonner";
 interface ReservasCalendarProps {
   reservas: any[];
   isLoading: boolean;
+  onSlotClick?: (fecha: string, hora: string) => void;
 }
 
-export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps) => {
+export const ReservasCalendar = ({ reservas, isLoading, onSlotClick }: ReservasCalendarProps) => {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [editReservaId, setEditReservaId] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -385,11 +386,18 @@ export const ReservasCalendar = ({ reservas, isLoading }: ReservasCalendarProps)
                     <div
                       key={`${dayIndex}-${hour}`}
                       className={`border-b border-l p-1 min-h-[60px] relative transition-colors ${
-                        isPastSlot ? 'bg-muted/40' : ''
+                        isPastSlot ? 'bg-muted/40 cursor-not-allowed' : 'cursor-pointer hover:bg-accent/10'
                       } ${isDropTarget ? 'bg-primary/10 ring-2 ring-primary' : ''}`}
                       onDragOver={(e) => handleDragOver(e, day, hour)}
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, day, hour)}
+                      onClick={() => {
+                        if (!isPastSlot && onSlotClick && dayReservas.length === 0) {
+                          const fecha = format(day, 'yyyy-MM-dd');
+                          const hora = `${hour.toString().padStart(2, '0')}:00`;
+                          onSlotClick(fecha, hora);
+                        }
+                      }}
                     >
                       {/* Línea de hora actual */}
                       {isToday && currentTimePosition !== null && hour === currentHour && (

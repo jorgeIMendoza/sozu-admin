@@ -59,12 +59,16 @@ interface NewReservaDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   preselectedCuentaMantenimientoId?: number;
+  preselectedFecha?: string;
+  preselectedHora?: string;
 }
 
 export const NewReservaDialog = ({ 
   open, 
   onOpenChange, 
-  preselectedCuentaMantenimientoId 
+  preselectedCuentaMantenimientoId,
+  preselectedFecha,
+  preselectedHora 
 }: NewReservaDialogProps) => {
   const [selectedEspacio, setSelectedEspacio] = useState<any>(null);
   const [selectedCuentaMantenimiento, setSelectedCuentaMantenimiento] = useState<any>(null);
@@ -444,6 +448,41 @@ export const NewReservaDialog = ({
     enabled: !!edificioIdSelected && !!fechaReserva && !!horaReserva,
   });
 
+  // Fetch reservas previas de la cuenta de mantenimiento (últimos 30 días)
+  const { data: reservasPreviasCuenta } = useQuery({
+    queryKey: ["reservas_previas_cuenta", selectedCuentaMantenimiento?.id],
+    queryFn: async () => {
+      if (!selectedCuentaMantenimiento?.id) return [];
+
+      const fechaLimite = new Date();
+      fechaLimite.setDate(fechaLimite.getDate() - 30);
+
+      const { data, error } = await (supabase as any)
+        .from("reservas")
+        .select(`
+          id,
+          fecha_reserva,
+          id_espacio_reservable_edificio,
+          espacios_reservables_edificio(
+            id,
+            permitir_reservas_recurrentes,
+            id_tipo_espacio_reservable
+          ),
+          acuerdos_pago!inner(
+            id_cuenta_cobranza
+          )
+        `)
+        .eq("acuerdos_pago.id_cuenta_cobranza", selectedCuentaMantenimiento.id)
+        .eq("activo", true)
+        .gte("fecha_reserva", fechaLimite.toISOString().split('T')[0]);
+
+      if (error) throw error;
+
+      return data;
+    },
+    enabled: !!selectedCuentaMantenimiento?.id,
+  });
+
   // Función para verificar si un espacio está ocupado
   const verificarEspacioOcupado = (espacioId: number) => {
     if (!reservasExistentes || reservasExistentes.length === 0 || !horaReserva) return false;
@@ -480,6 +519,41 @@ export const NewReservaDialog = ({
         (horaNuevaEnMinutos <= horaExistenteEnMinutos && finNueva >= finExistente)
       );
     });
+  };
+
+  // Función para verificar si un espacio está permitido para esta cuenta (validar recurrencia)
+  const verificarEspacioPermitidoParaCuenta = (espacioId: number) => {
+    const espacio = espacios?.find(e => e.id === espacioId);
+    
+    if (!espacio) return { permitido: true };
+    
+    // Si permite reservas recurrentes, siempre está disponible
+    if (espacio.permitir_reservas_recurrentes === true) {
+      return { permitido: true };
+    }
+    
+    // Si no permite recurrentes, verificar si ya fue reservado en los últimos 30 días
+    if (!reservasPreviasCuenta || reservasPreviasCuenta.length === 0) {
+      return { permitido: true };
+    }
+    
+    // Buscar reservas previas del mismo tipo de espacio
+    const tieneReservaPreviaDelMismoTipo = reservasPreviasCuenta.some((reserva: any) => {
+      const espacioPrevio = reserva.espacios_reservables_edificio;
+      return (
+        espacioPrevio?.id_tipo_espacio_reservable === espacio.id_tipo_espacio_reservable &&
+        espacioPrevio?.permitir_reservas_recurrentes === false
+      );
+    });
+    
+    if (tieneReservaPreviaDelMismoTipo) {
+      return { 
+        permitido: false, 
+        mensaje: "Se ha reservado hace no menos de 30 días" 
+      };
+    }
+    
+    return { permitido: true };
   };
 
 
@@ -619,8 +693,8 @@ export const NewReservaDialog = ({
           id_propiedad: cuentaMantenimientoData.id_propiedad.toString(),
           id_comprador: "",
           id_espacio_reservable_edificio: "",
-          fecha_reserva: format(new Date(), "yyyy-MM-dd"),
-          hora_reserva: "09:00",
+          fecha_reserva: preselectedFecha || format(new Date(), "yyyy-MM-dd"),
+          hora_reserva: preselectedHora || "09:00",
         });
         setSelectedCuentaMantenimiento({ id: cuentaMantenimientoData.id_cuenta_mantenimiento });
       } else {
@@ -631,14 +705,14 @@ export const NewReservaDialog = ({
           id_propiedad: "",
           id_comprador: "",
           id_espacio_reservable_edificio: "",
-          fecha_reserva: format(new Date(), "yyyy-MM-dd"),
-          hora_reserva: "09:00",
+          fecha_reserva: preselectedFecha || format(new Date(), "yyyy-MM-dd"),
+          hora_reserva: preselectedHora || "09:00",
         });
         setSelectedCuentaMantenimiento(null);
       }
       setSelectedEspacio(null);
     }
-  }, [open, form, cuentaMantenimientoData]);
+  }, [open, form, cuentaMantenimientoData, preselectedFecha, preselectedHora]);
 
   // Auto-select persona if only one exists
   useEffect(() => {
@@ -835,15 +909,31 @@ export const NewReservaDialog = ({
                         ) : (
                           (espacios || []).map((espacio: any) => {
                             const ocupado = verificarEspacioOcupado(espacio.id);
+                            const validacion = verificarEspacioPermitidoParaCuenta(espacio.id);
+                            const noPermitido = !validacion.permitido;
+                            const deshabilitado = ocupado || noPermitido;
                             const label = espacio.descripcion || espacio.tipos_espacio_reservables?.nombre || "Sin descripción";
+                            
                             return (
-                              <SelectItem 
-                                key={espacio.id} 
-                                value={espacio.id.toString()}
-                                disabled={ocupado}
-                              >
-                                {label} {ocupado ? "(ocupado)" : ""}
-                              </SelectItem>
+                              <TooltipProvider key={espacio.id}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div>
+                                      <SelectItem 
+                                        value={espacio.id.toString()}
+                                        disabled={deshabilitado}
+                                      >
+                                        {label} {ocupado ? "(ocupado)" : ""} {noPermitido ? `(${validacion.mensaje})` : ""}
+                                      </SelectItem>
+                                    </div>
+                                  </TooltipTrigger>
+                                  {noPermitido && (
+                                    <TooltipContent>
+                                      <p>{validacion.mensaje}</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
                             );
                           })
                         )}
