@@ -2584,9 +2584,12 @@ export default function DetalleCuentaCobranza() {
             </div>
           )}
 
-          {acuerdosPago && acuerdosPago.length > 0 ? (
-            <div className="space-y-2">
-              {acuerdosPago.map((acuerdo, index) => {
+          {/* Solo mostrar conceptos de pago si NO es propiedad Asignada */}
+          {cuentaDetalle?.id_estatus_disponibilidad !== 10 && (
+            <>
+              {acuerdosPago && acuerdosPago.length > 0 ? (
+                <div className="space-y-2">
+                  {acuerdosPago.map((acuerdo, index) => {
                 const totalAplicado = (acuerdo.aplicaciones || [])
                   .filter(app => !app.es_multa)
                   .reduce((sum, app) => sum + app.monto, 0);
@@ -2997,11 +3000,13 @@ export default function DetalleCuentaCobranza() {
                   </Collapsible>
                 );
               })}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No hay acuerdos de pago registrados
-            </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No hay acuerdos de pago registrados
+                </div>
+              )}
+            </>
           )}
               </div>
             </TabsContent>
