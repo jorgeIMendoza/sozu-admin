@@ -62,6 +62,7 @@ interface CuentaCobranza {
   cash_remaining?: number;
   cash_percentage?: number;
   cash_payments?: CashPayment[];
+  id_estatus_disponibilidad?: number;
 }
 
 export default function Pagos() {
@@ -337,7 +338,8 @@ export default function Pagos() {
             numero_propiedad,
             precio_lista,
             id_entidad_relacionada_dueno,
-            id_edificio_modelo
+            id_edificio_modelo,
+            id_estatus_disponibilidad
           )
         `)
         .in('id', ofertaIds) : { data: [], error: null };
@@ -680,7 +682,8 @@ export default function Pagos() {
           motivo_cancelacion: (cuenta as any).tipos_cancelacion?.nombre || null,
           apartado_pagado: apartadoPagadoPorCuenta[cuenta.id],
           tiene_acuerdos: tieneAcuerdosPorCuenta[cuenta.id],
-          tiene_multas_pendientes: multasPendientesPorCuenta[cuenta.id] || false
+          tiene_multas_pendientes: multasPendientesPorCuenta[cuenta.id] || false,
+          id_estatus_disponibilidad: propiedad?.id_estatus_disponibilidad
         };
       });
 
@@ -1184,7 +1187,7 @@ export default function Pagos() {
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            ) : !cuenta.apartado_pagado ? (
+                            ) : !cuenta.apartado_pagado && cuenta.id_estatus_disponibilidad !== 10 ? (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
@@ -1668,7 +1671,7 @@ export default function Pagos() {
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            ) : !cuenta.apartado_pagado ? (
+                            ) : !cuenta.apartado_pagado && cuenta.id_estatus_disponibilidad !== 10 ? (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
