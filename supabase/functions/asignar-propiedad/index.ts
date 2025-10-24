@@ -218,7 +218,7 @@ serve(async (req) => {
         id_persona_lead: id_persona,
         id_esquema_pago_seleccionado: esquemaPago.id,
         email_creador: email_usuario,
-        fecha_generacion: new Date().toISOString().split('T')[0],
+        // No especificar fecha_generacion para usar el default de la base de datos (CURRENT_TIMESTAMP)
         activo: true
       })
       .select('id')
