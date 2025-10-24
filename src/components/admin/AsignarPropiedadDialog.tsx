@@ -68,18 +68,11 @@ export const AsignarPropiedadDialog = ({ propertyId, propertyNumber }: AsignarPr
     setIsAssigning(true);
 
     try {
-      // Obtener email del usuario actual
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.email) {
-        throw new Error("No se pudo obtener el email del usuario");
-      }
-
       // Llamar al edge function
       const { data, error } = await supabase.functions.invoke('asignar-propiedad', {
         body: {
           id_propiedad: propertyId,
           id_persona: parseInt(selectedPersona),
-          email_usuario: user.email,
         },
       });
 

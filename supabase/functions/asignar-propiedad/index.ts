@@ -17,16 +17,29 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { id_propiedad, id_persona, email_usuario } = await req.json();
+    const { id_propiedad, id_persona } = await req.json();
+    
+    // Obtener el usuario del token de autorización
+    const authHeader = req.headers.get('Authorization');
+    let email_usuario = 'sistema@sozu.mx'; // Email por defecto
+    
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      const supabaseClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!);
+      const { data: { user } } = await supabaseClient.auth.getUser(token);
+      if (user?.email) {
+        email_usuario = user.email;
+      }
+    }
 
     console.log('🔄 Iniciando proceso de asignación de propiedad:', { id_propiedad, id_persona, email_usuario });
 
     // Validar que se proporcionen los datos necesarios
-    if (!id_propiedad || !id_persona || !email_usuario) {
+    if (!id_propiedad || !id_persona) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'Faltan datos requeridos: id_propiedad, id_persona, email_usuario' 
+          message: 'Faltan datos requeridos: id_propiedad, id_persona' 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
