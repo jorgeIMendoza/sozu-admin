@@ -105,27 +105,31 @@ serve(async (req) => {
     }
 
     // Validar que no tenga cuenta de cobranza activa
-    const { data: cuentaExistente } = await supabase
-      .from('cuentas_cobranza')
+    const { data: ofertasExistentes } = await supabase
+      .from('ofertas')
       .select('id')
-      .eq('activo', true)
-      .in('id_oferta', 
-        supabase
-          .from('ofertas')
-          .select('id')
-          .eq('id_propiedad', id_propiedad)
-          .eq('activo', true)
-      )
-      .maybeSingle();
+      .eq('id_propiedad', id_propiedad)
+      .eq('activo', true);
 
-    if (cuentaExistente) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Esta propiedad ya tiene una cuenta de cobranza activa' 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+    if (ofertasExistentes && ofertasExistentes.length > 0) {
+      const ofertaIds = ofertasExistentes.map(o => o.id);
+      
+      const { data: cuentaExistente } = await supabase
+        .from('cuentas_cobranza')
+        .select('id')
+        .in('id_oferta', ofertaIds)
+        .eq('activo', true)
+        .maybeSingle();
+
+      if (cuentaExistente) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: 'Esta propiedad ya tiene una cuenta de cobranza activa' 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
     }
 
     // 2. Validar que la persona existe y es del tipo "Comprador" (id_tipo_entidad = 2)
