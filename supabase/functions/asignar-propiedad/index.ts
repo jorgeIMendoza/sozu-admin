@@ -52,11 +52,8 @@ serve(async (req) => {
         id,
         numero_propiedad,
         id_estatus_disponibilidad,
-        activo,
-        entidades_relacionadas!propiedades_id_entidad_relacionada_dueno_fkey(
-          id_proyecto,
-          proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)
-        )
+        id_entidad_relacionada_dueno,
+        activo
       `)
       .eq('id', id_propiedad)
       .eq('activo', true)
@@ -67,6 +64,32 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, message: 'La propiedad no existe o no está activa' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+      );
+    }
+
+    // 1b. Obtener el proyecto de la entidad relacionada
+    const { data: entidadRelacionada, error: entidadError } = await supabase
+      .from('entidades_relacionadas')
+      .select(`
+        id_proyecto,
+        proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)
+      `)
+      .eq('id', propiedad.id_entidad_relacionada_dueno)
+      .single();
+
+    if (entidadError || !entidadRelacionada) {
+      console.error('❌ Error al obtener entidad relacionada:', entidadError);
+      return new Response(
+        JSON.stringify({ success: false, message: 'No se pudo obtener el proyecto de la propiedad' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    const proyecto = (entidadRelacionada.proyectos as any);
+    if (!proyecto) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'No se pudo obtener el proyecto de la propiedad' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
 
@@ -147,15 +170,6 @@ serve(async (req) => {
     const siglas = nombrePalabras
       .map((palabra: string) => palabra.charAt(0).toUpperCase())
       .join('');
-
-    // 4. Obtener proyecto
-    const proyecto = (propiedad.entidades_relacionadas as any)?.proyectos;
-    if (!proyecto) {
-      return new Response(
-        JSON.stringify({ success: false, message: 'No se pudo obtener el proyecto de la propiedad' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
-    }
 
     const nombreEsquema = `asignacion_${propiedad.numero_propiedad}_${proyecto.nombre}_${siglas}`;
     
