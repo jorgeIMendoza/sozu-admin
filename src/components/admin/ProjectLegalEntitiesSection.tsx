@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Building2, Users, Edit2, Save, X, Info, ExternalLink, Copy } from "lucide-react";
+import { Plus, Trash2, Building2, Users, Edit2, Save, X, Info, ExternalLink, Copy, AlertCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -662,6 +663,7 @@ export const ProjectLegalEntitiesSection = ({
               const hasAccounts = entitiesWithAccounts.includes(entity.id);
               const hasProperties = entitiesWithProperties.includes(entity.id);
               const isEditing = editingCuentaMadre === entity.id;
+              const hasInmobiliaria = projectLegalEntities.some((e: any) => e.tipos_entidad?.id === 5);
               
               return (
                 <Card key={entity.id}>
@@ -694,19 +696,40 @@ export const ProjectLegalEntitiesSection = ({
                               <label className="text-sm font-medium">Cuenta para Cobrar Comisiones:</label>
                               {!(entity as any).cuenta_stp_comisiones ? (
                                 <div className="mt-1">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      generateCuentaComisionesMutation.mutate(entity.id);
-                                    }}
-                                    disabled={generatingComisiones === entity.id || generateCuentaComisionesMutation.isPending}
-                                  >
-                                    {generatingComisiones === entity.id ? "Generando..." : "Generar Cuenta de Comisiones"}
-                                  </Button>
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div className="inline-block">
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              if (hasInmobiliaria) {
+                                                generateCuentaComisionesMutation.mutate(entity.id);
+                                              }
+                                            }}
+                                            disabled={!hasInmobiliaria || generatingComisiones === entity.id || generateCuentaComisionesMutation.isPending}
+                                            className={!hasInmobiliaria ? "cursor-not-allowed opacity-50" : ""}
+                                          >
+                                            {generatingComisiones === entity.id ? "Generando..." : "Generar Cuenta de Comisiones"}
+                                          </Button>
+                                        </div>
+                                      </TooltipTrigger>
+                                      {!hasInmobiliaria && (
+                                        <TooltipContent side="top" className="max-w-xs">
+                                          <div className="flex items-start gap-2">
+                                            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                            <p className="text-sm">
+                                              Para generar cuentas de comisiones, el proyecto debe tener asignada una entidad de tipo <strong>Inmobiliaria</strong>.
+                                            </p>
+                                          </div>
+                                        </TooltipContent>
+                                      )}
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 </div>
                               ) : (
                                 <div className="mt-1">
