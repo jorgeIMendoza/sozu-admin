@@ -28,6 +28,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
+import { AsignarPropiedadDialog } from "@/components/admin/AsignarPropiedadDialog";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -2018,6 +2019,19 @@ const Propiedades = () => {
                               propertyId={property.id}
                               property={property}
                             />
+                          )}
+                          {(property.disponibilidad === "Disponible" || property.disponibilidad === "Listo") && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AsignarPropiedadDialog 
+                                  propertyId={property.id}
+                                  propertyNumber={property.numero_propiedad}
+                                />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Asignar propiedad</p>
+                              </TooltipContent>
+                            </Tooltip>
                           )}
                            <Tooltip>
                              <TooltipTrigger asChild>
