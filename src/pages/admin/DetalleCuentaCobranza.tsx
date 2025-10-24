@@ -2435,17 +2435,18 @@ export default function DetalleCuentaCobranza() {
                 {originalScheme && (
             <div className="mb-6">
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="text-lg font-semibold">
-                  {isPaymentPlanModified ? "Plan de Pagos" : "Plan de pagos"}
-                  {!isPaymentPlanModified && acuerdosPago && acuerdosPago.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 text-xs">
-                      {Math.max(...acuerdosPago.map(a => a.orden))} pagos
-                    </Badge>
-                  )}
-                </h3>
+                <h3 className="text-lg font-semibold">Plan de pagos</h3>
                 
-                {!isPaymentPlanModified ? (
+                {cuentaDetalle?.id_estatus_disponibilidad === 10 ? (
+                  // Mostrar solo badge "Asignado" cuando el estatus es Asignado (id=10)
+                  <div className="flex items-center justify-center py-4">
+                    <Badge className="text-lg px-6 py-2 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600">
+                      Asignado
+                    </Badge>
+                  </div>
+                ) : !isPaymentPlanModified ? (
                   // Original unchanged plan - show percentages AND amounts
+                  <>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">Nombre del Plan</label>
@@ -2477,6 +2478,12 @@ export default function DetalleCuentaCobranza() {
                       </p>
                     </div>
                   </div>
+                  {acuerdosPago && acuerdosPago.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {Math.max(...acuerdosPago.map(a => a.orden))} pagos
+                    </Badge>
+                  )}
+                  </>
                 ) : (
                   // Modified plan - show both original (disabled) and current
                   <div className="space-y-4">

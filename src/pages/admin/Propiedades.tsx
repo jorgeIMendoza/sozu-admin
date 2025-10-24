@@ -100,6 +100,7 @@ interface Property {
   modelo: string;
   vista: string;
   disponibilidad: string;
+  id_estatus_disponibilidad: number;
   configuracion_modelo: {
     numero_recamaras: number;
     numero_completo_banos: number;
@@ -285,7 +286,7 @@ const Propiedades = () => {
               personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
             ),
             vistas(nombre),
-            estatus_disponibilidad!inner(nombre),
+            estatus_disponibilidad!inner(id, nombre),
             ofertas!ofertas_id_propiedad_fkey(
               id,
               id_producto,
@@ -599,6 +600,7 @@ const Propiedades = () => {
           modelo: property.edificios_modelos?.modelos?.nombre || 'Sin modelo',
           vista: property.vistas?.nombre || 'Sin vista',
           disponibilidad: property.estatus_disponibilidad?.nombre || 'Sin estatus',
+          id_estatus_disponibilidad: property.estatus_disponibilidad?.id || 0,
           tieneOfertas: property.ofertas && property.ofertas.some((o: any) => o.activo && o.id_producto === null),
           tieneOfertasProductos: property.ofertas && property.ofertas.some((o: any) => o.activo && o.id_producto !== null),
           estacionamientos_count: estacionamientosCounts[property.id] || 0,
@@ -1740,9 +1742,9 @@ const Propiedades = () => {
                             onClick={() => navigate(`/admin/cuentas-cobranza/${property.cuenta_cobranza_id}/detalle`)}
                             className="h-6 px-2 text-xs font-semibold cursor-pointer hover:bg-accent"
                           >
-                            {formatCuentaCobranzaId(property.cuenta_cobranza_id, 'Propiedad')}
+                          {formatCuentaCobranzaId(property.cuenta_cobranza_id, 'Propiedad')}
                           </Button>
-                          {property.cuenta_sin_esquema ? (
+                          {property.cuenta_sin_esquema && property.id_estatus_disponibilidad !== 10 ? (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger>
