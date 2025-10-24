@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Edit, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Edit, Loader2, AlertCircle, FileCheck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -2439,8 +2439,9 @@ export default function DetalleCuentaCobranza() {
                 
                 {cuentaDetalle?.id_estatus_disponibilidad === 10 ? (
                   // Mostrar solo badge "Asignado" cuando el estatus es Asignado (id=10)
-                  <div className="flex items-center justify-center py-4">
-                    <Badge className="text-lg px-6 py-2 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600">
+                  <div className="flex items-center justify-center py-8">
+                    <Badge className="text-xl px-8 py-3 bg-gradient-to-r from-violet-500 to-purple-600 dark:from-violet-600 dark:to-purple-700 text-white border-0 shadow-lg font-semibold flex items-center gap-2">
+                      <FileCheck className="h-5 w-5" />
                       Asignado
                     </Badge>
                   </div>
