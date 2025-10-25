@@ -132,7 +132,18 @@ serve(async (req) => {
     }
 
     // 7. Determinar tipo de persona (PF o PM)
-    const tipoPersona = compradores.every((c: any) => c.personas.tipo_persona === "PF") ? "pf" : "pm";
+    console.log("Compradores tipo_persona:", compradores.map((c: any) => ({ 
+      nombre: c.personas.nombre_legal, 
+      tipo: c.personas.tipo_persona 
+    })));
+    
+    // Normalizar tipo de persona: acepta "PF", "Física", "FISICA", etc.
+    const tipoPersona = compradores.every((c: any) => {
+      const tipo = c.personas.tipo_persona?.toString().toUpperCase();
+      return tipo === "PF" || tipo === "FÍSICA" || tipo === "FISICA";
+    }) ? "pf" : "pm";
+    
+    console.log("Tipo de persona determinado:", tipoPersona);
 
     // 8. Generar siglas
     function generarSiglas(nombreCompleto: string): string {
@@ -241,11 +252,14 @@ serve(async (req) => {
     );
 
     const projectFolderData = await projectFolderResponse.json();
+    console.log(`Buscando carpeta del proyecto: ${proyecto.nombre}`, projectFolderData);
+    
     if (!projectFolderData.files?.length) {
       throw new Error(`No se encontró la carpeta del proyecto: ${proyecto.nombre}`);
     }
 
     const projectFolderId = projectFolderData.files[0].id;
+    console.log(`Carpeta del proyecto encontrada: ${projectFolderId}`);
 
     // 11. Buscar carpeta Templates
     const templatesFolderResponse = await fetch(
@@ -254,22 +268,29 @@ serve(async (req) => {
     );
 
     const templatesFolderData = await templatesFolderResponse.json();
+    console.log("Carpeta Templates:", templatesFolderData);
+    
     if (!templatesFolderData.files?.length) {
       throw new Error("No se encontró la carpeta Templates");
     }
 
     const templatesFolderId = templatesFolderData.files[0].id;
+    console.log(`Carpeta Templates encontrada: ${templatesFolderId}`);
 
     // 12. Buscar template
     const templateName = `template_contrato_${tipoPersona}`;
+    console.log(`Buscando template: ${templateName}`);
+    
     const templateResponse = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=name='${templateName}' and '${templatesFolderId}' in parents and trashed=false&fields=files(id,name)`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
     const templateData = await templateResponse.json();
+    console.log("Templates encontrados:", templateData);
+    
     if (!templateData.files?.length) {
-      throw new Error(`No se encontró el template: ${templateName}`);
+      throw new Error(`No se encontró el template: ${templateName} en la carpeta Templates del proyecto ${proyecto.nombre}`);
     }
 
     const templateId = templateData.files[0].id;
