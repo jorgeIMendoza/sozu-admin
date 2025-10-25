@@ -117,7 +117,18 @@ export function ValidarPlaceholdersDialog({
                 }`}
                 onClick={() => setSeccionActiva(seccionActiva === 'disponibles' ? 'todas' : 'disponibles')}
               >
-                <div className="absolute top-2 right-2 text-[10px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-semibold">Template</div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="absolute top-2 right-2 text-[10px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-semibold cursor-help">
+                        Template
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Datos extraídos del template de Google Docs</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <div className="text-sm text-muted-foreground">Encontradas</div>
                 <div className="text-2xl font-bold text-green-500">{validacion.total_disponibles}</div>
               </Card>
@@ -129,7 +140,18 @@ export function ValidarPlaceholdersDialog({
                 }`}
                 onClick={() => setSeccionActiva(seccionActiva === 'vacios' ? 'todas' : 'vacios')}
               >
-                <div className="absolute top-2 right-2 text-[10px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-semibold">Template</div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="absolute top-2 right-2 text-[10px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-semibold cursor-help">
+                        Template
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Datos extraídos del template de Google Docs</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <div className="text-sm text-muted-foreground">Vacíos</div>
                 <div className="text-2xl font-bold text-yellow-500">{validacion.total_vacios}</div>
               </Card>
@@ -141,7 +163,18 @@ export function ValidarPlaceholdersDialog({
                 }`}
                 onClick={() => setSeccionActiva(seccionActiva === 'faltantes' ? 'todas' : 'faltantes')}
               >
-                <div className="absolute top-2 right-2 text-[10px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-semibold">Template</div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="absolute top-2 right-2 text-[10px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-semibold cursor-help">
+                        Template
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Datos extraídos del template de Google Docs</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <div className="text-sm text-muted-foreground">Faltantes</div>
                 <div className="text-2xl font-bold text-red-500">{validacion.total_faltantes}</div>
               </Card>
@@ -155,7 +188,7 @@ export function ValidarPlaceholdersDialog({
               >
                 <div className="text-sm text-muted-foreground">Variables Sistema</div>
                 <div className="text-2xl font-bold text-blue-500">
-                  {validacion.total_variables_usadas || 0}/{validacion.total_variables_sistema || 0}
+                  {validacion.total_variables_sistema || validacion.variables_disponibles_sistema?.length || 0}
                 </div>
               </Card>
             </div>
