@@ -459,6 +459,12 @@ serve(async (req) => {
       }
     });
 
+    // Calcular variables del sistema que están siendo usadas en el template
+    const variablesSistemaKeys = Object.keys(mergeData);
+    const variablesUsadasEnTemplate = variablesSistemaKeys.filter(key => 
+      placeholdersEnTemplate.has(key)
+    );
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -467,7 +473,10 @@ serve(async (req) => {
           placeholders_disponibles: placeholdersDisponibles,
           placeholders_faltantes: placeholdersFaltantes,
           placeholders_vacios: placeholdersVacios,
-          variables_disponibles_sistema: Object.keys(mergeData).sort(),
+          variables_disponibles_sistema: variablesSistemaKeys.sort(),
+          variables_usadas_en_template: variablesUsadasEnTemplate.sort(),
+          total_variables_sistema: variablesSistemaKeys.length,
+          total_variables_usadas: variablesUsadasEnTemplate.length,
           total_template: placeholdersEnTemplate.size,
           total_disponibles: placeholdersDisponibles.length,
           total_faltantes: placeholdersFaltantes.length,

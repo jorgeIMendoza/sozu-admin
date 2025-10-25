@@ -27,6 +27,9 @@ interface ValidacionData {
   placeholders_faltantes: string[];
   placeholders_vacios: string[];
   variables_disponibles_sistema: string[];
+  variables_usadas_en_template: string[];
+  total_variables_sistema: number;
+  total_variables_usadas: number;
   total_template: number;
   total_disponibles: number;
   total_faltantes: number;
@@ -73,10 +76,10 @@ export function ValidarPlaceholdersDialog({
     setTimeout(() => setCopiedVariable(null), 2000);
   };
 
-  // Crear Set de variables disponibles (las que están siendo usadas en el template)
-  const variablesDisponiblesSet = React.useMemo(() => {
-    return new Set(validacion.placeholders_disponibles.map(p => p.placeholder));
-  }, [validacion.placeholders_disponibles]);
+  // Crear Set de variables usadas en el template (del sistema)
+  const variablesUsadasSet = React.useMemo(() => {
+    return new Set(validacion.variables_usadas_en_template || []);
+  }, [validacion.variables_usadas_en_template]);
 
   const estadoBadge = (estado: string) => {
     switch (estado) {
@@ -148,7 +151,9 @@ export function ValidarPlaceholdersDialog({
                 onClick={() => setSeccionActiva(seccionActiva === 'variables' ? 'todas' : 'variables')}
               >
                 <div className="text-sm text-muted-foreground">Variables Sistema</div>
-                <div className="text-2xl font-bold text-blue-500">{validacion.variables_disponibles_sistema?.length || 0}</div>
+                <div className="text-2xl font-bold text-blue-500">
+                  {validacion.total_variables_usadas || 0}/{validacion.total_variables_sistema || 0}
+                </div>
               </Card>
             </div>
 
@@ -161,37 +166,37 @@ export function ValidarPlaceholdersDialog({
               <Card className="p-4 border-blue-500 bg-blue-50 dark:bg-blue-950">
                 <div className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
-                  📋 {validacion.variables_disponibles_sistema.length} Variables Disponibles en el Sistema
+                  📋 Usando {validacion.total_variables_usadas || 0} de {validacion.total_variables_sistema || 0} Variables del Sistema
                 </div>
                 <div className="text-xs text-muted-foreground mb-2">
-                  Estas son TODAS las variables que puedes usar en tu template. <span className="text-green-600 dark:text-green-400 font-semibold">Verde = Ya está en tu template</span>, Azul = Disponible para agregar. Copia y pega con formato {`{{nombre_variable}}`}
+                  <span className="text-green-600 dark:text-green-400 font-semibold">Verde = Ya está en tu template ({validacion.total_variables_usadas || 0})</span>, Azul = Disponible para agregar ({(validacion.total_variables_sistema || 0) - (validacion.total_variables_usadas || 0)}). Copia y pega con formato {`{{nombre_variable}}`}
                 </div>
                 <ScrollArea className="h-[300px] w-full border rounded bg-white dark:bg-background p-2">
                   <div className="grid grid-cols-2 gap-2">
                     {validacion.variables_disponibles_sistema.map((variable, i) => {
                       const isCopied = copiedVariable === variable;
-                      const estaDisponible = variablesDisponiblesSet.has(variable);
+                      const estaUsada = variablesUsadasSet.has(variable);
                       return (
                         <div 
                           key={i} 
                           className={`text-xs font-mono p-2 rounded border cursor-pointer transition-all flex items-center justify-between gap-2 group ${
-                            estaDisponible 
+                            estaUsada 
                               ? 'bg-green-50 dark:bg-green-900 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-800' 
                               : 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-800'
                           }`}
                           onClick={() => handleCopyVariable(variable)}
-                          title={estaDisponible ? "✅ Ya está en tu template - Click para copiar" : "Click para copiar al portapapeles"}
+                          title={estaUsada ? "✅ Ya está en tu template - Click para copiar" : "Click para copiar al portapapeles"}
                         >
                           <span className="flex-1">{`{{${variable}}}`}</span>
                           <div className="flex items-center gap-1">
-                            {estaDisponible && (
+                            {estaUsada && (
                               <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-400" />
                             )}
                             {isCopied ? (
                               <Check className="w-3 h-3 text-green-600 dark:text-green-400 animate-in zoom-in" />
                             ) : (
                               <Copy className={`w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity ${
-                                estaDisponible ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'
+                                estaUsada ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'
                               }`} />
                             )}
                           </div>
