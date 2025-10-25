@@ -16,29 +16,10 @@ serve(async (req) => {
 
     console.log("Generando contrato para cuenta:", id_cuenta_cobranza);
 
-    // 1. Obtener datos de cuenta, propiedad y proyecto
+    // 1. Obtener cuenta de cobranza
     const { data: cuentaData, error: cuentaError } = await supabase
       .from("cuentas_cobranza")
-      .select(`
-        id,
-        precio_final,
-        ofertas!cuentas_cobranza_id_oferta_fkey!inner(
-          id,
-          propiedades!ofertas_id_propiedad_fkey!inner(
-            id,
-            numero_propiedad,
-            m2_reales,
-            precio_lista,
-            edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(
-              edificios!edificios_modelos_id_edificio_fkey!inner(nombre, numero_edificio),
-              modelos!edificios_modelos_id_modelo_fkey!inner(nombre)
-            ),
-            entidades_relacionadas!propiedades_id_entidad_relacionada_dueno_fkey!inner(
-              proyectos!entidades_relacionadas_id_proyecto_fkey!inner(id, nombre)
-            )
-          )
-        )
-      `)
+      .select("id, precio_final, id_oferta")
       .eq("id", id_cuenta_cobranza)
       .single();
 
@@ -46,12 +27,82 @@ serve(async (req) => {
       throw new Error(`Error obteniendo cuenta de cobranza: ${cuentaError?.message}`);
     }
 
-    const propiedad = cuentaData.ofertas.propiedades;
-    const proyecto = propiedad.entidades_relacionadas.proyectos;
-    const edificio = propiedad.edificios_modelos.edificios;
-    const modelo = propiedad.edificios_modelos.modelos;
+    // 2. Obtener oferta
+    const { data: ofertaData, error: ofertaError } = await supabase
+      .from("ofertas")
+      .select("id, id_propiedad")
+      .eq("id", cuentaData.id_oferta)
+      .single();
 
-    // 2. Obtener compradores
+    if (ofertaError || !ofertaData) {
+      throw new Error(`Error obteniendo oferta: ${ofertaError?.message}`);
+    }
+
+    // 3. Obtener propiedad
+    const { data: propiedadData, error: propiedadError } = await supabase
+      .from("propiedades")
+      .select("id, numero_propiedad, m2_reales, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno")
+      .eq("id", ofertaData.id_propiedad)
+      .single();
+
+    if (propiedadError || !propiedadData) {
+      throw new Error(`Error obteniendo propiedad: ${propiedadError?.message}`);
+    }
+
+    // 4. Obtener edificio y modelo
+    const { data: edificioModeloData, error: emError } = await supabase
+      .from("edificios_modelos")
+      .select("id_edificio, id_modelo")
+      .eq("id", propiedadData.id_edificio_modelo)
+      .single();
+
+    if (emError || !edificioModeloData) {
+      throw new Error(`Error obteniendo edificio-modelo: ${emError?.message}`);
+    }
+
+    const { data: edificioData, error: edificioError } = await supabase
+      .from("edificios")
+      .select("nombre, numero_edificio")
+      .eq("id", edificioModeloData.id_edificio)
+      .single();
+
+    const { data: modeloData, error: modeloError } = await supabase
+      .from("modelos")
+      .select("nombre")
+      .eq("id", edificioModeloData.id_modelo)
+      .single();
+
+    if (edificioError || modeloError || !edificioData || !modeloData) {
+      throw new Error("Error obteniendo datos de edificio/modelo");
+    }
+
+    // 5. Obtener proyecto
+    const { data: entidadData, error: entidadError } = await supabase
+      .from("entidades_relacionadas")
+      .select("id_proyecto")
+      .eq("id", propiedadData.id_entidad_relacionada_dueno)
+      .single();
+
+    if (entidadError || !entidadData) {
+      throw new Error(`Error obteniendo entidad relacionada: ${entidadError?.message}`);
+    }
+
+    const { data: proyectoData, error: proyectoError } = await supabase
+      .from("proyectos")
+      .select("id, nombre")
+      .eq("id", entidadData.id_proyecto)
+      .single();
+
+    if (proyectoError || !proyectoData) {
+      throw new Error(`Error obteniendo proyecto: ${proyectoError?.message}`);
+    }
+
+    const propiedad = propiedadData;
+    const proyecto = proyectoData;
+    const edificio = edificioData;
+    const modelo = modeloData;
+
+    // 6. Obtener compradores
     const { data: compradores, error: compradoresError } = await supabase
       .from("compradores")
       .select(`
@@ -73,10 +124,10 @@ serve(async (req) => {
       throw new Error("No se encontraron compradores");
     }
 
-    // 3. Determinar tipo de persona (PF o PM)
+    // 7. Determinar tipo de persona (PF o PM)
     const tipoPersona = compradores.every((c: any) => c.personas.tipo_persona === "PF") ? "pf" : "pm";
 
-    // 4. Generar siglas
+    // 8. Generar siglas
     function generarSiglas(nombreCompleto: string): string {
       return nombreCompleto
         .split(" ")
@@ -87,7 +138,7 @@ serve(async (req) => {
 
     const siglas = compradores.map((c: any) => generarSiglas(c.personas.nombre_legal)).join("-");
 
-    // 5. Autenticación con Google Drive
+    // 9. Autenticación con Google Drive
     const serviceAccountEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
     const privateKey = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY")?.replace(/\\n/g, "\n");
     const parentFolderId = Deno.env.get("GOOGLE_DRIVE_PARENT_FOLDER_ID");
@@ -145,7 +196,7 @@ serve(async (req) => {
 
     const accessToken = tokenData.access_token;
 
-    // 6. Buscar carpeta del proyecto
+    // 10. Buscar carpeta del proyecto
     const projectFolderResponse = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=name='${proyecto.nombre}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -158,7 +209,7 @@ serve(async (req) => {
 
     const projectFolderId = projectFolderData.files[0].id;
 
-    // 7. Buscar carpeta Templates
+    // 11. Buscar carpeta Templates
     const templatesFolderResponse = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=name='Templates' and '${projectFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -171,7 +222,7 @@ serve(async (req) => {
 
     const templatesFolderId = templatesFolderData.files[0].id;
 
-    // 8. Buscar template
+    // 12. Buscar template
     const templateName = `template_contrato_${tipoPersona}`;
     const templateResponse = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=name='${templateName}' and '${templatesFolderId}' in parents and trashed=false&fields=files(id,name)`,
@@ -185,7 +236,7 @@ serve(async (req) => {
 
     const templateId = templateData.files[0].id;
 
-    // 9. Obtener contenido del template
+    // 13. Obtener contenido del template
     const templateContentResponse = await fetch(
       `https://docs.googleapis.com/v1/documents/${templateId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -209,7 +260,7 @@ serve(async (req) => {
       }
     });
 
-    // 10. Preparar datos para merge
+    // 14. Preparar datos para merge
     const mergeData: Record<string, string> = {
       numero_propiedad: propiedad.numero_propiedad,
       proyecto: proyecto.nombre,
@@ -236,7 +287,7 @@ serve(async (req) => {
       mergeData[`comprador_${i + 1}_porcentaje`] = c.porcentaje_copropiedad.toString();
     });
 
-    // 11. Validar placeholders
+    // 15. Validar placeholders
     const missingPlaceholders: string[] = [];
     const emptyPlaceholders: string[] = [];
 
@@ -248,7 +299,7 @@ serve(async (req) => {
       }
     });
 
-    // 12. Buscar/crear carpeta Documentos
+    // 16. Buscar/crear carpeta Documentos
     const documentosFolderResponse = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=name='Documentos' and '${projectFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -280,7 +331,7 @@ serve(async (req) => {
       documentosFolderId = newFolder.id;
     }
 
-    // 13. Copiar template
+    // 17. Copiar template
     const nombreComprador = compradores[0].personas.nombre_legal
       .replace(/\s+/g, "-")
       .toLowerCase();
@@ -304,7 +355,7 @@ serve(async (req) => {
     const copiedDoc = await copyResponse.json();
     const newDocId = copiedDoc.id;
 
-    // 14. Hacer merge
+    // 18. Hacer merge
     const requests = [];
     for (const [key, value] of Object.entries(mergeData)) {
       requests.push({
@@ -330,7 +381,7 @@ serve(async (req) => {
       }
     );
 
-    // 15. Guardar URL en BD
+    // 19. Guardar URL en BD
     const docUrl = `https://docs.google.com/document/d/${newDocId}/edit`;
 
     const { error: updateError } = await supabase
