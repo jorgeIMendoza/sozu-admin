@@ -73,13 +73,13 @@ serve(async (req) => {
       .eq("id", entidadData.id_proyecto)
       .single();
 
-    // Obtener compradores con datos completos
-    const { data: compradores } = await supabase
+    // Obtener compradores con datos básicos
+    const { data: compradores, error: compradoresError } = await supabase
       .from("compradores")
       .select(`
         id_persona,
         porcentaje_copropiedad,
-        personas!compradores_id_persona_fkey!inner(
+        personas!compradores_id_persona_fkey(
           nombre_legal,
           rfc,
           curp,
@@ -96,21 +96,108 @@ serve(async (req) => {
           direccion_id_municipio,
           id_estado_civil,
           id_estado_nacimiento,
-          id_municipio_nacimiento,
-          paises!personas_direccion_id_pais_fkey(nombre, nacionalidad),
-          estados_mx!personas_direccion_id_estado_fkey(nombre),
-          municipios_mx!personas_direccion_id_municipio_fkey(nombre),
-          estados_civil!personas_id_estado_civil_fkey(nombre),
-          estado_nacimiento:estados_mx!personas_id_estado_nacimiento_fkey(nombre),
-          municipio_nacimiento:municipios_mx!personas_id_municipio_nacimiento_fkey(nombre)
+          id_municipio_nacimiento
         )
       `)
       .eq("id_cuenta_cobranza", id_cuenta_cobranza)
       .eq("activo", true);
 
-    if (!compradores || compradores.length === 0) {
-      throw new Error("No se encontraron compradores");
+    if (compradoresError) {
+      console.error("Error obteniendo compradores:", compradoresError);
+      throw new Error(`Error obteniendo compradores: ${compradoresError.message}`);
     }
+
+    if (!compradores || compradores.length === 0) {
+      throw new Error("No se encontraron compradores para esta cuenta de cobranza");
+    }
+
+    // Obtener datos relacionados adicionales en consultas separadas
+    const compradoresConRelaciones = await Promise.all(
+      compradores.map(async (comprador) => {
+        const p = comprador.personas;
+        
+        // Obtener país
+        let pais = null;
+        if (p.direccion_id_pais) {
+          const { data: paisData } = await supabase
+            .from("paises")
+            .select("nombre, nacionalidad")
+            .eq("id", p.direccion_id_pais)
+            .single();
+          pais = paisData;
+        }
+
+        // Obtener estado
+        let estado = null;
+        if (p.direccion_id_estado) {
+          const { data: estadoData } = await supabase
+            .from("estados_mx")
+            .select("nombre")
+            .eq("id", p.direccion_id_estado)
+            .single();
+          estado = estadoData;
+        }
+
+        // Obtener municipio
+        let municipio = null;
+        if (p.direccion_id_municipio) {
+          const { data: municipioData } = await supabase
+            .from("municipios_mx")
+            .select("nombre")
+            .eq("id", p.direccion_id_municipio)
+            .single();
+          municipio = municipioData;
+        }
+
+        // Obtener estado civil
+        let estadoCivil = null;
+        if (p.id_estado_civil) {
+          const { data: estadoCivilData } = await supabase
+            .from("estados_civil")
+            .select("nombre")
+            .eq("id", p.id_estado_civil)
+            .single();
+          estadoCivil = estadoCivilData;
+        }
+
+        // Obtener estado de nacimiento
+        let estadoNacimiento = null;
+        if (p.id_estado_nacimiento) {
+          const { data: estadoNacData } = await supabase
+            .from("estados_mx")
+            .select("nombre")
+            .eq("id", p.id_estado_nacimiento)
+            .single();
+          estadoNacimiento = estadoNacData;
+        }
+
+        // Obtener municipio de nacimiento
+        let municipioNacimiento = null;
+        if (p.id_municipio_nacimiento) {
+          const { data: munNacData } = await supabase
+            .from("municipios_mx")
+            .select("nombre")
+            .eq("id", p.id_municipio_nacimiento)
+            .single();
+          municipioNacimiento = munNacData;
+        }
+
+        return {
+          ...comprador,
+          personas: {
+            ...p,
+            paises: pais,
+            estados_mx: estado,
+            municipios_mx: municipio,
+            estados_civil: estadoCivil,
+            estado_nacimiento: estadoNacimiento,
+            municipio_nacimiento: municipioNacimiento
+          }
+        };
+      })
+    );
+
+    const compradoresFinales = compradoresConRelaciones;
 
     // Formatear compradores
     function formatearComprador(comprador: any, index: number) {
@@ -147,16 +234,16 @@ serve(async (req) => {
       };
     }
 
-    const compradoresFormateados = compradores.map((c, i) => formatearComprador(c, i));
+    const compradoresFormateados = compradoresFinales.map((c, i) => formatearComprador(c, i));
 
     function generarSiglas(nombreCompleto: string): string {
       return nombreCompleto.split(" ").map((palabra) => palabra[0]).join("").toUpperCase();
     }
 
-    const siglas = compradores.map((c: any) => generarSiglas(c.personas.nombre_legal)).join("-");
+    const siglas = compradoresFinales.map((c: any) => generarSiglas(c.personas.nombre_legal)).join("-");
 
     // Determinar tipo de persona
-    const tipoPersona = compradores.every((c: any) => {
+    const tipoPersona = compradoresFinales.every((c: any) => {
       const tipo = c.personas.tipo_persona?.toString().toUpperCase();
       return tipo === "PF" || tipo === "FÍSICA" || tipo === "FISICA";
     }) ? "pf" : "pm";

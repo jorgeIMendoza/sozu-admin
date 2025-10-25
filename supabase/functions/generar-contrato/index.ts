@@ -109,13 +109,13 @@ serve(async (req) => {
     const edificio = edificioData;
     const modelo = modeloData;
 
-    // 6. Obtener compradores con todos sus datos relacionados
+    // 6. Obtener compradores con datos básicos y relacionados (usando left joins para datos opcionales)
     const { data: compradores, error: compradoresError } = await supabase
       .from("compradores")
       .select(`
         id_persona,
         porcentaje_copropiedad,
-        personas!compradores_id_persona_fkey!inner(
+        personas!compradores_id_persona_fkey(
           nombre_legal,
           rfc,
           curp,
@@ -135,30 +135,121 @@ serve(async (req) => {
           direccion_fiscal_codigo_postal,
           id_estado_civil,
           id_estado_nacimiento,
-          id_municipio_nacimiento,
-          paises!personas_direccion_id_pais_fkey(nombre, nacionalidad),
-          estados_mx!personas_direccion_id_estado_fkey(nombre),
-          municipios_mx!personas_direccion_id_municipio_fkey(nombre),
-          estados_civil!personas_id_estado_civil_fkey(nombre),
-          estado_nacimiento:estados_mx!personas_id_estado_nacimiento_fkey(nombre),
-          municipio_nacimiento:municipios_mx!personas_id_municipio_nacimiento_fkey(nombre)
+          id_municipio_nacimiento
         )
       `)
       .eq("id_cuenta_cobranza", id_cuenta_cobranza)
       .eq("activo", true);
 
-    if (compradoresError || !compradores || compradores.length === 0) {
-      throw new Error("No se encontraron compradores");
+    if (compradoresError) {
+      console.error("Error obteniendo compradores:", compradoresError);
+      throw new Error(`Error obteniendo compradores: ${compradoresError.message}`);
     }
 
+    if (!compradores || compradores.length === 0) {
+      console.error("No se encontraron compradores para cuenta:", id_cuenta_cobranza);
+      throw new Error("No se encontraron compradores para esta cuenta de cobranza");
+    }
+
+    console.log(`${compradores.length} comprador(es) encontrado(s)`);
+
+    // 6.5. Obtener datos relacionados adicionales en consultas separadas
+    const compradoresConRelaciones = await Promise.all(
+      compradores.map(async (comprador) => {
+        const p = comprador.personas;
+        
+        // Obtener país
+        let pais = null;
+        if (p.direccion_id_pais) {
+          const { data: paisData } = await supabase
+            .from("paises")
+            .select("nombre, nacionalidad")
+            .eq("id", p.direccion_id_pais)
+            .single();
+          pais = paisData;
+        }
+
+        // Obtener estado
+        let estado = null;
+        if (p.direccion_id_estado) {
+          const { data: estadoData } = await supabase
+            .from("estados_mx")
+            .select("nombre")
+            .eq("id", p.direccion_id_estado)
+            .single();
+          estado = estadoData;
+        }
+
+        // Obtener municipio
+        let municipio = null;
+        if (p.direccion_id_municipio) {
+          const { data: municipioData } = await supabase
+            .from("municipios_mx")
+            .select("nombre")
+            .eq("id", p.direccion_id_municipio)
+            .single();
+          municipio = municipioData;
+        }
+
+        // Obtener estado civil
+        let estadoCivil = null;
+        if (p.id_estado_civil) {
+          const { data: estadoCivilData } = await supabase
+            .from("estados_civil")
+            .select("nombre")
+            .eq("id", p.id_estado_civil)
+            .single();
+          estadoCivil = estadoCivilData;
+        }
+
+        // Obtener estado de nacimiento
+        let estadoNacimiento = null;
+        if (p.id_estado_nacimiento) {
+          const { data: estadoNacData } = await supabase
+            .from("estados_mx")
+            .select("nombre")
+            .eq("id", p.id_estado_nacimiento)
+            .single();
+          estadoNacimiento = estadoNacData;
+        }
+
+        // Obtener municipio de nacimiento
+        let municipioNacimiento = null;
+        if (p.id_municipio_nacimiento) {
+          const { data: munNacData } = await supabase
+            .from("municipios_mx")
+            .select("nombre")
+            .eq("id", p.id_municipio_nacimiento)
+            .single();
+          municipioNacimiento = munNacData;
+        }
+
+        return {
+          ...comprador,
+          personas: {
+            ...p,
+            paises: pais,
+            estados_mx: estado,
+            municipios_mx: municipio,
+            estados_civil: estadoCivil,
+            estado_nacimiento: estadoNacimiento,
+            municipio_nacimiento: municipioNacimiento
+          }
+        };
+      })
+    );
+
+    // Usar los compradores con relaciones
+    const compradoresFinales = compradoresConRelaciones;
+
     // 7. Determinar tipo de persona (PF o PM)
-    console.log("Compradores tipo_persona:", compradores.map((c: any) => ({ 
+    console.log("Compradores tipo_persona:", compradoresFinales.map((c: any) => ({ 
       nombre: c.personas.nombre_legal, 
       tipo: c.personas.tipo_persona 
     })));
     
     // Normalizar tipo de persona: acepta "PF", "Física", "FISICA", etc.
-    const tipoPersona = compradores.every((c: any) => {
+    const tipoPersona = compradoresFinales.every((c: any) => {
       const tipo = c.personas.tipo_persona?.toString().toUpperCase();
       return tipo === "PF" || tipo === "FÍSICA" || tipo === "FISICA";
     }) ? "pf" : "pm";
@@ -174,7 +265,7 @@ serve(async (req) => {
         .toUpperCase();
     }
 
-    const siglas = compradores.map((c: any) => generarSiglas(c.personas.nombre_legal)).join("-");
+    const siglas = compradoresFinales.map((c: any) => generarSiglas(c.personas.nombre_legal)).join("-");
 
     // 8.5. Formatear datos de compradores
     function formatearComprador(comprador: any, index: number) {
@@ -232,7 +323,7 @@ serve(async (req) => {
       };
     }
 
-    const compradoresFormateados = compradores.map((c, i) => formatearComprador(c, i));
+    const compradoresFormateados = compradoresFinales.map((c, i) => formatearComprador(c, i));
 
     // 9. Autenticación con Google Drive
     const serviceAccountEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
@@ -517,7 +608,7 @@ serve(async (req) => {
     }
 
     // 17. Buscar y eliminar contratos existentes de esta cuenta
-    const nombreComprador = compradores[0].personas.nombre_legal
+    const nombreComprador = compradoresFinales[0].personas.nombre_legal
       .replace(/\s+/g, "-")
       .toLowerCase();
     const nuevoNombre = `contrato_${id_cuenta_cobranza}_${nombreComprador}`;
