@@ -187,8 +187,25 @@ serve(async (req) => {
     );
 
     // Crear JWT
-    const encodedHeader = btoa(JSON.stringify(header));
-    const encodedPayload = btoa(JSON.stringify(payload));
+    // Helper para base64url encoding (JWT requiere este formato, no base64 estándar)
+    const base64UrlEncode = (str: string): string => {
+      return btoa(str)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    };
+
+    const base64UrlEncodeBuffer = (buffer: ArrayBuffer): string => {
+      const bytes = new Uint8Array(buffer);
+      const binary = String.fromCharCode(...bytes);
+      return btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    };
+
+    const encodedHeader = base64UrlEncode(JSON.stringify(header));
+    const encodedPayload = base64UrlEncode(JSON.stringify(payload));
     const signatureInput = `${encodedHeader}.${encodedPayload}`;
     
     const signatureBuffer = await crypto.subtle.sign(
@@ -197,7 +214,7 @@ serve(async (req) => {
       new TextEncoder().encode(signatureInput)
     );
     
-    const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+    const signature = base64UrlEncodeBuffer(signatureBuffer);
     const jwt = `${signatureInput}.${signature}`;
 
     // Obtener access token
@@ -208,8 +225,11 @@ serve(async (req) => {
     });
 
     const tokenData = await tokenResponse.json();
+    
+    // Agregar logging para debugging
     if (!tokenData.access_token) {
-      throw new Error("No se pudo obtener access token de Google");
+      console.error("Google token response:", tokenData);
+      throw new Error(`No se pudo obtener access token de Google: ${JSON.stringify(tokenData)}`);
     }
 
     const accessToken = tokenData.access_token;
