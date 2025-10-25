@@ -172,28 +172,26 @@ export function ValidarPlaceholdersDialog({
                 <div className="text-xs text-muted-foreground mb-2">
                   Estos placeholders se reemplazarán correctamente en el contrato
                 </div>
-                <div className="border rounded-md">
-                  <ScrollArea className="h-[400px]">
-                    <Table>
-                      <TableHeader className="sticky top-0 bg-background z-10">
-                        <TableRow>
-                          <TableHead className="w-[300px]">Placeholder</TableHead>
-                          <TableHead>Valor que se usará</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {validacion.placeholders_disponibles
-                          .filter(item => item.estado === 'ok')
-                          .map((item, i) => (
-                            <TableRow key={i}>
-                              <TableCell className="font-mono text-sm">{`{{${item.placeholder}}}`}</TableCell>
-                              <TableCell className="text-sm">{item.valor}</TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
-                </div>
+                <ScrollArea className="h-[400px] border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[300px]">Placeholder</TableHead>
+                        <TableHead>Valor que se usará</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {validacion.placeholders_disponibles
+                        .filter(item => item.estado === 'ok')
+                        .map((item, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-mono text-sm">{`{{${item.placeholder}}}`}</TableCell>
+                            <TableCell className="text-sm">{item.valor}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
               </div>
             )}
 
