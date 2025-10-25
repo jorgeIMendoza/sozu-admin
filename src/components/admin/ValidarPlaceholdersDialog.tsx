@@ -85,7 +85,7 @@ export function ValidarPlaceholdersDialog({
               >
                 <div className="text-sm text-muted-foreground">Total en Template</div>
                 <div className="text-2xl font-bold">{validacion.total_template}</div>
-                {seccionActiva === 'todas' && <div className="text-xs text-primary mt-1">← Viendo todo</div>}
+                {seccionActiva === 'todas' && <div className="text-xs text-primary font-medium mt-1">← Viendo todo</div>}
               </Card>
               <Card 
                 className="p-4 border-green-500 cursor-pointer hover:bg-green-50 dark:hover:bg-green-950 transition-colors"
@@ -133,7 +133,7 @@ export function ValidarPlaceholdersDialog({
             </Card>
 
             {/* Placeholders Faltantes - PRIORIDAD */}
-            {validacion.placeholders_faltantes.length > 0 && (seccionActiva === 'todas' || seccionActiva === 'faltantes') && (
+            {(seccionActiva === 'todas' || seccionActiva === 'faltantes') && validacion.placeholders_faltantes.length > 0 && (
               <Card className="p-4 border-red-500 bg-red-50 dark:bg-red-950">
                 <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
                   <XCircle className="w-4 h-4" />
@@ -155,7 +155,7 @@ export function ValidarPlaceholdersDialog({
             )}
 
             {/* Placeholders Vacíos */}
-            {validacion.placeholders_vacios.length > 0 && (seccionActiva === 'todas' || seccionActiva === 'vacios') && (
+            {(seccionActiva === 'todas' || seccionActiva === 'vacios') && validacion.placeholders_vacios.length > 0 && (
               <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
                 <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
@@ -177,7 +177,7 @@ export function ValidarPlaceholdersDialog({
             )}
 
             {/* Tabla completa de placeholders DISPONIBLES OK */}
-            {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 && (seccionActiva === 'todas' || seccionActiva === 'disponibles') && (
+            {(seccionActiva === 'todas' || seccionActiva === 'disponibles') && validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 && (
               <div>
                 <div className="text-sm font-medium mb-2 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-500" />
@@ -187,7 +187,7 @@ export function ValidarPlaceholdersDialog({
                   Estos placeholders se reemplazarán correctamente en el contrato
                 </div>
                 <div className="border rounded-md">
-                  <ScrollArea className="h-[250px] w-full">
+                  <ScrollArea className="h-[400px] w-full">
                     <Table>
                       <TableHeader>
                         <TableRow>
