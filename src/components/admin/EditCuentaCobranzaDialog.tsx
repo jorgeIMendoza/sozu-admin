@@ -1933,8 +1933,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             {tipoCuenta === 'Propiedad' && (
               <TabsTrigger value="escrituracion">Datos de escrituración</TabsTrigger>
             )}
-            {tipoCuenta === 'Propiedad' && (estatusPropiedad?.id_estatus_disponibilidad ?? 0) >= 7 && (
-              <TabsTrigger value="documentos">Documentos de entrega</TabsTrigger>
+            {tipoCuenta === 'Propiedad' && (
+              <TabsTrigger value="documentos">Documentos</TabsTrigger>
             )}
             {tipoCuenta === 'Propiedad' && hasFacturas && (
               <TabsTrigger value="facturas">Facturas</TabsTrigger>
@@ -2694,15 +2694,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             </TabsContent>
           )}
 
-          {/* Documentos Tab - Only for properties with status >= 7 */}
-          {tipoCuenta === 'Propiedad' && (estatusPropiedad?.id_estatus_disponibilidad ?? 0) >= 7 && (
+          {/* Documentos Tab - Only for properties */}
+          {tipoCuenta === 'Propiedad' && (
             <TabsContent value="documentos" className="space-y-4">
               {isReadOnly && <ReadOnlyBanner />}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <FileText className="h-5 w-5" />
-                    Documentos de entrega
+                    Documentos
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
