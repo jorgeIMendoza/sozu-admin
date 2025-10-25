@@ -49,7 +49,7 @@ export function ValidarPlaceholdersDialog({
 }: ValidarPlaceholdersDialogProps) {
   if (!validacion) return null;
 
-  const [seccionActiva, setSeccionActiva] = React.useState<'todas' | 'disponibles' | 'vacios' | 'faltantes'>('todas');
+  const [seccionActiva, setSeccionActiva] = React.useState<'todas' | 'disponibles' | 'vacios' | 'faltantes'>('disponibles');
 
   const estadoBadge = (estado: string) => {
     switch (estado) {
