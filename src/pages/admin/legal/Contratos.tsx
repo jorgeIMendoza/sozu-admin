@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { CompradoresConDocumentosDialog } from "@/components/admin/CompradoresConDocumentosDialog";
 import { ValidarPlaceholdersDialog } from "@/components/admin/ValidarPlaceholdersDialog";
+import { SubirContratoFirmadoDialog } from "@/components/admin/SubirContratoFirmadoDialog";
 
 interface Contrato {
   cuenta_id: number;
@@ -66,6 +67,9 @@ export default function Contratos() {
     template_name: string;
     cuenta_id: number;
   } | null>(null);
+
+  const [subirContratoDialogOpen, setSubirContratoDialogOpen] = useState(false);
+  const [cuentaParaSubirContrato, setCuentaParaSubirContrato] = useState<number | null>(null);
 
   // Fetch contratos pendientes
   const { data: contratos = [], isLoading } = useQuery({
@@ -402,8 +406,8 @@ export default function Contratos() {
                     <TableHead className="text-right">Precio Final</TableHead>
                     <TableHead>Cuenta</TableHead>
                     <TableHead>Compradores</TableHead>
-                    <TableHead>Contrato</TableHead>
-                    <TableHead className="text-right">Acción</TableHead>
+                    <TableHead>Contrato Draft</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -443,24 +447,40 @@ export default function Contratos() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => validarPlaceholdersMutation.mutate(contrato.cuenta_id)}
-                          disabled={validandoCuentaId === contrato.cuenta_id}
-                        >
-                          {validandoCuentaId === contrato.cuenta_id ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                              Validando...
-                            </>
-                          ) : (
-                            <>
-                              <FileText className="h-4 w-4 mr-1" />
-                              Validar
-                            </>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => validarPlaceholdersMutation.mutate(contrato.cuenta_id)}
+                            disabled={validandoCuentaId === contrato.cuenta_id}
+                          >
+                            {validandoCuentaId === contrato.cuenta_id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                Validando...
+                              </>
+                            ) : (
+                              <>
+                                <FileText className="h-4 w-4 mr-1" />
+                                Validar
+                              </>
+                            )}
+                          </Button>
+                          
+                          {contrato.contrato_draft && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => {
+                                setCuentaParaSubirContrato(contrato.cuenta_id);
+                                setSubirContratoDialogOpen(true);
+                              }}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              Subir Firmado
+                            </Button>
                           )}
-                        </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -481,6 +501,18 @@ export default function Contratos() {
           templateName={validacionDialogData.template_name}
           onGenerarContrato={() => validacionDialogData.cuenta_id && generarContratoMutation.mutate(validacionDialogData.cuenta_id)}
           isGenerating={generarContratoMutation.isPending}
+        />
+      )}
+
+      {cuentaParaSubirContrato && (
+        <SubirContratoFirmadoDialog
+          open={subirContratoDialogOpen}
+          onOpenChange={setSubirContratoDialogOpen}
+          cuentaCobranzaId={cuentaParaSubirContrato}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['contratos-pendientes'] });
+            setCuentaParaSubirContrato(null);
+          }}
         />
       )}
     </div>
