@@ -73,6 +73,11 @@ export function ValidarPlaceholdersDialog({
     setTimeout(() => setCopiedVariable(null), 2000);
   };
 
+  // Crear Set de variables disponibles (las que están siendo usadas en el template)
+  const variablesDisponiblesSet = React.useMemo(() => {
+    return new Set(validacion.placeholders_disponibles.map(p => p.placeholder));
+  }, [validacion.placeholders_disponibles]);
+
   const estadoBadge = (estado: string) => {
     switch (estado) {
       case 'ok':
@@ -159,25 +164,37 @@ export function ValidarPlaceholdersDialog({
                   📋 {validacion.variables_disponibles_sistema.length} Variables Disponibles en el Sistema
                 </div>
                 <div className="text-xs text-muted-foreground mb-2">
-                  Estas son TODAS las variables que puedes usar en tu template. Copia y pega en Google Docs con formato {`{{nombre_variable}}`}
+                  Estas son TODAS las variables que puedes usar en tu template. <span className="text-green-600 dark:text-green-400 font-semibold">Verde = Ya está en tu template</span>, Azul = Disponible para agregar. Copia y pega con formato {`{{nombre_variable}}`}
                 </div>
                 <ScrollArea className="h-[300px] w-full border rounded bg-white dark:bg-background p-2">
                   <div className="grid grid-cols-2 gap-2">
                     {validacion.variables_disponibles_sistema.map((variable, i) => {
                       const isCopied = copiedVariable === variable;
+                      const estaDisponible = variablesDisponiblesSet.has(variable);
                       return (
                         <div 
                           key={i} 
-                          className="text-xs font-mono bg-blue-50 dark:bg-blue-900 p-2 rounded border border-blue-300 dark:border-blue-700 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-800 transition-all flex items-center justify-between gap-2 group"
+                          className={`text-xs font-mono p-2 rounded border cursor-pointer transition-all flex items-center justify-between gap-2 group ${
+                            estaDisponible 
+                              ? 'bg-green-50 dark:bg-green-900 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-800' 
+                              : 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-800'
+                          }`}
                           onClick={() => handleCopyVariable(variable)}
-                          title="Click para copiar al portapapeles"
+                          title={estaDisponible ? "✅ Ya está en tu template - Click para copiar" : "Click para copiar al portapapeles"}
                         >
                           <span className="flex-1">{`{{${variable}}}`}</span>
-                          {isCopied ? (
-                            <Check className="w-3 h-3 text-green-600 dark:text-green-400 animate-in zoom-in" />
-                          ) : (
-                            <Copy className="w-3 h-3 text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          )}
+                          <div className="flex items-center gap-1">
+                            {estaDisponible && (
+                              <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-400" />
+                            )}
+                            {isCopied ? (
+                              <Check className="w-3 h-3 text-green-600 dark:text-green-400 animate-in zoom-in" />
+                            ) : (
+                              <Copy className={`w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity ${
+                                estaDisponible ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'
+                              }`} />
+                            )}
+                          </div>
                         </div>
                       );
                     })}
