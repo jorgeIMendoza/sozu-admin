@@ -393,11 +393,38 @@ serve(async (req) => {
       documentosFolderId = newFolder.id;
     }
 
-    // 17. Copiar template
+    // 17. Buscar y eliminar contratos existentes de esta cuenta
     const nombreComprador = compradores[0].personas.nombre_legal
       .replace(/\s+/g, "-")
       .toLowerCase();
     const nuevoNombre = `contrato_${id_cuenta_cobranza}_${nombreComprador}`;
+    
+    console.log(`Buscando contratos existentes con nombre: ${nuevoNombre}`);
+    
+    const existingContractsResponse = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${nuevoNombre}' and '${documentosFolderId}' in parents and trashed=false&fields=files(id,name)`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    
+    const existingContracts = await existingContractsResponse.json();
+    
+    if (existingContracts.files?.length) {
+      console.log(`Eliminando ${existingContracts.files.length} contrato(s) existente(s)`);
+      
+      // Eliminar todos los contratos existentes
+      for (const file of existingContracts.files) {
+        await fetch(
+          `https://www.googleapis.com/drive/v3/files/${file.id}`,
+          {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${accessToken}` }
+          }
+        );
+        console.log(`Contrato eliminado: ${file.name} (${file.id})`);
+      }
+    }
+
+    // 18. Copiar template
 
     const copyResponse = await fetch(
       `https://www.googleapis.com/drive/v3/files/${templateId}/copy`,
@@ -417,7 +444,7 @@ serve(async (req) => {
     const copiedDoc = await copyResponse.json();
     const newDocId = copiedDoc.id;
 
-    // 18. Hacer merge
+    // 19. Hacer merge
     const requests = [];
     for (const [key, value] of Object.entries(mergeData)) {
       requests.push({
@@ -443,7 +470,7 @@ serve(async (req) => {
       }
     );
 
-    // 19. Guardar URL en BD
+    // 20. Guardar URL en BD
     const docUrl = `https://docs.google.com/document/d/${newDocId}/edit`;
 
     const { error: updateError } = await supabase
