@@ -110,35 +110,38 @@ export function ValidarPlaceholdersDialog({
             {/* Resumen */}
             <div className="grid grid-cols-4 gap-4">
               <Card 
-                className={`p-4 border-green-500 cursor-pointer transition-all ${
+                className={`p-4 border-green-500 cursor-pointer transition-all relative ${
                   seccionActiva === 'disponibles' 
                     ? 'bg-green-100 dark:bg-green-950 ring-2 ring-green-500' 
                     : 'hover:bg-green-50 dark:hover:bg-green-950'
                 }`}
                 onClick={() => setSeccionActiva(seccionActiva === 'disponibles' ? 'todas' : 'disponibles')}
               >
-                <div className="text-sm text-muted-foreground">Disponibles</div>
+                <div className="absolute top-2 right-2 text-[10px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-semibold">Template</div>
+                <div className="text-sm text-muted-foreground">Encontradas</div>
                 <div className="text-2xl font-bold text-green-500">{validacion.total_disponibles}</div>
               </Card>
               <Card 
-                className={`p-4 border-yellow-500 cursor-pointer transition-all ${
+                className={`p-4 border-yellow-500 cursor-pointer transition-all relative ${
                   seccionActiva === 'vacios' 
                     ? 'bg-yellow-100 dark:bg-yellow-950 ring-2 ring-yellow-500' 
                     : 'hover:bg-yellow-50 dark:hover:bg-yellow-950'
                 }`}
                 onClick={() => setSeccionActiva(seccionActiva === 'vacios' ? 'todas' : 'vacios')}
               >
+                <div className="absolute top-2 right-2 text-[10px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-semibold">Template</div>
                 <div className="text-sm text-muted-foreground">Vacíos</div>
                 <div className="text-2xl font-bold text-yellow-500">{validacion.total_vacios}</div>
               </Card>
               <Card 
-                className={`p-4 border-red-500 cursor-pointer transition-all ${
+                className={`p-4 border-red-500 cursor-pointer transition-all relative ${
                   seccionActiva === 'faltantes' 
                     ? 'bg-red-100 dark:bg-red-950 ring-2 ring-red-500' 
                     : 'hover:bg-red-50 dark:hover:bg-red-950'
                 }`}
                 onClick={() => setSeccionActiva(seccionActiva === 'faltantes' ? 'todas' : 'faltantes')}
               >
+                <div className="absolute top-2 right-2 text-[10px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-semibold">Template</div>
                 <div className="text-sm text-muted-foreground">Faltantes</div>
                 <div className="text-2xl font-bold text-red-500">{validacion.total_faltantes}</div>
               </Card>
@@ -150,9 +153,9 @@ export function ValidarPlaceholdersDialog({
                 }`}
                 onClick={() => setSeccionActiva(seccionActiva === 'variables' ? 'todas' : 'variables')}
               >
-                <div className="text-sm text-muted-foreground">Variables Template</div>
+                <div className="text-sm text-muted-foreground">Variables Sistema</div>
                 <div className="text-2xl font-bold text-blue-500">
-                  {validacion.total_disponibles || 0}/{validacion.total_template || 0}
+                  {validacion.total_variables_usadas || 0}/{validacion.total_variables_sistema || 0}
                 </div>
               </Card>
             </div>
@@ -166,10 +169,10 @@ export function ValidarPlaceholdersDialog({
               <Card className="p-4 border-blue-500 bg-blue-50 dark:bg-blue-950">
                 <div className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
-                  📋 {validacion.total_disponibles || 0} de {validacion.total_template || 0} Variables con Datos (Faltan {validacion.total_faltantes || 0})
+                  📋 Variables del Sistema: {validacion.total_variables_usadas || 0} encontradas de {validacion.total_variables_sistema || 0} disponibles
                 </div>
                 <div className="text-xs text-muted-foreground mb-2">
-                  <span className="text-green-600 dark:text-green-400 font-semibold">Verde = Tiene datos del sistema ({validacion.total_disponibles || 0})</span>, Azul = Disponible para agregar al template. Copia y pega con formato {`{{nombre_variable}}`}
+                  <span className="text-green-600 dark:text-green-400 font-semibold">Verde = Encontrada en template ({validacion.total_variables_usadas || 0})</span>, Azul = Disponible para agregar ({(validacion.total_variables_sistema || 0) - (validacion.total_variables_usadas || 0)}). Copia con formato {`{{nombre_variable}}`}
                 </div>
                 <ScrollArea className="h-[300px] w-full border rounded bg-white dark:bg-background p-2">
                   <div className="grid grid-cols-2 gap-2">
@@ -252,31 +255,31 @@ export function ValidarPlaceholdersDialog({
               </Card>
             )}
 
-            {/* Tabla completa de placeholders DISPONIBLES OK */}
+            {/* Tabla completa de placeholders ENCONTRADOS OK */}
             {(seccionActiva === 'todas' || seccionActiva === 'disponibles') && validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 && (
               <div>
-                <div className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-500" />
+                <div className="text-sm font-medium mb-2 flex items-center gap-2 text-green-600 dark:text-green-400">
+                  <CheckCircle className="w-4 h-4" />
                   ✅ {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length} Placeholders Correctamente Mapeados
                 </div>
                 <div className="text-xs text-muted-foreground mb-2">
                   Estos placeholders se reemplazarán correctamente en el contrato
                 </div>
-                <div className="h-[250px] border rounded-md overflow-y-scroll">
+                <div className="h-[250px] border border-green-300 dark:border-green-700 rounded-md overflow-y-scroll bg-green-50 dark:bg-green-950">
                   <Table>
-                    <TableHeader className="sticky top-0 bg-background z-10 border-b">
-                      <TableRow>
-                        <TableHead className="w-[300px]">Placeholder</TableHead>
-                        <TableHead>Valor que se usará</TableHead>
+                    <TableHeader className="sticky top-0 bg-green-100 dark:bg-green-900 z-10 border-b border-green-300 dark:border-green-700">
+                      <TableRow className="hover:bg-green-100 dark:hover:bg-green-900">
+                        <TableHead className="w-[300px] text-green-700 dark:text-green-300">Placeholder</TableHead>
+                        <TableHead className="text-green-700 dark:text-green-300">Valor que se usará</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {validacion.placeholders_disponibles
                         .filter(item => item.estado === 'ok')
                         .map((item, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-mono text-sm">{`{{${item.placeholder}}}`}</TableCell>
-                            <TableCell className="text-sm">{item.valor}</TableCell>
+                          <TableRow key={i} className="hover:bg-green-100 dark:hover:bg-green-900 border-green-200 dark:border-green-800">
+                            <TableCell className="font-mono text-sm text-green-700 dark:text-green-300">{`{{${item.placeholder}}}`}</TableCell>
+                            <TableCell className="text-sm text-green-700 dark:text-green-300">{item.valor}</TableCell>
                           </TableRow>
                         ))}
                     </TableBody>
