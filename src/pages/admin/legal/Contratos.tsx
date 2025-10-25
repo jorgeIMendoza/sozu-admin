@@ -153,7 +153,7 @@ export default function Contratos() {
           .from('documentos')
           .select(`
             id,
-            url_documento,
+            url,
             fecha_creacion,
             tipos_documento!inner(nombre)
           `)
@@ -173,7 +173,7 @@ export default function Contratos() {
           documentos: (docs || []).map((d: any) => ({
             id: d.id,
             tipo: d.tipos_documento.nombre,
-            url: d.url_documento,
+            url: d.url,
             fecha: d.fecha_creacion,
           })),
         };
