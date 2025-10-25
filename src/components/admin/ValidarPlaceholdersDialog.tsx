@@ -245,80 +245,116 @@ export function ValidarPlaceholdersDialog({
             )}
 
             {/* Placeholders Faltantes - PRIORIDAD */}
-            {(seccionActiva === 'todas' || seccionActiva === 'faltantes') && validacion.placeholders_faltantes.length > 0 && (
-              <Card className="p-4 border-red-500 bg-red-50 dark:bg-red-950">
-                <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
-                  <XCircle className="w-4 h-4" />
-                  ⚠️ CRÍTICO: {validacion.total_faltantes} Placeholders NO GENERADOS (aparecerán en ROJO)
-                </div>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Estos placeholders están en el template pero NO tienen datos disponibles
-                </div>
-                <ScrollArea className="h-[200px] w-full border rounded bg-white dark:bg-background p-2">
-                  <div className="space-y-1">
-                    {validacion.placeholders_faltantes.map((ph, i) => (
-                      <div key={i} className="text-sm font-mono bg-red-50 dark:bg-red-900 p-2 rounded border border-red-300 dark:border-red-700">
-                        {`{{${ph}}}`}
-                      </div>
-                    ))}
+            {(seccionActiva === 'todas' || seccionActiva === 'faltantes') && (
+              validacion.placeholders_faltantes.length > 0 ? (
+                <Card className="p-4 border-red-500 bg-red-50 dark:bg-red-950">
+                  <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
+                    <XCircle className="w-4 h-4" />
+                    ⚠️ CRÍTICO: {validacion.total_faltantes} Placeholders NO GENERADOS (aparecerán en ROJO)
                   </div>
-                </ScrollArea>
-              </Card>
+                  <div className="text-xs text-muted-foreground mb-2">
+                    Estos placeholders están en el template pero NO tienen datos disponibles
+                  </div>
+                  <ScrollArea className="h-[200px] w-full border rounded bg-white dark:bg-background p-2">
+                    <div className="space-y-1">
+                      {validacion.placeholders_faltantes.map((ph, i) => (
+                        <div key={i} className="text-sm font-mono bg-red-50 dark:bg-red-900 p-2 rounded border border-red-300 dark:border-red-700">
+                          {`{{${ph}}}`}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </Card>
+              ) : seccionActiva === 'faltantes' && (
+                <Card className="p-4 border-green-500 bg-green-50 dark:bg-green-950">
+                  <div className="text-sm font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    ✅ No hay placeholders faltantes
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Todos los placeholders del template tienen datos mapeados en el sistema
+                  </div>
+                </Card>
+              )
             )}
 
             {/* Placeholders Vacíos */}
-            {(seccionActiva === 'todas' || seccionActiva === 'vacios') && validacion.placeholders_vacios.length > 0 && (
-              <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
-                <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  {validacion.total_vacios} Placeholders con datos VACÍOS (aparecerán en AMARILLO)
-                </div>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Estos placeholders tienen datos mapeados pero los valores están vacíos
-                </div>
-                <ScrollArea className="h-[150px] w-full border rounded bg-white dark:bg-background p-2">
-                  <div className="space-y-1">
-                    {validacion.placeholders_vacios.map((ph, i) => (
-                      <div key={i} className="text-sm font-mono bg-yellow-50 dark:bg-yellow-900 p-2 rounded border border-yellow-300 dark:border-yellow-700">
-                        {`{{${ph}}}`}
-                      </div>
-                    ))}
+            {(seccionActiva === 'todas' || seccionActiva === 'vacios') && (
+              validacion.placeholders_vacios.length > 0 ? (
+                <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+                  <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    {validacion.total_vacios} Placeholders con datos VACÍOS (aparecerán en AMARILLO)
                   </div>
-                </ScrollArea>
-              </Card>
+                  <div className="text-xs text-muted-foreground mb-2">
+                    Estos placeholders tienen datos mapeados pero los valores están vacíos
+                  </div>
+                  <ScrollArea className="h-[150px] w-full border rounded bg-white dark:bg-background p-2">
+                    <div className="space-y-1">
+                      {validacion.placeholders_vacios.map((ph, i) => (
+                        <div key={i} className="text-sm font-mono bg-yellow-50 dark:bg-yellow-900 p-2 rounded border border-yellow-300 dark:border-yellow-700">
+                          {`{{${ph}}}`}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </Card>
+              ) : seccionActiva === 'vacios' && (
+                <Card className="p-4 border-green-500 bg-green-50 dark:bg-green-950">
+                  <div className="text-sm font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    ✅ No hay placeholders vacíos
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Todos los placeholders del template tienen datos completos
+                  </div>
+                </Card>
+              )
             )}
 
             {/* Tabla completa de placeholders ENCONTRADOS OK */}
-            {(seccionActiva === 'todas' || seccionActiva === 'disponibles') && validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 && (
-              <div>
-                <div className="text-sm font-medium mb-2 flex items-center gap-2 text-green-600 dark:text-green-400">
-                  <CheckCircle className="w-4 h-4" />
-                  ✅ {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length} Placeholders Correctamente Mapeados
+            {(seccionActiva === 'todas' || seccionActiva === 'disponibles') && (
+              validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 ? (
+                <div>
+                  <div className="text-sm font-medium mb-2 flex items-center gap-2 text-green-600 dark:text-green-400">
+                    <CheckCircle className="w-4 h-4" />
+                    ✅ {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length} Placeholders Correctamente Mapeados
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-2">
+                    Estos placeholders se reemplazarán correctamente en el contrato
+                  </div>
+                  <div className="h-[250px] border border-green-300 dark:border-green-700 rounded-md overflow-y-scroll bg-green-50 dark:bg-green-950">
+                    <Table>
+                      <TableHeader className="sticky top-0 bg-green-100 dark:bg-green-900 z-10 border-b border-green-300 dark:border-green-700">
+                        <TableRow className="hover:bg-green-100 dark:hover:bg-green-900">
+                          <TableHead className="w-[300px] text-green-700 dark:text-green-300">Placeholder</TableHead>
+                          <TableHead className="text-green-700 dark:text-green-300">Valor que se usará</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {validacion.placeholders_disponibles
+                          .filter(item => item.estado === 'ok')
+                          .map((item, i) => (
+                            <TableRow key={i} className="hover:bg-green-100 dark:hover:bg-green-900 border-green-200 dark:border-green-800">
+                              <TableCell className="font-mono text-sm text-green-700 dark:text-green-300">{`{{${item.placeholder}}}`}</TableCell>
+                              <TableCell className="text-sm text-green-700 dark:text-green-300">{item.valor}</TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Estos placeholders se reemplazarán correctamente en el contrato
-                </div>
-                <div className="h-[250px] border border-green-300 dark:border-green-700 rounded-md overflow-y-scroll bg-green-50 dark:bg-green-950">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-green-100 dark:bg-green-900 z-10 border-b border-green-300 dark:border-green-700">
-                      <TableRow className="hover:bg-green-100 dark:hover:bg-green-900">
-                        <TableHead className="w-[300px] text-green-700 dark:text-green-300">Placeholder</TableHead>
-                        <TableHead className="text-green-700 dark:text-green-300">Valor que se usará</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {validacion.placeholders_disponibles
-                        .filter(item => item.estado === 'ok')
-                        .map((item, i) => (
-                          <TableRow key={i} className="hover:bg-green-100 dark:hover:bg-green-900 border-green-200 dark:border-green-800">
-                            <TableCell className="font-mono text-sm text-green-700 dark:text-green-300">{`{{${item.placeholder}}}`}</TableCell>
-                            <TableCell className="text-sm text-green-700 dark:text-green-300">{item.valor}</TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
+              ) : seccionActiva === 'disponibles' && (
+                <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+                  <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    ℹ️ No hay placeholders encontrados con datos
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Revisa las secciones de Vacíos y Faltantes para ver qué placeholders necesitan atención
+                  </div>
+                </Card>
+              )
             )}
 
           </div>
