@@ -76,10 +76,23 @@ export function ValidarPlaceholdersDialog({
     setTimeout(() => setCopiedVariable(null), 2000);
   };
 
-  // Crear Set de variables usadas en el template (del sistema)
-  const variablesUsadasSet = React.useMemo(() => {
-    return new Set(validacion.variables_usadas_en_template || []);
-  }, [validacion.variables_usadas_en_template]);
+  // Crear Sets para clasificar los placeholders del template
+  const placeholdersDisponiblesSet = React.useMemo(() => {
+    return new Set(validacion.placeholders_disponibles.filter(p => p.estado === 'ok').map(p => p.placeholder));
+  }, [validacion.placeholders_disponibles]);
+
+  const placeholdersVaciosSet = React.useMemo(() => {
+    return new Set(validacion.placeholders_vacios || []);
+  }, [validacion.placeholders_vacios]);
+
+  const placeholdersFaltantesSet = React.useMemo(() => {
+    return new Set(validacion.placeholders_faltantes || []);
+  }, [validacion.placeholders_faltantes]);
+
+  // Todos los placeholders del template
+  const todosPlaceholdersTemplate = React.useMemo(() => {
+    return validacion.placeholders_en_template || [];
+  }, [validacion.placeholders_en_template]);
 
   const estadoBadge = (estado: string) => {
     switch (estado) {
@@ -186,9 +199,9 @@ export function ValidarPlaceholdersDialog({
                 }`}
                 onClick={() => setSeccionActiva(seccionActiva === 'variables' ? 'todas' : 'variables')}
               >
-                <div className="text-sm text-muted-foreground">Variables Sistema</div>
+                <div className="text-sm text-muted-foreground">Variables Template</div>
                 <div className="text-2xl font-bold text-blue-500">
-                  {validacion.total_variables_sistema || validacion.variables_disponibles_sistema?.length || 0}
+                  {validacion.total_template || 0}
                 </div>
               </Card>
             </div>
@@ -198,42 +211,61 @@ export function ValidarPlaceholdersDialog({
             </div>
 
             {/* Variables disponibles en el sistema */}
-            {(seccionActiva === 'todas' || seccionActiva === 'variables') && validacion.variables_disponibles_sistema && (
+            {(seccionActiva === 'todas' || seccionActiva === 'variables') && todosPlaceholdersTemplate.length > 0 && (
               <Card className="p-4 border-blue-500 bg-blue-50 dark:bg-blue-950">
                 <div className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
-                  📋 Variables del Sistema: {validacion.total_variables_usadas || 0} encontradas de {validacion.total_variables_sistema || 0} disponibles
+                  📋 Variables del Template: {validacion.total_disponibles || 0} encontradas + {validacion.total_vacios || 0} vacías + {validacion.total_faltantes || 0} faltantes = {validacion.total_template || 0} total
                 </div>
                 <div className="text-xs text-muted-foreground mb-2">
-                  <span className="text-green-600 dark:text-green-400 font-semibold">Verde = Encontrada en template ({validacion.total_variables_usadas || 0})</span>, Azul = Disponible para agregar ({(validacion.total_variables_sistema || 0) - (validacion.total_variables_usadas || 0)}). Copia con formato {`{{nombre_variable}}`}
+                  <span className="text-green-600 dark:text-green-400 font-semibold">Verde = Encontrada con datos ({validacion.total_disponibles || 0})</span>, 
+                  <span className="text-yellow-600 dark:text-yellow-400 font-semibold"> Amarillo = Vacía ({validacion.total_vacios || 0})</span>, 
+                  <span className="text-red-600 dark:text-red-400 font-semibold"> Rojo = Faltante ({validacion.total_faltantes || 0})</span>
                 </div>
                 <ScrollArea className="h-[300px] w-full border rounded bg-white dark:bg-background p-2">
                   <div className="grid grid-cols-2 gap-2">
-                    {validacion.variables_disponibles_sistema.map((variable, i) => {
+                    {todosPlaceholdersTemplate.map((variable, i) => {
                       const isCopied = copiedVariable === variable;
-                      const estaUsada = variablesUsadasSet.has(variable);
+                      const estaDisponible = placeholdersDisponiblesSet.has(variable);
+                      const estaVacio = placeholdersVaciosSet.has(variable);
+                      const estaFaltante = placeholdersFaltantesSet.has(variable);
+                      
+                      let bgColor = 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-800';
+                      let iconColor = 'text-blue-600 dark:text-blue-400';
+                      let Icon = CheckCircle;
+                      let tooltip = 'Click para copiar al portapapeles';
+                      
+                      if (estaDisponible) {
+                        bgColor = 'bg-green-50 dark:bg-green-900 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-800';
+                        iconColor = 'text-green-600 dark:text-green-400';
+                        Icon = CheckCircle;
+                        tooltip = '✅ Encontrada con datos - Click para copiar';
+                      } else if (estaVacio) {
+                        bgColor = 'bg-yellow-50 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700 hover:bg-yellow-100 dark:hover:bg-yellow-800';
+                        iconColor = 'text-yellow-600 dark:text-yellow-400';
+                        Icon = AlertCircle;
+                        tooltip = '⚠️ Vacía - Click para copiar';
+                      } else if (estaFaltante) {
+                        bgColor = 'bg-red-50 dark:bg-red-900 border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-800';
+                        iconColor = 'text-red-600 dark:text-red-400';
+                        Icon = XCircle;
+                        tooltip = '❌ Faltante - No existe en el sistema';
+                      }
+                      
                       return (
                         <div 
                           key={i} 
-                          className={`text-xs font-mono p-2 rounded border cursor-pointer transition-all flex items-center justify-between gap-2 group ${
-                            estaUsada 
-                              ? 'bg-green-50 dark:bg-green-900 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-800' 
-                              : 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-800'
-                          }`}
+                          className={`text-xs font-mono p-2 rounded border cursor-pointer transition-all flex items-center justify-between gap-2 group ${bgColor}`}
                           onClick={() => handleCopyVariable(variable)}
-                          title={estaUsada ? "✅ Ya está en tu template - Click para copiar" : "Click para copiar al portapapeles"}
+                          title={tooltip}
                         >
                           <span className="flex-1">{`{{${variable}}}`}</span>
                           <div className="flex items-center gap-1">
-                            {estaUsada && (
-                              <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-400" />
-                            )}
+                            <Icon className={`w-3 h-3 ${iconColor}`} />
                             {isCopied ? (
-                              <Check className="w-3 h-3 text-green-600 dark:text-green-400 animate-in zoom-in" />
+                              <Check className={`w-3 h-3 ${iconColor} animate-in zoom-in`} />
                             ) : (
-                              <Copy className={`w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity ${
-                                estaUsada ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'
-                              }`} />
+                              <Copy className={`w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity ${iconColor}`} />
                             )}
                           </div>
                         </div>
@@ -266,8 +298,8 @@ export function ValidarPlaceholdersDialog({
                   </ScrollArea>
                 </Card>
               ) : seccionActiva === 'faltantes' && (
-                <Card className="p-4 border-green-500 bg-green-50 dark:bg-green-950">
-                  <div className="text-sm font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-2">
+                <Card className="p-4 border-red-500 bg-red-50 dark:bg-red-950">
+                  <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
                     <CheckCircle className="w-4 h-4" />
                     ✅ No hay placeholders faltantes
                   </div>
@@ -300,8 +332,8 @@ export function ValidarPlaceholdersDialog({
                   </ScrollArea>
                 </Card>
               ) : seccionActiva === 'vacios' && (
-                <Card className="p-4 border-green-500 bg-green-50 dark:bg-green-950">
-                  <div className="text-sm font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-2">
+                <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+                  <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
                     <CheckCircle className="w-4 h-4" />
                     ✅ No hay placeholders vacíos
                   </div>
@@ -345,8 +377,8 @@ export function ValidarPlaceholdersDialog({
                   </div>
                 </div>
               ) : seccionActiva === 'disponibles' && (
-                <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
-                  <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
+                <Card className="p-4 border-green-500 bg-green-50 dark:bg-green-950">
+                  <div className="text-sm font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
                     ℹ️ No hay placeholders encontrados con datos
                   </div>
