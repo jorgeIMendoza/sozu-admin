@@ -81,7 +81,7 @@ serve(async (req) => {
       .select(`
         id_persona,
         porcentaje_copropiedad,
-        personas:id_persona (
+        personas!compradores_id_persona_fkey (
           nombre_legal,
           rfc,
           curp,
