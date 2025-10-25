@@ -150,9 +150,9 @@ export function ValidarPlaceholdersDialog({
                 }`}
                 onClick={() => setSeccionActiva(seccionActiva === 'variables' ? 'todas' : 'variables')}
               >
-                <div className="text-sm text-muted-foreground">Variables Sistema</div>
+                <div className="text-sm text-muted-foreground">Variables Template</div>
                 <div className="text-2xl font-bold text-blue-500">
-                  {validacion.total_variables_usadas || 0}/{validacion.total_variables_sistema || 0}
+                  {validacion.total_disponibles || 0}/{validacion.total_template || 0}
                 </div>
               </Card>
             </div>
@@ -166,10 +166,10 @@ export function ValidarPlaceholdersDialog({
               <Card className="p-4 border-blue-500 bg-blue-50 dark:bg-blue-950">
                 <div className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
-                  📋 Usando {validacion.total_variables_usadas || 0} de {validacion.total_variables_sistema || 0} Variables del Sistema
+                  📋 {validacion.total_disponibles || 0} de {validacion.total_template || 0} Variables con Datos (Faltan {validacion.total_faltantes || 0})
                 </div>
                 <div className="text-xs text-muted-foreground mb-2">
-                  <span className="text-green-600 dark:text-green-400 font-semibold">Verde = Ya está en tu template ({validacion.total_variables_usadas || 0})</span>, Azul = Disponible para agregar ({(validacion.total_variables_sistema || 0) - (validacion.total_variables_usadas || 0)}). Copia y pega con formato {`{{nombre_variable}}`}
+                  <span className="text-green-600 dark:text-green-400 font-semibold">Verde = Tiene datos del sistema ({validacion.total_disponibles || 0})</span>, Azul = Disponible para agregar al template. Copia y pega con formato {`{{nombre_variable}}`}
                 </div>
                 <ScrollArea className="h-[300px] w-full border rounded bg-white dark:bg-background p-2">
                   <div className="grid grid-cols-2 gap-2">
