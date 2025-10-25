@@ -167,9 +167,20 @@ serve(async (req) => {
     const header = { alg: "RS256", typ: "JWT" };
 
     // Importar clave privada
+    // Remover headers PEM y decodificar base64
+    const pemHeader = "-----BEGIN PRIVATE KEY-----";
+    const pemFooter = "-----END PRIVATE KEY-----";
+    const pemContents = privateKey
+      .replace(pemHeader, "")
+      .replace(pemFooter, "")
+      .replace(/\s/g, "");
+    
+    // Decodificar base64 a ArrayBuffer
+    const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+    
     const importedKey = await crypto.subtle.importKey(
       "pkcs8",
-      new TextEncoder().encode(privateKey),
+      binaryDer.buffer,
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       false,
       ["sign"]
