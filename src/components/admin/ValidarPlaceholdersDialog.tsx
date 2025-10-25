@@ -61,7 +61,7 @@ export function ValidarPlaceholdersDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh]">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" />
@@ -72,139 +72,143 @@ export function ValidarPlaceholdersDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Resumen */}
-          <div className="grid grid-cols-4 gap-4">
-            <Card className="p-4">
-              <div className="text-sm text-muted-foreground">Total en Template</div>
-              <div className="text-2xl font-bold">{validacion.total_template}</div>
-            </Card>
-            <Card className="p-4 border-green-500">
-              <div className="text-sm text-muted-foreground">Disponibles</div>
-              <div className="text-2xl font-bold text-green-500">{validacion.total_disponibles}</div>
-            </Card>
-            <Card className="p-4 border-yellow-500">
-              <div className="text-sm text-muted-foreground">Vacíos</div>
-              <div className="text-2xl font-bold text-yellow-500">{validacion.total_vacios}</div>
-            </Card>
-            <Card className="p-4 border-red-500">
-              <div className="text-sm text-muted-foreground">Faltantes</div>
-              <div className="text-2xl font-bold text-red-500">{validacion.total_faltantes}</div>
-            </Card>
-          </div>
-
-          {/* Información de compradores */}
-          <Card className="p-4 bg-muted/50">
-            <div className="text-sm font-medium mb-2">👥 Compradores ({compradores.length})</div>
-            <div className="space-y-1">
-              {compradores.map((c, i) => (
-                <div key={i} className="text-sm">
-                  <span className="font-medium">{c.nombre}</span> - {c.porcentaje_copropiedad}% copropiedad
-                </div>
-              ))}
+        <ScrollArea className="flex-1 pr-4">
+          <div className="space-y-4">
+            {/* Resumen */}
+            <div className="grid grid-cols-4 gap-4">
+              <Card className="p-4">
+                <div className="text-sm text-muted-foreground">Total en Template</div>
+                <div className="text-2xl font-bold">{validacion.total_template}</div>
+              </Card>
+              <Card className="p-4 border-green-500">
+                <div className="text-sm text-muted-foreground">Disponibles</div>
+                <div className="text-2xl font-bold text-green-500">{validacion.total_disponibles}</div>
+              </Card>
+              <Card className="p-4 border-yellow-500">
+                <div className="text-sm text-muted-foreground">Vacíos</div>
+                <div className="text-2xl font-bold text-yellow-500">{validacion.total_vacios}</div>
+              </Card>
+              <Card className="p-4 border-red-500">
+                <div className="text-sm text-muted-foreground">Faltantes</div>
+                <div className="text-2xl font-bold text-red-500">{validacion.total_faltantes}</div>
+              </Card>
             </div>
-            <div className="text-xs text-muted-foreground mt-2">
-              Tipo: {tipoPersona === 'pf' ? 'Persona Física' : 'Persona Moral'}
-            </div>
-          </Card>
 
-          {/* Placeholders Faltantes - PRIORIDAD */}
-          {validacion.placeholders_faltantes.length > 0 && (
-            <Card className="p-4 border-red-500 bg-red-50 dark:bg-red-950">
-              <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
-                <XCircle className="w-4 h-4" />
-                ⚠️ CRÍTICO: Placeholders NO GENERADOS (aparecerán en ROJO en el contrato)
+            {/* Información de compradores */}
+            <Card className="p-4 bg-muted/50">
+              <div className="text-sm font-medium mb-2">👥 Compradores ({compradores.length})</div>
+              <div className="space-y-1">
+                {compradores.map((c, i) => (
+                  <div key={i} className="text-sm">
+                    <span className="font-medium">{c.nombre}</span> - {c.porcentaje_copropiedad}% copropiedad
+                  </div>
+                ))}
               </div>
-              <div className="text-xs text-muted-foreground mb-2">
-                Estos placeholders están en el template pero NO tienen datos disponibles para reemplazarlos
+              <div className="text-xs text-muted-foreground mt-2">
+                Tipo: {tipoPersona === 'pf' ? 'Persona Física' : 'Persona Moral'}
               </div>
-              <ScrollArea className="max-h-[150px]">
-                <div className="space-y-1">
-                  {validacion.placeholders_faltantes.map((ph, i) => (
-                    <div key={i} className="text-sm font-mono bg-white dark:bg-red-900 p-2 rounded border border-red-300 dark:border-red-700">
-                      {`{{${ph}}}`}
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
             </Card>
-          )}
 
-          {/* Placeholders Vacíos */}
-          {validacion.placeholders_vacios.length > 0 && (
-            <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
-              <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
-                Placeholders con datos VACÍOS (aparecerán en AMARILLO en el contrato)
-              </div>
-              <div className="text-xs text-muted-foreground mb-2">
-                Estos placeholders tienen datos mapeados pero los valores están vacíos
-              </div>
-              <ScrollArea className="max-h-[150px]">
-                <div className="space-y-1">
-                  {validacion.placeholders_vacios.map((ph, i) => (
-                    <div key={i} className="text-sm font-mono bg-white dark:bg-yellow-900 p-2 rounded border border-yellow-300 dark:border-yellow-700">
-                      {`{{${ph}}}`}
-                    </div>
-                  ))}
+            {/* Placeholders Faltantes - PRIORIDAD */}
+            {validacion.placeholders_faltantes.length > 0 && (
+              <Card className="p-4 border-red-500 bg-red-50 dark:bg-red-950">
+                <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
+                  <XCircle className="w-4 h-4" />
+                  ⚠️ CRÍTICO: {validacion.total_faltantes} Placeholders NO GENERADOS (aparecerán en ROJO)
                 </div>
-              </ScrollArea>
-            </Card>
-          )}
+                <div className="text-xs text-muted-foreground mb-2">
+                  Estos placeholders están en el template pero NO tienen datos disponibles
+                </div>
+                <ScrollArea className="h-[200px] w-full border rounded bg-white dark:bg-background p-2">
+                  <div className="space-y-1">
+                    {validacion.placeholders_faltantes.map((ph, i) => (
+                      <div key={i} className="text-sm font-mono bg-red-50 dark:bg-red-900 p-2 rounded border border-red-300 dark:border-red-700">
+                        {`{{${ph}}}`}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </Card>
+            )}
 
-          {/* Tabla completa de placeholders DISPONIBLES OK */}
-          {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 && (
-            <div>
-              <div className="text-sm font-medium mb-2 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                ✅ Placeholders Correctamente Mapeados ({validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length})
-              </div>
-              <div className="text-xs text-muted-foreground mb-2">
-                Estos placeholders se reemplazarán correctamente en el contrato
-              </div>
-              <ScrollArea className="max-h-[250px] border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Placeholder</TableHead>
-                      <TableHead>Valor que se usará</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {validacion.placeholders_disponibles
-                      .filter(item => item.estado === 'ok')
-                      .map((item, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-mono text-sm">{`{{${item.placeholder}}}`}</TableCell>
-                          <TableCell className="text-sm max-w-md truncate">{item.valor}</TableCell>
+            {/* Placeholders Vacíos */}
+            {validacion.placeholders_vacios.length > 0 && (
+              <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+                <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  {validacion.total_vacios} Placeholders con datos VACÍOS (aparecerán en AMARILLO)
+                </div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  Estos placeholders tienen datos mapeados pero los valores están vacíos
+                </div>
+                <ScrollArea className="h-[150px] w-full border rounded bg-white dark:bg-background p-2">
+                  <div className="space-y-1">
+                    {validacion.placeholders_vacios.map((ph, i) => (
+                      <div key={i} className="text-sm font-mono bg-yellow-50 dark:bg-yellow-900 p-2 rounded border border-yellow-300 dark:border-yellow-700">
+                        {`{{${ph}}}`}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </Card>
+            )}
+
+            {/* Tabla completa de placeholders DISPONIBLES OK */}
+            {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 && (
+              <div>
+                <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  ✅ {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length} Placeholders Correctamente Mapeados
+                </div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  Estos placeholders se reemplazarán correctamente en el contrato
+                </div>
+                <div className="border rounded-md">
+                  <ScrollArea className="h-[250px] w-full">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[300px]">Placeholder</TableHead>
+                          <TableHead>Valor que se usará</TableHead>
                         </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </div>
-          )}
-
-          {/* Advertencia final */}
-          {validacion.tiene_problemas && (
-            <Card className="p-4 bg-yellow-50 dark:bg-yellow-950 border-yellow-500">
-              <div className="text-sm font-medium mb-2">⚠️ Advertencia</div>
-              <div className="text-sm text-muted-foreground">
-                Si generas el contrato ahora, los placeholders faltantes aparecerán en ROJO y los vacíos en AMARILLO.
-                Puedes continuar de todas formas, pero deberás completar manualmente esos campos en Google Docs.
+                      </TableHeader>
+                      <TableBody>
+                        {validacion.placeholders_disponibles
+                          .filter(item => item.estado === 'ok')
+                          .map((item, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-mono text-sm">{`{{${item.placeholder}}}`}</TableCell>
+                              <TableCell className="text-sm">{item.valor}</TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </div>
               </div>
-            </Card>
-          )}
+            )}
 
-          {!validacion.tiene_problemas && (
-            <Card className="p-4 bg-green-50 dark:bg-green-950 border-green-500">
-              <div className="text-sm font-medium mb-2">✅ Todo listo</div>
-              <div className="text-sm text-muted-foreground">
-                Todos los placeholders están correctamente mapeados. El contrato se generará sin problemas.
-              </div>
-            </Card>
-          )}
-        </div>
+            {/* Advertencia final */}
+            {validacion.tiene_problemas && (
+              <Card className="p-4 bg-yellow-50 dark:bg-yellow-950 border-yellow-500">
+                <div className="text-sm font-medium mb-2">⚠️ Advertencia</div>
+                <div className="text-sm text-muted-foreground">
+                  Si generas el contrato ahora, los placeholders faltantes aparecerán en ROJO y los vacíos en AMARILLO.
+                  Puedes continuar de todas formas, pero deberás completar manualmente esos campos en Google Docs.
+                </div>
+              </Card>
+            )}
+
+            {!validacion.tiene_problemas && (
+              <Card className="p-4 bg-green-50 dark:bg-green-950 border-green-500">
+                <div className="text-sm font-medium mb-2">✅ Todo listo</div>
+                <div className="text-sm text-muted-foreground">
+                  Todos los placeholders están correctamente mapeados. El contrato se generará sin problemas.
+                </div>
+              </Card>
+            )}
+          </div>
+        </ScrollArea>
 
         {onGenerarContrato && (
           <DialogFooter>

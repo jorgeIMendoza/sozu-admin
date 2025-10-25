@@ -299,17 +299,15 @@ export default function Contratos() {
     onSuccess: (data) => {
       setValidacionDialogData(data);
       
-      // Mostrar resumen en toast
+      // Toast simple y corto
       const validation = data.validation;
-      const hasProblems = validation.tiene_problemas;
       
       toast({
-        title: hasProblems ? "⚠️ Validación con problemas" : "✅ Validación exitosa",
-        description: hasProblems 
-          ? `${validation.total_faltantes} placeholders faltantes, ${validation.total_vacios} vacíos. Revisa el diálogo para más detalles.`
+        title: validation.tiene_problemas ? "⚠️ Problemas detectados" : "✅ Todo listo",
+        description: validation.tiene_problemas 
+          ? `${validation.total_faltantes} faltantes, ${validation.total_vacios} vacíos. Revisa el diálogo.`
           : `Todos los ${validation.total_disponibles} placeholders están listos.`,
-        variant: hasProblems ? "default" : "default",
-        duration: 3000,
+        duration: 2000,
       });
     },
     onError: (error: any) => {
