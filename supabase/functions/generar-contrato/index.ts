@@ -567,17 +567,63 @@ serve(async (req) => {
     const copiedDoc = await copyResponse.json();
     const newDocId = copiedDoc.id;
 
-    // 18.5. Resaltar placeholders problemáticos en el documento ANTES del merge
-    if (missingPlaceholders.length > 0 || emptyPlaceholders.length > 0) {
-      // Obtener el contenido del documento para encontrar posiciones de placeholders
-      const docContentResponse = await fetch(
-        `https://docs.googleapis.com/v1/documents/${newDocId}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
+    // 19. Hacer merge PRIMERO (reemplazar todos los placeholders con datos)
+    const requests = [];
+    for (const [key, value] of Object.entries(mergeData)) {
+      requests.push({
+        replaceAllText: {
+          containsText: {
+            text: `{{${key}}}`,
+            matchCase: false,
+          },
+          replaceText: value,
+        },
+      });
+    }
 
-      const docContent = await docContentResponse.json();
+    await fetch(
+      `https://docs.googleapis.com/v1/documents/${newDocId}:batchUpdate`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ requests }),
+      }
+    );
 
-      // Función para encontrar todas las ocurrencias de un texto en el documento
+    console.log("Merge completado, buscando placeholders no reemplazados...");
+
+    // 19.5. DESPUÉS del merge, obtener el documento y buscar placeholders que NO se reemplazaron
+    const finalDocResponse = await fetch(
+      `https://docs.googleapis.com/v1/documents/${newDocId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    const finalDocContent = await finalDocResponse.json();
+    
+    // Extraer TODOS los placeholders que todavía quedan en el documento
+    const unreplacedPlaceholders = new Set<string>();
+    const finalContent = finalDocContent.body?.content || [];
+    
+    finalContent.forEach((element: any) => {
+      if (element.paragraph) {
+        element.paragraph.elements?.forEach((el: any) => {
+          const text = el.textRun?.content || "";
+          const matches = text.matchAll(/\{\{([^}]+)\}\}/g);
+          for (const match of matches) {
+            unreplacedPlaceholders.add(match[1].trim());
+          }
+        });
+      }
+    });
+
+    console.log(`Placeholders no reemplazados encontrados: ${unreplacedPlaceholders.size}`);
+
+    // Solo resaltar si hay placeholders no reemplazados
+    if (unreplacedPlaceholders.size > 0) {
+      // Función para encontrar posiciones de texto
       function findTextRanges(content: any, searchText: string): Array<{start: number, end: number}> {
         const ranges: Array<{start: number, end: number}> = [];
         const bodyContent = content.body?.content || [];
@@ -605,12 +651,47 @@ serve(async (req) => {
         return ranges;
       }
 
-      // Crear requests para resaltar placeholders problemáticos
       const highlightRequests = [];
 
-      // Resaltar en amarillo los placeholders que no tienen datos
-      for (const placeholder of missingPlaceholders) {
-        const ranges = findTextRanges(docContent, `{{${placeholder}}}`);
+      // Clasificar placeholders no reemplazados en "faltantes" vs "vacíos"
+      const stillMissingPlaceholders: string[] = [];
+      const stillEmptyPlaceholders: string[] = [];
+
+      unreplacedPlaceholders.forEach((ph) => {
+        if (!(ph in mergeData)) {
+          stillMissingPlaceholders.push(ph);
+        } else {
+          stillEmptyPlaceholders.push(ph);
+        }
+      });
+
+      // Resaltar en ROJO los placeholders faltantes (no están en mergeData)
+      for (const placeholder of stillMissingPlaceholders) {
+        const ranges = findTextRanges(finalDocContent, `{{${placeholder}}}`);
+        for (const range of ranges) {
+          highlightRequests.push({
+            updateTextStyle: {
+              range: {
+                startIndex: range.start,
+                endIndex: range.end
+              },
+              textStyle: {
+                backgroundColor: {
+                  color: {
+                    rgbColor: { red: 1, green: 0, blue: 0 } // Rojo
+                  }
+                },
+                bold: true
+              },
+              fields: 'backgroundColor,bold'
+            }
+          });
+        }
+      }
+
+      // Resaltar en AMARILLO los placeholders vacíos (están en mergeData pero con valor vacío)
+      for (const placeholder of stillEmptyPlaceholders) {
+        const ranges = findTextRanges(finalDocContent, `{{${placeholder}}}`);
         for (const range of ranges) {
           highlightRequests.push({
             updateTextStyle: {
@@ -631,30 +712,7 @@ serve(async (req) => {
         }
       }
 
-      // Resaltar en naranja los placeholders con datos vacíos
-      for (const placeholder of emptyPlaceholders) {
-        const ranges = findTextRanges(docContent, `{{${placeholder}}}`);
-        for (const range of ranges) {
-          highlightRequests.push({
-            updateTextStyle: {
-              range: {
-                startIndex: range.start,
-                endIndex: range.end
-              },
-              textStyle: {
-                backgroundColor: {
-                  color: {
-                    rgbColor: { red: 1, green: 0.65, blue: 0 } // Naranja
-                  }
-                }
-              },
-              fields: 'backgroundColor'
-            }
-          });
-        }
-      }
-
-      // Aplicar resaltados si hay alguno
+      // Aplicar resaltados
       if (highlightRequests.length > 0) {
         await fetch(
           `https://docs.googleapis.com/v1/documents/${newDocId}:batchUpdate`,
@@ -668,35 +726,19 @@ serve(async (req) => {
           }
         );
         
-        console.log(`${highlightRequests.length} placeholders resaltados en el documento (amarillo=faltante, naranja=vacío)`);
+        console.log(`Resaltados aplicados: ${stillMissingPlaceholders.length} faltantes (rojo), ${stillEmptyPlaceholders.length} vacíos (amarillo)`);
       }
-    }
 
-    // 19. Hacer merge
-    const requests = [];
-    for (const [key, value] of Object.entries(mergeData)) {
-      requests.push({
-        replaceAllText: {
-          containsText: {
-            text: `{{${key}}}`,
-            matchCase: false,
-          },
-          replaceText: value,
-        },
-      });
+      // Actualizar variables para el response
+      missingPlaceholders.length = 0;
+      missingPlaceholders.push(...stillMissingPlaceholders);
+      emptyPlaceholders.length = 0;
+      emptyPlaceholders.push(...stillEmptyPlaceholders);
+    } else {
+      console.log("✅ Todos los placeholders fueron reemplazados correctamente");
+      missingPlaceholders.length = 0;
+      emptyPlaceholders.length = 0;
     }
-
-    await fetch(
-      `https://docs.googleapis.com/v1/documents/${newDocId}:batchUpdate`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ requests }),
-      }
-    );
 
     // 20. Guardar URL en BD
     const docUrl = `https://docs.google.com/document/d/${newDocId}/edit`;
@@ -723,8 +765,8 @@ serve(async (req) => {
           total_compradores: compradoresFormateados.length
         },
         message: missingPlaceholders.length || emptyPlaceholders.length
-          ? "Contrato generado con advertencias. Los placeholders problemáticos están resaltados en amarillo (faltantes) y naranja (vacíos)."
-          : "Contrato generado exitosamente"
+          ? `Contrato generado con advertencias. Placeholders resaltados: ${missingPlaceholders.length} faltantes (ROJO), ${emptyPlaceholders.length} vacíos (AMARILLO).`
+          : "Contrato generado exitosamente - todos los placeholders fueron reemplazados"
       }),
       {
         headers: { "Content-Type": "application/json", ...corsHeaders },

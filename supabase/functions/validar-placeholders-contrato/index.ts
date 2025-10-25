@@ -1,0 +1,406 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { corsHeaders } from "../_shared/cors.ts";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { id_cuenta_cobranza } = await req.json();
+
+    console.log("Validando placeholders para cuenta:", id_cuenta_cobranza);
+
+    // Obtener datos (mismo flujo que generar-contrato pero sin crear documento)
+    const { data: cuentaData } = await supabase
+      .from("cuentas_cobranza")
+      .select("id, precio_final, id_oferta")
+      .eq("id", id_cuenta_cobranza)
+      .single();
+
+    if (!cuentaData) throw new Error("Cuenta de cobranza no encontrada");
+
+    const { data: ofertaData } = await supabase
+      .from("ofertas")
+      .select("id, id_propiedad")
+      .eq("id", cuentaData.id_oferta)
+      .single();
+
+    if (!ofertaData) throw new Error("Oferta no encontrada");
+
+    const { data: propiedadData } = await supabase
+      .from("propiedades")
+      .select("id, numero_propiedad, m2_interiores, m2_exteriores, m2_loft, id_edificio_modelo, id_entidad_relacionada_dueno")
+      .eq("id", ofertaData.id_propiedad)
+      .single();
+
+    if (!propiedadData) throw new Error("Propiedad no encontrada");
+
+    const m2Totales = (propiedadData.m2_interiores || 0) + (propiedadData.m2_exteriores || 0) + (propiedadData.m2_loft || 0);
+
+    const { data: edificioModeloData } = await supabase
+      .from("edificios_modelos")
+      .select("id_edificio, id_modelo")
+      .eq("id", propiedadData.id_edificio_modelo)
+      .single();
+
+    const { data: edificioData } = await supabase
+      .from("edificios")
+      .select("nombre")
+      .eq("id", edificioModeloData.id_edificio)
+      .single();
+
+    const { data: modeloData } = await supabase
+      .from("modelos")
+      .select("nombre")
+      .eq("id", edificioModeloData.id_modelo)
+      .single();
+
+    const { data: entidadData } = await supabase
+      .from("entidades_relacionadas")
+      .select("id_proyecto")
+      .eq("id", propiedadData.id_entidad_relacionada_dueno)
+      .single();
+
+    const { data: proyectoData } = await supabase
+      .from("proyectos")
+      .select("id, nombre")
+      .eq("id", entidadData.id_proyecto)
+      .single();
+
+    // Obtener compradores con datos completos
+    const { data: compradores } = await supabase
+      .from("compradores")
+      .select(`
+        id_persona,
+        porcentaje_copropiedad,
+        personas!compradores_id_persona_fkey!inner(
+          nombre_legal,
+          rfc,
+          curp,
+          tipo_persona,
+          email,
+          telefono,
+          sexo,
+          fecha_nacimiento,
+          direccion_calle,
+          direccion_colonia,
+          direccion_codigo_postal,
+          direccion_id_pais,
+          direccion_id_estado,
+          direccion_id_municipio,
+          id_estado_civil,
+          id_estado_nacimiento,
+          id_municipio_nacimiento,
+          paises!personas_direccion_id_pais_fkey(nombre, nacionalidad),
+          estados_mx!personas_direccion_id_estado_fkey(nombre),
+          municipios_mx!personas_direccion_id_municipio_fkey(nombre),
+          estados_civil!personas_id_estado_civil_fkey(nombre),
+          estado_nacimiento:estados_mx!personas_id_estado_nacimiento_fkey(nombre),
+          municipio_nacimiento:municipios_mx!personas_id_municipio_nacimiento_fkey(nombre)
+        )
+      `)
+      .eq("id_cuenta_cobranza", id_cuenta_cobranza)
+      .eq("activo", true);
+
+    if (!compradores || compradores.length === 0) {
+      throw new Error("No se encontraron compradores");
+    }
+
+    // Formatear compradores
+    function formatearComprador(comprador: any, index: number) {
+      const p = comprador.personas;
+      return {
+        nombre: p.nombre_legal || "",
+        rfc: p.rfc || "",
+        curp: p.curp || "",
+        email: p.email || "",
+        telefono: p.telefono || "",
+        tipo_persona: p.tipo_persona || "",
+        sexo: p.sexo || "",
+        fecha_nacimiento: p.fecha_nacimiento ? new Date(p.fecha_nacimiento).toLocaleDateString("es-MX") : "",
+        estado_civil: p.estados_civil?.nombre || "",
+        nacionalidad: p.paises?.nacionalidad || "",
+        estado_nacimiento: p.estado_nacimiento?.nombre || "",
+        municipio_nacimiento: p.municipio_nacimiento?.nombre || "",
+        direccion_calle: p.direccion_calle?.trim() || "",
+        direccion_colonia: p.direccion_colonia || "",
+        direccion_codigo_postal: p.direccion_codigo_postal?.trim() || "",
+        direccion_municipio: p.municipios_mx?.nombre || "",
+        direccion_estado: p.estados_mx?.nombre || "",
+        direccion_pais: p.paises?.nombre || "",
+        direccion_completa: [
+          p.direccion_calle?.trim(),
+          p.direccion_colonia,
+          p.direccion_codigo_postal?.trim() ? `CP ${p.direccion_codigo_postal.trim()}` : null,
+          p.municipios_mx?.nombre,
+          p.estados_mx?.nombre,
+          p.paises?.nombre
+        ].filter(Boolean).join(", "),
+        porcentaje_copropiedad: comprador.porcentaje_copropiedad?.toString() || "0",
+        numero: (index + 1).toString()
+      };
+    }
+
+    const compradoresFormateados = compradores.map((c, i) => formatearComprador(c, i));
+
+    function generarSiglas(nombreCompleto: string): string {
+      return nombreCompleto.split(" ").map((palabra) => palabra[0]).join("").toUpperCase();
+    }
+
+    const siglas = compradores.map((c: any) => generarSiglas(c.personas.nombre_legal)).join("-");
+
+    // Determinar tipo de persona
+    const tipoPersona = compradores.every((c: any) => {
+      const tipo = c.personas.tipo_persona?.toString().toUpperCase();
+      return tipo === "PF" || tipo === "FÍSICA" || tipo === "FISICA";
+    }) ? "pf" : "pm";
+
+    // Preparar mergeData (mismo que en generar-contrato)
+    const mergeData: Record<string, string> = {
+      numero_propiedad: propiedadData.numero_propiedad,
+      proyecto: proyectoData.nombre,
+      edificio: edificioData.nombre,
+      modelo: modeloData.nombre,
+      precio_final: cuentaData.precio_final.toLocaleString("es-MX", { style: "currency", currency: "MXN" }),
+      m2_totales: m2Totales.toString(),
+      m2_interiores: (propiedadData.m2_interiores || 0).toString(),
+      m2_exteriores: (propiedadData.m2_exteriores || 0).toString(),
+      m2_loft: (propiedadData.m2_loft || 0).toString(),
+      cuenta_cobranza: `CC-${id_cuenta_cobranza.toString().padStart(6, "0")}`,
+      fecha_actual: new Date().toLocaleDateString("es-MX"),
+      compradores_nombres: compradoresFormateados.map(c => c.nombre).join(", "),
+      compradores_siglas: siglas,
+      numero_compradores: compradoresFormateados.length.toString()
+    };
+
+    compradoresFormateados.forEach((comprador, index) => {
+      const num = index + 1;
+      mergeData[`comprador_${num}_nombre`] = comprador.nombre;
+      mergeData[`comprador_${num}_rfc`] = comprador.rfc;
+      mergeData[`comprador_${num}_curp`] = comprador.curp;
+      mergeData[`comprador_${num}_email`] = comprador.email;
+      mergeData[`comprador_${num}_telefono`] = comprador.telefono;
+      mergeData[`comprador_${num}_tipo_persona`] = comprador.tipo_persona;
+      mergeData[`comprador_${num}_sexo`] = comprador.sexo;
+      mergeData[`comprador_${num}_fecha_nacimiento`] = comprador.fecha_nacimiento;
+      mergeData[`comprador_${num}_estado_civil`] = comprador.estado_civil;
+      mergeData[`comprador_${num}_nacionalidad`] = comprador.nacionalidad;
+      mergeData[`comprador_${num}_estado_nacimiento`] = comprador.estado_nacimiento;
+      mergeData[`comprador_${num}_municipio_nacimiento`] = comprador.municipio_nacimiento;
+      mergeData[`comprador_${num}_direccion_calle`] = comprador.direccion_calle;
+      mergeData[`comprador_${num}_direccion_colonia`] = comprador.direccion_colonia;
+      mergeData[`comprador_${num}_direccion_codigo_postal`] = comprador.direccion_codigo_postal;
+      mergeData[`comprador_${num}_direccion_municipio`] = comprador.direccion_municipio;
+      mergeData[`comprador_${num}_direccion_estado`] = comprador.direccion_estado;
+      mergeData[`comprador_${num}_direccion_pais`] = comprador.direccion_pais;
+      mergeData[`comprador_${num}_direccion_completa`] = comprador.direccion_completa;
+      mergeData[`comprador_${num}_porcentaje_copropiedad`] = comprador.porcentaje_copropiedad;
+
+      if (index === 0) {
+        mergeData[`comprador_nombre`] = comprador.nombre;
+        mergeData[`comprador_rfc`] = comprador.rfc;
+        mergeData[`comprador_curp`] = comprador.curp;
+        mergeData[`comprador_email`] = comprador.email;
+        mergeData[`comprador_telefono`] = comprador.telefono;
+        mergeData[`comprador_direccion_completa`] = comprador.direccion_completa;
+        mergeData[`comprador_estado_civil`] = comprador.estado_civil;
+        mergeData[`comprador_nacionalidad`] = comprador.nacionalidad;
+      }
+    });
+
+    // Autenticación con Google para obtener placeholders del template
+    const serviceAccountEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
+    const privateKey = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY")?.replace(/\\n/g, "\n");
+    const parentFolderId = Deno.env.get("GOOGLE_DRIVE_PARENT_FOLDER_ID");
+
+    if (!serviceAccountEmail || !privateKey || !parentFolderId) {
+      throw new Error("Faltan credenciales de Google Drive");
+    }
+
+    // JWT y access token (simplificado)
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: serviceAccountEmail,
+      scope: "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/documents",
+      aud: "https://oauth2.googleapis.com/token",
+      exp: now + 3600,
+      iat: now,
+    };
+
+    const header = { alg: "RS256", typ: "JWT" };
+    const pemHeader = "-----BEGIN PRIVATE KEY-----";
+    const pemFooter = "-----END PRIVATE KEY-----";
+    const pemContents = privateKey.replace(pemHeader, "").replace(pemFooter, "").replace(/\s/g, "");
+    const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+    
+    const importedKey = await crypto.subtle.importKey(
+      "pkcs8",
+      binaryDer.buffer,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+
+    const base64UrlEncode = (str: string): string => {
+      return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    };
+
+    const base64UrlEncodeBuffer = (buffer: ArrayBuffer): string => {
+      const bytes = new Uint8Array(buffer);
+      const binary = String.fromCharCode(...bytes);
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    };
+
+    const encodedHeader = base64UrlEncode(JSON.stringify(header));
+    const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+    const signatureInput = `${encodedHeader}.${encodedPayload}`;
+    
+    const signatureBuffer = await crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      importedKey,
+      new TextEncoder().encode(signatureInput)
+    );
+    
+    const signature = base64UrlEncodeBuffer(signatureBuffer);
+    const jwt = `${signatureInput}.${signature}`;
+
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+    });
+
+    const tokenData = await tokenResponse.json();
+    if (!tokenData.access_token) {
+      throw new Error("No se pudo obtener access token de Google");
+    }
+
+    const accessToken = tokenData.access_token;
+
+    // Buscar carpeta del proyecto y template
+    const projectFolderResponse = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${proyectoData.nombre}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    const projectFolderData = await projectFolderResponse.json();
+    if (!projectFolderData.files?.length) {
+      throw new Error(`Carpeta del proyecto no encontrada: ${proyectoData.nombre}`);
+    }
+
+    const projectFolderId = projectFolderData.files[0].id;
+
+    const templatesFolderResponse = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='Templates' and '${projectFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    const templatesFolderData = await templatesFolderResponse.json();
+    if (!templatesFolderData.files?.length) {
+      throw new Error("Carpeta Templates no encontrada");
+    }
+
+    const templatesFolderId = templatesFolderData.files[0].id;
+    const templateName = `template_contrato_${tipoPersona}`;
+
+    const templateResponse = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${templateName}' and '${templatesFolderId}' in parents and trashed=false&fields=files(id)`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    const templateData = await templateResponse.json();
+    if (!templateData.files?.length) {
+      throw new Error(`Template no encontrado: ${templateName}`);
+    }
+
+    const templateId = templateData.files[0].id;
+
+    // Obtener contenido del template para extraer placeholders
+    const templateContentResponse = await fetch(
+      `https://docs.googleapis.com/v1/documents/${templateId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    const templateContent = await templateContentResponse.json();
+    
+    const placeholdersEnTemplate = new Set<string>();
+    const content = templateContent.body?.content || [];
+    
+    content.forEach((element: any) => {
+      if (element.paragraph) {
+        element.paragraph.elements?.forEach((el: any) => {
+          const text = el.textRun?.content || "";
+          const matches = text.matchAll(/\{\{([^}]+)\}\}/g);
+          for (const match of matches) {
+            placeholdersEnTemplate.add(match[1].trim());
+          }
+        });
+      }
+    });
+
+    // Clasificar placeholders
+    const placeholdersDisponibles: Array<{placeholder: string, valor: string, estado: string}> = [];
+    const placeholdersFaltantes: string[] = [];
+    const placeholdersVacios: string[] = [];
+
+    placeholdersEnTemplate.forEach((ph) => {
+      if (!(ph in mergeData)) {
+        placeholdersFaltantes.push(ph);
+      } else if (!mergeData[ph] || mergeData[ph].trim() === "") {
+        placeholdersVacios.push(ph);
+        placeholdersDisponibles.push({
+          placeholder: ph,
+          valor: "(vacío)",
+          estado: "vacío"
+        });
+      } else {
+        placeholdersDisponibles.push({
+          placeholder: ph,
+          valor: mergeData[ph],
+          estado: "ok"
+        });
+      }
+    });
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        validation: {
+          placeholders_en_template: Array.from(placeholdersEnTemplate),
+          placeholders_disponibles: placeholdersDisponibles,
+          placeholders_faltantes: placeholdersFaltantes,
+          placeholders_vacios: placeholdersVacios,
+          total_template: placeholdersEnTemplate.size,
+          total_disponibles: placeholdersDisponibles.length,
+          total_faltantes: placeholdersFaltantes.length,
+          total_vacios: placeholdersVacios.length,
+          tiene_problemas: placeholdersFaltantes.length > 0 || placeholdersVacios.length > 0
+        },
+        compradores: compradoresFormateados,
+        tipo_persona: tipoPersona,
+        template_name: templateName
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  } catch (error) {
+    console.error("Error validando placeholders:", error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message,
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+});

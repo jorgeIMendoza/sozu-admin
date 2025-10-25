@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText, Loader2, ExternalLink } from "lucide-react";
+import { FileText, Loader2, ExternalLink, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { CompradoresConDocumentosDialog } from "@/components/admin/CompradoresConDocumentosDialog";
+import { ValidarPlaceholdersDialog } from "@/components/admin/ValidarPlaceholdersDialog";
 
 interface Contrato {
   cuenta_id: number;
@@ -55,6 +56,13 @@ export default function Contratos() {
     dueno: "",
     cuenta_cobranza: "",
   });
+
+  const [validacionDialogData, setValidacionDialogData] = useState<{
+    validacion: any;
+    compradores: any[];
+    tipoPersona: string;
+    templateName: string;
+  } | null>(null);
 
   // Fetch contratos pendientes
   const { data: contratos = [], isLoading } = useQuery({
@@ -200,10 +208,10 @@ export default function Contratos() {
       const warnings = [];
       
       if (data.warnings?.missing_placeholders?.length > 0) {
-        warnings.push(`⚠️ Placeholders no encontrados en template (resaltados en amarillo): ${data.warnings.missing_placeholders.join(', ')}`);
+        warnings.push(`🔴 Placeholders faltantes (ROJO en doc): ${data.warnings.missing_placeholders.join(', ')}`);
       }
       if (data.warnings?.empty_placeholders?.length > 0) {
-        warnings.push(`⚠️ Placeholders con datos vacíos (resaltados en naranja): ${data.warnings.empty_placeholders.join(', ')}`);
+        warnings.push(`🟡 Placeholders vacíos (AMARILLO en doc): ${data.warnings.empty_placeholders.join(', ')}`);
       }
 
       const hasWarnings = warnings.length > 0;
@@ -217,13 +225,13 @@ export default function Contratos() {
       
       if (hasWarnings) {
         description += `\n\n${warnings.join('\n\n')}`;
-        description += `\n\n📄 Revisa el documento en Google Docs para ver los placeholders resaltados.`;
+        description += `\n\n📄 Los campos problemáticos están resaltados en el documento.`;
       }
 
       toast({
         title,
         description,
-        duration: hasWarnings ? 8000 : 4000,
+        duration: hasWarnings ? 10000 : 4000,
         action: data.document_url ? (
           <a 
             href={data.document_url} 
@@ -391,6 +399,17 @@ export default function Contratos() {
           )}
         </CardContent>
       </Card>
+
+      {validacionDialogData && (
+        <ValidarPlaceholdersDialog
+          open={!!validacionDialogData}
+          onOpenChange={(open) => !open && setValidacionDialogData(null)}
+          validacion={validacionDialogData.validacion}
+          compradores={validacionDialogData.compradores}
+          tipoPersona={validacionDialogData.tipoPersona}
+          templateName={validacionDialogData.templateName}
+        />
+      )}
     </div>
   );
 }
