@@ -53,8 +53,6 @@ export default function Contratos() {
     modelo: "",
     numero_propiedad: "",
     dueno: "",
-    precio_min: "",
-    precio_max: "",
     cuenta_cobranza: "",
   });
 
@@ -231,8 +229,6 @@ export default function Contratos() {
     if (filters.modelo && !c.modelo.toLowerCase().includes(filters.modelo.toLowerCase())) return false;
     if (filters.numero_propiedad && !c.numero_propiedad.toLowerCase().includes(filters.numero_propiedad.toLowerCase())) return false;
     if (filters.dueno && !c.dueno.toLowerCase().includes(filters.dueno.toLowerCase())) return false;
-    if (filters.precio_min && c.precio_final < parseFloat(filters.precio_min)) return false;
-    if (filters.precio_max && c.precio_final > parseFloat(filters.precio_max)) return false;
     if (filters.cuenta_cobranza && !formatCuentaCobranzaId(c.cuenta_id, 'Propiedad').toLowerCase().includes(filters.cuenta_cobranza.toLowerCase())) return false;
     return true;
   });
@@ -248,7 +244,7 @@ export default function Contratos() {
         </CardHeader>
         <CardContent>
           {/* Filtros */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <Input
               placeholder="Filtrar por proyecto..."
               value={filters.proyecto}
@@ -273,18 +269,6 @@ export default function Contratos() {
               placeholder="Filtrar por dueño..."
               value={filters.dueno}
               onChange={(e) => setFilters({ ...filters, dueno: e.target.value })}
-            />
-            <Input
-              type="number"
-              placeholder="Precio mínimo..."
-              value={filters.precio_min}
-              onChange={(e) => setFilters({ ...filters, precio_min: e.target.value })}
-            />
-            <Input
-              type="number"
-              placeholder="Precio máximo..."
-              value={filters.precio_max}
-              onChange={(e) => setFilters({ ...filters, precio_max: e.target.value })}
             />
             <Input
               placeholder="Filtrar por cuenta..."
