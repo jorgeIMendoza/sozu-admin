@@ -76,8 +76,8 @@ export function CompradoresConDocumentosDialog({
                 <CardHeader>
                   <CardTitle className="text-base flex items-center justify-between">
                     <span>{comprador.nombre_legal}</span>
-                    <Badge variant={comprador.tipo_persona === 'PF' ? 'default' : 'secondary'}>
-                      {comprador.tipo_persona === 'PF' ? 'Persona Física (PF)' : 'Persona Moral (PM)'}
+                    <Badge variant={comprador.tipo_persona === 'PM' ? 'secondary' : 'default'}>
+                      {comprador.tipo_persona === 'PM' ? 'Persona Moral (PM)' : 'Persona Física (PF)'}
                     </Badge>
                   </CardTitle>
                 </CardHeader>
