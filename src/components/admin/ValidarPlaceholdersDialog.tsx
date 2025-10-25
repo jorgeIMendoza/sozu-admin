@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CheckCircle, AlertCircle, XCircle, FileText, Play } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import React from "react";
 
 interface ValidacionData {
   placeholders_en_template: string[];
@@ -48,6 +49,8 @@ export function ValidarPlaceholdersDialog({
 }: ValidarPlaceholdersDialogProps) {
   if (!validacion) return null;
 
+  const [seccionActiva, setSeccionActiva] = React.useState<'todas' | 'disponibles' | 'vacios' | 'faltantes'>('todas');
+
   const estadoBadge = (estado: string) => {
     switch (estado) {
       case 'ok':
@@ -76,22 +79,42 @@ export function ValidarPlaceholdersDialog({
           <div className="space-y-4">
             {/* Resumen */}
             <div className="grid grid-cols-4 gap-4">
-              <Card className="p-4">
+              <Card 
+                className="p-4 cursor-pointer hover:bg-accent transition-colors"
+                onClick={() => setSeccionActiva('todas')}
+              >
                 <div className="text-sm text-muted-foreground">Total en Template</div>
                 <div className="text-2xl font-bold">{validacion.total_template}</div>
+                {seccionActiva === 'todas' && <div className="text-xs text-primary mt-1">← Viendo todo</div>}
               </Card>
-              <Card className="p-4 border-green-500">
+              <Card 
+                className="p-4 border-green-500 cursor-pointer hover:bg-green-50 dark:hover:bg-green-950 transition-colors"
+                onClick={() => setSeccionActiva('disponibles')}
+              >
                 <div className="text-sm text-muted-foreground">Disponibles</div>
                 <div className="text-2xl font-bold text-green-500">{validacion.total_disponibles}</div>
+                {seccionActiva === 'disponibles' && <div className="text-xs text-green-600 mt-1">← Filtrando</div>}
               </Card>
-              <Card className="p-4 border-yellow-500">
+              <Card 
+                className="p-4 border-yellow-500 cursor-pointer hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors"
+                onClick={() => setSeccionActiva('vacios')}
+              >
                 <div className="text-sm text-muted-foreground">Vacíos</div>
                 <div className="text-2xl font-bold text-yellow-500">{validacion.total_vacios}</div>
+                {seccionActiva === 'vacios' && <div className="text-xs text-yellow-600 mt-1">← Filtrando</div>}
               </Card>
-              <Card className="p-4 border-red-500">
+              <Card 
+                className="p-4 border-red-500 cursor-pointer hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                onClick={() => setSeccionActiva('faltantes')}
+              >
                 <div className="text-sm text-muted-foreground">Faltantes</div>
                 <div className="text-2xl font-bold text-red-500">{validacion.total_faltantes}</div>
+                {seccionActiva === 'faltantes' && <div className="text-xs text-red-600 mt-1">← Filtrando</div>}
               </Card>
+            </div>
+
+            <div className="text-xs text-muted-foreground text-center">
+              💡 Haz clic en las tarjetas para filtrar la información
             </div>
 
             {/* Información de compradores */}
@@ -110,7 +133,7 @@ export function ValidarPlaceholdersDialog({
             </Card>
 
             {/* Placeholders Faltantes - PRIORIDAD */}
-            {validacion.placeholders_faltantes.length > 0 && (
+            {validacion.placeholders_faltantes.length > 0 && (seccionActiva === 'todas' || seccionActiva === 'faltantes') && (
               <Card className="p-4 border-red-500 bg-red-50 dark:bg-red-950">
                 <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
                   <XCircle className="w-4 h-4" />
@@ -132,7 +155,7 @@ export function ValidarPlaceholdersDialog({
             )}
 
             {/* Placeholders Vacíos */}
-            {validacion.placeholders_vacios.length > 0 && (
+            {validacion.placeholders_vacios.length > 0 && (seccionActiva === 'todas' || seccionActiva === 'vacios') && (
               <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
                 <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
@@ -154,7 +177,7 @@ export function ValidarPlaceholdersDialog({
             )}
 
             {/* Tabla completa de placeholders DISPONIBLES OK */}
-            {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 && (
+            {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 && (seccionActiva === 'todas' || seccionActiva === 'disponibles') && (
               <div>
                 <div className="text-sm font-medium mb-2 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-500" />
