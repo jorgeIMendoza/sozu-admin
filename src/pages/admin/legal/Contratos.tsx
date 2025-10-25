@@ -158,6 +158,7 @@ export default function Contratos() {
             tipos_documento!inner(nombre)
           `)
           .eq('id_persona', c.id_persona)
+          .is('id_cuenta_cobranza', null)
           .eq('es_verificado', true)
           .eq('activo', true);
 
