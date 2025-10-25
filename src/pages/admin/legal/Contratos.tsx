@@ -58,10 +58,11 @@ export default function Contratos() {
   });
 
   const [validacionDialogData, setValidacionDialogData] = useState<{
-    validacion: any;
+    validation: any;
     compradores: any[];
-    tipoPersona: string;
-    templateName: string;
+    tipo_persona: string;
+    template_name: string;
+    cuenta_id: number;
   } | null>(null);
 
   // Fetch contratos pendientes
@@ -208,49 +209,115 @@ export default function Contratos() {
       const warnings = [];
       
       if (data.warnings?.missing_placeholders?.length > 0) {
-        warnings.push(`🔴 Placeholders faltantes (ROJO en doc): ${data.warnings.missing_placeholders.join(', ')}`);
+        warnings.push(`🔴 ${data.warnings.missing_placeholders.length} placeholders faltantes (resaltados en ROJO)`);
       }
       if (data.warnings?.empty_placeholders?.length > 0) {
-        warnings.push(`🟡 Placeholders vacíos (AMARILLO en doc): ${data.warnings.empty_placeholders.join(', ')}`);
+        warnings.push(`🟡 ${data.warnings.empty_placeholders.length} placeholders vacíos (resaltados en AMARILLO)`);
       }
 
       const hasWarnings = warnings.length > 0;
-      const title = hasWarnings ? "⚠️ Contrato generado con advertencias" : "✅ Contrato generado exitosamente";
-      
-      let description = data.message || "El contrato se generó correctamente.";
-      
-      if (data.warnings?.total_compradores) {
-        description += `\n\n👥 Se procesaron ${data.warnings.total_compradores} comprador(es).`;
-      }
       
       if (hasWarnings) {
-        description += `\n\n${warnings.join('\n\n')}`;
-        description += `\n\n📄 Los campos problemáticos están resaltados en el documento.`;
+        toast({
+          title: "⚠️ Contrato generado con advertencias",
+          description: (
+            <div className="space-y-2">
+              <p className="font-medium">
+                👥 {data.warnings?.total_compradores || 0} comprador(es) procesados
+              </p>
+              <div className="space-y-1">
+                {warnings.map((w, i) => (
+                  <p key={i} className="text-sm">{w}</p>
+                ))}
+              </div>
+              <p className="text-sm mt-2">
+                📄 Los campos problemáticos están resaltados en el documento.
+              </p>
+              {data.document_url && (
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="mt-2 w-full"
+                  onClick={() => window.open(data.document_url, '_blank')}
+                >
+                  Abrir Documento
+                </Button>
+              )}
+            </div>
+          ),
+          duration: 15000,
+        });
+      } else {
+        toast({
+          title: "✅ Contrato generado exitosamente",
+          description: (
+            <div className="space-y-2">
+              <p>El contrato se generó correctamente.</p>
+              <p className="text-sm">
+                👥 Se procesaron {data.warnings?.total_compradores || 0} comprador(es).
+              </p>
+              {data.document_url && (
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="mt-2 w-full"
+                  onClick={() => window.open(data.document_url, '_blank')}
+                >
+                  Abrir Documento
+                </Button>
+              )}
+            </div>
+          ),
+          duration: 5000,
+        });
       }
-
-      toast({
-        title,
-        description,
-        duration: hasWarnings ? 10000 : 4000,
-        action: data.document_url ? (
-          <a 
-            href={data.document_url} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-          >
-            Abrir Documento
-          </a>
-        ) : undefined,
-      });
 
       queryClient.invalidateQueries({ queryKey: ['contratos-pendientes'] });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
+        title: "❌ Error",
         description: error.message || "No se pudo generar el contrato.",
         variant: "destructive",
+        duration: 7000,
+      });
+    },
+  });
+
+  // Validar placeholders mutation
+  const validarPlaceholdersMutation = useMutation({
+    mutationFn: async (cuentaId: number) => {
+      const { data, error } = await supabase.functions.invoke('validar-placeholders-contrato', {
+        body: { id_cuenta_cobranza: cuentaId },
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+
+      return { ...data, cuenta_id: cuentaId };
+    },
+    onSuccess: (data) => {
+      setValidacionDialogData(data);
+      
+      // Mostrar resumen en toast
+      const validation = data.validation;
+      const hasProblems = validation.tiene_problemas;
+      
+      toast({
+        title: hasProblems ? "⚠️ Validación con problemas" : "✅ Validación exitosa",
+        description: hasProblems 
+          ? `${validation.total_faltantes} placeholders faltantes, ${validation.total_vacios} vacíos. Revisa el diálogo para más detalles.`
+          : `Todos los ${validation.total_disponibles} placeholders están listos.`,
+        variant: hasProblems ? "default" : "default",
+        duration: 3000,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ Error",
+        description: error.message || "No se pudo validar los placeholders.",
+        variant: "destructive",
+        duration: 5000,
       });
     },
   });
@@ -373,23 +440,43 @@ export default function Contratos() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          onClick={() => generarContratoMutation.mutate(contrato.cuenta_id)}
-                          disabled={generarContratoMutation.isPending}
-                        >
-                          {generarContratoMutation.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                              Generando...
-                            </>
-                          ) : (
-                            <>
-                              <FileText className="h-4 w-4 mr-1" />
-                              Generar Contrato
-                            </>
-                          )}
-                        </Button>
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => validarPlaceholdersMutation.mutate(contrato.cuenta_id)}
+                            disabled={validarPlaceholdersMutation.isPending}
+                          >
+                            {validarPlaceholdersMutation.isPending ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                Validando...
+                              </>
+                            ) : (
+                              <>
+                                <FileText className="h-4 w-4 mr-1" />
+                                Validar
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => generarContratoMutation.mutate(contrato.cuenta_id)}
+                            disabled={generarContratoMutation.isPending}
+                          >
+                            {generarContratoMutation.isPending ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                Generando...
+                              </>
+                            ) : (
+                              <>
+                                <FileText className="h-4 w-4 mr-1" />
+                                Generar
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -404,10 +491,12 @@ export default function Contratos() {
         <ValidarPlaceholdersDialog
           open={!!validacionDialogData}
           onOpenChange={(open) => !open && setValidacionDialogData(null)}
-          validacion={validacionDialogData.validacion}
+          validacion={validacionDialogData.validation}
           compradores={validacionDialogData.compradores}
-          tipoPersona={validacionDialogData.tipoPersona}
-          templateName={validacionDialogData.templateName}
+          tipoPersona={validacionDialogData.tipo_persona}
+          templateName={validacionDialogData.template_name}
+          onGenerarContrato={() => validacionDialogData.cuenta_id && generarContratoMutation.mutate(validacionDialogData.cuenta_id)}
+          isGenerating={generarContratoMutation.isPending}
         />
       )}
     </div>

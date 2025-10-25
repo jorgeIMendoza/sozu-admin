@@ -4,11 +4,13 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CheckCircle, AlertCircle, XCircle, FileText } from "lucide-react";
+import { CheckCircle, AlertCircle, XCircle, FileText, Play } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ValidacionData {
@@ -30,6 +32,8 @@ interface ValidarPlaceholdersDialogProps {
   compradores: any[];
   tipoPersona: string;
   templateName: string;
+  onGenerarContrato?: () => void;
+  isGenerating?: boolean;
 }
 
 export function ValidarPlaceholdersDialog({
@@ -38,7 +42,9 @@ export function ValidarPlaceholdersDialog({
   validacion,
   compradores,
   tipoPersona,
-  templateName
+  templateName,
+  onGenerarContrato,
+  isGenerating = false
 }: ValidarPlaceholdersDialogProps) {
   if (!validacion) return null;
 
@@ -175,7 +181,47 @@ export function ValidarPlaceholdersDialog({
               </div>
             </Card>
           )}
+
+          {!validacion.tiene_problemas && (
+            <Card className="p-4 bg-green-50 dark:bg-green-950 border-green-500">
+              <div className="text-sm font-medium mb-2">✅ Todo listo</div>
+              <div className="text-sm text-muted-foreground">
+                Todos los placeholders están correctamente mapeados. El contrato se generará sin problemas.
+              </div>
+            </Card>
+          )}
         </div>
+
+        {onGenerarContrato && (
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isGenerating}
+            >
+              Cerrar
+            </Button>
+            <Button
+              onClick={() => {
+                onGenerarContrato();
+                onOpenChange(false);
+              }}
+              disabled={isGenerating}
+            >
+              {isGenerating ? (
+                <>
+                  <AlertCircle className="w-4 h-4 mr-2 animate-spin" />
+                  Generando...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Generar Contrato Ahora
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
