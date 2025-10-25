@@ -108,17 +108,20 @@ export function ValidarPlaceholdersDialog({
             </div>
           </Card>
 
-          {/* Placeholders Faltantes */}
+          {/* Placeholders Faltantes - PRIORIDAD */}
           {validacion.placeholders_faltantes.length > 0 && (
-            <Card className="p-4 border-red-500">
-              <div className="text-sm font-medium text-red-500 mb-2 flex items-center gap-2">
+            <Card className="p-4 border-red-500 bg-red-50 dark:bg-red-950">
+              <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
                 <XCircle className="w-4 h-4" />
-                ⚠️ Placeholders NO GENERADOS (aparecerán en ROJO en el contrato)
+                ⚠️ CRÍTICO: Placeholders NO GENERADOS (aparecerán en ROJO en el contrato)
               </div>
-              <ScrollArea className="h-[100px]">
+              <div className="text-xs text-muted-foreground mb-2">
+                Estos placeholders están en el template pero NO tienen datos disponibles para reemplazarlos
+              </div>
+              <ScrollArea className="max-h-[150px]">
                 <div className="space-y-1">
                   {validacion.placeholders_faltantes.map((ph, i) => (
-                    <div key={i} className="text-sm font-mono bg-red-50 dark:bg-red-950 p-2 rounded">
+                    <div key={i} className="text-sm font-mono bg-white dark:bg-red-900 p-2 rounded border border-red-300 dark:border-red-700">
                       {`{{${ph}}}`}
                     </div>
                   ))}
@@ -129,15 +132,18 @@ export function ValidarPlaceholdersDialog({
 
           {/* Placeholders Vacíos */}
           {validacion.placeholders_vacios.length > 0 && (
-            <Card className="p-4 border-yellow-500">
-              <div className="text-sm font-medium text-yellow-500 mb-2 flex items-center gap-2">
+            <Card className="p-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+              <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
                 Placeholders con datos VACÍOS (aparecerán en AMARILLO en el contrato)
               </div>
-              <ScrollArea className="h-[100px]">
+              <div className="text-xs text-muted-foreground mb-2">
+                Estos placeholders tienen datos mapeados pero los valores están vacíos
+              </div>
+              <ScrollArea className="max-h-[150px]">
                 <div className="space-y-1">
                   {validacion.placeholders_vacios.map((ph, i) => (
-                    <div key={i} className="text-sm font-mono bg-yellow-50 dark:bg-yellow-950 p-2 rounded">
+                    <div key={i} className="text-sm font-mono bg-white dark:bg-yellow-900 p-2 rounded border border-yellow-300 dark:border-yellow-700">
                       {`{{${ph}}}`}
                     </div>
                   ))}
@@ -146,30 +152,38 @@ export function ValidarPlaceholdersDialog({
             </Card>
           )}
 
-          {/* Tabla completa de placeholders */}
-          <div>
-            <div className="text-sm font-medium mb-2">📋 Todos los Placeholders Disponibles</div>
-            <ScrollArea className="h-[300px] border rounded-md">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Placeholder</TableHead>
-                    <TableHead>Valor</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {validacion.placeholders_disponibles.map((item, i) => (
-                    <TableRow key={i}>
-                      <TableCell>{estadoBadge(item.estado)}</TableCell>
-                      <TableCell className="font-mono text-sm">{`{{${item.placeholder}}}`}</TableCell>
-                      <TableCell className="text-sm max-w-md truncate">{item.valor}</TableCell>
+          {/* Tabla completa de placeholders DISPONIBLES OK */}
+          {validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length > 0 && (
+            <div>
+              <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                ✅ Placeholders Correctamente Mapeados ({validacion.placeholders_disponibles.filter(p => p.estado === 'ok').length})
+              </div>
+              <div className="text-xs text-muted-foreground mb-2">
+                Estos placeholders se reemplazarán correctamente en el contrato
+              </div>
+              <ScrollArea className="max-h-[250px] border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Placeholder</TableHead>
+                      <TableHead>Valor que se usará</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {validacion.placeholders_disponibles
+                      .filter(item => item.estado === 'ok')
+                      .map((item, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-mono text-sm">{`{{${item.placeholder}}}`}</TableCell>
+                          <TableCell className="text-sm max-w-md truncate">{item.valor}</TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </div>
+          )}
 
           {/* Advertencia final */}
           {validacion.tiene_problemas && (
