@@ -74,12 +74,14 @@ serve(async (req) => {
       .single();
 
     // Obtener compradores con datos básicos
+    console.log("Validando placeholders para cuenta:", id_cuenta_cobranza);
+    
     const { data: compradores, error: compradoresError } = await supabase
       .from("compradores")
       .select(`
         id_persona,
         porcentaje_copropiedad,
-        personas!compradores_id_persona_fkey(
+        personas (
           nombre_legal,
           rfc,
           curp,
@@ -102,13 +104,15 @@ serve(async (req) => {
       .eq("id_cuenta_cobranza", id_cuenta_cobranza)
       .eq("activo", true);
 
+    console.log("Resultado compradores:", { total: compradores?.length, error: compradoresError });
+
     if (compradoresError) {
       console.error("Error obteniendo compradores:", compradoresError);
       throw new Error(`Error obteniendo compradores: ${compradoresError.message}`);
     }
 
     if (!compradores || compradores.length === 0) {
-      throw new Error("No se encontraron compradores para esta cuenta de cobranza");
+      throw new Error("No se encontraron compradores activos para esta cuenta de cobranza. Verifique que existan compradores asociados y que estén activos.");
     }
 
     // Obtener datos relacionados adicionales en consultas separadas

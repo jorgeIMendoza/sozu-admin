@@ -109,13 +109,15 @@ serve(async (req) => {
     const edificio = edificioData;
     const modelo = modeloData;
 
-    // 6. Obtener compradores con datos básicos y relacionados (usando left joins para datos opcionales)
+    // 6. Obtener compradores con datos básicos
+    console.log("Buscando compradores para cuenta:", id_cuenta_cobranza);
+    
     const { data: compradores, error: compradoresError } = await supabase
       .from("compradores")
       .select(`
         id_persona,
         porcentaje_copropiedad,
-        personas!compradores_id_persona_fkey(
+        personas (
           nombre_legal,
           rfc,
           curp,
@@ -141,17 +143,19 @@ serve(async (req) => {
       .eq("id_cuenta_cobranza", id_cuenta_cobranza)
       .eq("activo", true);
 
+    console.log("Resultado compradores:", { compradores, compradoresError });
+
     if (compradoresError) {
       console.error("Error obteniendo compradores:", compradoresError);
       throw new Error(`Error obteniendo compradores: ${compradoresError.message}`);
     }
 
     if (!compradores || compradores.length === 0) {
-      console.error("No se encontraron compradores para cuenta:", id_cuenta_cobranza);
-      throw new Error("No se encontraron compradores para esta cuenta de cobranza");
+      console.error("No se encontraron compradores activos para cuenta:", id_cuenta_cobranza);
+      throw new Error("No se encontraron compradores activos para esta cuenta de cobranza. Verifique que existan compradores asociados y que estén activos.");
     }
 
-    console.log(`${compradores.length} comprador(es) encontrado(s)`);
+    console.log(`✓ ${compradores.length} comprador(es) encontrado(s)`);
 
     // 6.5. Obtener datos relacionados adicionales en consultas separadas
     const compradoresConRelaciones = await Promise.all(
