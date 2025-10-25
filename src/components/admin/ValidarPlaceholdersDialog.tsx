@@ -10,8 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CheckCircle, AlertCircle, XCircle, FileText, Play } from "lucide-react";
+import { CheckCircle, AlertCircle, XCircle, FileText, Play, AlertTriangle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import React from "react";
 
 interface ValidacionData {
@@ -199,28 +205,43 @@ export function ValidarPlaceholdersDialog({
         </ScrollArea>
 
         {onGenerarContrato && (
-          <DialogFooter className="flex-col gap-3">
-            {/* Advertencia final */}
-            {validacion.tiene_problemas && (
-              <Card className="p-4 bg-yellow-50 dark:bg-yellow-950 border-yellow-500 w-full">
-                <div className="text-sm font-medium mb-2">⚠️ Advertencia</div>
-                <div className="text-sm text-muted-foreground">
-                  Si generas el contrato ahora, los placeholders faltantes aparecerán en ROJO y los vacíos en AMARILLO.
-                  Puedes continuar de todas formas, pero deberás completar manualmente esos campos en Google Docs.
-                </div>
-              </Card>
-            )}
+          <DialogFooter className="flex justify-between items-center gap-3">
+            {/* Advertencia como icono con tooltip */}
+            <div className="flex items-center gap-2">
+              {validacion.tiene_problemas && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+                        <AlertTriangle className="w-5 h-5" />
+                        <span className="text-sm font-medium">Advertencia</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-md">
+                      <p>Si generas el contrato ahora, los placeholders faltantes aparecerán en ROJO y los vacíos en AMARILLO. Puedes continuar de todas formas, pero deberás completar manualmente esos campos en Google Docs.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
 
-            {!validacion.tiene_problemas && (
-              <Card className="p-4 bg-green-50 dark:bg-green-950 border-green-500 w-full">
-                <div className="text-sm font-medium mb-2">✅ Todo listo</div>
-                <div className="text-sm text-muted-foreground">
-                  Todos los placeholders están correctamente mapeados. El contrato se generará sin problemas.
-                </div>
-              </Card>
-            )}
+              {!validacion.tiene_problemas && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                        <CheckCircle className="w-5 h-5" />
+                        <span className="text-sm font-medium">Todo listo</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Todos los placeholders están correctamente mapeados. El contrato se generará sin problemas.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
 
-            <div className="flex justify-end gap-2 w-full">
+            <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
                 onClick={() => onOpenChange(false)}
