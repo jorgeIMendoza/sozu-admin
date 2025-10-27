@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, FileText, Loader2 } from "lucide-react";
-import { N8N_WEBHOOK_BASE_URL } from "@/lib/config";
+import { supabase } from "@/integrations/supabase/client";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 interface SubirProyectoEscrituraDialogProps {
   open: boolean;
@@ -73,24 +74,47 @@ export default function SubirProyectoEscrituraDialog({
     setUploading(true);
 
     try {
-      // Preparar FormData para enviar al webhook
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('id_cuenta_cobranza', cuentaCobranzaId.toString());
+      // 1. Generar nombre del archivo con formato único
+      const timestamp = new Date().getTime();
+      const cuentaFormateada = formatCuentaCobranzaId(cuentaCobranzaId);
+      const fileName = `${cuentaFormateada}_proyecto_escritura_${timestamp}.pdf`;
+      const filePath = `${cuentaCobranzaId}/${fileName}`;
 
-      // Llamar al webhook de N8N
-      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/cargaProyectoEscritura`, {
-        method: 'POST',
-        body: formData,
-      });
+      // 2. Subir archivo a Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('proyectos_escritura')
+        .upload(filePath, file, {
+          contentType: 'application/pdf',
+          upsert: false
+        });
 
-      if (!response.ok) {
-        throw new Error(`Error al procesar el documento: ${response.statusText}`);
+      if (uploadError) {
+        throw new Error(`Error al subir archivo: ${uploadError.message}`);
+      }
+
+      // 3. Guardar registro en la tabla documentos
+      const { error: dbError } = await supabase
+        .from('documentos')
+        .insert({
+          id_cuenta_cobranza: cuentaCobranzaId,
+          id_tipo_documento: 29, // Proyecto de escritura
+          url: filePath,
+          activo: true,
+          es_verificado: false,
+        });
+
+      if (dbError) {
+        // Si falla el guardado en DB, intentar eliminar el archivo subido
+        await supabase.storage
+          .from('proyectos_escritura')
+          .remove([filePath]);
+        
+        throw new Error(`Error al guardar documento: ${dbError.message}`);
       }
 
       toast({
-        title: "✅ Proyecto de escritura enviado",
-        description: "El documento se está procesando",
+        title: "✅ Proyecto de escritura guardado",
+        description: "El documento ha sido subido exitosamente",
       });
 
       setFile(null);
@@ -101,7 +125,7 @@ export default function SubirProyectoEscrituraDialog({
       console.error('Error completo:', error);
       toast({
         title: "Error",
-        description: error.message || "No se pudo enviar el documento",
+        description: error.message || "No se pudo guardar el documento",
         variant: "destructive",
       });
     } finally {
