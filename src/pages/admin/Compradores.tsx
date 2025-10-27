@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, RotateCcw, CreditCard, UserX, HeartHandshake } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RotateCcw, CreditCard, UserX, HeartHandshake, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -380,6 +380,56 @@ export default function Compradores() {
     },
   });
 
+  // Mutation para verificar estatus de escrituración manualmente
+  const verificarEscrituracionMutation = useMutation({
+    mutationFn: async (compradorId: number) => {
+      // Primero obtener las cuentas de cobranza donde este comprador participa
+      const { data: cuentas, error: cuentasError } = await supabase
+        .from('compradores')
+        .select('id_cuenta_cobranza')
+        .eq('id_persona', compradorId)
+        .eq('activo', true);
+
+      if (cuentasError) throw cuentasError;
+      if (!cuentas || cuentas.length === 0) {
+        throw new Error('El comprador no tiene cuentas de cobranza activas');
+      }
+
+      // Invocar el Edge Function para cada cuenta
+      const results = await Promise.all(
+        cuentas.map(async (cuenta) => {
+          const { data, error } = await supabase.functions.invoke(
+            'check-property-escrituracion-status',
+            { body: { id_cuenta_cobranza: cuenta.id_cuenta_cobranza } }
+          );
+          if (error) throw error;
+          return { cuenta_id: cuenta.id_cuenta_cobranza, ...data };
+        })
+      );
+
+      return results;
+    },
+    onSuccess: (results) => {
+      const cambiosRealizados = results.filter((r: any) => r.status_changed);
+      const mensaje = cambiosRealizados.length > 0
+        ? `✅ ${cambiosRealizados.length} propiedad(es) actualizadas a Escrituración`
+        : 'ℹ️ No se cumplieron las condiciones en ninguna propiedad';
+      
+      toast({
+        title: cambiosRealizados.length > 0 ? "Éxito" : "Información",
+        description: mensaje,
+      });
+      queryClient.invalidateQueries({ queryKey: ['compradores'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: `Error al verificar estatus: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredCompradores = compradores.filter(comprador => 
     comprador.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     comprador.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -563,6 +613,24 @@ export default function Compradores() {
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>Gestionar cuentas bancarias</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => verificarEscrituracionMutation.mutate(comprador.id)}
+                                disabled={verificarEscrituracionMutation.isPending}
+                                className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-blue-900/30"
+                              >
+                                <RefreshCw className={`h-4 w-4 ${verificarEscrituracionMutation.isPending ? 'animate-spin' : ''}`} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Verificar estatus de escrituración</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>

@@ -2336,50 +2336,6 @@ export type Database = {
           },
         ]
       }
-      pagos_fake: {
-        Row: {
-          clave_rastreo: string | null
-          concepto_pago: string | null
-          fecha_pago: string
-          id: number
-          metodo_pago: string | null
-          monto: number
-          nombre_beneficiario: string | null
-          url_cep: string | null
-          url_recibo: string | null
-        }
-        Insert: {
-          clave_rastreo?: string | null
-          concepto_pago?: string | null
-          fecha_pago: string
-          id?: number
-          metodo_pago?: string | null
-          monto: number
-          nombre_beneficiario?: string | null
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Update: {
-          clave_rastreo?: string | null
-          concepto_pago?: string | null
-          fecha_pago?: string
-          id?: number
-          metodo_pago?: string | null
-          monto?: number
-          nombre_beneficiario?: string | null
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pagos_fake_clave_rastreo_fkey"
-            columns: ["clave_rastreo"]
-            isOneToOne: true
-            referencedRelation: "pagos_stp_raw"
-            referencedColumns: ["claverastreo"]
-          },
-        ]
-      }
       pagos_stp_raw: {
         Row: {
           claverastreo: string
