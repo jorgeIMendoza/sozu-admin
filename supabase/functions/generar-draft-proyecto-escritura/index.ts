@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
+// @deno-types="https://unpkg.com/docx-templates@4.11.3/lib/bundled.d.ts"
+import { createReport } from 'https://unpkg.com/docx-templates@4.11.3/lib/browser.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,9 +92,8 @@ serve(async (req) => {
 
     if (templateError) throw templateError;
 
-    // Leer el contenido del template como ArrayBuffer y luego convertir a string
+    // Leer el contenido del template como ArrayBuffer
     const arrayBuffer = await templateData.arrayBuffer();
-    const templateContent = new TextDecoder('utf-8').decode(arrayBuffer);
 
     // Extraer datos
     const propiedad = cuenta.ofertas.propiedades;
@@ -106,8 +107,8 @@ serve(async (req) => {
       .filter(Boolean)
       .join(', ') || 'N/A';
 
-    // Datos para reemplazar
-    const mergeData: Record<string, string> = {
+    // Datos para reemplazar en el template
+    const mergeData = {
       proyecto: proyecto.nombre,
       edificio: edificio.nombre,
       numero_propiedad: propiedad.numero_propiedad,
@@ -115,28 +116,27 @@ serve(async (req) => {
       comprador: compradoresNombres,
     };
 
-    // Hacer el merge: reemplazar {{placeholder}} con los valores
-    let documentContent = templateContent;
-    for (const [key, value] of Object.entries(mergeData)) {
-      const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
-      documentContent = documentContent.replace(regex, value);
-    }
+    console.log('Generando documento con datos:', mergeData);
+
+    // Generar el documento usando docx-templates
+    const report = await createReport({
+      template: arrayBuffer,
+      data: mergeData,
+      cmdDelimiter: ['{{', '}}'],
+    });
 
     // Obtener la extensión del template original
-    const templateExtension = notario.url_template_proyecto_contrato.split('.').pop() || 'doc';
+    const templateExtension = notario.url_template_proyecto_contrato.split('.').pop() || 'docx';
     
     // Crear nombre del archivo con proyecto y numero_propiedad
     const proyectoClean = proyecto.nombre.replace(/[^a-zA-Z0-9]/g, '_');
     const propiedadClean = propiedad.numero_propiedad.replace(/[^a-zA-Z0-9]/g, '_');
     const fileName = `proyecto_escritura_${proyectoClean}_${propiedadClean}.${templateExtension}`;
 
-    console.log('Draft generado exitosamente');
+    console.log('Draft generado exitosamente:', fileName);
 
-    // Convertir el contenido de vuelta a ArrayBuffer manteniendo la codificación
-    const encoder = new TextEncoder();
-    const uint8Array = encoder.encode(documentContent);
-    
-    // Convertir a base64 usando método seguro para archivos grandes
+    // Convertir a base64 para enviar al cliente
+    const uint8Array = new Uint8Array(report);
     const base64Content = btoa(
       Array.from(uint8Array)
         .map(byte => String.fromCharCode(byte))
