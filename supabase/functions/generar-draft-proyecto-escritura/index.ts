@@ -121,8 +121,10 @@ serve(async (req) => {
       documentContent = documentContent.replace(regex, value);
     }
 
-    // Crear nombre del archivo
-    const fileName = `Proyecto_Escritura_Cuenta_${id_cuenta_cobranza}_${Date.now()}.doc`;
+    // Crear nombre del archivo con proyecto y numero_propiedad
+    const proyectoClean = proyecto.nombre.replace(/[^a-zA-Z0-9]/g, '_');
+    const propiedadClean = propiedad.numero_propiedad.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `proyecto_escritura_${proyectoClean}_${propiedadClean}.rtf`;
 
     console.log('Draft generado exitosamente');
 

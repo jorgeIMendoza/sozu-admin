@@ -52,6 +52,7 @@ export default function RevisionDocumentacion() {
 
   const [selectedCuentaId, setSelectedCuentaId] = useState<number | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [generatingCuentaId, setGeneratingCuentaId] = useState<number | null>(null);
 
   // Query para obtener notarios activos
   const { data: notarios = [] } = useQuery({
@@ -282,6 +283,7 @@ export default function RevisionDocumentacion() {
   // Mutation para generar draft
   const generarDraftMutation = useMutation({
     mutationFn: async (cuentaId: number) => {
+      setGeneratingCuentaId(cuentaId);
       const { data, error } = await supabase.functions.invoke('generar-draft-proyecto-escritura', {
         body: { id_cuenta_cobranza: cuentaId }
       });
@@ -292,13 +294,14 @@ export default function RevisionDocumentacion() {
       return data;
     },
     onSuccess: (data) => {
+      setGeneratingCuentaId(null);
       toast({
         title: "Draft generado",
         description: "El documento se está descargando...",
       });
 
       // Descargar automáticamente
-      const blob = new Blob([data.content], { type: 'application/msword' });
+      const blob = new Blob([data.content], { type: 'application/rtf' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -309,6 +312,7 @@ export default function RevisionDocumentacion() {
       document.body.removeChild(a);
     },
     onError: (error: any) => {
+      setGeneratingCuentaId(null);
       toast({
         variant: "destructive",
         title: "Error",
@@ -506,9 +510,9 @@ export default function RevisionDocumentacion() {
                               size="sm"
                               variant="outline"
                               onClick={() => handleGenerarDraft(cuenta.cuenta_id)}
-                              disabled={generarDraftMutation.isPending}
+                              disabled={generatingCuentaId === cuenta.cuenta_id}
                             >
-                              {generarDraftMutation.isPending ? (
+                              {generatingCuentaId === cuenta.cuenta_id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 <FileDown className="h-4 w-4" />
