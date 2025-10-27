@@ -117,7 +117,7 @@ export default function RevisionDocumentacion() {
           precio_final,
           ofertas!fk_cuentas_cobranza_oferta!inner (
             id,
-            propiedades!inner (
+            propiedades!ofertas_id_propiedad_fkey!inner (
               id,
               numero_propiedad,
               id_estatus_disponibilidad,
@@ -139,12 +139,12 @@ export default function RevisionDocumentacion() {
         `)
         .eq('activo', true)
         .eq('ofertas!fk_cuentas_cobranza_oferta.activo', true)
-        .eq('ofertas!fk_cuentas_cobranza_oferta.propiedades.activo', true)
-        .eq('ofertas!fk_cuentas_cobranza_oferta.propiedades.id_estatus_disponibilidad', 7); // Solo Escrituración
+        .eq('ofertas!fk_cuentas_cobranza_oferta.propiedades!ofertas_id_propiedad_fkey.activo', true)
+        .eq('ofertas!fk_cuentas_cobranza_oferta.propiedades!ofertas_id_propiedad_fkey.id_estatus_disponibilidad', 7); // Solo Escrituración
 
       // Aplicar filtros
       if (filtroPropiedad) {
-        query = query.ilike('ofertas!fk_cuentas_cobranza_oferta.propiedades.numero_propiedad', `%${filtroPropiedad}%`);
+        query = query.ilike('ofertas!fk_cuentas_cobranza_oferta.propiedades!ofertas_id_propiedad_fkey.numero_propiedad', `%${filtroPropiedad}%`);
       }
       if (filtroCuenta) {
         query = query.eq('id', parseInt(filtroCuenta));
