@@ -115,7 +115,7 @@ export default function RevisionDocumentacion() {
         .select(`
           id,
           precio_final,
-          ofertas!inner (
+          ofertas!fk_cuentas_cobranza_oferta!inner (
             id,
             propiedades!inner (
               id,
