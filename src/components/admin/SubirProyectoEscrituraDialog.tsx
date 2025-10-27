@@ -32,16 +32,11 @@ export default function SubirProyectoEscrituraDialog({
       return;
     }
 
-    // Validar extensión
-    const validExtensions = ['.pdf', '.docx', '.doc'];
-    const hasValidExtension = validExtensions.some(ext => 
-      selectedFile.name.toLowerCase().endsWith(ext)
-    );
-    
-    if (!hasValidExtension) {
+    // Validar extensión - solo PDF por seguridad
+    if (!selectedFile.name.toLowerCase().endsWith('.pdf')) {
       toast({
         title: "Error",
-        description: "Solo se permiten archivos .docx, .doc y .pdf",
+        description: "Solo se permiten archivos PDF por razones de seguridad",
         variant: "destructive",
       });
       setFile(null);
@@ -131,12 +126,12 @@ export default function SubirProyectoEscrituraDialog({
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="file">Documento</Label>
+            <Label htmlFor="file">Documento PDF</Label>
             <div className="flex flex-col gap-2">
               <Input
                 id="file"
                 type="file"
-                accept=".pdf,.docx,.doc"
+                accept=".pdf"
                 onChange={handleFileChange}
                 disabled={uploading}
                 className="cursor-pointer"
@@ -152,8 +147,9 @@ export default function SubirProyectoEscrituraDialog({
           </div>
 
           <div className="text-xs text-muted-foreground space-y-1">
-            <p>• Formatos permitidos: .docx, .doc y .pdf</p>
+            <p>• Solo archivos PDF</p>
             <p>• Tamaño máximo: 10 MB</p>
+            <p>• Por seguridad, solo se aceptan PDF para evitar ediciones del documento</p>
             <p>• Cuenta de cobranza: {cuentaCobranzaId}</p>
           </div>
         </div>
