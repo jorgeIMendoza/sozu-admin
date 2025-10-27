@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.check-property-sold-status]
 verify_jwt = false
+
+[functions.generar-draft-proyecto-escritura]
+verify_jwt = false

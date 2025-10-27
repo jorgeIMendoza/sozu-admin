@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Upload, Users, CheckCircle, XCircle, Loader2, Download, Eye } from "lucide-react";
+import { FileText, Upload, Users, CheckCircle, XCircle, Loader2, Download, Eye, FileDown } from "lucide-react";
 import { CompradoresConDocumentosDialog } from "@/components/admin/CompradoresConDocumentosDialog";
 import SubirProyectoEscrituraDialog from "@/components/admin/SubirProyectoEscrituraDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -279,6 +279,48 @@ export default function RevisionDocumentacion() {
     setFiltroCuenta("");
   };
 
+  // Mutation para generar draft
+  const generarDraftMutation = useMutation({
+    mutationFn: async (cuentaId: number) => {
+      const { data, error } = await supabase.functions.invoke('generar-draft-proyecto-escritura', {
+        body: { id_cuenta_cobranza: cuentaId }
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Error al generar draft');
+      
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Draft generado",
+        description: "El documento se está descargando...",
+      });
+
+      // Descargar automáticamente
+      const blob = new Blob([data.content], { type: 'application/msword' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "No se pudo generar el draft",
+      });
+    },
+  });
+
+  const handleGenerarDraft = (cuentaId: number) => {
+    generarDraftMutation.mutate(cuentaId);
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <Card>
@@ -459,6 +501,21 @@ export default function RevisionDocumentacion() {
                             cuentaCobranzaId={cuenta.cuenta_id}
                             fetchCompradores={fetchCompradores}
                           />
+                          {notarioSeleccionado?.genera_proyecto_escritura && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleGenerarDraft(cuenta.cuenta_id)}
+                              disabled={generarDraftMutation.isPending}
+                            >
+                              {generarDraftMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <FileDown className="h-4 w-4" />
+                              )}
+                              Generar Draft
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             onClick={() => handleSubirProyecto(cuenta.cuenta_id)}
