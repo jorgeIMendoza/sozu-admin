@@ -87,14 +87,14 @@ Deno.serve(async (req) => {
       throw new Error('No se pudo obtener la propiedad');
     }
 
-    // Solo procesar si el estatus actual es 4 (Apartado)
-    if (propiedad.id_estatus_disponibilidad !== 4) {
-      console.log(`[check-property-sold-status] Propiedad ${propiedad.id} no está en estatus Apartado (estatus actual: ${propiedad.id_estatus_disponibilidad})`);
+    // Validar que el estatus sea 4 (Apartado) o 5 (Vendido)
+    if (propiedad.id_estatus_disponibilidad !== 4 && propiedad.id_estatus_disponibilidad !== 5) {
+      console.log(`[check-property-sold-status] Propiedad ${propiedad.id} no está en estatus Apartado ni Vendido (estatus actual: ${propiedad.id_estatus_disponibilidad})`);
       return new Response(
         JSON.stringify({
           success: true,
           status_changed: false,
-          message: 'La propiedad no está en estatus Apartado',
+          message: 'La propiedad no está en estatus Apartado ni Vendido',
           conditions_met: {
             enganche_completado: false,
             contrato_verificado: false
@@ -104,6 +104,8 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log(`[check-property-sold-status] Propiedad ${propiedad.id} con estatus: ${propiedad.id_estatus_disponibilidad} (${propiedad.id_estatus_disponibilidad === 4 ? 'Apartado' : 'Vendido'})`);
 
     // 3. VERIFICAR SI SOLO QUEDA PENDIENTE EL PAGO A CONTRA ENTREGA
     const { data: todosAcuerdos, error: todosAcuerdosError } = await supabase
@@ -138,51 +140,72 @@ Deno.serve(async (req) => {
 
     // Si solo queda pago a contra entrega pendiente, des-verificar documentos de compradores
     if (soloQuedaContraEntrega) {
-      console.log(`[check-property-sold-status] 🔄 Solo queda pago a contra entrega pendiente. Desverificando documentos...`);
+      console.log(`[check-property-sold-status] 🔄 Solo queda pago a contra entrega pendiente.`);
       
-      const { data: compradores, error: compradoresError } = await supabase
-        .from('compradores')
-        .select('id_persona')
-        .eq('id_cuenta_cobranza', id_cuenta_cobranza)
-        .eq('activo', true);
-
-      if (compradoresError) {
-        console.error('[check-property-sold-status] Error obteniendo compradores:', compradoresError);
-        throw new Error('Error al obtener compradores');
-      }
-
-      if (compradores && compradores.length > 0) {
-        const idsPersonas = compradores.map(c => c.id_persona);
-        console.log(`[check-property-sold-status] Desverificando documentos de ${idsPersonas.length} comprador(es): ${idsPersonas.join(', ')}`);
-
-        const { error: docsError } = await supabase
-          .from('documentos')
-          .update({ es_verificado: false })
-          .in('id_persona', idsPersonas)
+      // Solo desverificar documentos si la propiedad está en estatus Vendido (5)
+      if (propiedad.id_estatus_disponibilidad === 5) {
+        console.log('[check-property-sold-status] Propiedad en estatus Vendido. Desverificando documentos...');
+        
+        const { data: compradores, error: compradoresError } = await supabase
+          .from('compradores')
+          .select('id_persona')
+          .eq('id_cuenta_cobranza', id_cuenta_cobranza)
           .eq('activo', true);
 
-        if (docsError) {
-          console.error('[check-property-sold-status] Error desverificando documentos:', docsError);
-          throw new Error('Error al desverificar documentos de compradores');
+        if (compradoresError) {
+          console.error('[check-property-sold-status] Error obteniendo compradores:', compradoresError);
+          throw new Error('Error al obtener compradores');
         }
 
-        console.log(`[check-property-sold-status] ✅ Documentos desverificados exitosamente (solo quedaba contra entrega)`);
-      }
+        if (compradores && compradores.length > 0) {
+          const idsPersonas = compradores.map(c => c.id_persona);
+          console.log(`[check-property-sold-status] Desverificando documentos de ${idsPersonas.length} comprador(es): ${idsPersonas.join(', ')}`);
 
-      // Retornar respuesta exitosa SIN cambiar estatus de propiedad
-      return new Response(
-        JSON.stringify({
-          success: true,
-          status_changed: false,
-          message: 'Documentos de compradores desverificados: solo queda pago a contra entrega pendiente',
-          conditions_met: {
-            enganche_completado: false,
-            contrato_verificado: false
-          },
-          id_propiedad: propiedad.id
-        } as CheckSoldStatusResponse),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+          const { error: docsError } = await supabase
+            .from('documentos')
+            .update({ es_verificado: false })
+            .in('id_persona', idsPersonas)
+            .eq('activo', true)
+            .neq('id_tipo_documento', 22); // Excluir Factura PDF
+
+          if (docsError) {
+            console.error('[check-property-sold-status] Error desverificando documentos:', docsError);
+            throw new Error('Error al desverificar documentos de compradores');
+          }
+
+          console.log(`[check-property-sold-status] ✅ Documentos desverificados exitosamente (solo quedaba contra entrega)`);
+        }
+
+        // Retornar respuesta exitosa SIN cambiar estatus de propiedad
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status_changed: false,
+            message: 'Documentos desverificados - solo queda pago a contra entrega',
+            conditions_met: {
+              enganche_completado: true,
+              contrato_verificado: true
+            },
+            id_propiedad: propiedad.id
+          } as CheckSoldStatusResponse),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } else {
+        console.log(`[check-property-sold-status] Propiedad NO está en estatus Vendido (estatus actual: ${propiedad.id_estatus_disponibilidad}). No se desverifican documentos.`);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status_changed: false,
+            message: 'Solo queda contra entrega pero propiedad no está en estatus Vendido',
+            conditions_met: {
+              enganche_completado: true,
+              contrato_verificado: false
+            },
+            id_propiedad: propiedad.id
+          } as CheckSoldStatusResponse),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // 3. CONDICIÓN 1: Verificar que todos los acuerdos de Apartado (1) y Enganche (2) estén completamente pagados
@@ -224,29 +247,37 @@ Deno.serve(async (req) => {
 
     // 5. Si AMBAS condiciones se cumplen, actualizar el estatus de la propiedad a Vendido
     if (engancheCompletado && contratoVerificado) {
-      console.log(`[check-property-sold-status] ✅ Todas las condiciones cumplidas. Actualizando propiedad ${propiedad.id} a estatus Vendido (5)`);
+      console.log(`[check-property-sold-status] ✅ Todas las condiciones cumplidas.`);
+      
+      // Solo actualizar estatus si está en estatus 4 (Apartado)
+      if (propiedad.id_estatus_disponibilidad === 4) {
+        console.log(`[check-property-sold-status] Actualizando propiedad ${propiedad.id} de Apartado (4) a Vendido (5)`);
+        
+        const { error: updateError } = await supabase
+          .from('propiedades')
+          .update({
+            id_estatus_disponibilidad: 5, // Vendido
+            fecha_actualizacion: new Date().toISOString()
+          })
+          .eq('id', propiedad.id);
 
-      // Actualizar el estatus de la propiedad (SIN des-verificar documentos)
-      const { error: updateError } = await supabase
-        .from('propiedades')
-        .update({
-          id_estatus_disponibilidad: 5, // Vendido
-          fecha_actualizacion: new Date().toISOString()
-        })
-        .eq('id', propiedad.id);
+        if (updateError) {
+          console.error('[check-property-sold-status] Error actualizando propiedad:', updateError);
+          throw new Error('Error al actualizar el estatus de la propiedad');
+        }
 
-      if (updateError) {
-        console.error('[check-property-sold-status] Error actualizando propiedad:', updateError);
-        throw new Error('Error al actualizar el estatus de la propiedad');
+        console.log(`[check-property-sold-status] 🎉 Propiedad ${propiedad.id} actualizada exitosamente a estatus Vendido`);
+      } else {
+        console.log(`[check-property-sold-status] Propiedad ya no está en estatus Apartado (estatus actual: ${propiedad.id_estatus_disponibilidad}), no se actualiza estatus`);
       }
-
-      console.log(`[check-property-sold-status] 🎉 Propiedad ${propiedad.id} actualizada exitosamente a estatus Vendido`);
 
       return new Response(
         JSON.stringify({
           success: true,
-          status_changed: true,
-          message: 'La propiedad ha sido marcada como Vendida automáticamente',
+          status_changed: propiedad.id_estatus_disponibilidad === 4,
+          message: propiedad.id_estatus_disponibilidad === 4 
+            ? 'La propiedad ha sido marcada como Vendida automáticamente'
+            : 'Condiciones cumplidas pero propiedad ya no está en estatus Apartado',
           conditions_met: {
             enganche_completado: true,
             contrato_verificado: true
