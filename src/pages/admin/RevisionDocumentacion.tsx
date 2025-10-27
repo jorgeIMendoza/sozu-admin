@@ -121,7 +121,7 @@ export default function RevisionDocumentacion() {
               id,
               numero_propiedad,
               id_estatus_disponibilidad,
-              edificios_modelos!propiedades_id_edificio_modelo_fkey!inner (
+              edificios_modelos!fk_propiedades_edificio_modelo!inner (
                 modelos!inner (
                   nombre
                 ),
