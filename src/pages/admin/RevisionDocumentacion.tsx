@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -20,9 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Upload, Users, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { FileText, Upload, Users, CheckCircle, XCircle, Loader2, Download, Eye } from "lucide-react";
 import { CompradoresConDocumentosDialog } from "@/components/admin/CompradoresConDocumentosDialog";
 import SubirProyectoEscrituraDialog from "@/components/admin/SubirProyectoEscrituraDialog";
+import { useToast } from "@/hooks/use-toast";
 
 interface CuentaEscrituracion {
   cuenta_id: number;
@@ -39,6 +41,8 @@ interface CuentaEscrituracion {
 }
 
 export default function RevisionDocumentacion() {
+  const { toast } = useToast();
+  const [selectedNotarioId, setSelectedNotarioId] = useState<number | null>(null);
   const [filtroProyecto, setFiltroProyecto] = useState<string>("");
   const [filtroEdificio, setFiltroEdificio] = useState<string>("");
   const [filtroModelo, setFiltroModelo] = useState<string>("");
@@ -48,6 +52,24 @@ export default function RevisionDocumentacion() {
 
   const [selectedCuentaId, setSelectedCuentaId] = useState<number | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+
+  // Query para obtener notarios activos
+  const { data: notarios = [] } = useQuery({
+    queryKey: ['notarios-activos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notarios')
+        .select('*')
+        .eq('activo', true)
+        .order('nombre');
+      
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Obtener notario seleccionado
+  const notarioSeleccionado = notarios.find(n => n.id === selectedNotarioId);
 
   // Función para obtener compradores con documentos
   const fetchCompradores = async (cuentaId: number) => {
@@ -108,8 +130,9 @@ export default function RevisionDocumentacion() {
 
   // Query para obtener cuentas en escrituración
   const { data: cuentas, isLoading, refetch } = useQuery({
-    queryKey: ['cuentas-escrituracion', filtroProyecto, filtroEdificio, filtroModelo, filtroPropiedad, filtroDueno, filtroCuenta],
+    queryKey: ['cuentas-escrituracion', selectedNotarioId, filtroProyecto, filtroEdificio, filtroModelo, filtroPropiedad, filtroDueno, filtroCuenta],
     queryFn: async () => {
+      if (!selectedNotarioId) return [];
       console.log('Ejecutando query de cuentas en escrituración...');
       
       let query = supabase
@@ -117,6 +140,7 @@ export default function RevisionDocumentacion() {
         .select(`
           id,
           precio_final,
+          id_notario,
           ofertas!fk_cuentas_cobranza_oferta!inner (
             id,
             propiedades!ofertas_id_propiedad_fkey!inner (
@@ -142,7 +166,8 @@ export default function RevisionDocumentacion() {
         .eq('activo', true)
         .eq('ofertas.activo', true)
         .eq('ofertas.propiedades.activo', true)
-        .eq('ofertas.propiedades.id_estatus_disponibilidad', 7); // Solo Escrituración
+        .eq('ofertas.propiedades.id_estatus_disponibilidad', 7) // Solo Escrituración
+        .eq('id_notario', selectedNotarioId);
 
       // Aplicar filtros
       if (filtroPropiedad) {
@@ -228,7 +253,17 @@ export default function RevisionDocumentacion() {
 
       return cuentasFiltradas;
     },
+    enabled: !!selectedNotarioId,
   });
+
+  const handleVerTemplate = () => {
+    if (notarioSeleccionado?.url_template_proyecto_contrato) {
+      const { data } = supabase.storage
+        .from('templates_proyecto_escritura')
+        .getPublicUrl(notarioSeleccionado.url_template_proyecto_contrato);
+      window.open(data.publicUrl, '_blank');
+    }
+  };
 
   const handleSubirProyecto = (cuentaId: number) => {
     setSelectedCuentaId(cuentaId);
@@ -247,15 +282,72 @@ export default function RevisionDocumentacion() {
   return (
     <div className="container mx-auto py-6 space-y-6">
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-4">
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-6 w-6" />
             Revisión de Documentación - Escrituración
           </CardTitle>
+          
+          {/* Selector de Notario */}
+          <div className="space-y-2">
+            <Label>Seleccionar Notario</Label>
+            <div className="flex gap-4 items-start">
+              <Select
+                value={selectedNotarioId?.toString() || ""}
+                onValueChange={(value) => setSelectedNotarioId(parseInt(value))}
+              >
+                <SelectTrigger className="w-full max-w-md">
+                  <SelectValue placeholder="Selecciona un notario..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {notarios.map((notario) => (
+                    <SelectItem key={notario.id} value={notario.id.toString()}>
+                      {notario.nombre} - {notario.notaria}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {notarioSeleccionado?.genera_proyecto_escritura && notarioSeleccionado?.url_template_proyecto_contrato && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleVerTemplate}
+                  className="whitespace-nowrap"
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Ver Template
+                </Button>
+              )}
+            </div>
+            
+            {notarioSeleccionado && (
+              <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
+                <span className="font-medium">{notarioSeleccionado.nombre}</span>
+                <span>•</span>
+                <span>{notarioSeleccionado.notaria}</span>
+                {notarioSeleccionado.genera_proyecto_escritura && (
+                  <>
+                    <span>•</span>
+                    <Badge variant="secondary" className="text-xs">
+                      Genera Proyecto Escritura
+                    </Badge>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Filtros */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {!selectedNotarioId ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Selecciona un notario para ver las cuentas en escrituración</p>
+            </div>
+          ) : (
+            <>
+              {/* Filtros */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium">Proyecto</label>
               <Input
@@ -382,7 +474,9 @@ export default function RevisionDocumentacion() {
                 </TableBody>
               </Table>
             )}
-          </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

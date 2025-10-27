@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, RotateCcw } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 
 type Notario = {
@@ -21,6 +22,8 @@ type Notario = {
   telefono?: string;
   direccion?: string;
   activo: boolean;
+  genera_proyecto_escritura: boolean;
+  url_template_proyecto_contrato?: string;
 };
 
 export default function Notarios() {
@@ -42,6 +45,9 @@ export default function Notarios() {
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
   const [direccion, setDireccion] = useState("");
+  const [generaProyectoEscritura, setGeneraProyectoEscritura] = useState(false);
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
 
   const { data: activeNotarios = [], isLoading: loadingActiveNotarios } = useQuery({
     queryKey: ['notarios', 'active'],
@@ -190,6 +196,8 @@ export default function Notarios() {
     setEmail("");
     setTelefono("");
     setDireccion("");
+    setGeneraProyectoEscritura(false);
+    setTemplateFile(null);
   };
 
   const handleNew = () => {
@@ -204,6 +212,8 @@ export default function Notarios() {
     setEmail(notario.email);
     setTelefono(notario.telefono || "");
     setDireccion(notario.direccion || "");
+    setGeneraProyectoEscritura(notario.genera_proyecto_escritura || false);
+    setTemplateFile(null);
     setIsEditDialogOpen(true);
   };
 
@@ -233,7 +243,7 @@ export default function Notarios() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!nombre.trim() || !notaria.trim() || !email.trim()) {
@@ -245,18 +255,97 @@ export default function Notarios() {
       return;
     }
 
-    const notarioData = {
-      nombre: nombre.trim(),
-      notaria: notaria.trim(),
-      email: email.trim(),
-      telefono: telefono.trim() || null,
-      direccion: direccion.trim() || null,
-    };
+    if (generaProyectoEscritura && templateFile && !editingNotario) {
+      // Upload template file first
+      setUploadingTemplate(true);
+      try {
+        const fileExt = templateFile.name.split('.').pop();
+        const fileName = `template-${Date.now()}.${fileExt}`;
+        const { error: uploadError, data } = await supabase.storage
+          .from('templates_proyecto_escritura')
+          .upload(fileName, templateFile);
 
-    if (editingNotario) {
-      updateMutation.mutate(notarioData);
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('templates_proyecto_escritura')
+          .getPublicUrl(fileName);
+
+        const notarioData = {
+          nombre: nombre.trim(),
+          notaria: notaria.trim(),
+          email: email.trim(),
+          telefono: telefono.trim() || null,
+          direccion: direccion.trim() || null,
+          genera_proyecto_escritura: generaProyectoEscritura,
+          url_template_proyecto_contrato: data.path,
+        };
+
+        createMutation.mutate(notarioData);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: `Error al subir el template: ${error.message}`,
+          variant: "destructive",
+        });
+      } finally {
+        setUploadingTemplate(false);
+      }
+    } else if (generaProyectoEscritura && templateFile && editingNotario) {
+      // Update template file
+      setUploadingTemplate(true);
+      try {
+        // Delete old file if exists
+        if (editingNotario.url_template_proyecto_contrato) {
+          await supabase.storage
+            .from('templates_proyecto_escritura')
+            .remove([editingNotario.url_template_proyecto_contrato]);
+        }
+
+        const fileExt = templateFile.name.split('.').pop();
+        const fileName = `template-${Date.now()}.${fileExt}`;
+        const { error: uploadError, data } = await supabase.storage
+          .from('templates_proyecto_escritura')
+          .upload(fileName, templateFile);
+
+        if (uploadError) throw uploadError;
+
+        const notarioData = {
+          nombre: nombre.trim(),
+          notaria: notaria.trim(),
+          email: email.trim(),
+          telefono: telefono.trim() || null,
+          direccion: direccion.trim() || null,
+          genera_proyecto_escritura: generaProyectoEscritura,
+          url_template_proyecto_contrato: data.path,
+        };
+
+        updateMutation.mutate(notarioData);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: `Error al subir el template: ${error.message}`,
+          variant: "destructive",
+        });
+      } finally {
+        setUploadingTemplate(false);
+      }
     } else {
-      createMutation.mutate(notarioData);
+      const notarioData = {
+        nombre: nombre.trim(),
+        notaria: notaria.trim(),
+        email: email.trim(),
+        telefono: telefono.trim() || null,
+        direccion: direccion.trim() || null,
+        genera_proyecto_escritura: generaProyectoEscritura,
+        url_template_proyecto_contrato: editingNotario?.url_template_proyecto_contrato || null,
+      };
+
+      if (editingNotario) {
+        updateMutation.mutate(notarioData);
+      } else {
+        createMutation.mutate(notarioData);
+      }
     }
   };
 
@@ -510,6 +599,55 @@ export default function Notarios() {
           />
         </div>
 
+        <div className="flex items-center justify-between border-t pt-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="genera-proyecto">Genera Proyecto de Escritura</Label>
+            <p className="text-sm text-muted-foreground">
+              Habilitar si este notario genera proyectos de escritura
+            </p>
+          </div>
+          <Switch
+            id="genera-proyecto"
+            checked={generaProyectoEscritura}
+            onCheckedChange={setGeneraProyectoEscritura}
+          />
+        </div>
+
+        {generaProyectoEscritura && (
+          <div className="space-y-2 border border-border rounded-lg p-4 bg-muted/30">
+            <Label htmlFor="template">Template Proyecto de Contrato (.docx)</Label>
+            <div className="flex gap-2">
+              <Input
+                id="template"
+                type="file"
+                accept=".docx,.doc"
+                onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
+                className="flex-1"
+              />
+              {editingNotario?.url_template_proyecto_contrato && !templateFile && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const { data } = supabase.storage
+                      .from('templates_proyecto_escritura')
+                      .getPublicUrl(editingNotario.url_template_proyecto_contrato!);
+                    window.open(data.publicUrl, '_blank');
+                  }}
+                >
+                  Ver Actual
+                </Button>
+              )}
+            </div>
+            {templateFile && (
+              <p className="text-sm text-muted-foreground">
+                Archivo seleccionado: {templateFile.name}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-4 pt-4">
           <Button
             type="button"
@@ -529,10 +667,10 @@ export default function Notarios() {
           </Button>
           <Button
             type="submit"
-            disabled={createMutation.isPending || updateMutation.isPending}
+            disabled={createMutation.isPending || updateMutation.isPending || uploadingTemplate}
             className="flex-1"
           >
-            {createMutation.isPending || updateMutation.isPending ? 'Guardando...' : 'Guardar'}
+            {uploadingTemplate ? 'Subiendo template...' : createMutation.isPending || updateMutation.isPending ? 'Guardando...' : 'Guardar'}
           </Button>
         </div>
       </form>

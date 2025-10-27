@@ -2118,10 +2118,12 @@ export type Database = {
           email: string
           fecha_actualizacion: string
           fecha_creacion: string
+          genera_proyecto_escritura: boolean
           id: number
           nombre: string
           notaria: string
           telefono: string | null
+          url_template_proyecto_contrato: string | null
         }
         Insert: {
           activo?: boolean
@@ -2129,10 +2131,12 @@ export type Database = {
           email: string
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          genera_proyecto_escritura?: boolean
+          id?: number
           nombre: string
           notaria: string
           telefono?: string | null
+          url_template_proyecto_contrato?: string | null
         }
         Update: {
           activo?: boolean
@@ -2140,10 +2144,12 @@ export type Database = {
           email?: string
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          genera_proyecto_escritura?: boolean
+          id?: number
           nombre?: string
           notaria?: string
           telefono?: string | null
+          url_template_proyecto_contrato?: string | null
         }
         Relationships: []
       }
