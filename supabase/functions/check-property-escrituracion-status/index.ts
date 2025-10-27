@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
         id,
         ofertas!fk_ccob_oferta (
           id_propiedad,
-          propiedades!inner (
+          propiedades!fk_ofertas_propiedad (
             id,
             id_estatus_disponibilidad,
             numero_propiedad
