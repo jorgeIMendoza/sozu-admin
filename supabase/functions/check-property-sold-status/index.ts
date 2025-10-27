@@ -105,6 +105,86 @@ Deno.serve(async (req) => {
       );
     }
 
+    // 3. VERIFICAR SI SOLO QUEDA PENDIENTE EL PAGO A CONTRA ENTREGA
+    const { data: todosAcuerdos, error: todosAcuerdosError } = await supabase
+      .from('acuerdos_pago')
+      .select('id, id_concepto, pago_completado')
+      .eq('id_cuenta_cobranza', id_cuenta_cobranza)
+      .eq('activo', true);
+
+    if (todosAcuerdosError) {
+      console.error('[check-property-sold-status] Error obteniendo todos los acuerdos:', todosAcuerdosError);
+      throw new Error('Error al verificar acuerdos de pago');
+    }
+
+    // Filtrar acuerdos pendientes EXCLUYENDO el pago a contra entrega (id_concepto=3)
+    const acuerdosPendientesNoContraEntrega = todosAcuerdos?.filter(
+      acuerdo => !acuerdo.pago_completado && acuerdo.id_concepto !== 3
+    ) || [];
+
+    // Verificar si existe un acuerdo de contra entrega pendiente
+    const hayContraEntregaPendiente = todosAcuerdos?.some(
+      acuerdo => acuerdo.id_concepto === 3 && !acuerdo.pago_completado
+    ) || false;
+
+    const soloQuedaContraEntrega = 
+      acuerdosPendientesNoContraEntrega.length === 0 && 
+      hayContraEntregaPendiente;
+
+    console.log(`[check-property-sold-status] Análisis de acuerdos pendientes:`);
+    console.log(`  - Acuerdos pendientes (sin contra entrega): ${acuerdosPendientesNoContraEntrega.length}`);
+    console.log(`  - Hay contra entrega pendiente: ${hayContraEntregaPendiente}`);
+    console.log(`  - Solo queda contra entrega: ${soloQuedaContraEntrega}`);
+
+    // Si solo queda pago a contra entrega pendiente, des-verificar documentos de compradores
+    if (soloQuedaContraEntrega) {
+      console.log(`[check-property-sold-status] 🔄 Solo queda pago a contra entrega pendiente. Desverificando documentos...`);
+      
+      const { data: compradores, error: compradoresError } = await supabase
+        .from('compradores')
+        .select('id_persona')
+        .eq('id_cuenta_cobranza', id_cuenta_cobranza)
+        .eq('activo', true);
+
+      if (compradoresError) {
+        console.error('[check-property-sold-status] Error obteniendo compradores:', compradoresError);
+        throw new Error('Error al obtener compradores');
+      }
+
+      if (compradores && compradores.length > 0) {
+        const idsPersonas = compradores.map(c => c.id_persona);
+        console.log(`[check-property-sold-status] Desverificando documentos de ${idsPersonas.length} comprador(es): ${idsPersonas.join(', ')}`);
+
+        const { error: docsError } = await supabase
+          .from('documentos')
+          .update({ es_verificado: false })
+          .in('id_persona', idsPersonas)
+          .eq('activo', true);
+
+        if (docsError) {
+          console.error('[check-property-sold-status] Error desverificando documentos:', docsError);
+          throw new Error('Error al desverificar documentos de compradores');
+        }
+
+        console.log(`[check-property-sold-status] ✅ Documentos desverificados exitosamente (solo quedaba contra entrega)`);
+      }
+
+      // Retornar respuesta exitosa SIN cambiar estatus de propiedad
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status_changed: false,
+          message: 'Documentos de compradores desverificados: solo queda pago a contra entrega pendiente',
+          conditions_met: {
+            enganche_completado: false,
+            contrato_verificado: false
+          },
+          id_propiedad: propiedad.id
+        } as CheckSoldStatusResponse),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // 3. CONDICIÓN 1: Verificar que todos los acuerdos de Apartado (1) y Enganche (2) estén completamente pagados
     const { data: acuerdos, error: acuerdosError } = await supabase
       .from('acuerdos_pago')
@@ -142,41 +222,11 @@ Deno.serve(async (req) => {
 
     console.log(`[check-property-sold-status] Contrato verificado: ${contratoVerificado}`);
 
-    // 5. Si AMBAS condiciones se cumplen, actualizar el estatus de la propiedad
+    // 5. Si AMBAS condiciones se cumplen, actualizar el estatus de la propiedad a Vendido
     if (engancheCompletado && contratoVerificado) {
       console.log(`[check-property-sold-status] ✅ Todas las condiciones cumplidas. Actualizando propiedad ${propiedad.id} a estatus Vendido (5)`);
 
-      // 5.1. PRIMERO: Desverificar todos los documentos de los compradores
-      const { data: compradores, error: compradoresError } = await supabase
-        .from('compradores')
-        .select('id_persona')
-        .eq('id_cuenta_cobranza', id_cuenta_cobranza)
-        .eq('activo', true);
-
-      if (compradoresError) {
-        console.error('[check-property-sold-status] Error obteniendo compradores:', compradoresError);
-        throw new Error('Error al obtener compradores');
-      }
-
-      if (compradores && compradores.length > 0) {
-        const idsPersonas = compradores.map(c => c.id_persona);
-        console.log(`[check-property-sold-status] Desverificando documentos de ${idsPersonas.length} comprador(es): ${idsPersonas.join(', ')}`);
-
-        const { error: docsError } = await supabase
-          .from('documentos')
-          .update({ es_verificado: false })
-          .in('id_persona', idsPersonas)
-          .eq('activo', true);
-
-        if (docsError) {
-          console.error('[check-property-sold-status] Error desverificando documentos:', docsError);
-          throw new Error('Error al desverificar documentos de compradores');
-        }
-
-        console.log(`[check-property-sold-status] ✅ Documentos de compradores desverificados exitosamente`);
-      }
-
-      // 5.2. LUEGO: Actualizar el estatus de la propiedad
+      // Actualizar el estatus de la propiedad (SIN des-verificar documentos)
       const { error: updateError } = await supabase
         .from('propiedades')
         .update({
