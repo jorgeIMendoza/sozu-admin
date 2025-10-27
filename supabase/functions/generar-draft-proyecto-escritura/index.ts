@@ -109,11 +109,11 @@ serve(async (req) => {
 
     // Datos para reemplazar en el template
     const mergeData = {
-      proyecto: proyecto.nombre,
-      edificio: edificio.nombre,
+      nombre_proyecto: proyecto.nombre,
+      nombre_edificio: edificio.nombre,
       numero_propiedad: propiedad.numero_propiedad,
       precio_final: cuenta.precio_final.toLocaleString('es-MX', { minimumFractionDigits: 2 }),
-      comprador: compradoresNombres,
+      nombre_comprador: compradoresNombres,
     };
 
     console.log('Generando documento con datos:', mergeData);
