@@ -21,6 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FileText, Upload, Users, CheckCircle, XCircle, Loader2, Download, Eye, FileDown, FileEdit } from "lucide-react";
 import { CompradoresConDocumentosDialog } from "@/components/admin/CompradoresConDocumentosDialog";
 import SubirProyectoEscrituraDialog from "@/components/admin/SubirProyectoEscrituraDialog";
@@ -527,56 +533,64 @@ export default function RevisionDocumentacion() {
                         />
                       </TableCell>
                       <TableCell className="text-center">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!cuenta.tiene_proyecto_escritura}
-                          onClick={async () => {
-                            if (!cuenta.tiene_proyecto_escritura) return;
-                            
-                            try {
-                              const { data } = await supabase
-                                .from('documentos')
-                                .select('url')
-                                .eq('id_cuenta_cobranza', cuenta.cuenta_id)
-                                .eq('id_tipo_documento', 29)
-                                .eq('activo', true)
-                                .maybeSingle();
-                              
-                              if (data?.url) {
-                                const filePath = data.url.replace('/proyectos_escritura/', '');
-                                const { data: signedUrlData, error } = await supabase.storage
-                                  .from('proyectos_escritura')
-                                  .createSignedUrl(filePath, 3600);
-                                
-                                if (error) {
-                                  toast({
-                                    title: "Error",
-                                    description: "Error al obtener el documento",
-                                    variant: "destructive"
-                                  });
-                                  console.error(error);
-                                  return;
-                                }
-                                
-                                if (signedUrlData?.signedUrl) {
-                                  window.open(signedUrlData.signedUrl, '_blank');
-                                }
-                              }
-                            } catch (error) {
-                              console.error('Error:', error);
-                              toast({
-                                title: "Error",
-                                description: "Error al abrir el documento",
-                                variant: "destructive"
-                              });
-                            }
-                          }}
-                          className={cuenta.tiene_proyecto_escritura ? "" : "opacity-40 cursor-not-allowed"}
-                        >
-                          <Eye className="h-4 w-4" />
-                          Ver
-                        </Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={!cuenta.tiene_proyecto_escritura}
+                                onClick={async () => {
+                                  if (!cuenta.tiene_proyecto_escritura) return;
+                                  
+                                  try {
+                                    const { data } = await supabase
+                                      .from('documentos')
+                                      .select('url')
+                                      .eq('id_cuenta_cobranza', cuenta.cuenta_id)
+                                      .eq('id_tipo_documento', 29)
+                                      .eq('activo', true)
+                                      .maybeSingle();
+                                    
+                                    if (data?.url) {
+                                      const filePath = data.url.replace('/proyectos_escritura/', '');
+                                      const { data: signedUrlData, error } = await supabase.storage
+                                        .from('proyectos_escritura')
+                                        .createSignedUrl(filePath, 3600);
+                                      
+                                      if (error) {
+                                        toast({
+                                          title: "Error",
+                                          description: "Error al obtener el documento",
+                                          variant: "destructive"
+                                        });
+                                        console.error(error);
+                                        return;
+                                      }
+                                      
+                                      if (signedUrlData?.signedUrl) {
+                                        window.open(signedUrlData.signedUrl, '_blank');
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.error('Error:', error);
+                                    toast({
+                                      title: "Error",
+                                      description: "Error al abrir el documento",
+                                      variant: "destructive"
+                                    });
+                                  }
+                                }}
+                                className={cuenta.tiene_proyecto_escritura ? "" : "opacity-40 cursor-not-allowed"}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Ver Proyecto de Escritura</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2 justify-center">
