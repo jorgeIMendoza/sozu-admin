@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       .from('cuentas_cobranza')
       .select(`
         id,
-        ofertas!inner (
+        ofertas!fk_ccob_oferta (
           id_propiedad,
           propiedades!inner (
             id,
