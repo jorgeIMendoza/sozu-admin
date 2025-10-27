@@ -307,8 +307,12 @@ export default function RevisionDocumentacion() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // Descargar automáticamente
-      const blob = new Blob([bytes], { type: 'application/rtf' });
+      // Descargar automáticamente (detectar tipo según extensión)
+      const extension = data.fileName.split('.').pop()?.toLowerCase();
+      const mimeType = extension === 'doc' ? 'application/msword' : 
+                       extension === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+                       'application/rtf';
+      const blob = new Blob([bytes], { type: mimeType });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

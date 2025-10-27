@@ -122,17 +122,27 @@ serve(async (req) => {
       documentContent = documentContent.replace(regex, value);
     }
 
+    // Obtener la extensión del template original
+    const templateExtension = notario.url_template_proyecto_contrato.split('.').pop() || 'doc';
+    
     // Crear nombre del archivo con proyecto y numero_propiedad
     const proyectoClean = proyecto.nombre.replace(/[^a-zA-Z0-9]/g, '_');
     const propiedadClean = propiedad.numero_propiedad.replace(/[^a-zA-Z0-9]/g, '_');
-    const fileName = `proyecto_escritura_${proyectoClean}_${propiedadClean}.rtf`;
+    const fileName = `proyecto_escritura_${proyectoClean}_${propiedadClean}.${templateExtension}`;
 
     console.log('Draft generado exitosamente');
 
     // Convertir el contenido de vuelta a ArrayBuffer manteniendo la codificación
     const encoder = new TextEncoder();
     const uint8Array = encoder.encode(documentContent);
-    const base64Content = btoa(String.fromCharCode(...uint8Array));
+    
+    // Convertir a base64 en chunks para evitar "Maximum call stack size exceeded"
+    let base64Content = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize);
+      base64Content += btoa(String.fromCharCode(...chunk));
+    }
 
     return new Response(
       JSON.stringify({
