@@ -1402,7 +1402,7 @@ export default function Pagos() {
                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                      <Button 
-                                       variant="secondary" 
+                                       variant="outline" 
                                        size="icon"
                                        onClick={() => handleEditCuenta(cuenta)}
                                      >
