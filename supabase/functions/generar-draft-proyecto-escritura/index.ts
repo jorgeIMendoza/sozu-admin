@@ -90,8 +90,9 @@ serve(async (req) => {
 
     if (templateError) throw templateError;
 
-    // Leer el contenido del template
-    const templateContent = await templateData.text();
+    // Leer el contenido del template como ArrayBuffer y luego convertir a string
+    const arrayBuffer = await templateData.arrayBuffer();
+    const templateContent = new TextDecoder('utf-8').decode(arrayBuffer);
 
     // Extraer datos
     const propiedad = cuenta.ofertas.propiedades;
@@ -128,10 +129,15 @@ serve(async (req) => {
 
     console.log('Draft generado exitosamente');
 
+    // Convertir el contenido de vuelta a ArrayBuffer manteniendo la codificación
+    const encoder = new TextEncoder();
+    const uint8Array = encoder.encode(documentContent);
+    const base64Content = btoa(String.fromCharCode(...uint8Array));
+
     return new Response(
       JSON.stringify({
         success: true,
-        content: documentContent,
+        content: base64Content,
         fileName: fileName,
         message: 'Draft generado exitosamente'
       }),

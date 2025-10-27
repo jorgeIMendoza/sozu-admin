@@ -300,8 +300,15 @@ export default function RevisionDocumentacion() {
         description: "El documento se está descargando...",
       });
 
+      // Decodificar el contenido base64
+      const binaryString = atob(data.content);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
       // Descargar automáticamente
-      const blob = new Blob([data.content], { type: 'application/rtf' });
+      const blob = new Blob([bytes], { type: 'application/rtf' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
