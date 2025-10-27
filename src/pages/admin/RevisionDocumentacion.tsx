@@ -21,9 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Upload, Users, CheckCircle, XCircle, Loader2, Download, Eye, FileDown } from "lucide-react";
+import { FileText, Upload, Users, CheckCircle, XCircle, Loader2, Download, Eye, FileDown, FileEdit } from "lucide-react";
 import { CompradoresConDocumentosDialog } from "@/components/admin/CompradoresConDocumentosDialog";
 import SubirProyectoEscrituraDialog from "@/components/admin/SubirProyectoEscrituraDialog";
+import ActualizarTemplateDialog from "@/components/admin/ActualizarTemplateDialog";
 import { useToast } from "@/hooks/use-toast";
 
 interface CuentaEscrituracion {
@@ -52,6 +53,7 @@ export default function RevisionDocumentacion() {
 
   const [selectedCuentaId, setSelectedCuentaId] = useState<number | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [showUpdateTemplateDialog, setShowUpdateTemplateDialog] = useState(false);
   const [generatingCuentaId, setGeneratingCuentaId] = useState<number | null>(null);
 
   // Query para obtener notarios activos
@@ -365,16 +367,29 @@ export default function RevisionDocumentacion() {
                 </SelectContent>
               </Select>
               
-              {notarioSeleccionado?.genera_proyecto_escritura && notarioSeleccionado?.url_template_proyecto_contrato && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleVerTemplate}
-                  className="whitespace-nowrap"
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Ver Template
-                </Button>
+              {notarioSeleccionado?.genera_proyecto_escritura && (
+                <div className="flex gap-2">
+                  {notarioSeleccionado?.url_template_proyecto_contrato && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleVerTemplate}
+                      className="whitespace-nowrap"
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      Ver Template
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowUpdateTemplateDialog(true)}
+                    className="whitespace-nowrap"
+                  >
+                    <FileEdit className="h-4 w-4 mr-2" />
+                    Actualizar Template
+                  </Button>
+                </div>
               )}
             </div>
             
@@ -561,6 +576,14 @@ export default function RevisionDocumentacion() {
           onSuccess={() => refetch()}
         />
       )}
+
+      <ActualizarTemplateDialog
+        open={showUpdateTemplateDialog}
+        onOpenChange={setShowUpdateTemplateDialog}
+        notarioId={selectedNotarioId || 0}
+        notarioNombre={notarioSeleccionado?.nombre || ""}
+        currentTemplateUrl={notarioSeleccionado?.url_template_proyecto_contrato}
+      />
     </div>
   );
 }
