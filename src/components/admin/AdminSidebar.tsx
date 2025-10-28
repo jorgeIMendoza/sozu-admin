@@ -108,6 +108,7 @@ const navigationItems = [
     icon: CreditCard,
     children: [
       { title: "Cuentas de cobranza", href: "/admin/cuentas-cobranza", icon: Receipt },
+      { title: "Comisiones", href: "/admin/comisiones", icon: Banknote },
     ]
   },
   {
