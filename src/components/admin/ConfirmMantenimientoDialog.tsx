@@ -149,6 +149,7 @@ export function ConfirmMantenimientoDialog({
       if (clabeError) throw clabeError;
 
       setNuevaClabe(clabeData);
+      setClabeSTP(clabeData); // Actualizar con la CLABE completa generada
 
       // Call N8N endpoint
       const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/generaCuentaMantenimiento`, {
@@ -243,19 +244,18 @@ export function ConfirmMantenimientoDialog({
 
             {/* CLABE STP de la cuenta */}
             <div className="space-y-2">
-              <Label>CLABE STP de la Cuenta</Label>
-              <Input value={clabeSTP} readOnly className="bg-muted" />
+              <Label>
+                {nuevaClabe ? "Nueva CLABE STP Generada" : "CLABE STP de la Cuenta"}
+              </Label>
+              <div className="flex items-center gap-2">
+                {nuevaClabe && <CheckCircle2 className="h-5 w-5 text-green-600" />}
+                <Input 
+                  value={clabeSTP} 
+                  readOnly 
+                  className={nuevaClabe ? "bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-700 font-mono" : "bg-muted font-mono"} 
+                />
+              </div>
             </div>
-
-            {/* Nueva CLABE generada */}
-            {nuevaClabe && (
-              <Alert>
-                <CheckCircle2 className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Nueva CLABE generada:</strong> {nuevaClabe}
-                </AlertDescription>
-              </Alert>
-            )}
 
             {/* Warning message */}
             {!canConfirm && (
