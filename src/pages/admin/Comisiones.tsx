@@ -38,8 +38,48 @@ export default function Comisiones() {
       if (cuentasError) throw cuentasError;
       if (!cuentas || cuentas.length === 0) return [];
 
+      // Paso 1.5: Filtrar solo cuentas con enganche completo pagado
+      const cuentaIds = cuentas.map((c) => c.id);
+      
+      // Obtener acuerdos de enganche (id_concepto = 2) no completados
+      const { data: acuerdosEnganchePendientes, error: acuerdosError } = await supabase
+        .from("acuerdos_pago")
+        .select("id_cuenta_cobranza")
+        .in("id_cuenta_cobranza", cuentaIds)
+        .eq("id_concepto", 2) // Enganche
+        .eq("pago_completado", false)
+        .eq("activo", true);
+
+      if (acuerdosError) throw acuerdosError;
+
+      // IDs de cuentas con enganche pendiente
+      const cuentasConEnganchePendiente = new Set(
+        acuerdosEnganchePendientes?.map((a) => a.id_cuenta_cobranza) || []
+      );
+
+      // Filtrar solo cuentas que NO tienen enganche pendiente Y que tienen al menos un acuerdo de enganche
+      const { data: acuerdosEnganches, error: acuerdosEngancheError } = await supabase
+        .from("acuerdos_pago")
+        .select("id_cuenta_cobranza")
+        .in("id_cuenta_cobranza", cuentaIds)
+        .eq("id_concepto", 2)
+        .eq("activo", true);
+
+      if (acuerdosEngancheError) throw acuerdosEngancheError;
+
+      const cuentasConEnganche = new Set(
+        acuerdosEnganches?.map((a) => a.id_cuenta_cobranza) || []
+      );
+
+      // Solo incluir cuentas que tienen enganche Y lo tienen completo
+      const cuentasFiltradas = cuentas.filter(
+        (c) => cuentasConEnganche.has(c.id) && !cuentasConEnganchePendiente.has(c.id)
+      );
+
+      if (cuentasFiltradas.length === 0) return [];
+
       // Paso 2: Obtener ofertas relacionadas
-      const ofertaIds = cuentas.map((c) => c.id_oferta).filter((id) => id !== null);
+      const ofertaIds = cuentasFiltradas.map((c) => c.id_oferta).filter((id) => id !== null);
       
       const { data: ofertas, error: ofertasError } = ofertaIds.length > 0 
         ? await supabase
@@ -131,7 +171,7 @@ export default function Comisiones() {
       if (productosError) throw productosError;
 
       // Paso 7: Combinar todos los datos
-      return cuentas.map((cuenta) => {
+      return cuentasFiltradas.map((cuenta) => {
         const oferta = ofertas?.find((o) => o.id === cuenta.id_oferta);
         const propiedad = propiedades?.find((p) => p.id === oferta?.id_propiedad);
         const edificioModelo = edificios?.find((em) => em.id === propiedad?.id_edificio_modelo);
