@@ -812,19 +812,31 @@ export default function Pagos() {
     try {
       setLoadingDownload(cuenta.id);
       
-      // Get the offer and property data for this account
-      const { data: offerData } = await supabase
+      // Get the offer data for this account
+      const { data: offerData, error: offerError } = await supabase
         .from('cuentas_cobranza')
         .select(`
           id_oferta,
           ofertas!fk_cuentas_cobranza_oferta(
-            id_propiedad
+            id,
+            id_propiedad,
+            id_producto
           )
         `)
         .eq('id', cuenta.id)
         .single();
 
-      if (!offerData?.id_oferta || !offerData.ofertas?.id_propiedad) {
+      if (offerError) {
+        console.error('Error fetching offer data:', offerError);
+        toast({
+          title: "Error",
+          description: "Error al obtener los datos de la oferta",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!offerData?.id_oferta || !offerData.ofertas) {
         toast({
           title: "Error",
           description: "No se encontró la oferta asociada a esta cuenta",
@@ -833,17 +845,41 @@ export default function Pagos() {
         return;
       }
 
-      // Generate and download the PDF
       const { generateOfferPDF } = await import('@/services/htmlToPdfService');
-      await generateOfferPDF({
-        propertyId: offerData.ofertas.id_propiedad,
-        offerId: offerData.id_oferta,
-        propertyNumber: cuenta.numero_propiedad,
-        leadName: cuenta.compradores[0]?.nombre_legal || 'Sin comprador',
-        leadEmail: '', // We don't have email in this view
-        leadPhone: '', // We don't have phone in this view
-        creatorEmail: 'admin@system.com'
-      });
+      
+      // Check if it's a product/service offer or property offer
+      if (offerData.ofertas.id_producto && !offerData.ofertas.id_propiedad) {
+        // It's a product/service offer
+        await generateOfferPDF({
+          propertyId: offerData.ofertas.id_propiedad || 0, // Will be ignored for product offers
+          offerId: offerData.id_oferta,
+          propertyNumber: cuenta.producto_nombre || '',
+          leadName: cuenta.compradores[0]?.nombre_legal || 'Sin comprador',
+          leadEmail: '',
+          leadPhone: '',
+          creatorEmail: 'admin@system.com',
+          isProductOffer: true,
+          productId: offerData.ofertas.id_producto
+        });
+      } else if (offerData.ofertas.id_propiedad) {
+        // It's a property offer
+        await generateOfferPDF({
+          propertyId: offerData.ofertas.id_propiedad,
+          offerId: offerData.id_oferta,
+          propertyNumber: cuenta.numero_propiedad,
+          leadName: cuenta.compradores[0]?.nombre_legal || 'Sin comprador',
+          leadEmail: '',
+          leadPhone: '',
+          creatorEmail: 'admin@system.com'
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "La oferta no tiene propiedad ni producto asociado",
+          variant: "destructive",
+        });
+        return;
+      }
 
       toast({
         title: "PDF Generado",
@@ -853,7 +889,7 @@ export default function Pagos() {
       console.error('Error downloading offer:', error);
       toast({
         title: "Error",
-        description: "No se pudo descargar la oferta",
+        description: `No se pudo descargar la oferta: ${error instanceof Error ? error.message : 'Error desconocido'}`,
         variant: "destructive",
       });
     } finally {
