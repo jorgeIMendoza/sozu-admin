@@ -596,6 +596,16 @@ export const NewReservaDialog = ({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reservas"] });
+      
+      // Invalidar queries de mantenimiento si hay una cuenta preseleccionada
+      if (preselectedCuentaMantenimientoId) {
+        queryClient.invalidateQueries({ queryKey: ["cuenta_mantenimiento_detalle", preselectedCuentaMantenimientoId] });
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_mantenimiento", preselectedCuentaMantenimientoId] });
+        queryClient.invalidateQueries({ queryKey: ["multas_mantenimiento", preselectedCuentaMantenimientoId] });
+        queryClient.invalidateQueries({ queryKey: ["pagos_mantenimiento", preselectedCuentaMantenimientoId] });
+        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", preselectedCuentaMantenimientoId] });
+      }
+      
       toast.success("Reserva creada exitosamente");
       onOpenChange(false);
       form.reset();

@@ -364,13 +364,53 @@ export function TransferPaymentDialog({
         description: `Se transfirió el monto completo de $${montoTotalTransferir.toLocaleString()} a la cuenta seleccionada`,
       });
 
-      // Invalidate queries for both source and destination accounts
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaOrigenId] });
-      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaOrigenId] });
-      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaOrigenId] });
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaDestinoSeleccionada] });
-      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaDestinoSeleccionada] });
-      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaDestinoSeleccionada] });
+      // Detectar si las cuentas son de mantenimiento
+      const { data: cuentaOrigen } = await supabase
+        .from('cuentas_cobranza')
+        .select('id_cuenta_cobranza_padre')
+        .eq('id', cuentaOrigenId)
+        .single();
+
+      const { data: cuentaDestino } = await supabase
+        .from('cuentas_cobranza')
+        .select('id_cuenta_cobranza_padre')
+        .eq('id', cuentaDestinoId)
+        .single();
+
+      const esMantenimientoOrigen = !!cuentaOrigen?.id_cuenta_cobranza_padre;
+      const esMantenimientoDestino = !!cuentaDestino?.id_cuenta_cobranza_padre;
+
+      // Invalidate queries for source account
+      if (esMantenimientoOrigen) {
+        queryClient.invalidateQueries({ queryKey: ["cuenta_mantenimiento_detalle", cuentaOrigenId] });
+        queryClient.invalidateQueries({ queryKey: ["pagos_mantenimiento", cuentaOrigenId] });
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_mantenimiento", cuentaOrigenId] });
+        queryClient.invalidateQueries({ queryKey: ["multas_mantenimiento", cuentaOrigenId] });
+        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaOrigenId] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaOrigenId] });
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaOrigenId] });
+        queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaOrigenId] });
+        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaOrigenId] });
+      }
+
+      // Invalidate queries for destination account
+      if (esMantenimientoDestino) {
+        queryClient.invalidateQueries({ queryKey: ["cuenta_mantenimiento_detalle", cuentaDestinoId] });
+        queryClient.invalidateQueries({ queryKey: ["pagos_mantenimiento", cuentaDestinoId] });
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_mantenimiento", cuentaDestinoId] });
+        queryClient.invalidateQueries({ queryKey: ["multas_mantenimiento", cuentaDestinoId] });
+        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaDestinoId] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaDestinoId] });
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaDestinoId] });
+        queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaDestinoId] });
+        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaDestinoId] });
+      }
+
+      // Invalidar queries genéricas
+      queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
+      queryClient.invalidateQueries({ queryKey: ["cuentas_mantenimiento"] });
 
       onClose();
       

@@ -92,6 +92,7 @@ export function NewMultaMantenimientoDialog({ open, onOpenChange, cuentaId }: Ne
         title: "Multa agregada",
         description: "La multa ha sido agregada exitosamente",
       });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_mantenimiento_detalle", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_mantenimiento", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["multas_mantenimiento", cuentaId] });
       handleClose();

@@ -257,13 +257,28 @@ export function AddManualPaymentDialog({
         title: "Pago agregado",
         description: "El pago manual ha sido registrado exitosamente",
       });
+      
+      // Invalidar queries genéricas
       queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
       queryClient.invalidateQueries({ queryKey: ["cuentas_mantenimiento"] });
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
-      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaCobranzaId] });
-      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaCobranzaId] });
-      queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      
+      // Invalidar queries específicas según el tipo de cuenta
+      if (esMantenimiento) {
+        // Queries específicas de mantenimiento
+        queryClient.invalidateQueries({ queryKey: ["cuenta_mantenimiento_detalle", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["pagos_mantenimiento", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_mantenimiento", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["multas_mantenimiento", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
+      } else {
+        // Queries específicas de cuentas de cobranza normales
+        queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
+      }
+      
       form.reset();
       onClose();
     },
