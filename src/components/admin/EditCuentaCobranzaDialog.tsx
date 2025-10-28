@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Edit, Trash2, Plus, HeartHandshake, FileText, ExternalLink, CheckCircle } from 'lucide-react';
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from '@/lib/config';
 import { isFiscalDataComplete } from '@/utils/fiscalDataValidation';
@@ -208,6 +209,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [pendingNumeroEscritura, setPendingNumeroEscritura] = useState<string>('');
   const [shouldGenerateInvoice, setShouldGenerateInvoice] = useState(false);
   const [isCuentaFullyPaid, setIsCuentaFullyPaid] = useState(false);
+  
+  // Estados para comisiones
+  const [porcentajeComision, setPorcentajeComision] = useState<number>(0);
+  const [ivaIncluido, setIvaIncluido] = useState<boolean>(false);
+  const [searchUsuario, setSearchUsuario] = useState('');
+  const [selectedUsuario, setSelectedUsuario] = useState<any>(null);
+  const [porcentajeComisionista, setPorcentajeComisionista] = useState<string>('');
 
   const handleNavigateToCompradores = (rfc?: string) => {
     if (rfc) {
@@ -237,6 +245,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       return data;
     }
   });
+
+  // Initialize comisión states when cuentaDetalle loads
+  useEffect(() => {
+    if (cuentaDetalle) {
+      setPorcentajeComision(cuentaDetalle.porcentaje_comision_venta || 0);
+      setIvaIncluido((cuentaDetalle as any).iva_incluido || false);
+    }
+  }, [cuentaDetalle]);
 
   // Get property or product/service details
   const { data: propiedadDetalle } = useQuery({
@@ -1279,6 +1295,170 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const handleCreateAcuerdo = () => {
     if (!selectedEsquema) return;
     createAcuerdoMutation.mutate(parseInt(selectedEsquema));
+  };
+
+  // Query for comisionistas
+  const { data: comisionistas, refetch: refetchComisionistas } = useQuery({
+    queryKey: ["comisionistas", cuenta.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('comisionistas')
+        .select('*')
+        .eq('id_cuenta_cobranza', cuenta.id)
+        .eq('activo', true);
+      return data || [];
+    }
+  });
+
+  // Query for searching usuarios
+  const { data: usuarios } = useQuery({
+    queryKey: ["usuarios_search", searchUsuario],
+    queryFn: async () => {
+      if (!searchUsuario || searchUsuario.length < 2) return [];
+      
+      // Get existing comisionistas emails
+      const existingEmails = comisionistas?.map(c => c.email_usuario) || [];
+      
+      const { data } = await supabase
+        .from('usuarios')
+        .select('email, nombre')
+        .or(`email.ilike.%${searchUsuario}%,nombre.ilike.%${searchUsuario}%`)
+        .not('email', 'in', existingEmails.length > 0 ? `(${existingEmails.map(e => `"${e}"`).join(',')})` : '("")')
+        .limit(10);
+      
+      return data || [];
+    },
+    enabled: searchUsuario.length >= 2
+  });
+
+  // Mutation to update comisión data
+  const updateComisionMutation = useMutation({
+    mutationFn: async ({ porcentaje, ivaIncluido }: { porcentaje: number; ivaIncluido: boolean }) => {
+      const { error } = await supabase
+        .from('cuentas_cobranza')
+        .update({ 
+          porcentaje_comision_venta: porcentaje,
+          iva_incluido: ivaIncluido
+        })
+        .eq('id', cuenta.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Información de comisión actualizada");
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+    },
+    onError: (error) => {
+      console.error("Error updating comisión:", error);
+      toast.error("Error al actualizar la comisión");
+    }
+  });
+
+  // Mutation to add comisionista
+  const addComisionistaMutation = useMutation({
+    mutationFn: async ({ email, porcentaje }: { email: string; porcentaje: number }) => {
+      const { error } = await supabase
+        .from('comisionistas')
+        .insert({
+          id_cuenta_cobranza: cuenta.id,
+          email_usuario: email,
+          porcentaje_comision: porcentaje,
+          activo: true
+        });
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Comisionista agregado exitosamente");
+      refetchComisionistas();
+      setSearchUsuario('');
+      setSelectedUsuario(null);
+      setPorcentajeComisionista('');
+    },
+    onError: (error) => {
+      console.error("Error adding comisionista:", error);
+      toast.error("Error al agregar comisionista");
+    }
+  });
+
+  // Mutation to delete comisionista
+  const deleteComisionistaMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const { error } = await supabase
+        .from('comisionistas')
+        .update({ activo: false })
+        .eq('id_cuenta_cobranza', cuenta.id)
+        .eq('email_usuario', email);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Comisionista eliminado exitosamente");
+      refetchComisionistas();
+    },
+    onError: (error) => {
+      console.error("Error deleting comisionista:", error);
+      toast.error("Error al eliminar comisionista");
+    }
+  });
+
+  // Calculate total comisionistas percentage
+  const totalPorcentajeComisionistas = comisionistas?.reduce((sum, c) => sum + (c.porcentaje_comision || 0), 0) || 0;
+
+  // Handle adding comisionista
+  const handleAddComisionista = () => {
+    if (!selectedUsuario) {
+      toast.error("Debes seleccionar un usuario");
+      return;
+    }
+
+    const porcentaje = parseFloat(porcentajeComisionista);
+    if (isNaN(porcentaje) || porcentaje <= 0) {
+      toast.error("El porcentaje debe ser mayor a 0");
+      return;
+    }
+
+    // Validate that total doesn't exceed porcentaje_comision_venta
+    if (totalPorcentajeComisionistas + porcentaje > porcentajeComision) {
+      toast.error(`La suma de porcentajes de comisionistas (${(totalPorcentajeComisionistas + porcentaje).toFixed(2)}%) excede el porcentaje de comisión de venta (${porcentajeComision}%)`);
+      return;
+    }
+
+    addComisionistaMutation.mutate({ 
+      email: selectedUsuario.email, 
+      porcentaje 
+    });
+  };
+
+  // Handle porcentaje comision change
+  const handlePorcentajeComisionChange = (value: string) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) {
+      setPorcentajeComision(0);
+      return;
+    }
+
+    if (numValue < 5) {
+      toast.error("El porcentaje mínimo es 5%");
+      setPorcentajeComision(5);
+      return;
+    }
+
+    if (numValue > 100) {
+      toast.error("El porcentaje máximo es 100%");
+      setPorcentajeComision(100);
+      return;
+    }
+
+    setPorcentajeComision(numValue);
+  };
+
+  // Handle blur to save comision data
+  const handleComisionBlur = () => {
+    if (porcentajeComision !== (cuentaDetalle?.porcentaje_comision_venta || 0) || 
+        ivaIncluido !== ((cuentaDetalle as any)?.iva_incluido || false)) {
+      updateComisionMutation.mutate({ porcentaje: porcentajeComision, ivaIncluido });
+    }
   };
 
   // Mutation to update payment agreement amount
@@ -3655,24 +3835,210 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 <CardTitle>Información de Comisiones</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Porcentaje de Comisión por Venta</Label>
-                    <Input 
-                      value={`${cuentaDetalle?.porcentaje_comision_venta || 0}%`} 
-                      readOnly 
-                    />
-                  </div>
-                  {cuentaDetalle?.precio_final && cuentaDetalle.porcentaje_comision_venta && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label>Porcentaje de Comisión por Venta (%)</Label>
+                      <Input 
+                        type="number"
+                        min="5"
+                        max="100"
+                        step="0.01"
+                        value={porcentajeComision}
+                        onChange={(e) => handlePorcentajeComisionChange(e.target.value)}
+                        onBlur={handleComisionBlur}
+                        disabled={isReadOnly}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Mínimo 5%, máximo 100%</p>
+                    </div>
                     <div>
                       <Label>Monto de Comisión</Label>
                       <Input 
-                        value={new Intl.NumberFormat('es-MX', { 
-                          style: 'currency', 
-                          currency: 'MXN' 
-                        }).format((cuentaDetalle.precio_final * cuentaDetalle.porcentaje_comision_venta) / 100)} 
+                        value={cuentaDetalle?.precio_final && porcentajeComision ? 
+                          new Intl.NumberFormat('es-MX', { 
+                            style: 'currency', 
+                            currency: 'MXN' 
+                          }).format((cuentaDetalle.precio_final * porcentajeComision) / 100) 
+                          : '$0.00'
+                        } 
                         readOnly 
+                        className="bg-muted"
                       />
+                    </div>
+                    <div className="flex items-end">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="iva-incluido"
+                          checked={ivaIncluido}
+                          onChange={(e) => {
+                            setIvaIncluido(e.target.checked);
+                            updateComisionMutation.mutate({ 
+                              porcentaje: porcentajeComision, 
+                              ivaIncluido: e.target.checked 
+                            });
+                          }}
+                          disabled={isReadOnly}
+                          className="h-4 w-4 rounded border-input"
+                        />
+                        <Label htmlFor="iva-incluido" className="cursor-pointer">
+                          IVA Incluido
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Comisionistas Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Comisionistas</span>
+                  <Badge variant="outline">
+                    {totalPorcentajeComisionistas.toFixed(2)}% / {porcentajeComision}%
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Add Comisionista Form */}
+                  {!isReadOnly && (
+                    <div className="p-4 border rounded-lg space-y-4 bg-muted/30">
+                      <h4 className="font-medium">Agregar Comisionista</h4>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="col-span-1">
+                          <Label>Buscar Usuario</Label>
+                          <div className="relative">
+                            <Input
+                              placeholder="Buscar por email o nombre..."
+                              value={searchUsuario}
+                              onChange={(e) => setSearchUsuario(e.target.value)}
+                            />
+                            {usuarios && usuarios.length > 0 && (
+                              <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-auto">
+                                {usuarios.map((usuario) => (
+                                  <div
+                                    key={usuario.email}
+                                    className="px-3 py-2 hover:bg-muted cursor-pointer"
+                                    onClick={() => {
+                                      setSelectedUsuario(usuario);
+                                      setSearchUsuario(usuario.email);
+                                    }}
+                                  >
+                                    <p className="font-medium">{usuario.nombre || usuario.email}</p>
+                                    <p className="text-sm text-muted-foreground">{usuario.email}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Porcentaje de Comisión (%)</Label>
+                          <Input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={porcentajeComisionista}
+                            onChange={(e) => setPorcentajeComisionista(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <div className="space-y-2 w-full">
+                            <Label>Monto</Label>
+                            <Input
+                              value={cuentaDetalle?.precio_final && porcentajeComisionista ? 
+                                new Intl.NumberFormat('es-MX', { 
+                                  style: 'currency', 
+                                  currency: 'MXN' 
+                                }).format((cuentaDetalle.precio_final * parseFloat(porcentajeComisionista)) / 100)
+                                : '$0.00'
+                              }
+                              readOnly
+                              className="bg-muted"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <Button 
+                        onClick={handleAddComisionista}
+                        disabled={!selectedUsuario || !porcentajeComisionista || addComisionistaMutation.isPending}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Agregar Comisionista
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Comisionistas Table */}
+                  {comisionistas && comisionistas.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Usuario</TableHead>
+                          <TableHead className="text-right">% Comisión</TableHead>
+                          <TableHead className="text-right">Monto</TableHead>
+                          <TableHead className="text-center">Estado</TableHead>
+                          {!isReadOnly && <TableHead className="text-center">Acciones</TableHead>}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {comisionistas.map((comisionista) => (
+                          <TableRow key={comisionista.email_usuario}>
+                            <TableCell className="font-medium">{comisionista.email_usuario}</TableCell>
+                            <TableCell className="text-right">
+                              {comisionista.porcentaje_comision.toFixed(2)}%
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {cuentaDetalle?.precio_final ? 
+                                new Intl.NumberFormat('es-MX', { 
+                                  style: 'currency', 
+                                  currency: 'MXN' 
+                                }).format((cuentaDetalle.precio_final * comisionista.porcentaje_comision) / 100)
+                                : '$0.00'
+                              }
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {comisionista.pagada ? (
+                                <Badge variant="default">Pagada</Badge>
+                              ) : comisionista.aprobada ? (
+                                <Badge variant="secondary">Aprobada</Badge>
+                              ) : (
+                                <Badge variant="outline">Pendiente</Badge>
+                              )}
+                            </TableCell>
+                            {!isReadOnly && (
+                              <TableCell className="text-center">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => deleteComisionistaMutation.mutate(comisionista.email_usuario)}
+                                  disabled={deleteComisionistaMutation.isPending}
+                                >
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No hay comisionistas agregados
+                    </div>
+                  )}
+
+                  {/* Validation Warning */}
+                  {totalPorcentajeComisionistas > porcentajeComision && (
+                    <div className="p-3 bg-destructive/10 border border-destructive rounded-lg">
+                      <p className="text-sm text-destructive font-medium">
+                        ⚠️ La suma de porcentajes de comisionistas ({totalPorcentajeComisionistas.toFixed(2)}%) 
+                        excede el porcentaje de comisión de venta ({porcentajeComision}%)
+                      </p>
                     </div>
                   )}
                 </div>
