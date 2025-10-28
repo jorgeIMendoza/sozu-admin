@@ -1198,6 +1198,18 @@ export type Database = {
           },
         ]
       }
+      es_comision: {
+        Row: {
+          cuenta_stp_comisiones: string | null
+        }
+        Insert: {
+          cuenta_stp_comisiones?: string | null
+        }
+        Update: {
+          cuenta_stp_comisiones?: string | null
+        }
+        Relationships: []
+      }
       espacios_reservables_edificio: {
         Row: {
           activo: boolean
