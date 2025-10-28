@@ -63,6 +63,7 @@ export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId, acuerd
         title: "Multa agregada",
         description: "La multa ha sido agregada exitosamente",
       });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
       handleClose();
     },

@@ -129,7 +129,10 @@ export function EditPaymentDialog({
         title: "Pago actualizado",
         description: "El pago ha sido actualizado correctamente",
       });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
       onClose();
     },
     onError: (error: Error) => {

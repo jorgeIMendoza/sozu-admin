@@ -259,6 +259,10 @@ export function AddManualPaymentDialog({
       });
       queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
       queryClient.invalidateQueries({ queryKey: ["cuentas_mantenimiento"] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       form.reset();
       onClose();

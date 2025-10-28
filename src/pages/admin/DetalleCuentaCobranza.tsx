@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -421,8 +421,113 @@ export default function DetalleCuentaCobranza() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Real-time subscriptions for auto-updates
+  useEffect(() => {
+    if (!cuentaId) return;
+
+    const channels = [
+      // Subscribe to acuerdos_pago changes
+      supabase
+        .channel('acuerdos-pago-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'acuerdos_pago',
+            filter: `id_cuenta_cobranza=eq.${cuentaId}`
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
+          }
+        )
+        .subscribe(),
+      
+      // Subscribe to aplicaciones_pago changes
+      supabase
+        .channel('aplicaciones-pago-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'aplicaciones_pago'
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
+          }
+        )
+        .subscribe(),
+      
+      // Subscribe to pagos changes
+      supabase
+        .channel('pagos-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'pagos',
+            filter: `id_cuenta_cobranza=eq.${cuentaId}`
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
+          }
+        )
+        .subscribe(),
+      
+      // Subscribe to multas changes
+      supabase
+        .channel('multas-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'multas'
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+          }
+        )
+        .subscribe(),
+      
+      // Subscribe to cuentas_cobranza changes
+      supabase
+        .channel('cuentas-cobranza-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'cuentas_cobranza',
+            filter: `id=eq.${cuentaId}`
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+          }
+        )
+        .subscribe()
+    ];
+
+    return () => {
+      channels.forEach(channel => supabase.removeChannel(channel));
+    };
+  }, [cuentaId, queryClient]);
+
   const { data: cuentaDetalle, isLoading: cuentaLoading } = useQuery({
     queryKey: ["cuenta_detalle", cuentaId],
+    refetchInterval: 30000, // Refetch every 30 seconds as fallback
+    refetchOnWindowFocus: true, // Refetch when window receives focus
     queryFn: async () => {
       // Get cuenta cobranza with related data (including cancelled ones)
       const { data: cuenta, error: cuentaError } = await supabase
@@ -1699,7 +1804,10 @@ export default function DetalleCuentaCobranza() {
         title: "Pago eliminado",
         description: "La aplicación de pago ha sido eliminada exitosamente",
       });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
     },
     onError: (error) => {
       toast({
@@ -1854,6 +1962,7 @@ export default function DetalleCuentaCobranza() {
         title: "Multa eliminada",
         description: "La multa ha sido eliminada exitosamente",
       });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
     },
     onError: (error) => {

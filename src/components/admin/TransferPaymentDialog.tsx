@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, User, Hash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface TransferPaymentDialogProps {
   isOpen: boolean;
@@ -43,6 +44,7 @@ export function TransferPaymentDialog({
   const [cuentaDestinoSeleccionada, setCuentaDestinoSeleccionada] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (isOpen && ultimoPagoSTP?.clave_rastreo) {
@@ -361,6 +363,14 @@ export function TransferPaymentDialog({
         title: "Transferencia realizada",
         description: `Se transfirió el monto completo de $${montoTotalTransferir.toLocaleString()} a la cuenta seleccionada`,
       });
+
+      // Invalidate queries for both source and destination accounts
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaOrigenId] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaOrigenId] });
+      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaOrigenId] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaDestinoSeleccionada] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaDestinoSeleccionada] });
+      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaDestinoSeleccionada] });
 
       onClose();
       
