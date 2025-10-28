@@ -145,6 +145,7 @@ export default function Comisiones() {
           edificio_nombre: edificio?.nombre,
           numero_departamento: propiedad?.numero_propiedad,
           producto_nombre: producto?.nombre,
+          tipo: oferta?.id_propiedad ? "Propiedad" : "Producto",
         };
       });
     },
@@ -187,6 +188,7 @@ export default function Comisiones() {
             <TableHeader>
               <TableRow>
                 <TableHead>No. Cuenta</TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead>Proyecto</TableHead>
                 <TableHead>Edificio</TableHead>
                 <TableHead>No. Departamento</TableHead>
@@ -204,6 +206,9 @@ export default function Comisiones() {
                   <TableRow key={comision.id}>
                     <TableCell className="font-medium">
                       {formatCuentaCobranzaId(comision.id)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{comision.tipo}</Badge>
                     </TableCell>
                     <TableCell>{comision.proyecto_nombre || "-"}</TableCell>
                     <TableCell>{comision.edificio_nombre || "-"}</TableCell>
