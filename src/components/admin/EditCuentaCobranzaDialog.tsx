@@ -3836,10 +3836,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label>Porcentaje de Comisión por Venta (%)</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="porcentajeComision">Porcentaje de Comisión por Venta (%)</Label>
                       <Input 
+                        id="porcentajeComision"
                         type="number"
                         min="5"
                         max="100"
@@ -3849,11 +3850,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         onBlur={handleComisionBlur}
                         disabled={isReadOnly}
                       />
-                      <p className="text-xs text-muted-foreground mt-1">Mínimo 5%, máximo 100%</p>
+                      <p className="text-xs text-muted-foreground">Mínimo 5%, máximo 100%</p>
                     </div>
-                    <div>
-                      <Label>Monto de Comisión</Label>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="montoComision">Monto de Comisión</Label>
                       <Input 
+                        id="montoComision"
                         value={cuentaDetalle?.precio_final && porcentajeComision ? 
                           new Intl.NumberFormat('es-MX', { 
                             style: 'currency', 
@@ -3864,27 +3867,36 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                         readOnly 
                         className="bg-muted"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        {ivaIncluido ? 'Incluye IVA (16%)' : 'Sin IVA'}
+                      </p>
                     </div>
-                    <div className="flex items-end">
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
+
+                    <div className="space-y-2">
+                      <Label>Opciones de IVA</Label>
+                      <div className="flex items-center space-x-3 h-10 px-3 rounded-md border border-input bg-background hover:bg-accent/50 transition-colors">
+                        <Checkbox
                           id="iva-incluido"
                           checked={ivaIncluido}
-                          onChange={(e) => {
-                            setIvaIncluido(e.target.checked);
+                          onCheckedChange={(checked) => {
+                            setIvaIncluido(checked === true);
                             updateComisionMutation.mutate({ 
                               porcentaje: porcentajeComision, 
-                              ivaIncluido: e.target.checked 
+                              ivaIncluido: checked === true 
                             });
                           }}
                           disabled={isReadOnly}
-                          className="h-4 w-4 rounded border-input"
                         />
-                        <Label htmlFor="iva-incluido" className="cursor-pointer">
-                          IVA Incluido
+                        <Label
+                          htmlFor="iva-incluido"
+                          className="text-sm font-medium cursor-pointer select-none"
+                        >
+                          IVA Incluido (16%)
                         </Label>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        {ivaIncluido ? 'Se agregará 16% al monto' : 'Monto sin IVA'}
+                      </p>
                     </div>
                   </div>
                 </div>
