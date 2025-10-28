@@ -3858,7 +3858,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           new Intl.NumberFormat('es-MX', { 
                             style: 'currency', 
                             currency: 'MXN' 
-                          }).format((cuentaDetalle.precio_final * porcentajeComision) / 100) 
+                          }).format(((cuentaDetalle.precio_final * porcentajeComision) / 100) * (ivaIncluido ? 1.16 : 1)) 
                           : '$0.00'
                         } 
                         readOnly 
@@ -3954,7 +3954,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 new Intl.NumberFormat('es-MX', { 
                                   style: 'currency', 
                                   currency: 'MXN' 
-                                }).format((cuentaDetalle.precio_final * parseFloat(porcentajeComisionista)) / 100)
+                                }).format(((cuentaDetalle.precio_final * parseFloat(porcentajeComisionista)) / 100) * (ivaIncluido ? 1.16 : 1))
                                 : '$0.00'
                               }
                               readOnly
@@ -3997,7 +3997,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 new Intl.NumberFormat('es-MX', { 
                                   style: 'currency', 
                                   currency: 'MXN' 
-                                }).format((cuentaDetalle.precio_final * comisionista.porcentaje_comision) / 100)
+                                }).format(((cuentaDetalle.precio_final * comisionista.porcentaje_comision) / 100) * (ivaIncluido ? 1.16 : 1))
                                 : '$0.00'
                               }
                             </TableCell>
