@@ -496,10 +496,20 @@ export default function DetalleCuentaMantenimiento() {
     return format(localDate, "dd 'de' MMMM 'de' yyyy", { locale: es });
   };
 
-  const conRecargos = () => {
+  const conRecargos = (fechaPago: string | null) => {
+    if (!fechaPago) return false;
+    
     const today = new Date();
     const dayOfMonth = today.getDate();
-    return dayOfMonth > 10;
+    
+    // Parse fecha_pago (formato YYYY-MM-DD) a fecha local
+    const [year, month, day] = fechaPago.split('-').map(Number);
+    const fechaPagoDate = new Date(year, month - 1, day);
+    
+    // Solo mostrar recargos si:
+    // 1. El día actual del mes es mayor a 10
+    // 2. Y la fecha de pago ya pasó (es anterior a hoy)
+    return dayOfMonth > 10 && fechaPagoDate < today;
   };
 
   const calcularMontos = (montoConRecargos: number) => {
@@ -864,10 +874,10 @@ export default function DetalleCuentaMantenimiento() {
                                         </span>
                                       )}
                                     </>
-                                  ) : mostrarRecargos ? (
+                                   ) : mostrarRecargos ? (
                                     <>
                                       <span className="text-sm font-medium">{formatConcepto(acuerdo.concepto, acuerdo.fecha_pago)}</span>
-                                      {conRecargos() && cuentaDetalle?.monto_mensual_cuota_extraordinaria ? (
+                                      {conRecargos(acuerdo.fecha_pago) && cuentaDetalle?.monto_mensual_cuota_extraordinaria ? (
                                         <>
                                           <span className="text-sm text-muted-foreground line-through">
                                             {formatCurrency(calcularMontos(acuerdo.monto).montoOriginal)}
