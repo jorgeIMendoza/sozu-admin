@@ -20,12 +20,12 @@ import { es } from "date-fns/locale";
 export default function Comisiones() {
   const [filtroGeneral, setFiltroGeneral] = useState("");
   const [filtroId, setFiltroId] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState<string>("todos");
-  const [filtroProyecto, setFiltroProyecto] = useState<string>("todos");
-  const [filtroEdificio, setFiltroEdificio] = useState<string>("todos");
-  const [filtroModelo, setFiltroModelo] = useState<string>("todos");
+  const [filtroTipo, setFiltroTipo] = useState("");
+  const [filtroProyecto, setFiltroProyecto] = useState("");
+  const [filtroEdificio, setFiltroEdificio] = useState("");
+  const [filtroModelo, setFiltroModelo] = useState("");
   const [filtroNumero, setFiltroNumero] = useState("");
-  const [filtroEstatus, setFiltroEstatus] = useState<string>("todos");
+  const [filtroEstatus, setFiltroEstatus] = useState("");
 
   const { data: comisiones, isLoading } = useQuery({
     queryKey: ["comisiones"],
@@ -240,22 +240,22 @@ export default function Comisiones() {
     }
 
     // Filtro por tipo
-    if (filtroTipo !== "todos" && comision.tipo !== filtroTipo) {
+    if (filtroTipo && !comision.tipo?.toLowerCase().includes(filtroTipo.toLowerCase())) {
       return false;
     }
 
     // Filtro por proyecto
-    if (filtroProyecto !== "todos" && comision.proyecto_nombre !== filtroProyecto) {
+    if (filtroProyecto && !comision.proyecto_nombre?.toLowerCase().includes(filtroProyecto.toLowerCase())) {
       return false;
     }
 
     // Filtro por edificio
-    if (filtroEdificio !== "todos" && comision.edificio_nombre !== filtroEdificio) {
+    if (filtroEdificio && !comision.edificio_nombre?.toLowerCase().includes(filtroEdificio.toLowerCase())) {
       return false;
     }
 
     // Filtro por modelo
-    if (filtroModelo !== "todos" && comision.modelo_nombre !== filtroModelo) {
+    if (filtroModelo && !comision.modelo_nombre?.toLowerCase().includes(filtroModelo.toLowerCase())) {
       return false;
     }
 
@@ -268,12 +268,10 @@ export default function Comisiones() {
     }
 
     // Filtro por estatus
-    if (filtroEstatus !== "todos") {
+    if (filtroEstatus) {
       const esPagado = comision.es_pagada_comision_venta;
-      if (filtroEstatus === "pagado" && !esPagado) {
-        return false;
-      }
-      if (filtroEstatus === "pendiente" && esPagado) {
+      const estatusTexto = esPagado ? "pagado" : "pendiente";
+      if (!estatusTexto.toLowerCase().includes(filtroEstatus.toLowerCase())) {
         return false;
       }
     }
@@ -281,10 +279,6 @@ export default function Comisiones() {
     return true;
   }) || [];
 
-  // Obtener valores únicos para los filtros
-  const proyectosUnicos = [...new Set(comisiones?.map((c: any) => c.proyecto_nombre).filter(Boolean))] as string[];
-  const edificiosUnicos = [...new Set(comisiones?.map((c: any) => c.edificio_nombre).filter(Boolean))] as string[];
-  const modelosUnicos = [...new Set(comisiones?.map((c: any) => c.modelo_nombre).filter(Boolean))] as string[];
 
   if (isLoading) {
     return (
@@ -320,90 +314,62 @@ export default function Comisiones() {
           {/* Filtros */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="md:col-span-4">
-              <input
+              <Input
                 type="text"
                 placeholder="Buscar por ID, proyecto, número o modelo..."
                 value={filtroGeneral}
                 onChange={(e) => setFiltroGeneral(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md"
               />
             </div>
             
-            <input
+            <Input
               type="text"
               placeholder="Filtrar por ID..."
               value={filtroId}
               onChange={(e) => setFiltroId(e.target.value)}
-              className="px-3 py-2 border rounded-md"
             />
 
-            <select
+            <Input
+              type="text"
+              placeholder="Filtrar por tipo..."
               value={filtroTipo}
               onChange={(e) => setFiltroTipo(e.target.value)}
-              className="px-3 py-2 border rounded-md"
-            >
-              <option value="todos">Todos los tipos</option>
-              <option value="Propiedad">Propiedad</option>
-              <option value="Producto">Producto</option>
-              <option value="Servicio">Servicio</option>
-            </select>
+            />
 
-            <select
+            <Input
+              type="text"
+              placeholder="Filtrar por proyecto..."
               value={filtroProyecto}
               onChange={(e) => setFiltroProyecto(e.target.value)}
-              className="px-3 py-2 border rounded-md"
-            >
-              <option value="todos">Todos los proyectos</option>
-              {proyectosUnicos.map((proyecto) => (
-                <option key={proyecto} value={proyecto}>
-                  {proyecto}
-                </option>
-              ))}
-            </select>
+            />
 
-            <select
+            <Input
+              type="text"
+              placeholder="Filtrar por edificio..."
               value={filtroEdificio}
               onChange={(e) => setFiltroEdificio(e.target.value)}
-              className="px-3 py-2 border rounded-md"
-            >
-              <option value="todos">Todos los edificios</option>
-              {edificiosUnicos.map((edificio) => (
-                <option key={edificio} value={edificio}>
-                  {edificio}
-                </option>
-              ))}
-            </select>
+            />
 
-            <select
+            <Input
+              type="text"
+              placeholder="Filtrar por modelo..."
               value={filtroModelo}
               onChange={(e) => setFiltroModelo(e.target.value)}
-              className="px-3 py-2 border rounded-md"
-            >
-              <option value="todos">Todos los modelos</option>
-              {modelosUnicos.map((modelo) => (
-                <option key={modelo} value={modelo}>
-                  {modelo}
-                </option>
-              ))}
-            </select>
+            />
 
-            <input
+            <Input
               type="text"
               placeholder="Filtrar por número..."
               value={filtroNumero}
               onChange={(e) => setFiltroNumero(e.target.value)}
-              className="px-3 py-2 border rounded-md"
             />
 
-            <select
+            <Input
+              type="text"
+              placeholder="Filtrar por estatus..."
               value={filtroEstatus}
               onChange={(e) => setFiltroEstatus(e.target.value)}
-              className="px-3 py-2 border rounded-md"
-            >
-              <option value="todos">Todos los estatus</option>
-              <option value="pagado">Pagado</option>
-              <option value="pendiente">Pendiente</option>
-            </select>
+            />
           </div>
 
           <Table>
