@@ -19,7 +19,8 @@ export default function Comisiones() {
   const { data: comisiones, isLoading } = useQuery({
     queryKey: ["comisiones"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Paso 1: Obtener cuentas de cobranza básicas (sin mantenimiento)
+      const { data: cuentas, error: cuentasError } = await supabase
         .from("cuentas_cobranza")
         .select(`
           id,
@@ -29,33 +30,123 @@ export default function Comisiones() {
           fecha_pago_comision,
           es_comision_venta_efectivo,
           es_pagada_comision_venta,
-          id_oferta,
-          ofertas!fk_ccob_oferta (
-            id_propiedad,
-            id_producto,
-            propiedades!ofertas_id_propiedad_fkey (
-              id,
-              numero_departamento,
-              edificios!propiedades_id_edificio_modelo_fkey (
-                id,
-                nombre,
-                proyectos!edificios_id_proyecto_fkey (
-                  id,
-                  nombre
-                )
-              )
-            ),
-            productos!ofertas_id_producto_fkey (
-              id,
-              nombre
-            )
-          )
+          id_oferta
         `)
         .is("id_cuenta_cobranza_padre", null)
         .order("id", { ascending: false });
 
-      if (error) throw error;
-      return data;
+      if (cuentasError) throw cuentasError;
+      if (!cuentas || cuentas.length === 0) return [];
+
+      // Paso 2: Obtener ofertas relacionadas
+      const ofertaIds = cuentas.map((c) => c.id_oferta).filter((id) => id !== null);
+      
+      const { data: ofertas, error: ofertasError } = ofertaIds.length > 0 
+        ? await supabase
+            .from("ofertas")
+            .select(`
+              id,
+              id_propiedad,
+              id_producto
+            `)
+            .in("id", ofertaIds)
+        : { data: [], error: null };
+
+      if (ofertasError) throw ofertasError;
+
+      // Paso 3: Obtener propiedades relacionadas
+      const propiedadIds = ofertas?.filter((o) => o.id_propiedad).map((o) => o.id_propiedad) || [];
+      
+      const { data: propiedades, error: propiedadesError } = propiedadIds.length > 0
+        ? await supabase
+            .from("propiedades")
+            .select(`
+              id,
+              numero_departamento,
+              id_edificio_modelo
+            `)
+            .in("id", propiedadIds)
+        : { data: [], error: null };
+
+      if (propiedadesError) throw propiedadesError;
+
+      // Paso 4: Obtener edificios
+      const edificioIds = propiedades?.map((p) => p.id_edificio_modelo).filter(Boolean) || [];
+      
+      const { data: edificios, error: edificiosError } = edificioIds.length > 0
+        ? await supabase
+            .from("edificios_modelos")
+            .select(`
+              id,
+              id_edificio
+            `)
+            .in("id", edificioIds)
+        : { data: [], error: null };
+
+      if (edificiosError) throw edificiosError;
+
+      const edificioIdsReal = edificios?.map((em) => em.id_edificio).filter(Boolean) || [];
+      
+      const { data: edificiosData, error: edificiosDataError } = edificioIdsReal.length > 0
+        ? await supabase
+            .from("edificios")
+            .select(`
+              id,
+              nombre,
+              id_proyecto
+            `)
+            .in("id", edificioIdsReal)
+        : { data: [], error: null };
+
+      if (edificiosDataError) throw edificiosDataError;
+
+      // Paso 5: Obtener proyectos
+      const proyectoIds = edificiosData?.map((e) => e.id_proyecto).filter(Boolean) || [];
+      
+      const { data: proyectos, error: proyectosError } = proyectoIds.length > 0
+        ? await supabase
+            .from("proyectos")
+            .select(`
+              id,
+              nombre
+            `)
+            .in("id", proyectoIds)
+        : { data: [], error: null };
+
+      if (proyectosError) throw proyectosError;
+
+      // Paso 6: Obtener productos
+      const productoIds = ofertas?.filter((o) => o.id_producto).map((o) => o.id_producto) || [];
+      
+      const { data: productos, error: productosError } = productoIds.length > 0
+        ? await supabase
+            .from("productos_servicios")
+            .select(`
+              id,
+              nombre
+            `)
+            .in("id", productoIds)
+        : { data: [], error: null };
+
+      if (productosError) throw productosError;
+
+      // Paso 7: Combinar todos los datos
+      return cuentas.map((cuenta) => {
+        const oferta = ofertas?.find((o) => o.id === cuenta.id_oferta);
+        const propiedad = propiedades?.find((p) => p.id === oferta?.id_propiedad);
+        const edificioModelo = edificios?.find((em) => em.id === propiedad?.id_edificio_modelo);
+        const edificio = edificiosData?.find((e) => e.id === edificioModelo?.id_edificio);
+        const proyecto = proyectos?.find((pr) => pr.id === edificio?.id_proyecto);
+        const producto = productos?.find((prod) => prod.id === oferta?.id_producto);
+
+        return {
+          ...cuenta,
+          proyecto_nombre: proyecto?.nombre,
+          edificio_nombre: edificio?.nombre,
+          numero_departamento: propiedad?.numero_departamento,
+          producto_nombre: producto?.nombre,
+        };
+      });
     },
   });
 
@@ -108,24 +199,16 @@ export default function Comisiones() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {comisiones?.map((comision) => {
-                const oferta = comision.ofertas as any;
-                const propiedad = oferta?.propiedades;
-                const producto = oferta?.productos;
-                const edificio = propiedad?.edificios;
-                const proyecto = edificio?.proyectos;
-                
-                const montoComision = (comision.precio_final * comision.porcentaje_comision_venta) / 100;
-
+              {comisiones?.map((comision: any) => {
                 return (
                   <TableRow key={comision.id}>
                     <TableCell className="font-medium">
                       {formatCuentaCobranzaId(comision.id)}
                     </TableCell>
-                    <TableCell>{proyecto?.nombre || "-"}</TableCell>
-                    <TableCell>{edificio?.nombre || "-"}</TableCell>
+                    <TableCell>{comision.proyecto_nombre || "-"}</TableCell>
+                    <TableCell>{comision.edificio_nombre || "-"}</TableCell>
                     <TableCell>
-                      {propiedad?.numero_departamento || producto?.nombre || "-"}
+                      {comision.numero_departamento || comision.producto_nombre || "-"}
                     </TableCell>
                     <TableCell>{formatMonto(comision.precio_final)}</TableCell>
                     <TableCell>{comision.porcentaje_comision_venta}%</TableCell>
