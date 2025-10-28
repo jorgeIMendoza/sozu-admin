@@ -106,6 +106,29 @@ export default function SubirProyectoEscrituraDialog({
         throw new Error(`Error al subir archivo: ${uploadError.message}`);
       }
 
+      // 3.5. Llamar al endpoint cargaProyectoEscritura con el archivo PDF
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('id_cuenta_cobranza', cuentaCobranzaId.toString());
+
+        const { error: endpointError } = await supabase.functions.invoke('cargaProyectoEscritura', {
+          body: formData,
+        });
+
+        if (endpointError) {
+          console.error('Error al llamar endpoint cargaProyectoEscritura:', endpointError);
+          throw new Error(`Error al procesar el proyecto de escritura: ${endpointError.message}`);
+        }
+      } catch (endpointError: any) {
+        console.error('Error en endpoint cargaProyectoEscritura:', endpointError);
+        // Si falla el endpoint, eliminar el archivo subido
+        await supabase.storage
+          .from('proyectos_escritura')
+          .remove([filePath]);
+        throw new Error(`Error al procesar el documento: ${endpointError.message}`);
+      }
+
       // 4. Si existe un documento anterior, eliminarlo del storage y actualizar el registro
       if (existingDoc) {
         // Eliminar archivo anterior del storage si existe
