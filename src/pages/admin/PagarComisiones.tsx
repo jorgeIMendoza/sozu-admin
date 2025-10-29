@@ -104,11 +104,13 @@ export default function PagarComisiones() {
               id_producto,
               propiedades!fk_ofertas_propiedad(
                 numero,
-                edificios(
-                  nombre,
-                  proyectos(nombre)
-                ),
-                modelos(nombre)
+                edificios_modelos!propiedades_id_edificio_modelo_fkey(
+                  edificios!edificios_modelos_id_edificio_fkey(
+                    nombre,
+                    proyectos(nombre)
+                  ),
+                  modelos(nombre)
+                )
               ),
               productos!ofertas_id_producto_fkey(
                 id,
@@ -144,9 +146,9 @@ export default function PagarComisiones() {
           idCuenta: cuenta.id,
           numeroCuenta: formatCuentaCobranzaId(cuenta.id),
           tipo: producto ? producto.categorias_producto?.nombre : 'Propiedad',
-          proyecto: propiedad?.edificios?.proyectos?.nombre || 'N/A',
-          edificio: propiedad?.edificios?.nombre || 'N/A',
-          modelo: propiedad?.modelos?.nombre || 'N/A',
+          proyecto: propiedad?.edificios_modelos?.edificios?.proyectos?.nombre || 'N/A',
+          edificio: propiedad?.edificios_modelos?.edificios?.nombre || 'N/A',
+          modelo: propiedad?.edificios_modelos?.modelos?.nombre || 'N/A',
           numeroDepartamento: propiedad?.numero || 'N/A',
           precioFinal: cuenta.precio_final,
           porcentajeComision: com.porcentaje_comision,
@@ -182,11 +184,13 @@ export default function PagarComisiones() {
               id_producto,
               propiedades!fk_ofertas_propiedad(
                 numero,
-                edificios(
-                  nombre,
-                  proyectos(nombre)
-                ),
-                modelos(nombre)
+                edificios_modelos!propiedades_id_edificio_modelo_fkey(
+                  edificios!edificios_modelos_id_edificio_fkey(
+                    nombre,
+                    proyectos(nombre)
+                  ),
+                  modelos(nombre)
+                )
               ),
               productos!ofertas_id_producto_fkey(
                 id,
@@ -214,9 +218,9 @@ export default function PagarComisiones() {
             idCuenta: cuenta.id,
             numeroCuenta: formatCuentaCobranzaId(cuenta.id),
             tipo: producto ? producto.categorias_producto?.nombre : 'Propiedad',
-            proyecto: propiedad?.edificios?.proyectos?.nombre || 'N/A',
-            edificio: propiedad?.edificios?.nombre || 'N/A',
-            modelo: propiedad?.modelos?.nombre || 'N/A',
+            proyecto: propiedad?.edificios_modelos?.edificios?.proyectos?.nombre || 'N/A',
+            edificio: propiedad?.edificios_modelos?.edificios?.nombre || 'N/A',
+            modelo: propiedad?.edificios_modelos?.modelos?.nombre || 'N/A',
             numeroDepartamento: propiedad?.numero || 'N/A',
             precioFinal: cuenta.precio_final,
             comisionistas: []
