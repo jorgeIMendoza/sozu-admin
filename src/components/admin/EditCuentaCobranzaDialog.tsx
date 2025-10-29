@@ -1428,9 +1428,17 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   // Handle comision efectivo confirmation
   const handleComisionEfectivoConfirm = async () => {
     try {
-      // Calcular el monto de comisión (sin IVA)
-      const montoComision = (cuentaDetalle!.precio_final * porcentajeComision) / 100;
-      const nuevoPrecioFinal = cuentaDetalle!.precio_final - montoComision;
+      // Obtener precio_lista según el tipo de cuenta
+      const precioLista = tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista;
+      
+      if (!precioLista) {
+        toast.error("No se puede calcular la comisión: precio de lista no disponible");
+        return;
+      }
+
+      // ✅ CORRECTO: Calcular el monto de comisión sobre precio_lista (sin IVA)
+      const montoComision = (precioLista * porcentajeComision) / 100;
+      const nuevoPrecioFinal = precioLista - montoComision;
 
       // 1. Actualizar precio_final en cuentas_cobranza
       const { error: errorPrecio } = await supabase
