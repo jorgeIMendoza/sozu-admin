@@ -207,7 +207,7 @@ export default function Comisiones() {
               cuenta_stp_comisiones, 
               id_tipo_entidad,
               id_proyecto,
-              personas!inner(
+              personas!entidades_relacionadas_id_persona_fkey(
                 nombre_legal,
                 nombre_comercial
               )
