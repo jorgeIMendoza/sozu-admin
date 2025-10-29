@@ -185,6 +185,30 @@ export default function Comisiones() {
 
       if (productosError) throw productosError;
 
+      // Paso 6.5: Obtener cuenta_stp_comisiones de los dueños
+      const cuentaCobranzaIds = cuentasFiltradas.map(c => c.id);
+      
+      const { data: compradores, error: compradoresError } = await supabase
+        .from("compradores")
+        .select("id_cuenta_cobranza, id_persona")
+        .in("id_cuenta_cobranza", cuentaCobranzaIds)
+        .eq("activo", true);
+
+      if (compradoresError) throw compradoresError;
+
+      const personaIds = compradores?.map(c => c.id_persona).filter(Boolean) || [];
+
+      const { data: entidadesRelacionadas, error: entidadesError } = personaIds.length > 0
+        ? await supabase
+            .from("entidades_relacionadas")
+            .select("id_persona, cuenta_stp_comisiones, id_tipo_entidad")
+            .in("id_persona", personaIds)
+            .eq("id_tipo_entidad", 5) // 5 = Dueño
+            .eq("activo", true)
+        : { data: [], error: null };
+
+      if (entidadesError) throw entidadesError;
+
       // Paso 7: Combinar todos los datos
       return cuentasFiltradas.map((cuenta) => {
         const oferta = ofertas?.find((o) => o.id === cuenta.id_oferta);
@@ -193,6 +217,11 @@ export default function Comisiones() {
         const edificio = edificiosData?.find((e) => e.id === edificioModelo?.id_edificio);
         const proyecto = proyectos?.find((pr) => pr.id === edificio?.id_proyecto);
         const producto = productos?.find((prod) => prod.id === oferta?.id_producto);
+
+        // Obtener cuenta_stp_comisiones del dueño
+        const comprador = compradores?.find((c) => c.id_cuenta_cobranza === cuenta.id);
+        const entidadDueno = entidadesRelacionadas?.find((e) => e.id_persona === comprador?.id_persona);
+        const cuenta_stp_comisiones = entidadDueno?.cuenta_stp_comisiones;
 
         // Determinar tipo de cuenta
         let tipo: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
@@ -209,6 +238,7 @@ export default function Comisiones() {
           numero_departamento: propiedad?.numero_propiedad,
           producto_nombre: producto?.nombre,
           tipo: tipo,
+          cuenta_stp_comisiones,
         };
       });
     },
@@ -387,6 +417,7 @@ export default function Comisiones() {
                 <TableHead>Edificio</TableHead>
                 <TableHead>Modelo</TableHead>
                 <TableHead>No. Departamento</TableHead>
+                <TableHead>STP de Comisión</TableHead>
                 <TableHead>Monto</TableHead>
                 <TableHead>Comisión</TableHead>
                 <TableHead>Monto Comisión Pagado</TableHead>
@@ -410,6 +441,9 @@ export default function Comisiones() {
                     <TableCell>{comision.modelo_nombre || "-"}</TableCell>
                     <TableCell>
                       {comision.numero_departamento || comision.producto_nombre || "-"}
+                    </TableCell>
+                    <TableCell>
+                      {comision.cuenta_stp_comisiones || "-"}
                     </TableCell>
                     <TableCell>{formatMonto(comision.precio_final)}</TableCell>
                     <TableCell className="min-w-[200px]">
