@@ -103,7 +103,7 @@ export default function PagarComisiones() {
               id_propiedad,
               id_producto,
               propiedades!fk_ofertas_propiedad(
-                numero,
+                numero_propiedad,
                 edificios_modelos!propiedades_id_edificio_modelo_fkey(
                   edificios!edificios_modelos_id_edificio_fkey(
                     nombre,
@@ -149,7 +149,7 @@ export default function PagarComisiones() {
           proyecto: propiedad?.edificios_modelos?.edificios?.proyectos?.nombre || 'N/A',
           edificio: propiedad?.edificios_modelos?.edificios?.nombre || 'N/A',
           modelo: propiedad?.edificios_modelos?.modelos?.nombre || 'N/A',
-          numeroDepartamento: propiedad?.numero || 'N/A',
+          numeroDepartamento: propiedad?.numero_propiedad || 'N/A',
           precioFinal: cuenta.precio_final,
           porcentajeComision: com.porcentaje_comision,
           montoComision,
@@ -183,7 +183,7 @@ export default function PagarComisiones() {
               id_propiedad,
               id_producto,
               propiedades!fk_ofertas_propiedad(
-                numero,
+                numero_propiedad,
                 edificios_modelos!propiedades_id_edificio_modelo_fkey(
                   edificios!edificios_modelos_id_edificio_fkey(
                     nombre,
@@ -221,7 +221,7 @@ export default function PagarComisiones() {
             proyecto: propiedad?.edificios_modelos?.edificios?.proyectos?.nombre || 'N/A',
             edificio: propiedad?.edificios_modelos?.edificios?.nombre || 'N/A',
             modelo: propiedad?.edificios_modelos?.modelos?.nombre || 'N/A',
-            numeroDepartamento: propiedad?.numero || 'N/A',
+            numeroDepartamento: propiedad?.numero_propiedad || 'N/A',
             precioFinal: cuenta.precio_final,
             comisionistas: []
           };
