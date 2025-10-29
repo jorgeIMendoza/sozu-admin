@@ -53,7 +53,7 @@ export default function PagarComisiones() {
         .getPublicUrl(filePath);
 
       // Actualizar comisionista
-      const { error: updateError } = await supabase
+      const { data: updateData, error: updateError } = await supabase
         .from("comisionistas")
         .update({ 
           pagada: true,
@@ -61,15 +61,24 @@ export default function PagarComisiones() {
         })
         .eq("email_usuario", email)
         .eq("id_cuenta_cobranza", idCuenta)
-        .eq("activo", true);
+        .eq("aprobada", true)
+        .eq("activo", true)
+        .select();
       
       if (updateError) throw updateError;
+      
+      if (!updateData || updateData.length === 0) {
+        throw new Error("No se encontró la comisión para actualizar");
+      }
+      
+      return updateData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["pagar-comisiones"] });
+      queryClient.invalidateQueries({ queryKey: ["totales-comisiones"] });
       toast({
         title: "Comisión pagada",
-        description: "La comisión ha sido marcada como pagada exitosamente"
+        description: `La comisión ha sido marcada como pagada exitosamente. ${data?.length || 0} registro(s) actualizado(s).`
       });
       setUploadDialogOpen(false);
       setEvidenciaFile(null);
@@ -104,8 +113,9 @@ export default function PagarComisiones() {
         .getPublicUrl(filePath);
 
       // Actualizar todas las comisiones
+      const resultados = [];
       for (const cuenta of cuentas) {
-        const { error: updateError } = await supabase
+        const { data: updateData, error: updateError } = await supabase
           .from("comisionistas")
           .update({ 
             pagada: true,
@@ -113,16 +123,31 @@ export default function PagarComisiones() {
           })
           .eq("email_usuario", cuenta.email)
           .eq("id_cuenta_cobranza", cuenta.idCuenta)
-          .eq("activo", true);
+          .eq("aprobada", true)
+          .eq("activo", true)
+          .select();
         
         if (updateError) throw updateError;
+        
+        if (!updateData || updateData.length === 0) {
+          console.warn(`No se encontró comisión para ${cuenta.email} - cuenta ${cuenta.idCuenta}`);
+        } else {
+          resultados.push(updateData[0]);
+        }
       }
+      
+      if (resultados.length === 0) {
+        throw new Error("No se actualizó ninguna comisión");
+      }
+      
+      return resultados;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["pagar-comisiones"] });
+      queryClient.invalidateQueries({ queryKey: ["totales-comisiones"] });
       toast({
         title: "Comisiones pagadas",
-        description: "Todas las comisiones han sido marcadas como pagadas exitosamente"
+        description: `Todas las comisiones han sido marcadas como pagadas exitosamente. ${data?.length || 0} registro(s) actualizado(s).`
       });
       setUploadDialogOpen(false);
       setEvidenciaFile(null);
