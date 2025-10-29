@@ -17,8 +17,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { useToast } from "@/hooks/use-toast";
+import { Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function Comisiones() {
+  const { toast } = useToast();
   const [filtroGeneral, setFiltroGeneral] = useState("");
   const [filtroId, setFiltroId] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
@@ -27,6 +31,14 @@ export default function Comisiones() {
   const [filtroModelo, setFiltroModelo] = useState("");
   const [filtroNumero, setFiltroNumero] = useState("");
   const [filtroEstatus, setFiltroEstatus] = useState("");
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: "Copiado",
+      description: `${label} copiado al portapapeles`,
+    });
+  };
 
   const { data: comisiones, isLoading } = useQuery({
     queryKey: ["comisiones"],
@@ -429,7 +441,13 @@ export default function Comisiones() {
                 return (
                   <TableRow key={comision.id}>
                     <TableCell className="font-medium">
-                      {formatCuentaCobranzaId(comision.id, comision.tipo)}
+                      <button
+                        onClick={() => copyToClipboard(formatCuentaCobranzaId(comision.id, comision.tipo), "Número de cuenta")}
+                        className="flex items-center gap-2 hover:text-primary transition-colors cursor-pointer"
+                      >
+                        {formatCuentaCobranzaId(comision.id, comision.tipo)}
+                        <Copy className="h-3 w-3" />
+                      </button>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{comision.tipo}</Badge>
@@ -444,7 +462,15 @@ export default function Comisiones() {
                       {comision.nombre_dueno || "-"}
                     </TableCell>
                     <TableCell>
-                      {comision.cuenta_stp_comisiones || "-"}
+                      {comision.cuenta_stp_comisiones ? (
+                        <button
+                          onClick={() => copyToClipboard(comision.cuenta_stp_comisiones, "Cuenta STP")}
+                          className="flex items-center gap-2 hover:text-primary transition-colors cursor-pointer"
+                        >
+                          {comision.cuenta_stp_comisiones}
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      ) : "-"}
                     </TableCell>
                     <TableCell>{formatMonto(comision.precio_final)}</TableCell>
                     <TableCell className="min-w-[200px]">
