@@ -3407,35 +3407,43 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 const precioLista = tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista;
                                 
                                 // Ajustar precio_final si hay comisión en efectivo
+                                // Para comparar correctamente, debemos usar el precio ANTES de descontar la comisión
                                 let precioFinalAjustado = cuentaDetalle?.precio_final || 0;
                                 if (esComisionEfectivo && porcentajeComision > 0) {
                                   // Recuperar el precio_final antes de descontar la comisión
                                   precioFinalAjustado = precioFinalAjustado / (1 - porcentajeComision / 100);
                                 }
                                 
-                                return precioLista && cuentaDetalle?.precio_final && 
-                                  precioFinalAjustado !== precioLista && (
+                                if (!precioLista || !cuentaDetalle?.precio_final) return null;
+                                
+                                const difference = precioFinalAjustado - precioLista;
+                                // Usar tolerancia de $1 para evitar problemas de redondeo
+                                const tolerance = 1.0;
+                                
+                                // Si la diferencia es menor a la tolerancia, no mostrar ahorro/interés
+                                if (Math.abs(difference) < tolerance) {
+                                  return null;
+                                }
+                                
+                                const percentage = (difference / precioLista) * 100;
+                                
+                                return (
                                   <div>
                                     <h4 className="font-medium text-foreground mb-1">
-                                      {precioFinalAjustado < precioLista ? 'Ahorro' : 'Interés'}
+                                      {difference < 0 ? 'Ahorro' : 'Interés'}
                                     </h4>
                                     <p className={`text-sm font-semibold ${
-                                      precioFinalAjustado < precioLista 
+                                      difference < 0 
                                         ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
                                         : 'text-orange-600'
                                     }`}>
-                                      {(() => {
-                                        const difference = precioFinalAjustado - precioLista;
-                                        const percentage = (difference / precioLista) * 100;
-                                      if (difference > 0) {
-                                        return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
-                                      } else if (difference < 0) {
-                                        return `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(2)}%)`;
+                                      {difference > 0 
+                                        ? `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`
+                                        : `${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (${percentage.toFixed(2)}%)`
                                       }
-                                    })()}
-                                  </p>
-                                </div>
-                              );
+                                    </p>
+                                  </div>
+                                );
                             })()}
                           </div>
                           </div>
