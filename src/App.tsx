@@ -47,6 +47,7 @@ const ConsultasIA = lazy(() => import("./pages/admin/ConsultasIA"));
 const Reservas = lazy(() => import("./pages/admin/Reservas"));
 const Contratos = lazy(() => import("./pages/admin/legal/Contratos"));
 const Comisiones = lazy(() => import("./pages/admin/Comisiones"));
+const AprobacionComisiones = lazy(() => import("./pages/admin/AprobacionComisiones"));
 
 const queryClient = new QueryClient();
 
@@ -103,6 +104,7 @@ const App = () => (
             <Route path="cuentas-mantenimiento/:id/detalle" element={<DetalleCuentaMantenimiento />} />
             <Route path="cuentas-cobranza/:id/detalle" element={<DetalleCuentaCobranza />} />
             <Route path="comisiones" element={<Comisiones />} />
+            <Route path="aprobacion-comisiones" element={<AprobacionComisiones />} />
             <Route path="pagos" element={<ComingSoon title="Pagos" />} />
             <Route path="cuentas-bancarias" element={<ComingSoon title="Cuentas Bancarias" />} />
             <Route path="documentos" element={<ComingSoon title="Documentos" />} />
