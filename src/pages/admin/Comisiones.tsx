@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 
 export default function Comisiones() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [filtroGeneral, setFiltroGeneral] = useState("");
   const [filtroId, setFiltroId] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
@@ -31,6 +32,7 @@ export default function Comisiones() {
   const [filtroModelo, setFiltroModelo] = useState("");
   const [filtroNumero, setFiltroNumero] = useState("");
   const [filtroEstatus, setFiltroEstatus] = useState("");
+  const [filtroEfectivo, setFiltroEfectivo] = useState("");
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -38,6 +40,42 @@ export default function Comisiones() {
       title: "Copiado",
       description: `${label} copiado al portapapeles`,
     });
+  };
+
+  const pagarComisionMutation = useMutation({
+    mutationFn: async ({ cuentaId, montoComision }: { cuentaId: number; montoComision: number }) => {
+      const { error } = await supabase
+        .from("cuentas_cobranza")
+        .update({
+          es_pagada_comision_venta: true,
+          monto_comision_pagado: montoComision,
+          fecha_pago_comision: new Date().toISOString().split('T')[0],
+        })
+        .eq("id", cuentaId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["comisiones"] });
+      toast({
+        title: "Comisión pagada",
+        description: "La comisión se ha marcado como pagada exitosamente",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Hubo un error al pagar la comisión",
+        variant: "destructive",
+      });
+      console.error("Error al pagar comisión:", error);
+    },
+  });
+
+  const handlePagarComision = (comision: any) => {
+    const montoBase = (comision.porcentaje_comision_venta / 100) * comision.precio_final;
+    const montoFinal = comision.iva_incluido ? montoBase * 1.16 : montoBase;
+    pagarComisionMutation.mutate({ cuentaId: comision.id, montoComision: montoFinal });
   };
 
   const { data: comisiones, isLoading } = useQuery({
@@ -317,6 +355,15 @@ export default function Comisiones() {
       }
     }
 
+    // Filtro por efectivo
+    if (filtroEfectivo && filtroEfectivo !== "todos") {
+      const esEfectivo = comision.es_comision_venta_efectivo;
+      const efectivoTexto = esEfectivo ? "si" : "no";
+      if (efectivoTexto !== filtroEfectivo) {
+        return false;
+      }
+    }
+
     return true;
   }) || [];
 
@@ -415,6 +462,17 @@ export default function Comisiones() {
                 <SelectItem value="pagado">Pagado</SelectItem>
               </SelectContent>
             </Select>
+
+            <Select value={filtroEfectivo} onValueChange={setFiltroEfectivo}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filtrar por efectivo..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="si">Sí</SelectItem>
+                <SelectItem value="no">No</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <Table>
@@ -439,7 +497,10 @@ export default function Comisiones() {
             <TableBody>
               {comisionesFiltradas?.map((comision: any) => {
                 return (
-                  <TableRow key={comision.id}>
+                  <TableRow 
+                    key={comision.id}
+                    className={comision.es_comision_venta_efectivo ? "bg-yellow-50 dark:bg-yellow-950/20" : ""}
+                  >
                     <TableCell className="font-medium">
                       <button
                         onClick={() => copyToClipboard(formatCuentaCobranzaId(comision.id, comision.tipo), "Número de cuenta")}
@@ -516,6 +577,14 @@ export default function Comisiones() {
                     <TableCell>
                       {comision.es_pagada_comision_venta ? (
                         <Badge variant="default">Pagado</Badge>
+                      ) : comision.es_comision_venta_efectivo ? (
+                        <Button
+                          size="sm"
+                          onClick={() => handlePagarComision(comision)}
+                          disabled={pagarComisionMutation.isPending}
+                        >
+                          {pagarComisionMutation.isPending ? "Pagando..." : "Marcar como Pagado"}
+                        </Button>
                       ) : (
                         <Badge variant="destructive">Pendiente</Badge>
                       )}
