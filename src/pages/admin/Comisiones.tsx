@@ -425,8 +425,8 @@ export default function Comisiones() {
                 <TableHead>Precio final</TableHead>
                 <TableHead>Comisión</TableHead>
                 <TableHead>Monto Comisión Pagado</TableHead>
-                <TableHead>Fecha Pago</TableHead>
-                <TableHead>En Efectivo</TableHead>
+                <TableHead>Fecha Pago Comisión</TableHead>
+                <TableHead>Comisión En Efectivo</TableHead>
                 <TableHead>Estatus</TableHead>
               </TableRow>
             </TableHeader>
