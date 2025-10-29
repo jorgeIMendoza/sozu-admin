@@ -110,6 +110,7 @@ const navigationItems = [
       { title: "Cuentas de cobranza", href: "/admin/cuentas-cobranza", icon: Receipt },
       { title: "Comisiones", href: "/admin/comisiones", icon: Banknote },
       { title: "Aprobación de Comisiones", href: "/admin/aprobacion-comisiones", icon: BadgeDollarSign },
+      { title: "Pagar comisiones", href: "/admin/pagar-comisiones", icon: CreditCard },
     ]
   },
   {
