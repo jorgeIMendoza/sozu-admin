@@ -389,6 +389,48 @@ export default function PagarComisiones() {
     cuenta.proyecto.toLowerCase().includes(filtroGeneral.toLowerCase())
   );
 
+  // Calcular totales para las cards de resumen
+  const { data: totalesComisiones } = useQuery({
+    queryKey: ["totales-comisiones"],
+    queryFn: async () => {
+      const { data: comisionistas, error } = await supabase
+        .from("comisionistas")
+        .select(`
+          porcentaje_comision,
+          pagada,
+          id_cuenta_cobranza,
+          cuentas_cobranza!comisionistas_id_cuenta_cobranza_fkey(
+            precio_final
+          )
+        `)
+        .eq("activo", true)
+        .eq("aprobada", true);
+
+      if (error) throw error;
+
+      let montoTotal = 0;
+      let montoDispersado = 0;
+      let montoPendiente = 0;
+
+      comisionistas.forEach((com: any) => {
+        const montoComision = (com.cuentas_cobranza.precio_final * com.porcentaje_comision) / 100;
+        montoTotal += montoComision;
+        
+        if (com.pagada) {
+          montoDispersado += montoComision;
+        } else {
+          montoPendiente += montoComision;
+        }
+      });
+
+      return {
+        montoTotal,
+        montoDispersado,
+        montoPendiente
+      };
+    }
+  });
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -396,6 +438,57 @@ export default function PagarComisiones() {
           <h1 className="text-3xl font-bold">Pagar Comisiones</h1>
           <p className="text-muted-foreground">Gestión de pagos de comisiones aprobadas</p>
         </div>
+      </div>
+
+      {/* Cards de resumen */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Monto Total de Comisiones
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {totalesComisiones ? formatCurrency(totalesComisiones.montoTotal) : <Skeleton className="h-8 w-32" />}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Total de comisiones aprobadas
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Monto a Dispersar
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">
+              {totalesComisiones ? formatCurrency(totalesComisiones.montoPendiente) : <Skeleton className="h-8 w-32" />}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Comisiones pendientes de pago
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Monto Dispersado
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {totalesComisiones ? formatCurrency(totalesComisiones.montoDispersado) : <Skeleton className="h-8 w-32" />}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Comisiones ya pagadas
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="flex gap-4">
