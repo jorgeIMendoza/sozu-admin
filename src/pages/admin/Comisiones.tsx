@@ -1,14 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { Badge } from "@/components/ui/badge";
@@ -20,9 +13,10 @@ import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
 export default function Comisiones() {
-  const { toast } = useToast();
+  const {
+    toast
+  } = useToast();
   const queryClient = useQueryClient();
   const [filtroGeneral, setFiltroGeneral] = useState("");
   const [filtroId, setFiltroId] = useState("");
@@ -33,58 +27,67 @@ export default function Comisiones() {
   const [filtroNumero, setFiltroNumero] = useState("");
   const [filtroEstatus, setFiltroEstatus] = useState("");
   const [filtroEfectivo, setFiltroEfectivo] = useState("");
-
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({
       title: "Copiado",
-      description: `${label} copiado al portapapeles`,
+      description: `${label} copiado al portapapeles`
     });
   };
-
   const pagarComisionMutation = useMutation({
-    mutationFn: async ({ cuentaId, montoComision }: { cuentaId: number; montoComision: number }) => {
-      const { error } = await supabase
-        .from("cuentas_cobranza")
-        .update({
-          es_pagada_comision_venta: true,
-          monto_comision_pagado: montoComision,
-          fecha_pago_comision: new Date().toISOString().split('T')[0],
-        })
-        .eq("id", cuentaId);
-
+    mutationFn: async ({
+      cuentaId,
+      montoComision
+    }: {
+      cuentaId: number;
+      montoComision: number;
+    }) => {
+      const {
+        error
+      } = await supabase.from("cuentas_cobranza").update({
+        es_pagada_comision_venta: true,
+        monto_comision_pagado: montoComision,
+        fecha_pago_comision: new Date().toISOString().split('T')[0]
+      }).eq("id", cuentaId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["comisiones"] });
+      queryClient.invalidateQueries({
+        queryKey: ["comisiones"]
+      });
       toast({
         title: "Comisión pagada",
-        description: "La comisión se ha marcado como pagada exitosamente",
+        description: "La comisión se ha marcado como pagada exitosamente"
       });
     },
-    onError: (error) => {
+    onError: error => {
       toast({
         title: "Error",
         description: "Hubo un error al pagar la comisión",
-        variant: "destructive",
+        variant: "destructive"
       });
       console.error("Error al pagar comisión:", error);
-    },
+    }
   });
-
   const handlePagarComision = (comision: any) => {
-    const montoBase = (comision.porcentaje_comision_venta / 100) * comision.precio_final;
+    const montoBase = comision.porcentaje_comision_venta / 100 * comision.precio_final;
     const montoFinal = comision.iva_incluido ? montoBase * 1.16 : montoBase;
-    pagarComisionMutation.mutate({ cuentaId: comision.id, montoComision: montoFinal });
+    pagarComisionMutation.mutate({
+      cuentaId: comision.id,
+      montoComision: montoFinal
+    });
   };
-
-  const { data: comisiones, isLoading } = useQuery({
+  const {
+    data: comisiones,
+    isLoading
+  } = useQuery({
     queryKey: ["comisiones"],
     queryFn: async () => {
       // Paso 1: Obtener cuentas de cobranza básicas (sin mantenimiento)
-      const { data: cuentas, error: cuentasError } = (await supabase
-        .from("cuentas_cobranza")
-        .select(`
+      const {
+        data: cuentas,
+        error: cuentasError
+      } = (await supabase.from("cuentas_cobranza").select(`
           id,
           precio_final,
           porcentaje_comision_venta,
@@ -94,178 +97,156 @@ export default function Comisiones() {
           es_comision_venta_efectivo,
           es_pagada_comision_venta,
           id_oferta
-        `)
-        .is("id_cuenta_cobranza_padre", null)
-        .order("id", { ascending: false })) as any;
-
+        `).is("id_cuenta_cobranza_padre", null).order("id", {
+        ascending: false
+      })) as any;
       if (cuentasError) throw cuentasError;
       if (!cuentas || cuentas.length === 0) return [];
 
       // Paso 1.5: Filtrar solo cuentas con enganche completo pagado
-      const cuentaIds = cuentas.map((c) => c.id);
-      
-      // Obtener acuerdos de enganche (id_concepto = 2) no completados
-      const { data: acuerdosEnganchePendientes, error: acuerdosError } = await supabase
-        .from("acuerdos_pago")
-        .select("id_cuenta_cobranza")
-        .in("id_cuenta_cobranza", cuentaIds)
-        .eq("id_concepto", 2) // Enganche
-        .eq("pago_completado", false)
-        .eq("activo", true);
+      const cuentaIds = cuentas.map(c => c.id);
 
+      // Obtener acuerdos de enganche (id_concepto = 2) no completados
+      const {
+        data: acuerdosEnganchePendientes,
+        error: acuerdosError
+      } = await supabase.from("acuerdos_pago").select("id_cuenta_cobranza").in("id_cuenta_cobranza", cuentaIds).eq("id_concepto", 2) // Enganche
+      .eq("pago_completado", false).eq("activo", true);
       if (acuerdosError) throw acuerdosError;
 
       // IDs de cuentas con enganche pendiente
-      const cuentasConEnganchePendiente = new Set(
-        acuerdosEnganchePendientes?.map((a) => a.id_cuenta_cobranza) || []
-      );
+      const cuentasConEnganchePendiente = new Set(acuerdosEnganchePendientes?.map(a => a.id_cuenta_cobranza) || []);
 
       // Filtrar solo cuentas que NO tienen enganche pendiente Y que tienen al menos un acuerdo de enganche
-      const { data: acuerdosEnganches, error: acuerdosEngancheError } = await supabase
-        .from("acuerdos_pago")
-        .select("id_cuenta_cobranza")
-        .in("id_cuenta_cobranza", cuentaIds)
-        .eq("id_concepto", 2)
-        .eq("activo", true);
-
+      const {
+        data: acuerdosEnganches,
+        error: acuerdosEngancheError
+      } = await supabase.from("acuerdos_pago").select("id_cuenta_cobranza").in("id_cuenta_cobranza", cuentaIds).eq("id_concepto", 2).eq("activo", true);
       if (acuerdosEngancheError) throw acuerdosEngancheError;
-
-      const cuentasConEnganche = new Set(
-        acuerdosEnganches?.map((a) => a.id_cuenta_cobranza) || []
-      );
+      const cuentasConEnganche = new Set(acuerdosEnganches?.map(a => a.id_cuenta_cobranza) || []);
 
       // Solo incluir cuentas que tienen enganche Y lo tienen completo
-      const cuentasFiltradas = cuentas.filter(
-        (c) => cuentasConEnganche.has(c.id) && !cuentasConEnganchePendiente.has(c.id)
-      );
-
+      const cuentasFiltradas = cuentas.filter(c => cuentasConEnganche.has(c.id) && !cuentasConEnganchePendiente.has(c.id));
       if (cuentasFiltradas.length === 0) return [];
 
       // Paso 2: Obtener ofertas relacionadas
-      const ofertaIds = cuentasFiltradas.map((c) => c.id_oferta).filter((id) => id !== null);
-      
-      const { data: ofertas, error: ofertasError } = ofertaIds.length > 0 
-        ? await supabase
-            .from("ofertas")
-            .select(`
+      const ofertaIds = cuentasFiltradas.map(c => c.id_oferta).filter(id => id !== null);
+      const {
+        data: ofertas,
+        error: ofertasError
+      } = ofertaIds.length > 0 ? await supabase.from("ofertas").select(`
               id,
               id_propiedad,
               id_producto
-            `)
-            .in("id", ofertaIds)
-        : { data: [], error: null };
-
+            `).in("id", ofertaIds) : {
+        data: [],
+        error: null
+      };
       if (ofertasError) throw ofertasError;
 
       // Paso 3: Obtener propiedades y modelos relacionados (con dueño)
-      const propiedadIds = ofertas?.filter((o) => o.id_propiedad).map((o) => o.id_propiedad) || [];
-      
-      const { data: propiedades, error: propiedadesError } = propiedadIds.length > 0
-        ? await supabase
-            .from("propiedades")
-            .select(`
+      const propiedadIds = ofertas?.filter(o => o.id_propiedad).map(o => o.id_propiedad) || [];
+      const {
+        data: propiedades,
+        error: propiedadesError
+      } = propiedadIds.length > 0 ? await supabase.from("propiedades").select(`
               id,
               numero_propiedad,
               id_edificio_modelo,
               id_entidad_relacionada_dueno
-            `)
-            .in("id", propiedadIds)
-        : { data: [], error: null };
-
+            `).in("id", propiedadIds) : {
+        data: [],
+        error: null
+      };
       if (propiedadesError) throw propiedadesError;
 
       // Paso 4: Obtener edificios y modelos
-      const edificioModeloIds = propiedades?.map((p) => p.id_edificio_modelo).filter(Boolean) || [];
-      
-      const { data: edificiosModelos, error: edificiosModelosError } = edificioModeloIds.length > 0
-        ? await supabase
-            .from("edificios_modelos")
-            .select(`
+      const edificioModeloIds = propiedades?.map(p => p.id_edificio_modelo).filter(Boolean) || [];
+      const {
+        data: edificiosModelos,
+        error: edificiosModelosError
+      } = edificioModeloIds.length > 0 ? await supabase.from("edificios_modelos").select(`
               id,
               id_edificio,
               modelos!edificios_modelos_id_modelo_fkey(nombre)
-            `)
-            .in("id", edificioModeloIds)
-        : { data: [], error: null };
-
+            `).in("id", edificioModeloIds) : {
+        data: [],
+        error: null
+      };
       if (edificiosModelosError) throw edificiosModelosError;
-      const edificioIdsReal = edificiosModelos?.map((em) => em.id_edificio).filter(Boolean) || [];
-      
-      const { data: edificiosData, error: edificiosDataError } = edificioIdsReal.length > 0
-        ? await supabase
-            .from("edificios")
-            .select(`
+      const edificioIdsReal = edificiosModelos?.map(em => em.id_edificio).filter(Boolean) || [];
+      const {
+        data: edificiosData,
+        error: edificiosDataError
+      } = edificioIdsReal.length > 0 ? await supabase.from("edificios").select(`
               id,
               nombre,
               id_proyecto
-            `)
-            .in("id", edificioIdsReal)
-        : { data: [], error: null };
-
+            `).in("id", edificioIdsReal) : {
+        data: [],
+        error: null
+      };
       if (edificiosDataError) throw edificiosDataError;
 
       // Paso 5: Obtener proyectos
-      const proyectoIds = edificiosData?.map((e) => e.id_proyecto).filter(Boolean) || [];
-      
-      const { data: proyectos, error: proyectosError } = proyectoIds.length > 0
-        ? await supabase
-            .from("proyectos")
-            .select(`
+      const proyectoIds = edificiosData?.map(e => e.id_proyecto).filter(Boolean) || [];
+      const {
+        data: proyectos,
+        error: proyectosError
+      } = proyectoIds.length > 0 ? await supabase.from("proyectos").select(`
               id,
               nombre
-            `)
-            .in("id", proyectoIds)
-        : { data: [], error: null };
-
+            `).in("id", proyectoIds) : {
+        data: [],
+        error: null
+      };
       if (proyectosError) throw proyectosError;
 
       // Paso 6: Obtener productos con categorías
-      const productoIds = ofertas?.filter((o) => o.id_producto).map((o) => o.id_producto) || [];
-      
-      const { data: productos, error: productosError } = productoIds.length > 0
-        ? await supabase
-            .from("productos_servicios")
-            .select(`
+      const productoIds = ofertas?.filter(o => o.id_producto).map(o => o.id_producto) || [];
+      const {
+        data: productos,
+        error: productosError
+      } = productoIds.length > 0 ? await supabase.from("productos_servicios").select(`
               id,
               nombre,
               id_categoria,
               categorias_producto!productos_servicios_id_categoria_fkey(nombre)
-            `)
-            .in("id", productoIds)
-        : { data: [], error: null };
-
+            `).in("id", productoIds) : {
+        data: [],
+        error: null
+      };
       if (productosError) throw productosError;
 
       // Paso 6.5: Obtener entidades relacionadas (dueños) de las propiedades
-      const entidadIds = propiedades?.map((p) => p.id_entidad_relacionada_dueno).filter(Boolean) || [];
-      
-      const { data: entidadesRelacionadas, error: entidadesError } = entidadIds.length > 0
-        ? await supabase
-            .from("entidades_relacionadas")
-            .select(`
+      const entidadIds = propiedades?.map(p => p.id_entidad_relacionada_dueno).filter(Boolean) || [];
+      const {
+        data: entidadesRelacionadas,
+        error: entidadesError
+      } = entidadIds.length > 0 ? await supabase.from("entidades_relacionadas").select(`
               id,
               cuenta_stp_comisiones,
               personas!fk_entrel_persona(
                 nombre_legal,
                 nombre_comercial
               )
-            `)
-            .in("id", entidadIds)
-        : { data: [], error: null };
-
+            `).in("id", entidadIds) : {
+        data: [],
+        error: null
+      };
       if (entidadesError) throw entidadesError;
 
       // Paso 7: Combinar todos los datos
-      return cuentasFiltradas.map((cuenta) => {
-        const oferta = ofertas?.find((o) => o.id === cuenta.id_oferta);
-        const propiedad = propiedades?.find((p) => p.id === oferta?.id_propiedad);
-        const edificioModelo = edificiosModelos?.find((em) => em.id === propiedad?.id_edificio_modelo);
-        const edificio = edificiosData?.find((e) => e.id === edificioModelo?.id_edificio);
-        const proyecto = proyectos?.find((pr) => pr.id === edificio?.id_proyecto);
-        const producto = productos?.find((prod) => prod.id === oferta?.id_producto);
+      return cuentasFiltradas.map(cuenta => {
+        const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
+        const propiedad = propiedades?.find(p => p.id === oferta?.id_propiedad);
+        const edificioModelo = edificiosModelos?.find(em => em.id === propiedad?.id_edificio_modelo);
+        const edificio = edificiosData?.find(e => e.id === edificioModelo?.id_edificio);
+        const proyecto = proyectos?.find(pr => pr.id === edificio?.id_proyecto);
+        const producto = productos?.find(prod => prod.id === oferta?.id_producto);
 
         // Obtener cuenta_stp_comisiones y nombre del dueño desde la entidad relacionada de la propiedad
-        const entidadDueno = entidadesRelacionadas?.find((e) => e.id === propiedad?.id_entidad_relacionada_dueno);
+        const entidadDueno = entidadesRelacionadas?.find(e => e.id === propiedad?.id_entidad_relacionada_dueno);
         const cuenta_stp_comisiones = entidadDueno?.cuenta_stp_comisiones;
         const nombre_dueno = entidadDueno?.personas?.nombre_comercial || entidadDueno?.personas?.nombre_legal;
 
@@ -275,7 +256,6 @@ export default function Comisiones() {
           const categoriaNombre = producto.categorias_producto?.nombre?.toLowerCase();
           tipo = categoriaNombre === 'servicios' ? 'Servicio' : 'Producto';
         }
-
         return {
           ...cuenta,
           proyecto_nombre: proyecto?.nombre,
@@ -285,16 +265,15 @@ export default function Comisiones() {
           producto_nombre: producto?.nombre,
           tipo: tipo,
           cuenta_stp_comisiones,
-          nombre_dueno,
+          nombre_dueno
         };
       });
-    },
+    }
   });
-
   const formatMonto = (monto: number) => {
     return new Intl.NumberFormat("es-MX", {
       style: "currency",
-      currency: "MXN",
+      currency: "MXN"
     }).format(monto);
   };
 
@@ -307,7 +286,6 @@ export default function Comisiones() {
       const matchProyecto = comision.proyecto_nombre?.toLowerCase().includes(searchTerm);
       const matchNumero = (comision.numero_departamento || comision.producto_nombre || "").toLowerCase().includes(searchTerm);
       const matchModelo = comision.modelo_nombre?.toLowerCase().includes(searchTerm);
-      
       if (!matchId && !matchProyecto && !matchNumero && !matchModelo) {
         return false;
       }
@@ -363,14 +341,10 @@ export default function Comisiones() {
         return false;
       }
     }
-
     return true;
   }) || [];
-
-
   if (isLoading) {
-    return (
-      <div className="container mx-auto py-6 space-y-4">
+    return <div className="container mx-auto py-6 space-y-4">
         <Card>
           <CardHeader>
             <CardTitle>Comisiones</CardTitle>
@@ -383,12 +357,9 @@ export default function Comisiones() {
             </div>
           </CardContent>
         </Card>
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="container mx-auto py-6">
+  return <div className="container mx-auto py-6">
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -402,55 +373,20 @@ export default function Comisiones() {
           {/* Filtros */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="md:col-span-4">
-              <Input
-                type="text"
-                placeholder="Buscar por ID, proyecto, número o modelo..."
-                value={filtroGeneral}
-                onChange={(e) => setFiltroGeneral(e.target.value)}
-              />
+              <Input type="text" placeholder="Buscar por ID, proyecto, número o modelo..." value={filtroGeneral} onChange={e => setFiltroGeneral(e.target.value)} />
             </div>
             
-            <Input
-              type="text"
-              placeholder="Filtrar por ID..."
-              value={filtroId}
-              onChange={(e) => setFiltroId(e.target.value)}
-            />
+            <Input type="text" placeholder="Filtrar por ID..." value={filtroId} onChange={e => setFiltroId(e.target.value)} />
 
-            <Input
-              type="text"
-              placeholder="Filtrar por tipo..."
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value)}
-            />
+            <Input type="text" placeholder="Filtrar por tipo..." value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} />
 
-            <Input
-              type="text"
-              placeholder="Filtrar por proyecto..."
-              value={filtroProyecto}
-              onChange={(e) => setFiltroProyecto(e.target.value)}
-            />
+            <Input type="text" placeholder="Filtrar por proyecto..." value={filtroProyecto} onChange={e => setFiltroProyecto(e.target.value)} />
 
-            <Input
-              type="text"
-              placeholder="Filtrar por edificio..."
-              value={filtroEdificio}
-              onChange={(e) => setFiltroEdificio(e.target.value)}
-            />
+            <Input type="text" placeholder="Filtrar por edificio..." value={filtroEdificio} onChange={e => setFiltroEdificio(e.target.value)} />
 
-            <Input
-              type="text"
-              placeholder="Filtrar por modelo..."
-              value={filtroModelo}
-              onChange={(e) => setFiltroModelo(e.target.value)}
-            />
+            <Input type="text" placeholder="Filtrar por modelo..." value={filtroModelo} onChange={e => setFiltroModelo(e.target.value)} />
 
-            <Input
-              type="text"
-              placeholder="Filtrar por número..."
-              value={filtroNumero}
-              onChange={(e) => setFiltroNumero(e.target.value)}
-            />
+            <Input type="text" placeholder="Filtrar por número..." value={filtroNumero} onChange={e => setFiltroNumero(e.target.value)} />
 
             <Select value={filtroEstatus} onValueChange={setFiltroEstatus}>
               <SelectTrigger>
@@ -486,7 +422,7 @@ export default function Comisiones() {
                 <TableHead>No. Departamento</TableHead>
                 <TableHead>Entidad Dueña</TableHead>
                 <TableHead>STP de Comisión</TableHead>
-                <TableHead>Monto</TableHead>
+                <TableHead>Precio final</TableHead>
                 <TableHead>Comisión</TableHead>
                 <TableHead>Monto Comisión Pagado</TableHead>
                 <TableHead>Fecha Pago</TableHead>
@@ -496,16 +432,9 @@ export default function Comisiones() {
             </TableHeader>
             <TableBody>
               {comisionesFiltradas?.map((comision: any) => {
-                return (
-                  <TableRow 
-                    key={comision.id}
-                    className={comision.es_comision_venta_efectivo ? "bg-yellow-50 dark:bg-yellow-950/20" : ""}
-                  >
+              return <TableRow key={comision.id} className={comision.es_comision_venta_efectivo ? "bg-yellow-50 dark:bg-yellow-950/20" : ""}>
                     <TableCell className="font-medium">
-                      <button
-                        onClick={() => copyToClipboard(formatCuentaCobranzaId(comision.id, comision.tipo), "Número de cuenta")}
-                        className="flex items-center gap-2 hover:text-primary transition-colors cursor-pointer"
-                      >
+                      <button onClick={() => copyToClipboard(formatCuentaCobranzaId(comision.id, comision.tipo), "Número de cuenta")} className="flex items-center gap-2 hover:text-primary transition-colors cursor-pointer">
                         {formatCuentaCobranzaId(comision.id, comision.tipo)}
                         <Copy className="h-3 w-3" />
                       </button>
@@ -523,79 +452,52 @@ export default function Comisiones() {
                       {comision.nombre_dueno || "-"}
                     </TableCell>
                     <TableCell>
-                      {comision.cuenta_stp_comisiones ? (
-                        <button
-                          onClick={() => copyToClipboard(comision.cuenta_stp_comisiones, "Cuenta STP")}
-                          className="flex items-center gap-2 hover:text-primary transition-colors cursor-pointer"
-                        >
+                      {comision.cuenta_stp_comisiones ? <button onClick={() => copyToClipboard(comision.cuenta_stp_comisiones, "Cuenta STP")} className="flex items-center gap-2 hover:text-primary transition-colors cursor-pointer">
                           {comision.cuenta_stp_comisiones}
                           <Copy className="h-3 w-3" />
-                        </button>
-                      ) : "-"}
+                        </button> : "-"}
                     </TableCell>
                     <TableCell>{formatMonto(comision.precio_final)}</TableCell>
                     <TableCell className="min-w-[200px]">
                       <div className="relative">
                         <div className="pr-16">
                           {(() => {
-                            const montoBase = (comision.porcentaje_comision_venta / 100) * comision.precio_final;
-                            const montoFinal = comision.iva_incluido ? montoBase * 1.16 : montoBase;
-                            return (
-                              <div className="font-medium">
+                        const montoBase = comision.porcentaje_comision_venta / 100 * comision.precio_final;
+                        const montoFinal = comision.iva_incluido ? montoBase * 1.16 : montoBase;
+                        return <div className="font-medium">
                                 {formatMonto(montoFinal)}
                                 <div className="text-xs text-muted-foreground mt-0.5">
                                   ({comision.porcentaje_comision_venta}%)
                                 </div>
-                              </div>
-                            );
-                          })()}
+                              </div>;
+                      })()}
                         </div>
-                        {comision.iva_incluido && (
-                          <Badge variant="default" className="absolute top-0 right-0 text-[10px] px-1.5 py-0 bg-green-600 hover:bg-green-700">
+                        {comision.iva_incluido && <Badge variant="default" className="absolute top-0 right-0 text-[10px] px-1.5 py-0 bg-green-600 hover:bg-green-700">
                             IVA Incluido
-                          </Badge>
-                        )}
+                          </Badge>}
                       </div>
                     </TableCell>
                     <TableCell>
                       {formatMonto(comision.monto_comision_pagado)}
                     </TableCell>
                     <TableCell>
-                      {comision.fecha_pago_comision
-                        ? format(new Date(comision.fecha_pago_comision), "dd/MMM/yyyy", {
-                            locale: es,
-                          })
-                        : "-"}
+                      {comision.fecha_pago_comision ? format(new Date(comision.fecha_pago_comision), "dd/MMM/yyyy", {
+                    locale: es
+                  }) : "-"}
                     </TableCell>
                     <TableCell>
-                      {comision.es_comision_venta_efectivo ? (
-                        <Badge variant="secondary">Sí</Badge>
-                      ) : (
-                        <Badge variant="outline">No</Badge>
-                      )}
+                      {comision.es_comision_venta_efectivo ? <Badge variant="secondary">Sí</Badge> : <Badge variant="outline">No</Badge>}
                     </TableCell>
                     <TableCell>
-                      {comision.es_pagada_comision_venta ? (
-                        <Badge variant="default">Pagado</Badge>
-                      ) : comision.es_comision_venta_efectivo ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handlePagarComision(comision)}
-                          disabled={pagarComisionMutation.isPending}
-                        >
+                      {comision.es_pagada_comision_venta ? <Badge variant="default">Pagado</Badge> : comision.es_comision_venta_efectivo ? <Button size="sm" onClick={() => handlePagarComision(comision)} disabled={pagarComisionMutation.isPending}>
                           {pagarComisionMutation.isPending ? "Pagando..." : "Marcar como Pagado"}
-                        </Button>
-                      ) : (
-                        <Badge variant="destructive">Pendiente</Badge>
-                      )}
+                        </Button> : <Badge variant="destructive">Pendiente</Badge>}
                     </TableCell>
-                  </TableRow>
-                );
-              })}
+                  </TableRow>;
+            })}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
-    </div>
-  );
+    </div>;
 }
