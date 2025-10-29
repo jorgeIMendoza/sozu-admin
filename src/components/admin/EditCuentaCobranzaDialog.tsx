@@ -253,10 +253,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     if (cuentaDetalle) {
       setPorcentajeComision(cuentaDetalle.porcentaje_comision_venta || 0);
       setIvaIncluido((cuentaDetalle as any).iva_incluido || false);
-      const comisionEfectivo = (cuentaDetalle as any).es_comision_venta_efectivo || false;
-      console.info('🔍 [EditCuentaCobranzaDialog] es_comision_venta_efectivo:', comisionEfectivo);
-      console.info('🔍 [EditCuentaCobranzaDialog] cuentaDetalle completo:', cuentaDetalle);
-      setEsComisionEfectivo(comisionEfectivo);
+      setEsComisionEfectivo((cuentaDetalle as any).es_comision_venta_efectivo || false);
     }
   }, [cuentaDetalle]);
 
@@ -3351,12 +3348,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 <div className="mb-4">
                   <div className="flex items-center gap-3">
                     <h3 className="text-lg font-semibold text-foreground">Acuerdo de Pago</h3>
-                    {(() => {
-                      console.info('🔍 [Acuerdos] esComisionEfectivo:', esComisionEfectivo);
-                      console.info('🔍 [Acuerdos] porcentajeComision:', porcentajeComision);
-                      console.info('🔍 [Acuerdos] cuentaDetalle:', cuentaDetalle);
-                      return null;
-                    })()}
                     {esComisionEfectivo && cuentaDetalle && porcentajeComision > 0 && (() => {
                       const precioLista = tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista;
                       const montoComision = precioLista ? precioLista * (porcentajeComision / 100) : 0;
@@ -3447,27 +3438,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               {(() => {
                                 const precioLista = tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista;
                                 
-                                console.info('🔍 [Ahorro/Interés] precioLista:', precioLista);
-                                console.info('🔍 [Ahorro/Interés] precio_final:', cuentaDetalle?.precio_final);
-                                console.info('🔍 [Ahorro/Interés] esComisionEfectivo:', esComisionEfectivo);
-                                console.info('🔍 [Ahorro/Interés] porcentajeComision:', porcentajeComision);
-                                
                                 if (!precioLista || !cuentaDetalle?.precio_final) return null;
                                 
-                                // Ajustar precio_final si hay comisión en efectivo
-                                // La comisión se calcula como: precio_lista * porcentaje
-                                // Entonces: precio_final = precio_lista - comisión
-                                // Para recuperar el precio antes de comisión: precio_final + comisión = precio_lista
-                                let precioFinalAjustado = cuentaDetalle.precio_final;
+                                // NO mostrar ahorro/interés si hay comisión en efectivo
+                                // porque la diferencia no es un ahorro real, sino la comisión descontada
                                 if (esComisionEfectivo && porcentajeComision > 0) {
-                                  const montoComision = precioLista * (porcentajeComision / 100);
-                                  precioFinalAjustado = cuentaDetalle.precio_final + montoComision;
-                                  console.info('🔍 [Ahorro/Interés] montoComision:', montoComision);
-                                  console.info('🔍 [Ahorro/Interés] precioFinalAjustado:', precioFinalAjustado);
+                                  return null;
                                 }
                                 
-                                const difference = precioFinalAjustado - precioLista;
-                                console.info('🔍 [Ahorro/Interés] difference:', difference);
+                                const difference = cuentaDetalle.precio_final - precioLista;
                                 
                                 // Usar tolerancia para evitar problemas de redondeo
                                 const tolerance = 10.0;
