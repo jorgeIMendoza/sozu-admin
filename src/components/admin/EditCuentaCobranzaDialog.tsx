@@ -1170,7 +1170,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             id_propiedad,
             id_producto,
             id_esquema_pago_seleccionado,
-            propiedades!id_propiedad(precio_lista),
+            propiedades!ofertas_id_propiedad_fkey(precio_lista),
             productos_servicios!id_producto(precio_lista),
             esquemas_pago!id_esquema_pago_seleccionado(porcentaje_descuento_aumento)
           `)
