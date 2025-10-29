@@ -14,6 +14,7 @@ import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -269,10 +270,10 @@ export default function Comisiones() {
     }
 
     // Filtro por estatus
-    if (filtroEstatus) {
+    if (filtroEstatus && filtroEstatus !== "todos") {
       const esPagado = comision.es_pagada_comision_venta;
       const estatusTexto = esPagado ? "pagado" : "pendiente";
-      if (!estatusTexto.toLowerCase().includes(filtroEstatus.toLowerCase())) {
+      if (estatusTexto !== filtroEstatus) {
         return false;
       }
     }
@@ -365,12 +366,16 @@ export default function Comisiones() {
               onChange={(e) => setFiltroNumero(e.target.value)}
             />
 
-            <Input
-              type="text"
-              placeholder="Filtrar por estatus..."
-              value={filtroEstatus}
-              onChange={(e) => setFiltroEstatus(e.target.value)}
-            />
+            <Select value={filtroEstatus} onValueChange={setFiltroEstatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filtrar por estatus..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="pendiente">Pendiente</SelectItem>
+                <SelectItem value="pagado">Pagado</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <Table>
