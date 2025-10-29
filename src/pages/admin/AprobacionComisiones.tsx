@@ -252,8 +252,7 @@ export default function AprobacionComisiones() {
 
   // Calcular totales
   const calcularPorcentajeTotalComisiones = (cuenta: any) => {
-    const comisionistasPendientes = cuenta.comisionistas.filter((c: any) => !c.aprobada);
-    const totalPorcentaje = comisionistasPendientes.reduce((sum: number, c: any) => sum + (c.porcentaje_comision || 0), 0);
+    const totalPorcentaje = cuenta.comisionistas.reduce((sum: number, c: any) => sum + (c.porcentaje_comision || 0), 0);
     return totalPorcentaje;
   };
 
@@ -368,6 +367,18 @@ export default function AprobacionComisiones() {
                                 >
                                   Aprobar Todos
                                 </Button>
+                              </div>
+                            )}
+                            
+                            {!isPendientes && cuenta.comisionistas.length > 0 && (
+                              <div className="mb-4">
+                                <Alert>
+                                  <AlertDescription>
+                                    <strong>Resumen de comisiones:</strong> Se pagará un total de{" "}
+                                    <strong>{porcentajeTotalPendiente.toFixed(2)}%</strong> del precio de la propiedad 
+                                    ({formatMonto((cuenta.precio_final * porcentajeTotalPendiente) / 100)}) en comisiones.
+                                  </AlertDescription>
+                                </Alert>
                               </div>
                             )}
 
