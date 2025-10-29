@@ -112,9 +112,9 @@ export default function PagarComisiones() {
                   modelos!edificios_modelos_id_modelo_fkey(nombre)
                 )
               ),
-              productos!ofertas_id_producto_fkey(
+              productos_servicios!ofertas_id_producto_fkey(
                 id,
-                categorias_producto(nombre)
+                categorias_producto!productos_servicios_id_categoria_fkey(nombre)
               )
             )
           )
@@ -138,7 +138,7 @@ export default function PagarComisiones() {
         const cuenta = com.cuentas_cobranza;
         const oferta = cuenta.ofertas;
         const propiedad = oferta?.propiedades;
-        const producto = oferta?.productos;
+        const producto = oferta?.productos_servicios;
         const montoComision = (cuenta.precio_final * com.porcentaje_comision) / 100;
 
         acc[com.email_usuario].montoTotal += montoComision;
@@ -192,9 +192,9 @@ export default function PagarComisiones() {
                   modelos!edificios_modelos_id_modelo_fkey(nombre)
                 )
               ),
-              productos!ofertas_id_producto_fkey(
+              productos_servicios!ofertas_id_producto_fkey(
                 id,
-                categorias_producto(nombre)
+                categorias_producto!productos_servicios_id_categoria_fkey(nombre)
               )
             )
           )
@@ -212,7 +212,7 @@ export default function PagarComisiones() {
           const cuenta = com.cuentas_cobranza;
           const oferta = cuenta.ofertas;
           const propiedad = oferta?.propiedades;
-          const producto = oferta?.productos;
+          const producto = oferta?.productos_servicios;
 
           acc[cuentaId] = {
             idCuenta: cuenta.id,
