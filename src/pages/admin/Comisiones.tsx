@@ -198,6 +198,18 @@ export default function Comisiones() {
 
       const personaIds = compradores?.map(c => c.id_persona).filter(Boolean) || [];
 
+      // Obtener proyectos relacionados con las cuentas para filtrar correctamente
+      const proyectoIdsFromCuentas = new Set<number>();
+      cuentasFiltradas.forEach((c) => {
+        const oferta = ofertas?.find((o) => o.id === c.id_oferta);
+        const propiedad = propiedades?.find((p) => p.id === oferta?.id_propiedad);
+        const edificioModelo = edificiosModelos?.find((em) => em.id === propiedad?.id_edificio_modelo);
+        const edificio = edificiosData?.find((e) => e.id === edificioModelo?.id_edificio);
+        if (edificio?.id_proyecto) {
+          proyectoIdsFromCuentas.add(edificio.id_proyecto);
+        }
+      });
+
       // Obtener información de las entidades relacionadas con sus personas y proyecto
       const { data: entidadesRelacionadas, error: entidadesError } = personaIds.length > 0
         ? await supabase
@@ -213,6 +225,7 @@ export default function Comisiones() {
               )
             `)
             .in("id_persona", personaIds)
+            .in("id_proyecto", Array.from(proyectoIdsFromCuentas))
             .eq("id_tipo_entidad", 5) // 5 = Dueño
             .eq("activo", true)
         : { data: [], error: null };
