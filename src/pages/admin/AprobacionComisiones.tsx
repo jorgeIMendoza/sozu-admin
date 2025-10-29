@@ -252,7 +252,14 @@ export default function AprobacionComisiones() {
 
   // Calcular totales
   const calcularPorcentajeTotalComisiones = (cuenta: any) => {
-    const totalPorcentaje = cuenta.comisionistas.reduce((sum: number, c: any) => sum + (c.porcentaje_comision || 0), 0);
+    // Usar el porcentaje de la cuenta de cobranza como fuente de verdad
+    return cuenta.porcentaje_comision_venta || 0;
+  };
+  
+  const calcularPorcentajeDispersarComisiones = (cuenta: any) => {
+    // Sumar solo los comisionistas pendientes de aprobar
+    const comisionistasPendientes = cuenta.comisionistas.filter((c: any) => !c.aprobada);
+    const totalPorcentaje = comisionistasPendientes.reduce((sum: number, c: any) => sum + (c.porcentaje_comision || 0), 0);
     return totalPorcentaje;
   };
 
@@ -288,6 +295,7 @@ export default function AprobacionComisiones() {
           <TableHead>No. Departamento</TableHead>
           <TableHead>Precio final</TableHead>
           <TableHead>Comisión Total</TableHead>
+          <TableHead>Comisión a dispersar</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -302,6 +310,7 @@ export default function AprobacionComisiones() {
             const isExpanded = expandedCuentas.has(cuenta.id);
             const comisionistasPendientes = cuenta.comisionistas.filter((c: any) => !c.aprobada);
             const porcentajeTotalPendiente = calcularPorcentajeTotalComisiones(cuenta);
+            const porcentajeDispersar = calcularPorcentajeDispersarComisiones(cuenta);
             const tieneComisionistas = cuenta.comisionistas.length > 0;
             
             return (
@@ -340,6 +349,14 @@ export default function AprobacionComisiones() {
                       <div className="font-medium">{formatMonto((cuenta.precio_final * porcentajeTotalPendiente) / 100)}</div>
                       <Badge variant={porcentajeTotalPendiente > 0 ? "default" : "secondary"}>
                         {porcentajeTotalPendiente.toFixed(2)}%
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell onClick={() => toggleCuenta(cuenta.id)}>
+                    <div className="space-y-1">
+                      <div className="font-medium">{formatMonto((cuenta.precio_final * porcentajeDispersar) / 100)}</div>
+                      <Badge variant={porcentajeDispersar > 0 ? "default" : "secondary"}>
+                        {porcentajeDispersar.toFixed(2)}%
                       </Badge>
                     </div>
                   </TableCell>
@@ -418,9 +435,9 @@ export default function AprobacionComisiones() {
                                     <TableCell>Total a dispersar</TableCell>
                                     <TableCell>
                                       <div className="space-y-1">
-                                        <div className="font-bold">{formatMonto((cuenta.precio_final * porcentajeTotalPendiente) / 100)}</div>
+                                        <div className="font-bold">{formatMonto((cuenta.precio_final * porcentajeDispersar) / 100)}</div>
                                         <Badge variant="default">
-                                          {porcentajeTotalPendiente.toFixed(2)}%
+                                          {porcentajeDispersar.toFixed(2)}%
                                         </Badge>
                                       </div>
                                     </TableCell>
