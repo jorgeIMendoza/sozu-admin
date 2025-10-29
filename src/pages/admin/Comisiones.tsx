@@ -37,6 +37,7 @@ export default function Comisiones() {
           id,
           precio_final,
           porcentaje_comision_venta,
+          comision_incluye_iva,
           monto_comision_pagado,
           fecha_pago_comision,
           es_comision_venta_efectivo,
@@ -407,7 +408,24 @@ export default function Comisiones() {
                     </TableCell>
                     <TableCell>{formatMonto(comision.precio_final)}</TableCell>
                     <TableCell>
-                      {formatMonto((comision.porcentaje_comision_venta / 100) * comision.precio_final)} ({comision.porcentaje_comision_venta}%)
+                      <div className="space-y-1">
+                        <div>
+                          {(() => {
+                            const montoBase = (comision.porcentaje_comision_venta / 100) * comision.precio_final;
+                            const montoFinal = comision.comision_incluye_iva ? montoBase * 1.16 : montoBase;
+                            return (
+                              <>
+                                {formatMonto(montoFinal)} ({comision.porcentaje_comision_venta}%)
+                              </>
+                            );
+                          })()}
+                        </div>
+                        {comision.comision_incluye_iva && (
+                          <Badge variant="secondary" className="text-xs">
+                            IVA Incluido
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {formatMonto(comision.monto_comision_pagado)}
