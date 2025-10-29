@@ -1426,15 +1426,61 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   };
 
   // Handle comision efectivo confirmation
-  const handleComisionEfectivoConfirm = () => {
-    setEsComisionEfectivo(true);
-    setIvaIncluido(false);
-    updateComisionMutation.mutate({ 
-      porcentaje: porcentajeComision, 
-      ivaIncluido: false,
-      esComisionEfectivo: true
-    });
-    setShowComisionEfectivoDialog(false);
+  const handleComisionEfectivoConfirm = async () => {
+    try {
+      // Calcular el monto de comisión (sin IVA)
+      const montoComision = (cuentaDetalle!.precio_final * porcentajeComision) / 100;
+      const nuevoPrecioFinal = cuentaDetalle!.precio_final - montoComision;
+
+      // 1. Actualizar precio_final en cuentas_cobranza
+      const { error: errorPrecio } = await supabase
+        .from('cuentas_cobranza')
+        .update({ 
+          precio_final: nuevoPrecioFinal,
+          es_comision_venta_efectivo: true,
+          iva_incluido: false,
+          porcentaje_comision_venta: porcentajeComision
+        })
+        .eq('id', cuenta.id);
+      
+      if (errorPrecio) throw errorPrecio;
+
+      // 2. Actualizar monto del acuerdo de pago de enganche (id_concepto=2)
+      const { data: acuerdoEnganche, error: errorGetEnganche } = await supabase
+        .from('acuerdos_pago')
+        .select('id, monto')
+        .eq('id_cuenta_cobranza', cuenta.id)
+        .eq('id_concepto', 2)
+        .eq('activo', true)
+        .single();
+      
+      if (errorGetEnganche) throw errorGetEnganche;
+
+      if (acuerdoEnganche) {
+        const nuevoMontoEnganche = acuerdoEnganche.monto - montoComision;
+        
+        const { error: errorUpdateEnganche } = await supabase
+          .from('acuerdos_pago')
+          .update({ monto: nuevoMontoEnganche })
+          .eq('id', acuerdoEnganche.id);
+        
+        if (errorUpdateEnganche) throw errorUpdateEnganche;
+      }
+
+      // Actualizar estado local
+      setEsComisionEfectivo(true);
+      setIvaIncluido(false);
+      
+      // Invalidar queries para refrescar datos
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+      
+      toast.success(`Comisión en efectivo aplicada. Descuento: ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(montoComision)}`);
+      setShowComisionEfectivoDialog(false);
+    } catch (error) {
+      console.error('Error applying comision efectivo:', error);
+      toast.error("Error al aplicar comisión en efectivo");
+    }
   };
 
   // Mutation to update payment agreement amount
@@ -3292,7 +3338,19 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
                 {/* Acuerdo de Pago Title */}
                 <div className="mb-4">
-                  <h3 className="text-lg font-semibold text-foreground">Acuerdo de Pago</h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-lg font-semibold text-foreground">Acuerdo de Pago</h3>
+                    {esComisionEfectivo && cuentaDetalle && (
+                      <Badge variant="outline" className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200">
+                        💰 Comisión en efectivo: -{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format((cuentaDetalle.precio_final * porcentajeComision) / (100 - porcentajeComision))}
+                      </Badge>
+                    )}
+                  </div>
+                  {esComisionEfectivo && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      El monto de la comisión fue descontado del precio final y del enganche
+                    </p>
+                  )}
                 </div>
 
                 {/* Selected Payment Scheme Information */}
