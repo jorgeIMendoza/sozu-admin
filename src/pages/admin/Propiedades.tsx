@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, AlertCircle } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, AlertCircle, Banknote } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -86,6 +86,8 @@ interface Property {
   clabe_stp: string | null; // Nueva propiedad para CLABE de cuentas_cobranza
   cuenta_cobranza_id: number | null; // Nueva propiedad para ID de cuenta de cobranza
   precio_final: number | null; // Nueva propiedad para precio final de cuenta de cobranza
+  es_comision_venta_efectivo?: boolean; // Nueva propiedad para indicar comisión en efectivo
+  porcentaje_comision_venta?: number; // Nueva propiedad para porcentaje de comisión
   total_pagado: number; // Nueva propiedad para total pagado
   restante: number; // Nueva propiedad para monto restante
   activo: boolean;
@@ -337,7 +339,7 @@ const Propiedades = () => {
       // Get active cuentas_cobranza separately
       const { data: activeCuentas } = await supabase
         .from('cuentas_cobranza')
-        .select('id, clabe_stp, id_oferta, precio_final')
+        .select('id, clabe_stp, id_oferta, precio_final, es_comision_venta_efectivo, porcentaje_comision_venta')
         .eq('activo', true);
 
       const activeCuentasMap = (activeCuentas || []).reduce((acc: any, cuenta: any) => {
@@ -530,6 +532,10 @@ const Propiedades = () => {
           activeCuentasMap[oferta.id]
         ).find((cuenta: any) => cuenta !== undefined);
         
+        // Get es_comision_venta_efectivo and porcentaje_comision_venta
+        const esComisionEfectivo = cuentaCobranzaData?.es_comision_venta_efectivo || false;
+        const porcentajeComision = cuentaCobranzaData?.porcentaje_comision_venta || 0;
+        
         let paymentStatus = cuentaCobranzaData?.id && paymentStatusMap[cuentaCobranzaData.id] 
           ? paymentStatusMap[cuentaCobranzaData.id] 
           : null;
@@ -587,6 +593,8 @@ const Propiedades = () => {
           clabe_stp: cuentaCobranzaData?.clabe_stp || property.clabe_stp_tmp_apartado,
           cuenta_cobranza_id: cuentaCobranzaData?.id || null,
           precio_final: precio_final > 0 ? precio_final : null,
+          es_comision_venta_efectivo: esComisionEfectivo,
+          porcentaje_comision_venta: porcentajeComision,
           total_pagado,
           restante,
           activo: property.activo,
@@ -1813,40 +1821,65 @@ const Propiedades = () => {
                      {property.precio_final ? (
                        <div className="flex items-center justify-end gap-2">
                          <span>{formatCurrency(property.precio_final)}</span>
-                         {property.precio_final > property.precio_lista ? (
-                           <TooltipProvider>
-                             <Tooltip>
-                               <TooltipTrigger>
-                                 <TrendingUp className="h-4 w-4 text-orange-600" />
-                               </TooltipTrigger>
-                               <TooltipContent>
-                                 <p>Precio final mayor a precio de lista</p>
-                               </TooltipContent>
-                             </Tooltip>
-                           </TooltipProvider>
-                         ) : property.precio_final < property.precio_lista ? (
-                           <TooltipProvider>
-                             <Tooltip>
-                               <TooltipTrigger>
-                                 <TrendingDown className="h-4 w-4 text-green-600" />
-                               </TooltipTrigger>
-                               <TooltipContent>
-                                 <p>Precio final menor a precio de lista</p>
-                               </TooltipContent>
-                             </Tooltip>
-                           </TooltipProvider>
-                         ) : (
-                           <TooltipProvider>
-                             <Tooltip>
-                               <TooltipTrigger>
-                                 <Equal className="h-4 w-4 text-blue-600" />
-                               </TooltipTrigger>
-                               <TooltipContent>
-                                 <p>Precio final igual a precio de lista</p>
-                               </TooltipContent>
-                             </Tooltip>
-                           </TooltipProvider>
-                         )}
+                         {(() => {
+                           // Ajustar precio_final si hay comisión en efectivo
+                           let precioFinalAjustado = property.precio_final;
+                           if (property.es_comision_venta_efectivo && property.porcentaje_comision_venta) {
+                             precioFinalAjustado = property.precio_final / (1 - property.porcentaje_comision_venta / 100);
+                           }
+                           
+                           return (
+                             <>
+                               {precioFinalAjustado > property.precio_lista ? (
+                                 <TooltipProvider>
+                                   <Tooltip>
+                                     <TooltipTrigger>
+                                       <TrendingUp className="h-4 w-4 text-orange-600" />
+                                     </TooltipTrigger>
+                                     <TooltipContent>
+                                       <p>Precio final mayor a precio de lista</p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
+                               ) : precioFinalAjustado < property.precio_lista ? (
+                                 <TooltipProvider>
+                                   <Tooltip>
+                                     <TooltipTrigger>
+                                       <TrendingDown className="h-4 w-4 text-green-600" />
+                                     </TooltipTrigger>
+                                     <TooltipContent>
+                                       <p>Precio final menor a precio de lista</p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
+                               ) : (
+                                 <TooltipProvider>
+                                   <Tooltip>
+                                     <TooltipTrigger>
+                                       <Equal className="h-4 w-4 text-blue-600" />
+                                     </TooltipTrigger>
+                                     <TooltipContent>
+                                       <p>Precio final igual a precio de lista</p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
+                               )}
+                               {property.es_comision_venta_efectivo && (
+                                 <TooltipProvider>
+                                   <Tooltip>
+                                     <TooltipTrigger>
+                                       <Banknote className="h-4 w-4 text-yellow-600" />
+                                     </TooltipTrigger>
+                                     <TooltipContent>
+                                       <p>Comisión pagada en efectivo ({property.porcentaje_comision_venta?.toFixed(2)}%)</p>
+                                       <p className="text-xs mt-1">Precio antes de comisión: {formatCurrency(precioFinalAjustado)}</p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
+                               )}
+                             </>
+                           );
+                         })()}
                        </div>
                      ) : '-'}
                    </TableCell>

@@ -3340,9 +3340,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 <div className="mb-4">
                   <div className="flex items-center gap-3">
                     <h3 className="text-lg font-semibold text-foreground">Acuerdo de Pago</h3>
-                    {esComisionEfectivo && cuentaDetalle && (
+                    {esComisionEfectivo && cuentaDetalle && porcentajeComision > 0 && (
                       <Badge variant="outline" className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200">
-                        💰 Comisión en efectivo: -{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format((cuentaDetalle.precio_final * porcentajeComision) / (100 - porcentajeComision))}
+                        💰 Comisión en efectivo: -{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format((cuentaDetalle.precio_final / (1 - porcentajeComision / 100)) - cuentaDetalle.precio_final)}
                       </Badge>
                     )}
                   </div>
@@ -3405,19 +3405,27 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               </div>
                               {(() => {
                                 const precioLista = tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista;
+                                
+                                // Ajustar precio_final si hay comisión en efectivo
+                                let precioFinalAjustado = cuentaDetalle?.precio_final || 0;
+                                if (esComisionEfectivo && porcentajeComision > 0) {
+                                  // Recuperar el precio_final antes de descontar la comisión
+                                  precioFinalAjustado = precioFinalAjustado / (1 - porcentajeComision / 100);
+                                }
+                                
                                 return precioLista && cuentaDetalle?.precio_final && 
-                                  cuentaDetalle.precio_final !== precioLista && (
+                                  precioFinalAjustado !== precioLista && (
                                   <div>
                                     <h4 className="font-medium text-foreground mb-1">
-                                      {cuentaDetalle.precio_final < precioLista ? 'Ahorro' : 'Interés'}
+                                      {precioFinalAjustado < precioLista ? 'Ahorro' : 'Interés'}
                                     </h4>
                                     <p className={`text-sm font-semibold ${
-                                      cuentaDetalle.precio_final < precioLista 
+                                      precioFinalAjustado < precioLista 
                                         ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
                                         : 'text-orange-600'
                                     }`}>
                                       {(() => {
-                                        const difference = cuentaDetalle.precio_final - precioLista;
+                                        const difference = precioFinalAjustado - precioLista;
                                         const percentage = (difference / precioLista) * 100;
                                       if (difference > 0) {
                                         return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
