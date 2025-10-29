@@ -185,7 +185,7 @@ export default function Comisiones() {
 
       if (productosError) throw productosError;
 
-      // Paso 6.5: Obtener cuenta_stp_comisiones de los dueños
+      // Paso 6.5: Obtener cuenta_stp_comisiones y nombre de los dueños
       const cuentaCobranzaIds = cuentasFiltradas.map(c => c.id);
       
       const { data: compradores, error: compradoresError } = await supabase
@@ -198,10 +198,20 @@ export default function Comisiones() {
 
       const personaIds = compradores?.map(c => c.id_persona).filter(Boolean) || [];
 
+      // Obtener información de las entidades relacionadas con sus personas y proyecto
       const { data: entidadesRelacionadas, error: entidadesError } = personaIds.length > 0
         ? await supabase
             .from("entidades_relacionadas")
-            .select("id_persona, cuenta_stp_comisiones, id_tipo_entidad")
+            .select(`
+              id_persona, 
+              cuenta_stp_comisiones, 
+              id_tipo_entidad,
+              id_proyecto,
+              personas!inner(
+                nombre_legal,
+                nombre_comercial
+              )
+            `)
             .in("id_persona", personaIds)
             .eq("id_tipo_entidad", 5) // 5 = Dueño
             .eq("activo", true)
@@ -218,10 +228,13 @@ export default function Comisiones() {
         const proyecto = proyectos?.find((pr) => pr.id === edificio?.id_proyecto);
         const producto = productos?.find((prod) => prod.id === oferta?.id_producto);
 
-        // Obtener cuenta_stp_comisiones del dueño
+        // Obtener cuenta_stp_comisiones y nombre del dueño
         const comprador = compradores?.find((c) => c.id_cuenta_cobranza === cuenta.id);
-        const entidadDueno = entidadesRelacionadas?.find((e) => e.id_persona === comprador?.id_persona);
+        const entidadDueno = entidadesRelacionadas?.find((e) => 
+          e.id_persona === comprador?.id_persona && e.id_proyecto === proyecto?.id
+        );
         const cuenta_stp_comisiones = entidadDueno?.cuenta_stp_comisiones;
+        const nombre_dueno = entidadDueno?.personas?.nombre_comercial || entidadDueno?.personas?.nombre_legal;
 
         // Determinar tipo de cuenta
         let tipo: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
@@ -239,6 +252,7 @@ export default function Comisiones() {
           producto_nombre: producto?.nombre,
           tipo: tipo,
           cuenta_stp_comisiones,
+          nombre_dueno,
         };
       });
     },
@@ -417,6 +431,7 @@ export default function Comisiones() {
                 <TableHead>Edificio</TableHead>
                 <TableHead>Modelo</TableHead>
                 <TableHead>No. Departamento</TableHead>
+                <TableHead>Entidad Dueña</TableHead>
                 <TableHead>STP de Comisión</TableHead>
                 <TableHead>Monto</TableHead>
                 <TableHead>Comisión</TableHead>
@@ -441,6 +456,9 @@ export default function Comisiones() {
                     <TableCell>{comision.modelo_nombre || "-"}</TableCell>
                     <TableCell>
                       {comision.numero_departamento || comision.producto_nombre || "-"}
+                    </TableCell>
+                    <TableCell>
+                      {comision.nombre_dueno || "-"}
                     </TableCell>
                     <TableCell>
                       {comision.cuenta_stp_comisiones || "-"}
