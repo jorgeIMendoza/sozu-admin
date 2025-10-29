@@ -3895,7 +3895,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               setShowComisionEfectivoDialog(true);
                             }
                           }}
-                          disabled={isReadOnly || esComisionEfectivo}
+                          disabled={isReadOnly || esComisionEfectivo || isEnganchePagado}
                         />
                       </div>
                     </div>
@@ -3970,7 +3970,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 ivaIncluido: checked === true 
                               });
                             }}
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || isEnganchePagado}
                           />
                           <Label
                             htmlFor="iva-incluido"
