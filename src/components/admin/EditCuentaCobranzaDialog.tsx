@@ -3440,13 +3440,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 
                                 if (!precioLista || !cuentaDetalle?.precio_final) return null;
                                 
-                                // NO mostrar ahorro/interés si hay comisión en efectivo
-                                // porque la diferencia no es un ahorro real, sino la comisión descontada
+                                // Ajustar precio_final si hay comisión en efectivo
+                                let precioFinalAjustado = cuentaDetalle.precio_final;
                                 if (esComisionEfectivo && porcentajeComision > 0) {
-                                  return null;
+                                  const montoComision = precioLista * (porcentajeComision / 100);
+                                  precioFinalAjustado = cuentaDetalle.precio_final + montoComision;
                                 }
                                 
-                                const difference = cuentaDetalle.precio_final - precioLista;
+                                const difference = precioFinalAjustado - precioLista;
                                 
                                 // Usar tolerancia para evitar problemas de redondeo
                                 const tolerance = 10.0;
@@ -3555,25 +3556,38 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               {(() => {
                                 const precioLista = tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista;
                                 
-                                // NO mostrar ahorro/interés si hay comisión en efectivo
+                                if (!precioLista || !cuentaDetalle?.precio_final) return null;
+                                
+                                // Ajustar precio_final si hay comisión en efectivo
+                                let precioFinalAjustado = cuentaDetalle.precio_final;
                                 if (esComisionEfectivo && porcentajeComision > 0) {
+                                  const montoComision = precioLista * (porcentajeComision / 100);
+                                  precioFinalAjustado = cuentaDetalle.precio_final + montoComision;
+                                }
+                                
+                                const difference = precioFinalAjustado - precioLista;
+                                
+                                // Usar tolerancia para evitar problemas de redondeo
+                                const tolerance = 10.0;
+                                
+                                // Si la diferencia es menor a la tolerancia, no mostrar
+                                if (Math.abs(difference) < tolerance) {
                                   return null;
                                 }
                                 
-                                return precioLista && cuentaDetalle?.precio_final && 
-                                  cuentaDetalle.precio_final !== precioLista && (
+                                const percentage = (difference / precioLista) * 100;
+                                
+                                return (
                                   <div>
                                     <h4 className="font-medium text-foreground mb-1">
-                                      {cuentaDetalle.precio_final < precioLista ? 'Ahorro' : 'Interés'}
+                                      {difference < 0 ? 'Ahorro' : 'Interés'}
                                     </h4>
                                     <p className={`text-sm font-semibold ${
-                                      cuentaDetalle.precio_final < precioLista 
+                                      difference < 0 
                                         ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
                                         : 'text-orange-600'
                                     }`}>
                                       {(() => {
-                                        const difference = cuentaDetalle.precio_final - precioLista;
-                                        const percentage = (difference / precioLista) * 100;
                                       if (difference > 0) {
                                         return `+${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(difference)} (+${percentage.toFixed(2)}%)`;
                                       } else if (difference < 0) {
