@@ -1208,8 +1208,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       queryClient.invalidateQueries({ queryKey: ['acuerdos_pago', cuenta.id] });
       queryClient.invalidateQueries({ queryKey: ['cuenta_detalle', cuenta.id] });
       queryClient.invalidateQueries({ queryKey: ['selected_payment_scheme'] });
-      
-      onUpdate();
     },
     onError: (error: Error) => {
       console.error('Error creating acuerdo:', error);
