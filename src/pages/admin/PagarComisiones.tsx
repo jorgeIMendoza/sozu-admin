@@ -102,7 +102,7 @@ export default function PagarComisiones() {
             ofertas!fk_cuentas_cobranza_oferta!inner(
               id_propiedad,
               id_producto,
-              propiedades(
+              propiedades!fk_ofertas_propiedad(
                 numero,
                 edificios(
                   nombre,
@@ -180,7 +180,7 @@ export default function PagarComisiones() {
             ofertas!fk_cuentas_cobranza_oferta!inner(
               id_propiedad,
               id_producto,
-              propiedades(
+              propiedades!fk_ofertas_propiedad(
                 numero,
                 edificios(
                   nombre,
