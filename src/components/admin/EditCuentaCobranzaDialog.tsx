@@ -4186,8 +4186,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                   Al activar esta opción:
                 </p>
                 <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li>El campo IVA se establecerá en <strong>false</strong></li>
-                  <li>El campo "Opciones IVA" se ocultará</li>
                   <li>El cálculo del monto de comisión <strong>no incluirá IVA</strong></li>
                   <li>Esta acción es <strong className="text-destructive">IRREVERSIBLE</strong></li>
                 </ul>
