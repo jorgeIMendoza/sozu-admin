@@ -216,6 +216,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const [searchUsuario, setSearchUsuario] = useState('');
   const [selectedUsuario, setSelectedUsuario] = useState<any>(null);
   const [porcentajeComisionista, setPorcentajeComisionista] = useState<string>('');
+  const [esComisionEfectivo, setEsComisionEfectivo] = useState<boolean>(false);
+  const [showComisionEfectivoDialog, setShowComisionEfectivoDialog] = useState(false);
 
   const handleNavigateToCompradores = (rfc?: string) => {
     if (rfc) {
@@ -251,6 +253,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     if (cuentaDetalle) {
       setPorcentajeComision(cuentaDetalle.porcentaje_comision_venta || 0);
       setIvaIncluido((cuentaDetalle as any).iva_incluido || false);
+      setEsComisionEfectivo((cuentaDetalle as any).es_comision_venta_efectivo || false);
     }
   }, [cuentaDetalle]);
 
@@ -1333,13 +1336,19 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
   // Mutation to update comisión data
   const updateComisionMutation = useMutation({
-    mutationFn: async ({ porcentaje, ivaIncluido }: { porcentaje: number; ivaIncluido: boolean }) => {
+    mutationFn: async ({ porcentaje, ivaIncluido, esComisionEfectivo }: { porcentaje: number; ivaIncluido: boolean; esComisionEfectivo?: boolean }) => {
+      const updateData: any = { 
+        porcentaje_comision_venta: porcentaje,
+        iva_incluido: ivaIncluido
+      };
+      
+      if (esComisionEfectivo !== undefined) {
+        updateData.es_comision_venta_efectivo = esComisionEfectivo;
+      }
+      
       const { error } = await supabase
         .from('cuentas_cobranza')
-        .update({ 
-          porcentaje_comision_venta: porcentaje,
-          iva_incluido: ivaIncluido
-        })
+        .update(updateData)
         .eq('id', cuenta.id);
       
       if (error) throw error;
@@ -1405,6 +1414,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   // Calculate total comisionistas percentage
   const totalPorcentajeComisionistas = comisionistas?.reduce((sum, c) => sum + (c.porcentaje_comision || 0), 0) || 0;
 
+  // Calculate if enganche is fully paid
+  const isEnganchePagado = acuerdosPago ? (() => {
+    const apartado = acuerdosPago.find((a: any) => a.concepto_nombre?.toLowerCase() === 'apartado');
+    const enganche = acuerdosPago.find((a: any) => a.concepto_nombre?.toLowerCase() === 'enganche');
+    
+    const montoApartado = apartado?.monto || 0;
+    const montoPagadoApartado = apartado?.monto_pagado || 0;
+    const montoEnganche = enganche?.monto || 0;
+    const montoPagadoEnganche = enganche?.monto_pagado || 0;
+    
+    const totalEnganche = montoApartado + montoEnganche;
+    const totalPagadoEnganche = montoPagadoApartado + montoPagadoEnganche;
+    
+    return totalPagadoEnganche >= totalEnganche && totalEnganche > 0;
+  })() : false;
+
   // Handle adding comisionista
   const handleAddComisionista = () => {
     if (!selectedUsuario) {
@@ -1459,6 +1484,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         ivaIncluido !== ((cuentaDetalle as any)?.iva_incluido || false)) {
       updateComisionMutation.mutate({ porcentaje: porcentajeComision, ivaIncluido });
     }
+  };
+
+  // Handle comision efectivo confirmation
+  const handleComisionEfectivoConfirm = () => {
+    setEsComisionEfectivo(true);
+    setIvaIncluido(false);
+    updateComisionMutation.mutate({ 
+      porcentaje: porcentajeComision, 
+      ivaIncluido: false,
+      esComisionEfectivo: true
+    });
+    setShowComisionEfectivoDialog(false);
   };
 
   // Mutation to update payment agreement amount
@@ -3836,6 +3873,39 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
+                  {/* Comisión en Efectivo Toggle */}
+                  <div className="p-4 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <Label htmlFor="comision-efectivo" className="text-base font-semibold">
+                          Comisión en Efectivo
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          {esComisionEfectivo 
+                            ? 'La comisión se pagará en efectivo (sin IVA)'
+                            : 'Activar si la comisión se pagará en efectivo'}
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <Checkbox
+                          id="comision-efectivo"
+                          checked={esComisionEfectivo}
+                          onCheckedChange={(checked) => {
+                            if (checked === true && !esComisionEfectivo) {
+                              setShowComisionEfectivoDialog(true);
+                            }
+                          }}
+                          disabled={isReadOnly || esComisionEfectivo}
+                        />
+                      </div>
+                    </div>
+                    {esComisionEfectivo && (
+                      <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-sm text-yellow-800 dark:text-yellow-200">
+                        ⚠️ Esta configuración no se puede revertir
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="porcentajeComision">Porcentaje de Comisión por Venta (%)</Label>
@@ -3858,9 +3928,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           handlePorcentajeComisionChange(value);
                         }}
                         onBlur={handleComisionBlur}
-                        disabled={isReadOnly}
+                        disabled={isReadOnly || isEnganchePagado}
                       />
-                      <p className="text-xs text-muted-foreground">Mínimo 5%, máximo 100% (hasta 4 decimales)</p>
+                      <p className="text-xs text-muted-foreground">
+                        {isEnganchePagado 
+                          ? 'No editable - El enganche está completamente pagado' 
+                          : 'Mínimo 5%, máximo 100% (hasta 4 decimales)'}
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -3871,43 +3945,45 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           new Intl.NumberFormat('es-MX', { 
                             style: 'currency', 
                             currency: 'MXN' 
-                          }).format(((cuentaDetalle.precio_final * porcentajeComision) / 100) * (ivaIncluido ? 1.16 : 1)) 
+                          }).format(((cuentaDetalle.precio_final * porcentajeComision) / 100) * (esComisionEfectivo ? 1 : (ivaIncluido ? 1.16 : 1))) 
                           : '$0.00'
                         } 
                         readOnly 
                         className="bg-muted"
                       />
                       <p className="text-xs text-muted-foreground">
-                        {ivaIncluido ? 'Incluye IVA (16%)' : 'Sin IVA'}
+                        {esComisionEfectivo ? 'Sin IVA (Efectivo)' : (ivaIncluido ? 'Incluye IVA (16%)' : 'Sin IVA')}
                       </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Opciones de IVA</Label>
-                      <div className="flex items-center space-x-3 h-10 px-3 rounded-md border border-input bg-background hover:bg-accent/50 transition-colors">
-                        <Checkbox
-                          id="iva-incluido"
-                          checked={ivaIncluido}
-                          onCheckedChange={(checked) => {
-                            setIvaIncluido(checked === true);
-                            updateComisionMutation.mutate({ 
-                              porcentaje: porcentajeComision, 
-                              ivaIncluido: checked === true 
-                            });
-                          }}
-                          disabled={isReadOnly}
-                        />
-                        <Label
-                          htmlFor="iva-incluido"
-                          className="text-sm font-medium cursor-pointer select-none"
-                        >
-                          IVA Incluido (16%)
-                        </Label>
+                    {!esComisionEfectivo && (
+                      <div className="space-y-2">
+                        <Label>Opciones de IVA</Label>
+                        <div className="flex items-center space-x-3 h-10 px-3 rounded-md border border-input bg-background hover:bg-accent/50 transition-colors">
+                          <Checkbox
+                            id="iva-incluido"
+                            checked={ivaIncluido}
+                            onCheckedChange={(checked) => {
+                              setIvaIncluido(checked === true);
+                              updateComisionMutation.mutate({ 
+                                porcentaje: porcentajeComision, 
+                                ivaIncluido: checked === true 
+                              });
+                            }}
+                            disabled={isReadOnly}
+                          />
+                          <Label
+                            htmlFor="iva-incluido"
+                            className="text-sm font-medium cursor-pointer select-none"
+                          >
+                            IVA Incluido (16%)
+                          </Label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {ivaIncluido ? 'Se agregará 16% al monto' : 'Monto sin IVA'}
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {ivaIncluido ? 'Se agregará 16% al monto' : 'Monto sin IVA'}
-                      </p>
-                    </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -3925,6 +4001,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
+                  {isEnganchePagado && (
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        ℹ️ El enganche está completamente pagado. Solo se pueden agregar nuevos comisionistas, no editar porcentajes existentes.
+                      </p>
+                    </div>
+                  )}
+                  
                   {/* Add Comisionista Form */}
                   {!isReadOnly && (
                     <div className="p-4 border rounded-lg space-y-4 bg-muted/30">
@@ -3997,14 +4081,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                               new Intl.NumberFormat('es-MX', { 
                                 style: 'currency', 
                                 currency: 'MXN' 
-                              }).format(((cuentaDetalle.precio_final * parseFloat(porcentajeComisionista)) / 100) * (ivaIncluido ? 1.16 : 1))
+                              }).format(((cuentaDetalle.precio_final * parseFloat(porcentajeComisionista)) / 100) * (esComisionEfectivo ? 1 : (ivaIncluido ? 1.16 : 1)))
                               : '$0.00'
                             }
                             readOnly
                             className="bg-muted"
                           />
                           <p className="text-xs text-muted-foreground">
-                            {ivaIncluido ? 'Incluye IVA (16%)' : 'Sin IVA'}
+                            {esComisionEfectivo ? 'Sin IVA (Efectivo)' : (ivaIncluido ? 'Incluye IVA (16%)' : 'Sin IVA')}
                           </p>
                         </div>
                       </div>
@@ -4042,7 +4126,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                 new Intl.NumberFormat('es-MX', { 
                                   style: 'currency', 
                                   currency: 'MXN' 
-                                }).format(((cuentaDetalle.precio_final * comisionista.porcentaje_comision) / 100) * (ivaIncluido ? 1.16 : 1))
+                                }).format(((cuentaDetalle.precio_final * comisionista.porcentaje_comision) / 100) * (esComisionEfectivo ? 1 : (ivaIncluido ? 1.16 : 1)))
                                 : '$0.00'
                               }
                             </TableCell>
@@ -4091,6 +4175,35 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Modal de confirmación para comisión en efectivo */}
+        <AlertDialog open={showComisionEfectivoDialog} onOpenChange={setShowComisionEfectivoDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Comisión en Efectivo</AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <p>
+                  Al activar esta opción:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li>El campo IVA se establecerá en <strong>false</strong></li>
+                  <li>El campo "Opciones IVA" se ocultará</li>
+                  <li>El cálculo del monto de comisión <strong>no incluirá IVA</strong></li>
+                  <li>Esta acción es <strong className="text-destructive">IRREVERSIBLE</strong></li>
+                </ul>
+                <p className="text-destructive font-semibold mt-4">
+                  ⚠️ Una vez confirmado, no podrás desactivar esta opción.
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleComisionEfectivoConfirm}>
+                Confirmar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Modal de confirmación para número de escritura */}
         <ConfirmEscrituraDialog
