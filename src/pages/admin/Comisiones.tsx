@@ -32,7 +32,7 @@ export default function Comisiones() {
     queryKey: ["comisiones"],
     queryFn: async () => {
       // Paso 1: Obtener cuentas de cobranza básicas (sin mantenimiento)
-      const { data: cuentas, error: cuentasError } = await supabase
+      const { data: cuentas, error: cuentasError } = (await supabase
         .from("cuentas_cobranza")
         .select(`
           id,
@@ -46,7 +46,7 @@ export default function Comisiones() {
           id_oferta
         `)
         .is("id_cuenta_cobranza_padre", null)
-        .order("id", { ascending: false });
+        .order("id", { ascending: false })) as any;
 
       if (cuentasError) throw cuentasError;
       if (!cuentas || cuentas.length === 0) return [];
@@ -430,7 +430,7 @@ export default function Comisiones() {
                         </div>
                         {comision.iva_incluido && (
                           <Badge variant="default" className="absolute top-0 right-0 text-[10px] px-1.5 py-0 bg-green-600 hover:bg-green-700">
-                            IVA
+                            IVA Incluido
                           </Badge>
                         )}
                       </div>
