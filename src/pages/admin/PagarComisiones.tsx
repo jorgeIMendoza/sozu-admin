@@ -110,7 +110,7 @@ export default function PagarComisiones() {
                 ),
                 modelos(nombre)
               ),
-              productos(
+              productos!ofertas_id_producto_fkey(
                 id,
                 categorias_producto(nombre)
               )
@@ -188,7 +188,7 @@ export default function PagarComisiones() {
                 ),
                 modelos(nombre)
               ),
-              productos(
+              productos!ofertas_id_producto_fkey(
                 id,
                 categorias_producto(nombre)
               )
