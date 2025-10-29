@@ -106,6 +106,18 @@ export type Database = {
           },
         ]
       }
+      adminte_pago: {
+        Row: {
+          case: boolean | null
+        }
+        Insert: {
+          case?: boolean | null
+        }
+        Update: {
+          case?: boolean | null
+        }
+        Relationships: []
+      }
       amenidades: {
         Row: {
           activo: boolean
@@ -602,14 +614,14 @@ export type Database = {
           {
             foreignKeyName: "comisionistas_id_cuenta_cobranza_fkey"
             columns: ["id_cuenta_cobranza"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "cuentas_cobranza"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "fk_comisionistas_cuenta"
             columns: ["id_cuenta_cobranza"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "cuentas_cobranza"
             referencedColumns: ["id"]
           },
