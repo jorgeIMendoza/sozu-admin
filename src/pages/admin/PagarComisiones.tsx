@@ -107,9 +107,9 @@ export default function PagarComisiones() {
                 edificios_modelos!propiedades_id_edificio_modelo_fkey(
                   edificios!edificios_modelos_id_edificio_fkey(
                     nombre,
-                    proyectos(nombre)
+                    proyectos!edificios_id_proyecto_fkey(nombre)
                   ),
-                  modelos(nombre)
+                  modelos!edificios_modelos_id_modelo_fkey(nombre)
                 )
               ),
               productos!ofertas_id_producto_fkey(
@@ -187,9 +187,9 @@ export default function PagarComisiones() {
                 edificios_modelos!propiedades_id_edificio_modelo_fkey(
                   edificios!edificios_modelos_id_edificio_fkey(
                     nombre,
-                    proyectos(nombre)
+                    proyectos!edificios_id_proyecto_fkey(nombre)
                   ),
-                  modelos(nombre)
+                  modelos!edificios_modelos_id_modelo_fkey(nombre)
                 )
               ),
               productos!ofertas_id_producto_fkey(
