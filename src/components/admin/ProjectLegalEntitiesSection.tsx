@@ -689,252 +689,65 @@ export const ProjectLegalEntitiesSection = ({
                           )}
                         </div>
                         
-                        {/* Cuenta para cobrar comisiones - Only for Dueño Vendedor, Administradora, and Aportante */}
-                        {([4, 6, 15].includes(entity.tipos_entidad?.id || 0)) && (
+                        {/* Cuenta para cobrar comisiones y Cuenta Madre STP - For Dueño Vendedor, Inmobiliaria, Administradora, and Aportante */}
+                        {([4, 5, 6, 15].includes(entity.tipos_entidad?.id || 0)) && (
                           <div className="mt-3 pt-3 border-t space-y-3">
-                            <div>
-                              <label className="text-sm font-medium">Cuenta para Cobrar Comisiones:</label>
-                              {!(entity as any).cuenta_stp_comisiones ? (
-                                <div className="mt-1">
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <div className="inline-block">
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              if (hasInmobiliaria) {
-                                                generateCuentaComisionesMutation.mutate(entity.id);
-                                              }
-                                            }}
-                                            disabled={!hasInmobiliaria || generatingComisiones === entity.id || generateCuentaComisionesMutation.isPending}
-                                            className={!hasInmobiliaria ? "cursor-not-allowed opacity-50" : ""}
-                                          >
-                                            {generatingComisiones === entity.id ? "Generando..." : "Generar Cuenta de Comisiones"}
-                                          </Button>
-                                        </div>
-                                      </TooltipTrigger>
-                                      {!hasInmobiliaria && (
-                                        <TooltipContent side="top" className="max-w-xs">
-                                          <div className="flex items-start gap-2">
-                                            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                                            <p className="text-sm">
-                                              Para generar cuentas de comisiones, el proyecto debe tener asignada una entidad de tipo <strong>Inmobiliaria</strong>.
-                                            </p>
+                            {/* Cuenta para Cobrar Comisiones - Only for Dueño Vendedor, Administradora, and Aportante (not Inmobiliaria) */}
+                            {([4, 6, 15].includes(entity.tipos_entidad?.id || 0)) && (
+                              <div>
+                                <label className="text-sm font-medium">Cuenta para Cobrar Comisiones:</label>
+                                {!(entity as any).cuenta_stp_comisiones ? (
+                                  <div className="mt-1">
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className="inline-block">
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (hasInmobiliaria) {
+                                                  generateCuentaComisionesMutation.mutate(entity.id);
+                                                }
+                                              }}
+                                              disabled={!hasInmobiliaria || generatingComisiones === entity.id || generateCuentaComisionesMutation.isPending}
+                                              className={!hasInmobiliaria ? "cursor-not-allowed opacity-50" : ""}
+                                            >
+                                              {generatingComisiones === entity.id ? "Generando..." : "Generar Cuenta de Comisiones"}
+                                            </Button>
                                           </div>
-                                        </TooltipContent>
+                                        </TooltipTrigger>
+                                        {!hasInmobiliaria && (
+                                          <TooltipContent side="top" className="max-w-xs">
+                                            <div className="flex items-start gap-2">
+                                              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                              <p className="text-sm">
+                                                Para generar cuentas de comisiones, el proyecto debe tener asignada una entidad de tipo <strong>Inmobiliaria</strong>.
+                                              </p>
+                                            </div>
+                                          </TooltipContent>
+                                        )}
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  </div>
+                                ) : (
+                                  <div className="mt-1">
+                                    <span className="text-sm font-mono">
+                                      {(entity as any).cuenta_stp_comisiones || (
+                                        <span className="text-muted-foreground italic">No asignada</span>
                                       )}
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </div>
-                              ) : (
-                                <div className="mt-1">
-                                  <span className="text-sm font-mono">
-                                    {(entity as any).cuenta_stp_comisiones || (
-                                      <span className="text-muted-foreground italic">No asignada</span>
-                                    )}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
                             <div>
                               <label className="text-sm font-medium">Cuenta Madre STP:</label>
                               {isEditing ? (
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Input
-                                    value={tempCuentaMadre}
-                                    onChange={(e) => setTempCuentaMadre(e.target.value)}
-                                    placeholder="14 dígitos"
-                                    maxLength={14}
-                                    className="flex-1"
-                                  />
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      updateCuentaMadreMutation.mutate({
-                                        entityId: entity.id,
-                                        cuentaMadre: tempCuentaMadre
-                                      });
-                                    }}
-                                    disabled={updateCuentaMadreMutation.isPending}
-                                  >
-                                    <Save className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setEditingCuentaMadre(null);
-                                      setTempCuentaMadre("");
-                                    }}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-sm font-mono flex-1">
-                                    {entity.cuenta_madre_stp ? (
-                                      <>
-                                        <span>{entity.cuenta_madre_stp.substring(0, 10)}</span>
-                                        <span className="font-bold text-base text-primary">{entity.cuenta_madre_stp.substring(10)}</span>
-                                      </>
-                                    ) : (
-                                      <span className="text-muted-foreground italic">No asignada</span>
-                                    )}
-                                  </span>
-                                   {!hasAccounts && (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setEditingCuentaMadre(entity.id);
-                                        setTempCuentaMadre(entity.cuenta_madre_stp || "");
-                                      }}
-                                    >
-                                      <Edit2 className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                  {hasAccounts && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      Con cuentas generadas
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Facturar checkbox and API Key field */}
-                            <div className="space-y-2">
-                              <div className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`facturar-${entity.id}`}
-                                  checked={entity.facturar || false}
-                                  onCheckedChange={(checked) => {
-                                    updateFacturarMutation.mutate({
-                                      entityId: entity.id,
-                                      facturar: checked as boolean,
-                                      entity: entity
-                                    });
-                                  }}
-                                  disabled={updateFacturarMutation.isPending}
-                                />
-                                <Label
-                                  htmlFor={`facturar-${entity.id}`}
-                                  className="text-sm font-medium cursor-pointer"
-                                >
-                                  Facturar
-                                </Label>
-                              </div>
-
-                              {/* API Key configuration - shown only when facturar is checked */}
-                              {entity.facturar && entity.nombre_api_key && (
-                                <div className="mt-3 p-4 border rounded-lg bg-muted/30">
-                                  <div className="space-y-4">
-                                    {/* API Key Principal */}
-                                    <div>
-                                      <Label className="text-xs text-muted-foreground">Nombre del Secret</Label>
-                                      <div className="flex gap-2 mt-1">
-                                        <Input
-                                          value={entity.nombre_api_key}
-                                          readOnly
-                                          className="flex-1 bg-background font-mono text-sm"
-                                        />
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            navigator.clipboard.writeText(entity.nombre_api_key || '');
-                                            toast({
-                                              title: "Copiado",
-                                              description: "Nombre del secret copiado al portapapeles",
-                                            });
-                                          }}
-                                        >
-                                          <Copy className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    </div>
-
-                                    {/* API Key Draft */}
-                                    <div>
-                                      <Label className="text-xs text-muted-foreground">Nombre del Secret (Draft)</Label>
-                                      <div className="flex gap-2 mt-1">
-                                        <Input
-                                          value={(entity as any).nombre_api_key_draft || `${entity.nombre_api_key}_DRAFT`}
-                                          readOnly
-                                          className="flex-1 bg-background font-mono text-sm"
-                                        />
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            const draftKey = (entity as any).nombre_api_key_draft || `${entity.nombre_api_key}_DRAFT`;
-                                            navigator.clipboard.writeText(draftKey);
-                                            toast({
-                                              title: "Copiado",
-                                              description: "Nombre del secret draft copiado al portapapeles",
-                                            });
-                                          }}
-                                        >
-                                          <Copy className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-md border border-blue-200 dark:border-blue-800">
-                                      <div className="flex gap-2 mb-2">
-                                        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                                        <div className="text-sm space-y-2">
-                                          <p className="font-medium text-blue-900 dark:text-blue-100">Instrucciones para configurar los Secrets:</p>
-                                          <ol className="list-decimal list-inside space-y-1 text-blue-800 dark:text-blue-200">
-                                            <li>Copia los nombres de los secrets mostrados arriba</li>
-                                            <li><strong>Contacta al administrador del proyecto de Supabase</strong></li>
-                                            <li>El administrador debe ir al Dashboard de Supabase → Edge Functions → Secrets</li>
-                                            <li>Crear los secrets con los nombres copiados</li>
-                                            <li>Ingresar los valores correspondientes de las API keys</li>
-                                          </ol>
-                                        </div>
-                                      </div>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="mt-2 w-full"
-                                        onClick={() => window.open(`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/settings/functions`, '_blank')}
-                                      >
-                                        <ExternalLink className="h-4 w-4 mr-2" />
-                                        Abrir Configuración de Secrets en Supabase
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Cuenta Madre STP Field - For Inmobiliaria, Dueño Vendedor, Administradora, and Aportante */}
-                        {([4, 5, 6, 15].includes(entity.tipos_entidad?.id || 0)) && (
-                          <div className="mt-3 pt-3 border-t space-y-3">
-                            <div>
-                              <label className="text-sm font-medium">Cuenta Madre STP:</label>
-                              {editingCuentaMadre === entity.id ? (
                                 <div className="flex items-center gap-2 mt-1">
                                   <Input
                                     value={tempCuentaMadre}
