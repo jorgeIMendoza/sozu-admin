@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload, Banknote } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -43,6 +43,8 @@ interface CuentaCobranza {
   clabe_stp: string | null;
   precio_final: number;
   precio_lista: number | null;
+  es_comision_venta_efectivo?: boolean;
+  porcentaje_comision_venta?: number;
   pagado: number;
   restante: number;
   compradores: Comprador[];
@@ -129,6 +131,8 @@ export default function Pagos() {
           id_oferta,
           activo,
           valor_uma,
+          es_comision_venta_efectivo,
+          porcentaje_comision_venta,
           tipos_cancelacion:id_tipo_cancelacion(nombre)
         `)
         .is('id_cuenta_cobranza_padre', null);
@@ -659,6 +663,8 @@ export default function Pagos() {
           clabe_stp: cuenta.clabe_stp,
           precio_final,
           precio_lista: propiedad?.precio_lista || null,
+          es_comision_venta_efectivo: (cuenta as any).es_comision_venta_efectivo || false,
+          porcentaje_comision_venta: (cuenta as any).porcentaje_comision_venta || 0,
           pagado,
           restante,
           cash_limit: limiteEfectivo,
@@ -1317,40 +1323,65 @@ export default function Pagos() {
                          <TableCell className="font-semibold text-green-600">
                            <div className="flex items-center justify-end gap-2">
                              <span>{formatCurrency(Number(cuenta.precio_final))}</span>
-                             {cuenta.precio_lista && cuenta.precio_final > cuenta.precio_lista ? (
-                               <TooltipProvider>
-                                 <Tooltip>
-                                   <TooltipTrigger>
-                                     <TrendingUp className="h-4 w-4 text-orange-600" />
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Precio final mayor a precio de lista</p>
-                                   </TooltipContent>
-                                 </Tooltip>
-                               </TooltipProvider>
-                             ) : cuenta.precio_lista && cuenta.precio_final < cuenta.precio_lista ? (
-                               <TooltipProvider>
-                                 <Tooltip>
-                                   <TooltipTrigger>
-                                     <TrendingDown className="h-4 w-4 text-green-600" />
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Precio final menor a precio de lista</p>
-                                   </TooltipContent>
-                                 </Tooltip>
-                               </TooltipProvider>
-                             ) : cuenta.precio_lista && cuenta.precio_final === cuenta.precio_lista ? (
-                               <TooltipProvider>
-                                 <Tooltip>
-                                   <TooltipTrigger>
-                                     <Equal className="h-4 w-4 text-blue-600" />
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Precio final igual a precio de lista</p>
-                                   </TooltipContent>
-                                 </Tooltip>
-                               </TooltipProvider>
-                             ) : null}
+                             {(() => {
+                               // Ajustar precio_final si hay comisión en efectivo
+                               let precioFinalAjustado = cuenta.precio_final;
+                               if (cuenta.es_comision_venta_efectivo && cuenta.porcentaje_comision_venta) {
+                                 precioFinalAjustado = cuenta.precio_final / (1 - cuenta.porcentaje_comision_venta / 100);
+                               }
+                               
+                               return (
+                                 <>
+                                   {cuenta.precio_lista && precioFinalAjustado > cuenta.precio_lista ? (
+                                     <TooltipProvider>
+                                       <Tooltip>
+                                         <TooltipTrigger>
+                                           <TrendingUp className="h-4 w-4 text-orange-600" />
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Precio final mayor a precio de lista</p>
+                                         </TooltipContent>
+                                       </Tooltip>
+                                     </TooltipProvider>
+                                   ) : cuenta.precio_lista && precioFinalAjustado < cuenta.precio_lista ? (
+                                     <TooltipProvider>
+                                       <Tooltip>
+                                         <TooltipTrigger>
+                                           <TrendingDown className="h-4 w-4 text-green-600" />
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Precio final menor a precio de lista</p>
+                                         </TooltipContent>
+                                       </Tooltip>
+                                     </TooltipProvider>
+                                   ) : cuenta.precio_lista && precioFinalAjustado === cuenta.precio_lista ? (
+                                     <TooltipProvider>
+                                       <Tooltip>
+                                         <TooltipTrigger>
+                                           <Equal className="h-4 w-4 text-blue-600" />
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Precio final igual a precio de lista</p>
+                                         </TooltipContent>
+                                       </Tooltip>
+                                     </TooltipProvider>
+                                   ) : null}
+                                   {cuenta.es_comision_venta_efectivo && cuenta.porcentaje_comision_venta && (
+                                     <TooltipProvider>
+                                       <Tooltip>
+                                         <TooltipTrigger>
+                                           <Banknote className="h-4 w-4 text-yellow-600" />
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Comisión pagada en efectivo ({cuenta.porcentaje_comision_venta.toFixed(2)}%)</p>
+                                           <p className="text-xs mt-1">Precio antes de comisión: {formatCurrency(precioFinalAjustado)}</p>
+                                         </TooltipContent>
+                                       </Tooltip>
+                                     </TooltipProvider>
+                                   )}
+                                 </>
+                               );
+                             })()}
                            </div>
                          </TableCell>
                         <TableCell className="font-semibold text-blue-600">
@@ -1801,40 +1832,65 @@ export default function Pagos() {
                          <TableCell className="font-semibold text-green-600">
                            <div className="flex items-center justify-end gap-2">
                              <span>{formatCurrency(Number(cuenta.precio_final))}</span>
-                             {cuenta.precio_lista && cuenta.precio_final > cuenta.precio_lista ? (
-                               <TooltipProvider>
-                                 <Tooltip>
-                                   <TooltipTrigger>
-                                     <TrendingUp className="h-4 w-4 text-orange-600" />
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Precio final mayor a precio de lista</p>
-                                   </TooltipContent>
-                                 </Tooltip>
-                               </TooltipProvider>
-                             ) : cuenta.precio_lista && cuenta.precio_final < cuenta.precio_lista ? (
-                               <TooltipProvider>
-                                 <Tooltip>
-                                   <TooltipTrigger>
-                                     <TrendingDown className="h-4 w-4 text-green-600" />
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Precio final menor a precio de lista</p>
-                                   </TooltipContent>
-                                 </Tooltip>
-                               </TooltipProvider>
-                             ) : cuenta.precio_lista && cuenta.precio_final === cuenta.precio_lista ? (
-                               <TooltipProvider>
-                                 <Tooltip>
-                                   <TooltipTrigger>
-                                     <Equal className="h-4 w-4 text-blue-600" />
-                                   </TooltipTrigger>
-                                   <TooltipContent>
-                                     <p>Precio final igual a precio de lista</p>
-                                   </TooltipContent>
-                                 </Tooltip>
-                               </TooltipProvider>
-                             ) : null}
+                             {(() => {
+                               // Ajustar precio_final si hay comisión en efectivo
+                               let precioFinalAjustado = cuenta.precio_final;
+                               if (cuenta.es_comision_venta_efectivo && cuenta.porcentaje_comision_venta) {
+                                 precioFinalAjustado = cuenta.precio_final / (1 - cuenta.porcentaje_comision_venta / 100);
+                               }
+                               
+                               return (
+                                 <>
+                                   {cuenta.precio_lista && precioFinalAjustado > cuenta.precio_lista ? (
+                                     <TooltipProvider>
+                                       <Tooltip>
+                                         <TooltipTrigger>
+                                           <TrendingUp className="h-4 w-4 text-orange-600" />
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Precio final mayor a precio de lista</p>
+                                         </TooltipContent>
+                                       </Tooltip>
+                                     </TooltipProvider>
+                                   ) : cuenta.precio_lista && precioFinalAjustado < cuenta.precio_lista ? (
+                                     <TooltipProvider>
+                                       <Tooltip>
+                                         <TooltipTrigger>
+                                           <TrendingDown className="h-4 w-4 text-green-600" />
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Precio final menor a precio de lista</p>
+                                         </TooltipContent>
+                                       </Tooltip>
+                                     </TooltipProvider>
+                                   ) : cuenta.precio_lista && precioFinalAjustado === cuenta.precio_lista ? (
+                                     <TooltipProvider>
+                                       <Tooltip>
+                                         <TooltipTrigger>
+                                           <Equal className="h-4 w-4 text-blue-600" />
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Precio final igual a precio de lista</p>
+                                         </TooltipContent>
+                                       </Tooltip>
+                                     </TooltipProvider>
+                                   ) : null}
+                                   {cuenta.es_comision_venta_efectivo && cuenta.porcentaje_comision_venta && (
+                                     <TooltipProvider>
+                                       <Tooltip>
+                                         <TooltipTrigger>
+                                           <Banknote className="h-4 w-4 text-yellow-600" />
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Comisión pagada en efectivo ({cuenta.porcentaje_comision_venta.toFixed(2)}%)</p>
+                                           <p className="text-xs mt-1">Precio antes de comisión: {formatCurrency(precioFinalAjustado)}</p>
+                                         </TooltipContent>
+                                       </Tooltip>
+                                     </TooltipProvider>
+                                   )}
+                                 </>
+                               );
+                             })()}
                            </div>
                          </TableCell>
                         <TableCell className="font-semibold text-blue-600">
