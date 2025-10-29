@@ -61,7 +61,6 @@ export default function PagarComisiones() {
         })
         .eq("email_usuario", email)
         .eq("id_cuenta_cobranza", idCuenta)
-        .eq("aprobada", true)
         .eq("activo", true)
         .select();
       
@@ -123,7 +122,6 @@ export default function PagarComisiones() {
           })
           .eq("email_usuario", cuenta.email)
           .eq("id_cuenta_cobranza", cuenta.idCuenta)
-          .eq("aprobada", true)
           .eq("activo", true)
           .select();
         
