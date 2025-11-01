@@ -98,7 +98,7 @@ const Proyectos = () => {
           )
         `)
         .eq("activo", true)
-        .order("fecha_creacion", { ascending: false });
+        .order("nombre", { ascending: true });
       
       const { data, error } = queryResult;
       
@@ -181,7 +181,7 @@ const Proyectos = () => {
           )
         `)
         .eq("activo", false)
-        .order("fecha_creacion", { ascending: false });
+        .order("nombre", { ascending: true });
       
       const { data, error } = queryResult;
       
@@ -365,9 +365,7 @@ const Proyectos = () => {
 
   // Filter active projects based on search term and specific filters
   const filteredActiveProjects = activeProjects.filter(project => {
-    const matchesSearch = project.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.direccion?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = searchTerm === "" || project.nombre.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesNombre = project.nombre.toLowerCase().includes(nombreFilter.toLowerCase());
     const matchesDesarrollador = "Por definir".toLowerCase().includes(desarrolladorFilter.toLowerCase()); // Simplificado por ahora
@@ -383,9 +381,7 @@ const Proyectos = () => {
 
   // Filter deleted projects based on search term and specific filters
   const filteredDeletedProjects = deletedProjects.filter(project => {
-    const matchesSearch = project.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.direccion?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = searchTerm === "" || project.nombre.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesNombre = project.nombre.toLowerCase().includes(nombreFilter.toLowerCase());
     const matchesDesarrollador = "Por definir".toLowerCase().includes(desarrolladorFilter.toLowerCase()); // Simplificado por ahora
