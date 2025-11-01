@@ -1213,18 +1213,6 @@ export type Database = {
           },
         ]
       }
-      es_comision: {
-        Row: {
-          cuenta_stp_comisiones: string | null
-        }
-        Insert: {
-          cuenta_stp_comisiones?: string | null
-        }
-        Update: {
-          cuenta_stp_comisiones?: string | null
-        }
-        Relationships: []
-      }
       espacios_reservables_edificio: {
         Row: {
           activo: boolean
@@ -3200,7 +3188,7 @@ export type Database = {
           id_tipo_uso?: number | null
           latitud?: number | null
           longitud?: number | null
-          monto_garantia_renta: number
+          monto_garantia_renta?: number
           monto_mensual_cuota_extraordinaria?: number
           mostrar_piso_en_oferta?: boolean
           mostrar_precio_m2_en_oferta?: boolean
@@ -3267,48 +3255,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "proyectos_direccion_id_estado_fkey"
-            columns: ["direccion_id_estado"]
-            isOneToOne: false
-            referencedRelation: "estados_mx"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "proyectos_direccion_id_estado_fkey1"
-            columns: ["direccion_id_estado"]
-            isOneToOne: false
-            referencedRelation: "estados_mx"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "proyectos_direccion_id_municipio_fkey"
-            columns: ["direccion_id_municipio"]
-            isOneToOne: false
-            referencedRelation: "municipios_mx"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "proyectos_direccion_id_municipio_fkey1"
-            columns: ["direccion_id_municipio"]
-            isOneToOne: false
-            referencedRelation: "municipios_mx"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "proyectos_direccion_id_pais_fkey"
-            columns: ["direccion_id_pais"]
-            isOneToOne: false
-            referencedRelation: "paises"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "proyectos_direccion_id_pais_fkey1"
-            columns: ["direccion_id_pais"]
-            isOneToOne: false
-            referencedRelation: "paises"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "proyectos_id_estatus_proyecto_fkey"
             columns: ["id_estatus_proyecto"]
             isOneToOne: false
@@ -3362,6 +3308,87 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      proyectos_stagin: {
+        Row: {
+          costo_mantenimiento_m2: string | null
+          descripcion: string | null
+          direccion: string | null
+          fecha_entrega: string | null
+          fecha_inicio_construccion: string | null
+          fecha_lanzamiento: string | null
+          id: number
+          id_estado: number | null
+          id_estatus_proyecto: number | null
+          id_municipio: number | null
+          id_pais: string | null
+          id_tipo_uso: number | null
+          latitud: number | null
+          longitud: number | null
+          nombre: string | null
+          nombre_estado: string | null
+          nombre_firmante_recibos: string | null
+          nombre_municipio: string | null
+          nombre_pais: string | null
+          tipo_transaccion: string | null
+          tipo_uso: string | null
+          url_firma_recibos: string | null
+          url_imagen_portada: string | null
+          url_logo: string | null
+        }
+        Insert: {
+          costo_mantenimiento_m2?: string | null
+          descripcion?: string | null
+          direccion?: string | null
+          fecha_entrega?: string | null
+          fecha_inicio_construccion?: string | null
+          fecha_lanzamiento?: string | null
+          id?: number
+          id_estado?: number | null
+          id_estatus_proyecto?: number | null
+          id_municipio?: number | null
+          id_pais?: string | null
+          id_tipo_uso?: number | null
+          latitud?: number | null
+          longitud?: number | null
+          nombre?: string | null
+          nombre_estado?: string | null
+          nombre_firmante_recibos?: string | null
+          nombre_municipio?: string | null
+          nombre_pais?: string | null
+          tipo_transaccion?: string | null
+          tipo_uso?: string | null
+          url_firma_recibos?: string | null
+          url_imagen_portada?: string | null
+          url_logo?: string | null
+        }
+        Update: {
+          costo_mantenimiento_m2?: string | null
+          descripcion?: string | null
+          direccion?: string | null
+          fecha_entrega?: string | null
+          fecha_inicio_construccion?: string | null
+          fecha_lanzamiento?: string | null
+          id?: number
+          id_estado?: number | null
+          id_estatus_proyecto?: number | null
+          id_municipio?: number | null
+          id_pais?: string | null
+          id_tipo_uso?: number | null
+          latitud?: number | null
+          longitud?: number | null
+          nombre?: string | null
+          nombre_estado?: string | null
+          nombre_firmante_recibos?: string | null
+          nombre_municipio?: string | null
+          nombre_pais?: string | null
+          tipo_transaccion?: string | null
+          tipo_uso?: string | null
+          url_firma_recibos?: string | null
+          url_imagen_portada?: string | null
+          url_logo?: string | null
+        }
+        Relationships: []
       }
       queries_reportes: {
         Row: {
@@ -4186,6 +4213,10 @@ export type Database = {
     }
     Functions: {
       actualizar_estatus_reservas: { Args: never; Returns: undefined }
+      borrar_sp_cargar_proyectos_desde_stagin: {
+        Args: never
+        Returns: undefined
+      }
       crear_referencia_bancaria: {
         Args: { id_er_dueno: number }
         Returns: string
