@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Edit, Trash2, MapPin, Copy } from "lucide-react";
+import { Edit, Trash2, MapPin, Copy, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -69,6 +69,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
   const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [amenidadesSearchTerm, setAmenidadesSearchTerm] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -755,57 +756,80 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                       <FormField
                         control={form.control}
                         name="amenidades"
-                        render={() => (
-                          <FormItem>
-                            <div className="flex items-center justify-between">
-                              <FormLabel>Amenidades</FormLabel>
-                              <NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
-                              {amenidades?.map((amenidad) => (
-                                <FormField
-                                  key={amenidad.id}
-                                  control={form.control}
-                                  name="amenidades"
-                                  render={({ field }) => {
-                                    return (
-                                      <FormItem
-                                        key={amenidad.id}
-                                        className="flex flex-row items-start space-x-3 space-y-0"
-                                      >
-                                        <FormControl>
-                                          <Checkbox
-                                            checked={field.value?.includes(amenidad.id.toString())}
-                                            onCheckedChange={(checked) => {
-                                              return checked
-                                                ? field.onChange([...field.value, amenidad.id.toString()])
-                                                : field.onChange(
-                                                    field.value?.filter(
-                                                      (value) => value !== amenidad.id.toString()
-                                                    )
-                                                  )
-                                            }}
-                                          />
-                                        </FormControl>
-                                        <div className="flex items-center space-x-2">
-                                          <span className="text-sm">{amenidad.nombre}</span>
-                                          <EditAmenityDialog 
-                                            amenityId={amenidad.id}
-                                            amenityName={amenidad.nombre}
-                                            onAmenityUpdated={() => {
-                                              queryClient.invalidateQueries({ queryKey: ['amenidades'] })
-                                            }}
-                                          />
-                                        </div>
-                                      </FormItem>
-                                    )
-                                  }}
+                        render={() => {
+                          const filteredAmenidades = amenidades?.filter(amenidad => 
+                            amenidad.nombre.toLowerCase().includes(amenidadesSearchTerm.toLowerCase())
+                          ) || [];
+                          
+                          return (
+                            <FormItem>
+                              <div className="flex items-center justify-between">
+                                <FormLabel>Amenidades</FormLabel>
+                                <NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />
+                              </div>
+                              
+                              <div className="relative">
+                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                  placeholder="Buscar amenidad..."
+                                  value={amenidadesSearchTerm}
+                                  onChange={(e) => setAmenidadesSearchTerm(e.target.value)}
+                                  className="pl-8"
                                 />
-                              ))}
-                            </div>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                                {filteredAmenidades.length > 0 ? (
+                                  filteredAmenidades.map((amenidad) => (
+                                    <FormField
+                                      key={amenidad.id}
+                                      control={form.control}
+                                      name="amenidades"
+                                      render={({ field }) => {
+                                        return (
+                                          <FormItem
+                                            key={amenidad.id}
+                                            className="flex flex-row items-start space-x-3 space-y-0"
+                                          >
+                                            <FormControl>
+                                              <Checkbox
+                                                checked={field.value?.includes(amenidad.id.toString())}
+                                                onCheckedChange={(checked) => {
+                                                  return checked
+                                                    ? field.onChange([...field.value, amenidad.id.toString()])
+                                                    : field.onChange(
+                                                        field.value?.filter(
+                                                          (value) => value !== amenidad.id.toString()
+                                                        )
+                                                      )
+                                                }}
+                                              />
+                                            </FormControl>
+                                            <div className="flex items-center space-x-2">
+                                              <span className="text-sm">{amenidad.nombre}</span>
+                                              <EditAmenityDialog 
+                                                amenityId={amenidad.id}
+                                                amenityName={amenidad.nombre}
+                                                onAmenityUpdated={() => {
+                                                  queryClient.invalidateQueries({ queryKey: ['amenidades'] })
+                                                }}
+                                              />
+                                            </div>
+                                          </FormItem>
+                                        )
+                                      }}
+                                    />
+                                  ))
+                                ) : (
+                                  <p className="col-span-2 text-sm text-muted-foreground text-center py-4">
+                                    No se encontraron amenidades
+                                  </p>
+                                )}
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )
+                        }}
                       />
                     </>
                   )}
