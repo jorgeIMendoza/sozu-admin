@@ -91,6 +91,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   const [paymentSchemes, setPaymentSchemes] = useState<PaymentScheme[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
   const [amenidadesSearchTerm, setAmenidadesSearchTerm] = useState("");
+  const [showOnlySelected, setShowOnlySelected] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -759,10 +760,17 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                 <FormField
                   control={form.control}
                   name="amenidades"
-                  render={() => {
-                    const filteredAmenidades = amenidades?.filter(amenidad => 
+                  render={({ field }) => {
+                    const selectedAmenidades = field.value || [];
+                    let filteredAmenidades = amenidades?.filter(amenidad => 
                       amenidad.nombre.toLowerCase().includes(amenidadesSearchTerm.toLowerCase())
                     ) || [];
+                    
+                    if (showOnlySelected) {
+                      filteredAmenidades = filteredAmenidades.filter(amenidad => 
+                        selectedAmenidades.includes(amenidad.id.toString())
+                      );
+                    }
                     
                     return (
                       <FormItem>
@@ -771,14 +779,25 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                           <NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />
                         </div>
                         
-                        <div className="relative">
-                          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            placeholder="Buscar amenidad..."
-                            value={amenidadesSearchTerm}
-                            onChange={(e) => setAmenidadesSearchTerm(e.target.value)}
-                            className="pl-8"
-                          />
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Buscar amenidad..."
+                              value={amenidadesSearchTerm}
+                              onChange={(e) => setAmenidadesSearchTerm(e.target.value)}
+                              className="pl-8"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant={showOnlySelected ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setShowOnlySelected(!showOnlySelected)}
+                            className="whitespace-nowrap"
+                          >
+                            {showOnlySelected ? `Seleccionadas (${selectedAmenidades.length})` : 'Ver seleccionadas'}
+                          </Button>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
