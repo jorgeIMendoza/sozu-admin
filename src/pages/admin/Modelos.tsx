@@ -83,7 +83,7 @@ export default function Modelos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("modelos")
-        .select("*")
+        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo")
         .eq("activo", true)
         .order("nombre");
 
@@ -101,7 +101,7 @@ export default function Modelos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("modelos")
-        .select("*")
+        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo")
         .eq("activo", false)
         .order("nombre");
 
