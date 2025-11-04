@@ -179,14 +179,23 @@ export default function Modelos() {
   const currentModelos = activeTab === "active" ? modelosActivos : modelosEliminados;
   const isLoading = activeTab === "active" ? loadingActivos : loadingEliminados;
 
-  // Filter modelos based on search term and project
-  const filteredModelos = currentModelos?.filter((modelo) => {
-    const matchesSearch = modelo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (modelo.descripcion && modelo.descripcion.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesProyecto = selectedProyectoFilter.length === 0 || 
-      (modelo.id_proyecto && selectedProyectoFilter.includes(modelo.id_proyecto));
-    return matchesSearch && matchesProyecto;
-  }) || [];
+  // Filter function for modelos
+  const filterModelos = (modelos: Modelo[] | undefined) => {
+    return modelos?.filter((modelo) => {
+      const matchesSearch = modelo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (modelo.descripcion && modelo.descripcion.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesProyecto = selectedProyectoFilter.length === 0 || 
+        (modelo.id_proyecto != null && selectedProyectoFilter.includes(modelo.id_proyecto));
+      return matchesSearch && matchesProyecto;
+    }) || [];
+  };
+
+  // Filter both active and deleted modelos for counts
+  const filteredModelosActivos = filterModelos(modelosActivos);
+  const filteredModelosEliminados = filterModelos(modelosEliminados);
+
+  // Current filtered modelos based on active tab
+  const filteredModelos = activeTab === "active" ? filteredModelosActivos : filteredModelosEliminados;
 
   const toggleProjectSelection = (projectId: number) => {
     setSelectedProyectoFilter(prev => 
@@ -319,8 +328,8 @@ export default function Modelos() {
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "active" | "deleted")}>
         <TabsList>
-          <TabsTrigger value="active">Modelos Activos ({modelosActivos?.length || 0})</TabsTrigger>
-          <TabsTrigger value="deleted">Modelos Eliminados ({modelosEliminados?.length || 0})</TabsTrigger>
+          <TabsTrigger value="active">Modelos Activos ({filteredModelosActivos.length})</TabsTrigger>
+          <TabsTrigger value="deleted">Modelos Eliminados ({filteredModelosEliminados.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="active">
