@@ -98,8 +98,38 @@ interface CuentaCobranza {
 }
 
 export default function CuentasMantenimiento() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
   const [inputValue, setInputValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [idCuentaFilter, setIdCuentaFilter] = useState("");
+  const [propietariosFilter, setPropietariosFilter] = useState("");
+  const [clabeFilter, setClabeFilter] = useState("");
+  const [proyectoFilter, setProyectoFilter] = useState("");
+  const [noPropiedadFilter, setNoPropiedadFilter] = useState("");
+  const [modeloFilter, setModeloFilter] = useState("");
+  
+  const [editDialog, setEditDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
+    isOpen: false,
+    cuenta: null,
+  });
+  
+  const [complementosDialog, setComplementosDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
+    isOpen: false,
+    cuenta: null,
+  });
+  
+  const [addResidenteDialog, setAddResidenteDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
+    isOpen: false,
+    cuenta: null,
+  });
+  
+  const [residentesDialog, setResidentesDialog] = useState<{ isOpen: boolean; residentes: Residente[] }>({
+    isOpen: false,
+    residentes: [],
+  });
   
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -111,6 +141,11 @@ export default function CuentasMantenimiento() {
 
     return () => clearTimeout(timer);
   }, [inputValue]);
+
+  // Función para normalizar saldos pequeños a cero
+  const normalizarSaldo = (saldo: number): number => {
+    return Math.abs(saldo) < 0.01 ? 0 : saldo;
+  };
   
   const { data: cuentasCobranza, isLoading } = useQuery({
     queryKey: ["cuentas_mantenimiento"],
@@ -770,6 +805,13 @@ export default function CuentasMantenimiento() {
     },
   });
 
+  // Refocus search input after loading completes
+  useEffect(() => {
+    if (!isLoading && inputValue && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isLoading, inputValue]);
+
   // Filter only active maintenance accounts
   const cuentasToFilter = cuentasCobranza?.filter(c => c.activo) || [];
   
@@ -860,9 +902,10 @@ export default function CuentasMantenimiento() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
           <Input
+            ref={searchInputRef}
             placeholder="Buscar por ID, propietario, RFC, CLABE, proyecto, propiedad..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
             className="pl-10"
           />
         </div>
