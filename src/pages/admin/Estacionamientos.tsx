@@ -34,6 +34,11 @@ const Estacionamientos = () => {
   const [proyectoFilter, setProyectoFilter] = useState("");
   const [editingEstacionamiento, setEditingEstacionamiento] = useState<Estacionamiento | null>(null);
   
+  // Pagination states
+  const [currentPageActive, setCurrentPageActive] = useState(1);
+  const [currentPageDeleted, setCurrentPageDeleted] = useState(1);
+  const itemsPerPage = 50;
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 

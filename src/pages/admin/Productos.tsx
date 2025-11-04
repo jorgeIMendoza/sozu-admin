@@ -34,7 +34,8 @@ type Producto = {
 export default function Productos() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPageActive, setCurrentPageActive] = useState(1);
+  const [currentPageDeleted, setCurrentPageDeleted] = useState(1);
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEntity, setEditingEntity] = useState<Producto | null>(null);
@@ -55,7 +56,8 @@ export default function Productos() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const itemsPerPage = 10;
+  const itemsPerPage = 50;
+  const currentPage = activeTab === 'active' ? currentPageActive : currentPageDeleted;
 
   const fetchProductos = async (activo: boolean) => {
     const { data, error } = await supabase
@@ -156,36 +158,135 @@ export default function Productos() {
     },
   });
 
-  const { data: activeProductos = [], isLoading: loadingActive } = useQuery({
-    queryKey: ['productos', 'active'],
-    queryFn: () => fetchProductos(true),
+  const { data: activeProductosData, isLoading: loadingActive } = useQuery({
+    queryKey: ['productos', 'active', currentPageActive, searchTerm],
+    queryFn: async () => {
+      const from = (currentPageActive - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+
+      let query = supabase
+        .from('productos_servicios')
+        .select(`
+          *,
+          categorias_producto!productos_servicios_id_categoria_fkey (nombre),
+          entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
+            personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
+          ),
+          unidades_sat (descripcion)
+        `, { count: 'exact' })
+        .eq('activo', true)
+        .eq('es_producto', true);
+      
+      if (searchTerm) {
+        query = query.or(`nombre.ilike.%${searchTerm}%,descripcion.ilike.%${searchTerm}%,sat_id.ilike.%${searchTerm}%`);
+      }
+
+      const { data, error, count } = await query
+        .order('nombre', { ascending: true })
+        .range(from, to);
+      
+      if (error) throw error;
+      
+      const productos = (data || []).map((item: any) => ({
+        id: item.id,
+        nombre: item.nombre,
+        descripcion: item.descripcion,
+        sat_id: item.sat_id,
+        id_unidad_sat: item.id_unidad_sat,
+        id_categoria: item.id_categoria,
+        id_entidad_relacionada_dueno: item.id_entidad_relacionada_dueno,
+        stock: item.stock,
+        activo: item.activo,
+        precio_lista: item.precio_lista || 0,
+        categoria_nombre: item.categorias_producto?.nombre,
+        dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
+        unidad_sat_descripcion: item.unidades_sat?.descripcion,
+      })) as Producto[];
+
+      return { productos, count: count || 0 };
+    },
   });
 
-  const { data: deletedProductos = [], isLoading: loadingDeleted } = useQuery({
-    queryKey: ['productos', 'deleted'],
-    queryFn: () => fetchProductos(false),
+  const { data: deletedProductosData, isLoading: loadingDeleted } = useQuery({
+    queryKey: ['productos', 'deleted', currentPageDeleted, searchTerm],
+    queryFn: async () => {
+      const from = (currentPageDeleted - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+
+      let query = supabase
+        .from('productos_servicios')
+        .select(`
+          *,
+          categorias_producto!productos_servicios_id_categoria_fkey (nombre),
+          entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
+            personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
+          ),
+          unidades_sat (descripcion)
+        `, { count: 'exact' })
+        .eq('activo', false)
+        .eq('es_producto', true);
+      
+      if (searchTerm) {
+        query = query.or(`nombre.ilike.%${searchTerm}%,descripcion.ilike.%${searchTerm}%,sat_id.ilike.%${searchTerm}%`);
+      }
+
+      const { data, error, count } = await query
+        .order('nombre', { ascending: true })
+        .range(from, to);
+      
+      if (error) throw error;
+      
+      const productos = (data || []).map((item: any) => ({
+        id: item.id,
+        nombre: item.nombre,
+        descripcion: item.descripcion,
+        sat_id: item.sat_id,
+        id_unidad_sat: item.id_unidad_sat,
+        id_categoria: item.id_categoria,
+        id_entidad_relacionada_dueno: item.id_entidad_relacionada_dueno,
+        stock: item.stock,
+        activo: item.activo,
+        precio_lista: item.precio_lista || 0,
+        categoria_nombre: item.categorias_producto?.nombre,
+        dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
+        unidad_sat_descripcion: item.unidades_sat?.descripcion,
+      })) as Producto[];
+
+      return { productos, count: count || 0 };
+    },
+    enabled: activeTab === 'deleted',
   });
+
+  const activeProductos = activeProductosData?.productos || [];
+  const totalActivosCount = activeProductosData?.count || 0;
+  const deletedProductos = deletedProductosData?.productos || [];
+  const totalEliminadosCount = deletedProductosData?.count || 0;
 
   const productos = activeTab === 'active' ? activeProductos : deletedProductos;
-  const filteredProductos = productos.filter(producto => 
-    producto.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    producto.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    producto.sat_id?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const totalPages = Math.ceil(filteredProductos.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedProductos = filteredProductos.slice(startIndex, endIndex);
+  const totalCount = activeTab === 'active' ? totalActivosCount : totalEliminadosCount;
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    setCurrentPage(1);
+    if (value === 'active') {
+      setCurrentPageActive(1);
+    } else {
+      setCurrentPageDeleted(1);
+    }
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1);
+    setCurrentPageActive(1);
+    setCurrentPageDeleted(1);
+  };
+
+  const setCurrentPage = (page: number) => {
+    if (activeTab === 'active') {
+      setCurrentPageActive(page);
+    } else {
+      setCurrentPageDeleted(page);
+    }
   };
 
   const resetForm = () => {
@@ -380,7 +481,7 @@ export default function Productos() {
       );
     }
 
-    if (paginatedProductos.length === 0) {
+    if (productos.length === 0) {
       return (
         <div className="text-center py-8">
           <Package className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
@@ -414,7 +515,7 @@ export default function Productos() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedProductos.map((producto) => (
+            {productos.map((producto) => (
               <TableRow 
                 key={producto.id} 
                 className={`hover:bg-muted/30 transition-colors ${!producto.activo ? 'opacity-60' : ''}`}
@@ -480,7 +581,7 @@ export default function Productos() {
     if (totalPages <= 1) return null;
 
     return (
-      <div className="mt-6 flex justify-center">
+      <div className="mt-6 flex justify-center flex-col items-center gap-2">
         <Pagination>
           <PaginationContent>
             <PaginationItem>
@@ -490,7 +591,7 @@ export default function Productos() {
                   e.preventDefault();
                   if (currentPage > 1) setCurrentPage(currentPage - 1);
                 }}
-                className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                className={currentPage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
               />
             </PaginationItem>
             
@@ -515,6 +616,7 @@ export default function Productos() {
                       setCurrentPage(pageNum);
                     }}
                     isActive={currentPage === pageNum}
+                    className="cursor-pointer"
                   >
                     {pageNum}
                   </PaginationLink>
@@ -529,11 +631,14 @@ export default function Productos() {
                   e.preventDefault();
                   if (currentPage < totalPages) setCurrentPage(currentPage + 1);
                 }}
-                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
               />
             </PaginationItem>
           </PaginationContent>
         </Pagination>
+        <div className="text-sm text-muted-foreground">
+          Página {currentPage} de {totalPages} ({totalCount} productos)
+        </div>
       </div>
     );
   }
@@ -570,8 +675,8 @@ export default function Productos() {
         <CardContent>
           <Tabs value={activeTab} onValueChange={handleTabChange}>
             <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="active">Activos ({activeProductos.length})</TabsTrigger>
-              <TabsTrigger value="deleted">Eliminados ({deletedProductos.length})</TabsTrigger>
+              <TabsTrigger value="active">Activos ({totalActivosCount})</TabsTrigger>
+              <TabsTrigger value="deleted">Eliminados ({totalEliminadosCount})</TabsTrigger>
             </TabsList>
             
             <TabsContent value="active">

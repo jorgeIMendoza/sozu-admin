@@ -32,6 +32,11 @@ const Bodegas = () => {
   const [proyectoFilter, setProyectoFilter] = useState("");
   const [editingBodega, setEditingBodega] = useState<Bodega | null>(null);
   
+  // Pagination states
+  const [currentPageActive, setCurrentPageActive] = useState(1);
+  const [currentPageDeleted, setCurrentPageDeleted] = useState(1);
+  const itemsPerPage = 50;
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
