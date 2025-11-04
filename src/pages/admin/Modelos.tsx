@@ -81,17 +81,19 @@ export default function Modelos() {
   const { data: modelosActivos, isLoading: loadingActivos, refetch: refetchActivos } = useQuery({
     queryKey: ["modelos", "active"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from("modelos")
-        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo")
+        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo", { count: 'exact' })
         .eq("activo", true)
-        .order("nombre");
+        .order("nombre")
+        .limit(10000);
 
       if (error) {
         console.error("Error fetching modelos activos:", error);
         throw error;
       }
 
+      console.log(`Modelos activos obtenidos: ${data?.length} de ${count}`);
       return (data || []) as Modelo[];
     },
   });
@@ -99,17 +101,19 @@ export default function Modelos() {
   const { data: modelosEliminados, isLoading: loadingEliminados, refetch: refetchEliminados } = useQuery({
     queryKey: ["modelos", "deleted"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from("modelos")
-        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo")
+        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo", { count: 'exact' })
         .eq("activo", false)
-        .order("nombre");
+        .order("nombre")
+        .limit(10000);
 
       if (error) {
         console.error("Error fetching modelos eliminados:", error);
         throw error;
       }
 
+      console.log(`Modelos eliminados obtenidos: ${data?.length} de ${count}`);
       return (data || []) as Modelo[];
     },
     enabled: activeTab === "deleted",
