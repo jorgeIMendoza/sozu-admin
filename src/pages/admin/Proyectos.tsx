@@ -98,8 +98,21 @@ const Proyectos = () => {
               id,
               nombre
             )
+          ),
+          entidades_relacionadas!inner (
+            id,
+            id_persona,
+            id_tipo_entidad,
+            activo,
+            personas (
+              id,
+              nombre_comercial,
+              nombre_legal
+            )
           )
         `, { count: 'exact' })
+        .eq("entidades_relacionadas.activo", true)
+        .eq("entidades_relacionadas.id_tipo_entidad", 3)
         .eq("activo", true);
       
       // Aplicar filtros
@@ -201,8 +214,21 @@ const Proyectos = () => {
               id,
               nombre
             )
+          ),
+          entidades_relacionadas!inner (
+            id,
+            id_persona,
+            id_tipo_entidad,
+            activo,
+            personas (
+              id,
+              nombre_comercial,
+              nombre_legal
+            )
           )
         `, { count: 'exact' })
+        .eq("entidades_relacionadas.activo", true)
+        .eq("entidades_relacionadas.id_tipo_entidad", 3)
         .eq("activo", false);
       
       // Aplicar filtros
@@ -508,7 +534,9 @@ const Proyectos = () => {
               {projects.map((project) => {
                 const multimedia = getMultimediaCount(project);
                 const city = getCityName(project);
-                const developer = "Por definir"; // Simplificamos por ahora
+                const developer = project.entidades_relacionadas?.[0]?.personas?.nombre_comercial || 
+                  project.entidades_relacionadas?.[0]?.personas?.nombre_legal || 
+                  "Por definir";
                 const departmentCount = project.edificios?.reduce((total: number, edificio: any) => {
                   return total + (edificio.edificios_modelos?.reduce((edificioTotal: number, modelo: any) => {
                     return edificioTotal + (modelo.propiedades?.length || 0);
