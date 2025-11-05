@@ -152,17 +152,21 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
       ? paymentSchemes.filter(scheme => scheme.es_manual)
       : paymentSchemes.filter(scheme => !scheme.es_manual);
 
+    // Convención de porcentaje_descuento_aumento:
+    // - Valor positivo: incremento (aumenta el precio)
+    // - Valor negativo: descuento (reduce el precio)
+    // Ejemplo: +10 = 10% más caro, -8 = 8% más barato
     const calculatePaymentAmounts = (scheme: PaymentScheme) => {
       const basePrice = propertyDetails.precio_lista;
-      const discount = basePrice * (scheme.porcentaje_descuento_aumento / 100);
-      const finalPrice = basePrice - discount;
+      const adjustment = basePrice * (scheme.porcentaje_descuento_aumento / 100);
+      const finalPrice = basePrice + adjustment; // Cambio crítico: ahora suma el ajuste
       
       return {
         enganche: finalPrice * (scheme.porcentaje_enganche / 100),
         mensualidad: (finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades,
         entrega: finalPrice * (scheme.porcentaje_entrega / 100),
         finalPrice,
-        discount
+        adjustment
       };
     };
 
@@ -447,8 +451,8 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               {filteredPaymentSchemes.map((scheme, index) => {
                 const amounts = calculatePaymentAmounts(scheme);
                 const isSelected = offerData.id_esquema_pago_seleccionado === scheme.id;
-                const savingsPercentage = scheme.porcentaje_descuento_aumento;
-                const hasSavings = amounts.discount > 0;
+                const adjustmentPercentage = scheme.porcentaje_descuento_aumento;
+                const hasSavings = amounts.adjustment < 0; // Negativo = descuento
                 
                 return (
                   <div 
@@ -485,9 +489,9 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                       
                       {hasSavings && (
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#000000' }}>Ahorro:</span>
+                          <span style={{ color: '#000000' }}>Ahorro ({Math.abs(adjustmentPercentage)}%):</span>
                           <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                            {savingsPercentage}% {formatCurrency(amounts.discount)}
+                            {formatCurrency(Math.abs(amounts.adjustment))}
                           </span>
                         </div>
                       )}

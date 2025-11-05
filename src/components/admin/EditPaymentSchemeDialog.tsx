@@ -236,12 +236,17 @@ export const EditPaymentSchemeDialog = ({ scheme, onSchemeUpdated }: EditPayment
               name="porcentaje_descuento_aumento"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Porcentaje Descuento/Aumento (%)</FormLabel>
+                  <FormLabel>
+                    Porcentaje Ajuste de Precio (%)
+                    <span className="text-xs text-muted-foreground block mt-1">
+                      Positivo = incremento, Negativo = descuento
+                    </span>
+                  </FormLabel>
                   <FormControl>
                     <Input 
                       type="number" 
                       step="0.01"
-                      placeholder="0.00" 
+                      placeholder="0.00 (ej: -8 para 8% descuento)" 
                       {...field} 
                     />
                   </FormControl>

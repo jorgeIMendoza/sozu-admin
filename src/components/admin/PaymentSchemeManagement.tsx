@@ -108,10 +108,13 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
   };
 
   const PaymentSchemeDetailsDialog = ({ scheme }: { scheme: any }) => {
-    const discountAmount = scheme.porcentaje_descuento_aumento || 0;
-    const isDiscount = discountAmount > 0; // Positive = discount (reduces price)
-    const isIncrement = discountAmount < 0; // Negative = increment (increases price)
-    const hasDiscountIncrement = discountAmount !== 0;
+    // Convención de porcentaje_descuento_aumento:
+    // - Valor positivo: incremento (aumenta el precio)
+    // - Valor negativo: descuento (reduce el precio)
+    const adjustmentAmount = scheme.porcentaje_descuento_aumento || 0;
+    const isIncrement = adjustmentAmount > 0; // Positive = increment (increases price)
+    const isDiscount = adjustmentAmount < 0; // Negative = discount (reduces price)
+    const hasAdjustment = adjustmentAmount !== 0;
 
     return (
       <Dialog>
@@ -140,21 +143,21 @@ export const PaymentSchemeManagement = ({ projectId }: PaymentSchemeManagementPr
                 <span className="font-medium">No. Mensualidades:</span> {scheme.numero_mensualidades}
               </div>
             </div>
-            {hasDiscountIncrement && (
+            {hasAdjustment && (
               <div className="pt-2 border-t">
                 <div className="flex justify-between items-center">
                   <span className="font-medium">
-                    {isDiscount ? "Descuento:" : "Incremento:"}
+                    {isIncrement ? "Incremento:" : "Descuento:"}
                   </span>
                   <Badge 
                     variant="outline"
                     className={`font-medium ${
-                      isDiscount 
-                        ? "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700" 
-                        : "bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600"
+                      isIncrement 
+                        ? "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/50 dark:text-blue-200 dark:border-blue-700" 
+                        : "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700"
                     }`}
                   >
-                    {Math.abs(discountAmount)}%
+                    {Math.abs(adjustmentAmount)}%
                   </Badge>
                 </div>
               </div>

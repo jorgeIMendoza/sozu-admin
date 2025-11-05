@@ -113,17 +113,21 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
       ? paymentSchemes.filter(scheme => scheme.es_manual)
       : paymentSchemes.filter(scheme => !scheme.es_manual);
 
+    // Convención de porcentaje_descuento_aumento:
+    // - Valor positivo: incremento (aumenta el precio)
+    // - Valor negativo: descuento (reduce el precio)
+    // Ejemplo: +10 = 10% más caro, -8 = 8% más barato
     const calculatePaymentAmounts = (scheme: PaymentScheme) => {
       const basePrice = propertyDetails.precio_lista;
-      const discount = basePrice * (scheme.porcentaje_descuento_aumento / 100);
-      const finalPrice = basePrice - discount;
+      const adjustment = basePrice * (scheme.porcentaje_descuento_aumento / 100);
+      const finalPrice = basePrice + adjustment; // Cambio crítico: ahora suma el ajuste
       
       return {
         enganche: finalPrice * (scheme.porcentaje_enganche / 100),
         mensualidad: (finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades,
         entrega: finalPrice * (scheme.porcentaje_entrega / 100),
         finalPrice,
-        discount
+        adjustment
       };
     };
 
@@ -326,8 +330,8 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Precio Final</p>
                       <p className="font-bold text-primary text-xs">{formatCurrency(calculation.finalPrice)}</p>
-                      {calculation.discount > 0 && (
-                        <p className="text-xs text-green-600">Ahorro: {formatCurrency(calculation.discount)}</p>
+                      {calculation.adjustment < 0 && (
+                        <p className="text-xs text-green-600">Ahorro: {formatCurrency(Math.abs(calculation.adjustment))}</p>
                       )}
                     </div>
                   </div>
