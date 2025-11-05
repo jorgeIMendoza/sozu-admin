@@ -13,9 +13,18 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { PropertyCharacteristicsSection } from "./PropertyCharacteristicsSection";
 import { PropertyYouTubeVideosSection } from "./PropertyYouTubeVideosSection";
+import React from "react";
 
 // Componente auxiliar para mostrar la configuración del modelo
-const ModelConfigurationDisplay = ({ modeloId, modelName }: { modeloId: string; modelName: string }) => {
+const ModelConfigurationDisplay = ({ 
+  modeloId, 
+  modelName,
+  onCharacteristicsLoaded 
+}: { 
+  modeloId: string; 
+  modelName: string;
+  onCharacteristicsLoaded?: (ids: number[]) => void;
+}) => {
   const { data: modelDetails } = useQuery({
     queryKey: ["model-details-display", modeloId],
     queryFn: async () => {
@@ -52,6 +61,16 @@ const ModelConfigurationDisplay = ({ modeloId, modelName }: { modeloId: string; 
     },
     enabled: !!modeloId,
   });
+
+  // Notificar al padre cuando se carguen las características
+  React.useEffect(() => {
+    if (modelCharacteristics && onCharacteristicsLoaded) {
+      const ids = modelCharacteristics
+        .map((mc: any) => mc.caracteristicas?.id)
+        .filter((id): id is number => id !== undefined);
+      onCharacteristicsLoaded(ids);
+    }
+  }, [modelCharacteristics, onCharacteristicsLoaded]);
 
   return (
     <Card>
@@ -161,6 +180,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [modeloId, setModeloId] = useState<string | undefined>(undefined);
+  const [excludedCharacteristicIds, setExcludedCharacteristicIds] = useState<number[]>([]);
   const [formData, setFormData] = useState({
     numero_propiedad: property.numero_propiedad,
     numero_piso: property.numero_piso,
@@ -740,12 +760,18 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                 </Card>
 
                 {/* Configuración del Modelo */}
-                {modeloId && <ModelConfigurationDisplay modeloId={modeloId} modelName={property.modelo} />}
+                {modeloId && (
+                  <ModelConfigurationDisplay 
+                    modeloId={modeloId} 
+                    modelName={property.modelo}
+                    onCharacteristicsLoaded={setExcludedCharacteristicIds}
+                  />
+                )}
 
                 {/* Características extra de la Propiedad */}
                 <PropertyCharacteristicsSection 
                   propertyId={property.id} 
-                  excludeCharacteristicIds={[]}
+                  excludeCharacteristicIds={excludedCharacteristicIds}
                 />
               </div>
             </TabsContent>
