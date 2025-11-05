@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { PropertyCharacteristicsSection } from "./PropertyCharacteristicsSection";
+import { PropertyDescriptionSection } from "./PropertyDescriptionSection";
 import { PropertyYouTubeVideosSection } from "./PropertyYouTubeVideosSection";
 import { Combobox } from "@/components/ui/combobox";
 
@@ -50,6 +51,7 @@ interface EditPropertyDialogProps {
 export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropertyDialogProps) => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [modeloId, setModeloId] = useState<string | undefined>(undefined);
   const [formData, setFormData] = useState({
     numero_propiedad: property.numero_propiedad,
     numero_piso: property.numero_piso,
@@ -233,6 +235,20 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
       if (fullPropertyError) {
         console.error('Error fetching full property details:', fullPropertyError);
         return;
+      }
+
+      // Get id_modelo from id_edificio_modelo
+      if (fullPropertyData?.id_edificio_modelo) {
+        const { data: edificioModelo, error: emError } = await supabase
+          .from('edificios_modelos')
+          .select('id_modelo')
+          .eq('id', fullPropertyData.id_edificio_modelo)
+          .maybeSingle();
+        
+        if (!emError && edificioModelo) {
+          setModeloId(edificioModelo.id_modelo.toString());
+          console.log('Model ID loaded:', edificioModelo.id_modelo);
+        }
       }
 
       // Check CLABE STP - first check if there's clabe_stp_tmp_apartado
@@ -595,62 +611,15 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
             
             <TabsContent value="descripcion" className="space-y-6">
               <div className="grid gap-6">
-                {/* Descripción de la Propiedad */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Descripción de la Propiedad</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <Label htmlFor="descripcion">Descripción</Label>
-                      <Textarea
-                        id="descripcion"
-                        value={formData.descripcion}
-                        onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
-                        placeholder="Describe las características y amenidades de la propiedad..."
-                        className="min-h-[120px]"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Configuración del Modelo */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Configuración del Modelo {property.modelo}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <Label className="text-sm font-medium">Número de Recámaras</Label>
-                        <div className="mt-1">
-                          <Badge variant="outline" className="text-sm">
-                            {property.configuracion_modelo.numero_recamaras} recámaras
-                          </Badge>
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium">Número de Baños Completos</Label>
-                        <div className="mt-1">
-                          <Badge variant="outline" className="text-sm">
-                            {property.configuracion_modelo.numero_completo_banos} baños completos
-                          </Badge>
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium">Número de Medios Baños</Label>
-                        <div className="mt-1">
-                          <Badge variant="outline" className="text-sm">
-                            {property.configuracion_modelo.numero_medio_bano} medios baños
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Características */}
-                <PropertyCharacteristicsSection propertyId={property.id} />
+                <PropertyDescriptionSection 
+                  form={{
+                    control: null,
+                    getValues: () => formData,
+                    setValue: (name: string, value: any) => setFormData(prev => ({ ...prev, [name]: value }))
+                  }}
+                  selectedModelId={modeloId}
+                  propertyId={property.id}
+                />
               </div>
             </TabsContent>
 
