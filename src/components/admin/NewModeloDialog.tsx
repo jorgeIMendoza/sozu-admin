@@ -5,7 +5,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -139,20 +139,19 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Proyecto</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona un proyecto" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {proyectos.map((proyecto) => (
-                        <SelectItem key={proyecto.id} value={proyecto.id.toString()}>
-                          {proyecto.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <Combobox
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      options={proyectos.map((proyecto) => ({
+                        label: proyecto.nombre,
+                        value: proyecto.id.toString(),
+                      }))}
+                      placeholder="Selecciona un proyecto"
+                      searchPlaceholder="Buscar proyecto..."
+                      emptyText="No se encontró el proyecto"
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
