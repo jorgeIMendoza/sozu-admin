@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Edit, Trash2, MapPin, Copy, Search, CheckCircle, Grid3x3 } from "lucide-react";
+import { Edit, Trash2, MapPin, Copy, Search, CheckCircle, Grid3x3, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -148,6 +148,22 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
         `)
         .eq("id", projectId)
         .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: open,
+  });
+
+  const { data: vistas } = useQuery({
+    queryKey: ["vistas-proyecto", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("vistas")
+        .select("*")
+        .eq("id_proyecto", projectId)
+        .eq("activo", true)
+        .order("nombre");
       
       if (error) throw error;
       return data;
@@ -406,13 +422,14 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" id="edit-project-form">
               <Tabs defaultValue="information" className="w-full">
-                <TabsList className={`grid w-full ${isSpecialProject ? 'grid-cols-2' : 'grid-cols-6'}`}>
+                <TabsList className={`grid w-full ${isSpecialProject ? 'grid-cols-2' : 'grid-cols-7'}`}>
                   <TabsTrigger value="information">Información</TabsTrigger>
                   {!isSpecialProject && <TabsTrigger value="images">Configuración general</TabsTrigger>}
                   {!isSpecialProject && <TabsTrigger value="multimedia">Multimedia</TabsTrigger>}
                   <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
                   {!isSpecialProject && <TabsTrigger value="reservable-spaces">Espacios para reservar</TabsTrigger>}
                   {!isSpecialProject && <TabsTrigger value="offer-config">Configuración de oferta</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="vistas">Vistas</TabsTrigger>}
                 </TabsList>
                 
                 <TabsContent value="information" className="mt-6">
@@ -1082,6 +1099,46 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger }: Edit
                         )}
                       />
                     </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="vistas" className="mt-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Eye className="h-5 w-5" />
+                      <h3 className="text-lg font-semibold">Vistas del Proyecto</h3>
+                    </div>
+                    
+                    {vistas && vistas.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {vistas.map((vista: any) => (
+                          <div key={vista.id} className="border rounded-lg p-4 space-y-2">
+                            <div className="font-medium">{vista.nombre}</div>
+                            {vista.url && (
+                              <img 
+                                src={vista.url} 
+                                alt={vista.nombre}
+                                className="w-full h-32 object-cover rounded-md"
+                                onError={(e) => {
+                                  e.currentTarget.src = '/placeholder.svg';
+                                }}
+                              />
+                            )}
+                            {!vista.url && (
+                              <div className="w-full h-32 bg-muted rounded-md flex items-center justify-center text-muted-foreground text-sm">
+                                Sin imagen
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground border rounded-lg">
+                        <Eye className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>No hay vistas asignadas a este proyecto</p>
+                        <p className="text-sm mt-1">Puedes agregar vistas desde la sección "Vistas" en el menú de Inventarios</p>
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
               </Tabs>
