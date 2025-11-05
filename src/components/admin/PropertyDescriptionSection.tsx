@@ -35,31 +35,43 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
   });
 
   // Fetch model characteristics when model is selected
-  const { data: modelCharacteristics } = useQuery({
+  const { data: modelCharacteristics, isLoading: isLoadingCharacteristics } = useQuery({
     queryKey: ["model-characteristics", selectedModelId],
     queryFn: async () => {
       if (!selectedModelId) return [];
+      
+      console.log("Fetching characteristics for model:", selectedModelId);
       
       const { data, error } = await supabase
         .from("modelos_caracteristicas")
         .select(`
           id,
           id_caracteristica,
-          caracteristicas!inner (
+          activo,
+          caracteristicas (
             id,
             nombre,
             activo
           )
         `)
         .eq("id_modelo", parseInt(selectedModelId))
-        .eq("activo", true)
-        .eq("caracteristicas.activo", true);
+        .eq("activo", true);
       
       if (error) {
         console.error("Error fetching model characteristics:", error);
         throw error;
       }
-      return data || [];
+      
+      console.log("Model characteristics fetched:", data);
+      
+      // Filter only active characteristics
+      const filtered = (data || []).filter((mc: any) => 
+        mc.caracteristicas && mc.caracteristicas.activo === true
+      );
+      
+      console.log("Filtered active characteristics:", filtered);
+      
+      return filtered;
     },
     enabled: !!selectedModelId,
   });
@@ -139,7 +151,14 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
             </div>
 
             {/* Características del Modelo */}
-            {modelCharacteristics && modelCharacteristics.length > 0 && (
+            {isLoadingCharacteristics && (
+              <div className="space-y-2 pt-4 border-t">
+                <FormLabel>Características del Modelo</FormLabel>
+                <p className="text-sm text-muted-foreground">Cargando características...</p>
+              </div>
+            )}
+            
+            {!isLoadingCharacteristics && modelCharacteristics && modelCharacteristics.length > 0 && (
               <div className="space-y-2 pt-4 border-t">
                 <FormLabel>Características del Modelo</FormLabel>
                 <div className="p-3 border rounded-md bg-muted/50">
@@ -154,6 +173,15 @@ export const PropertyDescriptionSection = ({ form, selectedModelId, propertyId, 
                     })}
                   </div>
                 </div>
+              </div>
+            )}
+            
+            {!isLoadingCharacteristics && (!modelCharacteristics || modelCharacteristics.length === 0) && (
+              <div className="space-y-2 pt-4 border-t">
+                <FormLabel>Características del Modelo</FormLabel>
+                <p className="text-sm text-muted-foreground">
+                  Este modelo no tiene características asignadas
+                </p>
               </div>
             )}
           </CardContent>
