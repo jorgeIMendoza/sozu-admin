@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Building2, Eye, Edit, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -154,7 +155,7 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
             Ver Modelos
           </Button>
         </DialogTrigger>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Modelos de {buildingName}</DialogTitle>
           </DialogHeader>
@@ -162,32 +163,27 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
             {modelsLoading ? (
               <p>Cargando modelos...</p>
             ) : models && models.length > 0 ? (
-              <div className="space-y-2">
-                {models.map((model: any) => (
-                  <Card key={model.id}>
-                    <CardContent className="p-3">
-                      <h4 className="font-medium">{model.nombre}</h4>
-                      {model.descripcion && (
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {model.descripcion}
-                        </p>
-                      )}
-                      <div className="grid grid-cols-2 gap-2 text-sm mt-2">
-                        {model.numero_recamaras && (
-                          <div>
-                            <span className="font-medium">Recámaras:</span> {model.numero_recamaras}
-                          </div>
-                        )}
-                        {model.numero_completo_banos && (
-                          <div>
-                            <span className="font-medium">Baños:</span> {model.numero_completo_banos}
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {models.length} modelo{models.length !== 1 ? 's' : ''} asignado{models.length !== 1 ? 's' : ''}
+                </p>
+                <ScrollArea className="h-[400px] pr-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {models.map((model: any) => (
+                      <Card key={model.id}>
+                        <CardContent className="p-3">
+                          <h4 className="font-medium text-sm">{model.nombre}</h4>
+                          {model.descripcion && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {model.descripcion}
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </>
             ) : (
               <p className="text-muted-foreground">No hay modelos asignados a este edificio</p>
             )}

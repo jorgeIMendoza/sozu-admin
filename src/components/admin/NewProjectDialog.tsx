@@ -757,6 +757,8 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                   />
                 )}
 
+                {/* Amenidades Section - Con separación adicional */}
+                <div className="pt-6">
                 <FormField
                   control={form.control}
                   name="amenidades"
@@ -875,6 +877,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                     )
                   }}
                 />
+                </div>
                   </>
                 )}
 
