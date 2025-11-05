@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 interface PropertyMultimediaSectionProps {
   form: any;
   propertyId?: number;
+  projectId?: string;
   onMultimediaChange?: (multimedia: MultimediaItem[], youtubeVideos: YoutubeVideoItem[]) => void;
 }
 
@@ -30,7 +31,7 @@ interface YoutubeVideoItem {
   link: string;
 }
 
-export const PropertyMultimediaSection = ({ form, propertyId, onMultimediaChange }: PropertyMultimediaSectionProps) => {
+export const PropertyMultimediaSection = ({ form, propertyId, projectId, onMultimediaChange }: PropertyMultimediaSectionProps) => {
   const { toast } = useToast();
   const [multimediaItems, setMultimediaItems] = useState<MultimediaItem[]>([]);
   const [youtubeVideos, setYoutubeVideos] = useState<YoutubeVideoItem[]>([]);
@@ -51,19 +52,23 @@ export const PropertyMultimediaSection = ({ form, propertyId, onMultimediaChange
     link: ''
   });
 
-  // Query para obtener las vistas disponibles
+  // Query para obtener las vistas disponibles filtradas por proyecto
   const { data: vistas, isLoading: loadingVistas } = useQuery({
-    queryKey: ["vistas"],
+    queryKey: ["vistas", projectId],
     queryFn: async () => {
+      if (!projectId) return [];
+      
       const { data, error } = await supabase
         .from("vistas")
         .select("id, nombre, url")
         .eq("activo", true)
+        .eq("id_proyecto", parseInt(projectId))
         .order("nombre");
 
       if (error) throw error;
       return data;
     },
+    enabled: !!projectId
   });
 
   // Notificar cambios al componente padre

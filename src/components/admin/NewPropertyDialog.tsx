@@ -324,6 +324,7 @@ export const NewPropertyDialog = ({ onPropertyAdded }: NewPropertyDialogProps) =
                 {selectedOwnerId && selectedOwnerId !== "no-owners" ? (
                   <PropertyMultimediaSection 
                     form={form} 
+                    projectId={form.watch("id_proyecto")}
                     onMultimediaChange={handleMultimediaChange}
                   />
                 ) : (

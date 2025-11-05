@@ -201,19 +201,6 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
   });
 
   // Fetch catalogs for dropdowns
-  const { data: vistas } = useQuery({
-    queryKey: ['vistas'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('vistas')
-        .select('id, nombre, url')
-        .eq('activo', true)
-        .order('nombre');
-      if (error) throw error;
-      return data;
-    }
-  });
-
   const { data: tiposTransaccion } = useQuery({
     queryKey: ['tipos_transaccion'],
     queryFn: async () => {
@@ -275,6 +262,24 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
       if (error) throw error;
       return data?.edificios_modelos?.edificios?.proyectos;
     }
+  });
+
+  // Fetch catalogs for dropdowns - vistas (must be after propertyProject)
+  const { data: vistas } = useQuery({
+    queryKey: ['vistas', propertyProject?.id],
+    queryFn: async () => {
+      if (!propertyProject?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('vistas')
+        .select('id, nombre, url')
+        .eq('activo', true)
+        .eq('id_proyecto', propertyProject.id)
+        .order('nombre');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!propertyProject?.id
   });
 
   // Fetch owners based on the custom query logic - filter by specific entity types and project
