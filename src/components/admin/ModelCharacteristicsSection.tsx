@@ -270,7 +270,17 @@ export function ModelCharacteristicsSection({
             <CardTitle>Características del Modelo</CardTitle>
             <CardDescription>Selecciona las características que incluye este modelo</CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
+            <Button
+              type="button"
+              onClick={() => setIsAddingCharacteristic(true)}
+              disabled={isAddingCharacteristic}
+              variant="outline"
+              size="sm"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva Característica
+            </Button>
             <Button
               type="button"
               variant={showOnlySelected ? "secondary" : "outline"}
@@ -289,16 +299,6 @@ export function ModelCharacteristicsSection({
                   Ver Seleccionadas ({internalSelectedIds.length})
                 </>
               )}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => setIsAddingCharacteristic(true)}
-              disabled={isAddingCharacteristic}
-              variant="outline"
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Nueva Característica
             </Button>
           </div>
         </div>
