@@ -12,8 +12,117 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { PropertyCharacteristicsSection } from "./PropertyCharacteristicsSection";
-import { PropertyDescriptionSection } from "./PropertyDescriptionSection";
 import { PropertyYouTubeVideosSection } from "./PropertyYouTubeVideosSection";
+
+// Componente auxiliar para mostrar la configuración del modelo
+const ModelConfigurationDisplay = ({ modeloId, modelName }: { modeloId: string; modelName: string }) => {
+  const { data: modelDetails } = useQuery({
+    queryKey: ["model-details-display", modeloId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("modelos")
+        .select("*")
+        .eq("id", parseInt(modeloId))
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!modeloId,
+  });
+
+  const { data: modelCharacteristics, isLoading } = useQuery({
+    queryKey: ["model-chars-display", modeloId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("modelos_caracteristicas")
+        .select(`
+          id,
+          caracteristicas (
+            id,
+            nombre,
+            activo
+          )
+        `)
+        .eq("id_modelo", parseInt(modeloId))
+        .eq("activo", true);
+      
+      if (error) throw error;
+      return (data || []).filter((mc: any) => mc.caracteristicas?.activo === true);
+    },
+    enabled: !!modeloId,
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Configuración del Modelo {modelName}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {modelDetails && (
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <Label className="text-sm font-medium">Número de Recámaras</Label>
+              <div className="mt-1">
+                <Badge variant="outline" className="text-sm">
+                  {modelDetails.numero_recamaras || 0} recámaras
+                </Badge>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Número de Baños Completos</Label>
+              <div className="mt-1">
+                <Badge variant="outline" className="text-sm">
+                  {modelDetails.numero_completo_banos || 0} baños completos
+                </Badge>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Número de Medios Baños</Label>
+              <div className="mt-1">
+                <Badge variant="outline" className="text-sm">
+                  {modelDetails.numero_medio_bano || 0} medios baños
+                </Badge>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Características del Modelo */}
+        {isLoading && (
+          <div className="pt-4 border-t">
+            <Label className="text-sm font-medium">Características del Modelo</Label>
+            <p className="text-sm text-muted-foreground mt-2">Cargando características...</p>
+          </div>
+        )}
+        
+        {!isLoading && modelCharacteristics && modelCharacteristics.length > 0 && (
+          <div className="pt-4 border-t">
+            <Label className="text-sm font-medium">Características del Modelo</Label>
+            <div className="mt-2 p-3 border rounded-md bg-muted/50">
+              <div className="flex flex-wrap gap-2">
+                {modelCharacteristics.map((mc: any) => (
+                  <Badge key={mc.id} variant="secondary">
+                    {mc.caracteristicas?.nombre || 'Sin nombre'}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {!isLoading && (!modelCharacteristics || modelCharacteristics.length === 0) && (
+          <div className="pt-4 border-t">
+            <Label className="text-sm font-medium">Características del Modelo</Label>
+            <p className="text-sm text-muted-foreground mt-2">
+              Este modelo no tiene características asignadas
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 import { Combobox } from "@/components/ui/combobox";
 
 interface Property {
@@ -611,14 +720,32 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
             
             <TabsContent value="descripcion" className="space-y-6">
               <div className="grid gap-6">
-                <PropertyDescriptionSection 
-                  form={{
-                    control: null,
-                    getValues: () => formData,
-                    setValue: (name: string, value: any) => setFormData(prev => ({ ...prev, [name]: value }))
-                  }}
-                  selectedModelId={modeloId}
-                  propertyId={property.id}
+                {/* Descripción de la Propiedad */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Descripción de la Propiedad</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <Label htmlFor="descripcion">Descripción</Label>
+                      <Textarea
+                        id="descripcion"
+                        value={formData.descripcion}
+                        onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
+                        placeholder="Describe las características y amenidades de la propiedad..."
+                        className="min-h-[120px]"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Configuración del Modelo */}
+                {modeloId && <ModelConfigurationDisplay modeloId={modeloId} modelName={property.modelo} />}
+
+                {/* Características extra de la Propiedad */}
+                <PropertyCharacteristicsSection 
+                  propertyId={property.id} 
+                  excludeCharacteristicIds={[]}
                 />
               </div>
             </TabsContent>
