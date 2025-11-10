@@ -53,7 +53,7 @@ export default function Servicios() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const itemsPerPage = 50;
+  const itemsPerPage = 20;
   const currentPage = activeTab === 'active' ? currentPageActive : currentPageDeleted;
 
   // Fetch categorías

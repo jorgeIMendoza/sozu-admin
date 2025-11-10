@@ -56,7 +56,7 @@ export default function Productos() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const itemsPerPage = 50;
+  const itemsPerPage = 20;
   const currentPage = activeTab === 'active' ? currentPageActive : currentPageDeleted;
 
   const fetchProductos = async (activo: boolean) => {
