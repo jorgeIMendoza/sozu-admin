@@ -33,7 +33,8 @@ type Servicio = {
 export default function Servicios() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPageActive, setCurrentPageActive] = useState(1);
+  const [currentPageDeleted, setCurrentPageDeleted] = useState(1);
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEntity, setEditingEntity] = useState<Servicio | null>(null);
@@ -52,40 +53,8 @@ export default function Servicios() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const itemsPerPage = 10;
-
-  const fetchServicios = async (activo: boolean) => {
-    const { data, error } = await supabase
-      .from('productos_servicios')
-      .select(`
-        *,
-        categorias_producto!productos_servicios_id_categoria_fkey (nombre),
-        entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
-          personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
-        ),
-        unidades_sat (descripcion)
-      `)
-      .eq('activo', activo)
-      .eq('es_producto', false)
-      .order('nombre', { ascending: true });
-    
-    if (error) throw error;
-    
-    return (data || []).map((item: any) => ({
-      id: item.id,
-      nombre: item.nombre,
-      descripcion: item.descripcion,
-      sat_id: item.sat_id,
-      id_unidad_sat: item.id_unidad_sat,
-      id_categoria: item.id_categoria,
-      id_entidad_relacionada_dueno: item.id_entidad_relacionada_dueno,
-      activo: item.activo,
-      precio_lista: item.precio_lista || 0,
-      categoria_nombre: item.categorias_producto?.nombre,
-      dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
-      unidad_sat_descripcion: item.unidades_sat?.descripcion,
-    })) as Servicio[];
-  };
+  const itemsPerPage = 50;
+  const currentPage = activeTab === 'active' ? currentPageActive : currentPageDeleted;
 
   // Fetch categorías
   const { data: categorias = [] } = useQuery({
@@ -152,36 +121,133 @@ export default function Servicios() {
     },
   });
 
-  const { data: activeServicios = [], isLoading: loadingActive } = useQuery({
-    queryKey: ['servicios', 'active'],
-    queryFn: () => fetchServicios(true),
+  const { data: activeServiciosData, isLoading: loadingActive } = useQuery({
+    queryKey: ['servicios', 'active', currentPageActive, searchTerm],
+    queryFn: async () => {
+      const from = (currentPageActive - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+
+      let query = supabase
+        .from('productos_servicios')
+        .select(`
+          *,
+          categorias_producto!productos_servicios_id_categoria_fkey (nombre),
+          entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
+            personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
+          ),
+          unidades_sat (descripcion)
+        `, { count: 'exact' })
+        .eq('activo', true)
+        .eq('es_producto', false);
+      
+      if (searchTerm) {
+        query = query.or(`nombre.ilike.%${searchTerm}%,descripcion.ilike.%${searchTerm}%,sat_id.ilike.%${searchTerm}%`);
+      }
+
+      const { data, error, count } = await query
+        .order('nombre', { ascending: true })
+        .range(from, to);
+      
+      if (error) throw error;
+      
+      const servicios = (data || []).map((item: any) => ({
+        id: item.id,
+        nombre: item.nombre,
+        descripcion: item.descripcion,
+        sat_id: item.sat_id,
+        id_unidad_sat: item.id_unidad_sat,
+        id_categoria: item.id_categoria,
+        id_entidad_relacionada_dueno: item.id_entidad_relacionada_dueno,
+        activo: item.activo,
+        precio_lista: item.precio_lista || 0,
+        categoria_nombre: item.categorias_producto?.nombre,
+        dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
+        unidad_sat_descripcion: item.unidades_sat?.descripcion,
+      })) as Servicio[];
+
+      return { servicios, count: count || 0 };
+    },
   });
 
-  const { data: deletedServicios = [], isLoading: loadingDeleted } = useQuery({
-    queryKey: ['servicios', 'deleted'],
-    queryFn: () => fetchServicios(false),
+  const { data: deletedServiciosData, isLoading: loadingDeleted } = useQuery({
+    queryKey: ['servicios', 'deleted', currentPageDeleted, searchTerm],
+    queryFn: async () => {
+      const from = (currentPageDeleted - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+
+      let query = supabase
+        .from('productos_servicios')
+        .select(`
+          *,
+          categorias_producto!productos_servicios_id_categoria_fkey (nombre),
+          entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
+            personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
+          ),
+          unidades_sat (descripcion)
+        `, { count: 'exact' })
+        .eq('activo', false)
+        .eq('es_producto', false);
+      
+      if (searchTerm) {
+        query = query.or(`nombre.ilike.%${searchTerm}%,descripcion.ilike.%${searchTerm}%,sat_id.ilike.%${searchTerm}%`);
+      }
+
+      const { data, error, count } = await query
+        .order('nombre', { ascending: true })
+        .range(from, to);
+      
+      if (error) throw error;
+      
+      const servicios = (data || []).map((item: any) => ({
+        id: item.id,
+        nombre: item.nombre,
+        descripcion: item.descripcion,
+        sat_id: item.sat_id,
+        id_unidad_sat: item.id_unidad_sat,
+        id_categoria: item.id_categoria,
+        id_entidad_relacionada_dueno: item.id_entidad_relacionada_dueno,
+        activo: item.activo,
+        precio_lista: item.precio_lista || 0,
+        categoria_nombre: item.categorias_producto?.nombre,
+        dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
+        unidad_sat_descripcion: item.unidades_sat?.descripcion,
+      })) as Servicio[];
+
+      return { servicios, count: count || 0 };
+    },
+    enabled: activeTab === 'deleted',
   });
+
+  const activeServicios = activeServiciosData?.servicios || [];
+  const totalActivosCount = activeServiciosData?.count || 0;
+  const deletedServicios = deletedServiciosData?.servicios || [];
+  const totalEliminadosCount = deletedServiciosData?.count || 0;
 
   const servicios = activeTab === 'active' ? activeServicios : deletedServicios;
-  const filteredServicios = servicios.filter(servicio => 
-    servicio.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    servicio.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    servicio.sat_id?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const totalPages = Math.ceil(filteredServicios.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedServicios = filteredServicios.slice(startIndex, endIndex);
+  const totalCount = activeTab === 'active' ? totalActivosCount : totalEliminadosCount;
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    setCurrentPage(1);
+    if (value === 'active') {
+      setCurrentPageActive(1);
+    } else {
+      setCurrentPageDeleted(1);
+    }
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1);
+    setCurrentPageActive(1);
+    setCurrentPageDeleted(1);
+  };
+
+  const setCurrentPage = (page: number) => {
+    if (activeTab === 'active') {
+      setCurrentPageActive(page);
+    } else {
+      setCurrentPageDeleted(page);
+    }
   };
 
   const resetForm = () => {
@@ -373,7 +439,7 @@ export default function Servicios() {
       );
     }
 
-    if (paginatedServicios.length === 0) {
+    if (servicios.length === 0) {
       return (
         <div className="text-center py-8">
           <Wrench className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
@@ -405,7 +471,7 @@ export default function Servicios() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedServicios.map((servicio) => (
+            {servicios.map((servicio) => (
               <TableRow 
                 key={servicio.id} 
                 className={`hover:bg-muted/30 transition-colors ${!servicio.activo ? 'opacity-60' : ''}`}
@@ -465,7 +531,7 @@ export default function Servicios() {
     if (totalPages <= 1) return null;
 
     return (
-      <div className="mt-6 flex justify-center">
+      <div className="mt-6 flex justify-center flex-col items-center gap-2">
         <Pagination>
           <PaginationContent>
             <PaginationItem>
@@ -475,7 +541,7 @@ export default function Servicios() {
                   e.preventDefault();
                   if (currentPage > 1) setCurrentPage(currentPage - 1);
                 }}
-                className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                className={currentPage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
               />
             </PaginationItem>
             
@@ -500,6 +566,7 @@ export default function Servicios() {
                       setCurrentPage(pageNum);
                     }}
                     isActive={currentPage === pageNum}
+                    className="cursor-pointer"
                   >
                     {pageNum}
                   </PaginationLink>
@@ -514,11 +581,14 @@ export default function Servicios() {
                   e.preventDefault();
                   if (currentPage < totalPages) setCurrentPage(currentPage + 1);
                 }}
-                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
               />
             </PaginationItem>
           </PaginationContent>
         </Pagination>
+        <div className="text-sm text-muted-foreground">
+          Página {currentPage} de {totalPages} ({totalCount} servicios)
+        </div>
       </div>
     );
   }
@@ -555,8 +625,8 @@ export default function Servicios() {
         <CardContent>
           <Tabs value={activeTab} onValueChange={handleTabChange}>
             <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="active">Activos ({activeServicios.length})</TabsTrigger>
-              <TabsTrigger value="deleted">Eliminados ({deletedServicios.length})</TabsTrigger>
+              <TabsTrigger value="active">Activos ({totalActivosCount})</TabsTrigger>
+              <TabsTrigger value="deleted">Eliminados ({totalEliminadosCount})</TabsTrigger>
             </TabsList>
             
             <TabsContent value="active">
