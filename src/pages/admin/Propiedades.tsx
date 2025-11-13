@@ -720,7 +720,7 @@ const Propiedades = () => {
           query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
         }
 
-        const { data, error } = await query;
+        const { data, error } = await query.limit(10000);
         
         if (error) throw error;
 
@@ -868,7 +868,7 @@ const Propiedades = () => {
           query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
         }
 
-        const { data, error } = await query;
+        const { data, error } = await query.limit(10000);
         
         if (error) throw error;
 
@@ -1017,7 +1017,7 @@ const Propiedades = () => {
           query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
         }
 
-        const { data, error } = await query;
+        const { data, error } = await query.limit(10000);
         
         if (error) throw error;
 
