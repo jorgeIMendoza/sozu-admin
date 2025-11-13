@@ -721,6 +721,9 @@ const Propiedades = () => {
         }
 
         const { data, error, count } = await query
+          .order('edificios_modelos.edificios.proyectos.nombre', { ascending: true })
+          .order('edificios_modelos.edificios.nombre', { ascending: true })
+          .order('numero_propiedad', { ascending: true })
           .range(from, to);
         
         if (error) throw error;
@@ -868,6 +871,9 @@ const Propiedades = () => {
         }
 
         const { data, error, count } = await query
+          .order('edificios_modelos.edificios.proyectos.nombre', { ascending: true })
+          .order('edificios_modelos.edificios.nombre', { ascending: true })
+          .order('numero_propiedad', { ascending: true })
           .range(from, to);
         
         if (error) throw error;
@@ -1016,6 +1022,9 @@ const Propiedades = () => {
         }
 
         const { data, error, count } = await query
+          .order('edificios_modelos.edificios.proyectos.nombre', { ascending: true })
+          .order('edificios_modelos.edificios.nombre', { ascending: true })
+          .order('numero_propiedad', { ascending: true })
           .range(from, to);
         
         if (error) throw error;
