@@ -147,7 +147,7 @@ const Propiedades = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchTerm(inputValue);
-    }, 300);
+    }, 400);
 
     return () => clearTimeout(timer);
   }, [inputValue]);
@@ -192,28 +192,28 @@ const Propiedades = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setProyectoFilter(proyectoFilterInput);
-    }, 300);
+    }, 400);
     return () => clearTimeout(timer);
   }, [proyectoFilterInput]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setModeloFilter(modeloFilterInput);
-    }, 300);
+    }, 400);
     return () => clearTimeout(timer);
   }, [modeloFilterInput]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setRecamarasFilter(recamarasFilterInput);
-    }, 300);
+    }, 400);
     return () => clearTimeout(timer);
   }, [recamarasFilterInput]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setBanosFilter(banosFilterInput);
-    }, 300);
+    }, 400);
     return () => clearTimeout(timer);
   }, [banosFilterInput]);
   
@@ -2569,8 +2569,8 @@ const Propiedades = () => {
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por número de propiedad, propietario, proyecto, edificio, modelo o CLABE..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
                 className="pl-8"
               />
             </div>
