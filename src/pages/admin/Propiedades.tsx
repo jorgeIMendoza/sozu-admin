@@ -2092,7 +2092,7 @@ const Propiedades = () => {
                   <TableCell className="font-medium">{property.proyecto}</TableCell>
                   <TableCell>
                     {property.es_desarrollador ? (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-col">
                         <span>{property.propietario}</span>
                         <span className="text-muted-foreground text-xs">(Desarrollador)</span>
                       </div>
