@@ -720,8 +720,7 @@ const Propiedades = () => {
           query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
         }
 
-        const { data, error, count } = await query
-          .range(from, to);
+        const { data, error } = await query;
         
         if (error) throw error;
 
@@ -768,25 +767,13 @@ const Propiedades = () => {
           return matchesSearch && matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
         });
 
-        // Sort by proyecto, propietario, edificio, numero_departamento
-        const sorted = filtered.sort((a, b) => {
-          // 1. Sort by proyecto
-          const proyectoCompare = a.proyecto.localeCompare(b.proyecto);
-          if (proyectoCompare !== 0) return proyectoCompare;
-          
-          // 2. Sort by propietario
-          const propietarioCompare = a.propietario.localeCompare(b.propietario);
-          if (propietarioCompare !== 0) return propietarioCompare;
-          
-          // 3. Sort by edificio
-          const edificioCompare = a.edificio.localeCompare(b.edificio);
-          if (edificioCompare !== 0) return edificioCompare;
-          
-          // 4. Sort by numero_propiedad
-          return a.numero_propiedad.localeCompare(b.numero_propiedad);
-        });
+        // Calculate total count from filtered data
+        const totalCount = filtered.length;
+        
+        // Apply client-side pagination
+        const paginatedData = filtered.slice(from, to + 1);
 
-        return { properties: sorted, count: count || 0 };
+        return { properties: paginatedData, count: totalCount };
       } catch (error) {
         console.error('Error fetching active properties:', error);
         return { properties: [], count: 0 };
@@ -881,8 +868,7 @@ const Propiedades = () => {
           query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
         }
 
-        const { data, error, count } = await query
-          .range(from, to);
+        const { data, error } = await query;
         
         if (error) throw error;
 
@@ -929,25 +915,13 @@ const Propiedades = () => {
           return matchesSearch && matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
         });
 
-        // Sort by proyecto, propietario, edificio, numero_departamento
-        const sorted = filtered.sort((a, b) => {
-          // 1. Sort by proyecto
-          const proyectoCompare = a.proyecto.localeCompare(b.proyecto);
-          if (proyectoCompare !== 0) return proyectoCompare;
-          
-          // 2. Sort by propietario
-          const propietarioCompare = a.propietario.localeCompare(b.propietario);
-          if (propietarioCompare !== 0) return propietarioCompare;
-          
-          // 3. Sort by edificio
-          const edificioCompare = a.edificio.localeCompare(b.edificio);
-          if (edificioCompare !== 0) return edificioCompare;
-          
-          // 4. Sort by numero_propiedad
-          return a.numero_propiedad.localeCompare(b.numero_propiedad);
-        });
+        // Calculate total count from filtered data
+        const totalCount = filtered.length;
+        
+        // Apply client-side pagination
+        const paginatedData = filtered.slice(from, to + 1);
 
-        return { properties: sorted, count: count || 0 };
+        return { properties: paginatedData, count: totalCount };
       } catch (error) {
         console.error('Error fetching draft properties:', error);
         return { properties: [], count: 0 };
@@ -1043,8 +1017,7 @@ const Propiedades = () => {
           query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
         }
 
-        const { data, error, count } = await query
-          .range(from, to);
+        const { data, error } = await query;
         
         if (error) throw error;
 
@@ -1091,25 +1064,13 @@ const Propiedades = () => {
           return matchesSearch && matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
         });
 
-        // Sort by proyecto, propietario, edificio, numero_departamento
-        const sorted = filtered.sort((a, b) => {
-          // 1. Sort by proyecto
-          const proyectoCompare = a.proyecto.localeCompare(b.proyecto);
-          if (proyectoCompare !== 0) return proyectoCompare;
-          
-          // 2. Sort by propietario
-          const propietarioCompare = a.propietario.localeCompare(b.propietario);
-          if (propietarioCompare !== 0) return propietarioCompare;
-          
-          // 3. Sort by edificio
-          const edificioCompare = a.edificio.localeCompare(b.edificio);
-          if (edificioCompare !== 0) return edificioCompare;
-          
-          // 4. Sort by numero_propiedad
-          return a.numero_propiedad.localeCompare(b.numero_propiedad);
-        });
+        // Calculate total count from filtered data
+        const totalCount = filtered.length;
+        
+        // Apply client-side pagination
+        const paginatedData = filtered.slice(from, to + 1);
 
-        return { properties: sorted, count: count || 0 };
+        return { properties: paginatedData, count: totalCount };
       } catch (error) {
         console.error('Error fetching deleted properties:', error);
         return { properties: [], count: 0 };
