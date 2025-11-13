@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from "@/lib/config";
@@ -1760,6 +1760,54 @@ const Propiedades = () => {
     setCurrentPageDraft(1);
   };
 
+  // Helper function to generate pagination items with ellipsis
+  const getPaginationItems = (currentPage: number, totalPages: number) => {
+    const items: (number | 'ellipsis')[] = [];
+    const maxVisible = 7; // Maximum number of page buttons to show
+    
+    if (totalPages <= maxVisible) {
+      // Show all pages if total is small
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    
+    // Always show first page
+    items.push(1);
+    
+    // Calculate range around current page
+    let rangeStart = Math.max(2, currentPage - 1);
+    let rangeEnd = Math.min(totalPages - 1, currentPage + 1);
+    
+    // Adjust range if we're near the start or end
+    if (currentPage <= 3) {
+      rangeEnd = Math.min(4, totalPages - 1);
+    }
+    if (currentPage >= totalPages - 2) {
+      rangeStart = Math.max(totalPages - 3, 2);
+    }
+    
+    // Add ellipsis after first page if needed
+    if (rangeStart > 2) {
+      items.push('ellipsis');
+    }
+    
+    // Add range around current page
+    for (let i = rangeStart; i <= rangeEnd; i++) {
+      items.push(i);
+    }
+    
+    // Add ellipsis before last page if needed
+    if (rangeEnd < totalPages - 1) {
+      items.push('ellipsis');
+    }
+    
+    // Always show last page
+    if (totalPages > 1) {
+      items.push(totalPages);
+    }
+    
+    return items;
+  };
+
   const renderPagination = (currentPage: number, totalPages: number, onPageChange: (page: number) => void) => {
     if (totalPages <= 1) return null;
 
@@ -1773,16 +1821,22 @@ const Propiedades = () => {
                 className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
               />
             </PaginationItem>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <PaginationItem key={page}>
-                <PaginationLink
-                  onClick={() => onPageChange(page)}
-                  isActive={currentPage === page}
-                  className="cursor-pointer"
-                >
-                  {page}
-                </PaginationLink>
-              </PaginationItem>
+            {getPaginationItems(currentPage, totalPages).map((item, index) => (
+              item === 'ellipsis' ? (
+                <PaginationItem key={`ellipsis-${index}`}>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              ) : (
+                <PaginationItem key={item}>
+                  <PaginationLink
+                    onClick={() => onPageChange(item as number)}
+                    isActive={currentPage === item}
+                    className="cursor-pointer"
+                  >
+                    {item}
+                  </PaginationLink>
+                </PaginationItem>
+              )
             ))}
             <PaginationItem>
               <PaginationNext 
