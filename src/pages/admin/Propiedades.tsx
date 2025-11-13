@@ -721,14 +721,25 @@ const Propiedades = () => {
         }
 
         const { data, error, count } = await query
-          .order('edificios_modelos.edificios.proyectos.nombre', { ascending: true })
-          .order('edificios_modelos.edificios.nombre', { ascending: true })
-          .order('numero_propiedad', { ascending: true })
           .range(from, to);
         
         if (error) throw error;
 
         const enrichedData = await enrichPropertiesData(data || []);
+        
+        // Client-side sorting: proyecto -> edificio -> número de propiedad
+        enrichedData.sort((a, b) => {
+          // Primero por proyecto
+          const proyectoCompare = a.proyecto.localeCompare(b.proyecto, 'es', { numeric: true });
+          if (proyectoCompare !== 0) return proyectoCompare;
+          
+          // Luego por edificio
+          const edificioCompare = a.edificio.localeCompare(b.edificio, 'es', { numeric: true });
+          if (edificioCompare !== 0) return edificioCompare;
+          
+          // Finalmente por número de propiedad
+          return a.numero_propiedad.localeCompare(b.numero_propiedad, 'es', { numeric: true });
+        });
         
         // Apply only client-side filters that can't be done in SQL
         const filtered = enrichedData.filter(property => {
@@ -871,14 +882,25 @@ const Propiedades = () => {
         }
 
         const { data, error, count } = await query
-          .order('edificios_modelos.edificios.proyectos.nombre', { ascending: true })
-          .order('edificios_modelos.edificios.nombre', { ascending: true })
-          .order('numero_propiedad', { ascending: true })
           .range(from, to);
         
         if (error) throw error;
 
         const enrichedData = await enrichPropertiesData(data || []);
+        
+        // Client-side sorting: proyecto -> edificio -> número de propiedad
+        enrichedData.sort((a, b) => {
+          // Primero por proyecto
+          const proyectoCompare = a.proyecto.localeCompare(b.proyecto, 'es', { numeric: true });
+          if (proyectoCompare !== 0) return proyectoCompare;
+          
+          // Luego por edificio
+          const edificioCompare = a.edificio.localeCompare(b.edificio, 'es', { numeric: true });
+          if (edificioCompare !== 0) return edificioCompare;
+          
+          // Finalmente por número de propiedad
+          return a.numero_propiedad.localeCompare(b.numero_propiedad, 'es', { numeric: true });
+        });
         
         // Apply only client-side filters that can't be done in SQL
         const filtered = enrichedData.filter(property => {
@@ -1022,14 +1044,25 @@ const Propiedades = () => {
         }
 
         const { data, error, count } = await query
-          .order('edificios_modelos.edificios.proyectos.nombre', { ascending: true })
-          .order('edificios_modelos.edificios.nombre', { ascending: true })
-          .order('numero_propiedad', { ascending: true })
           .range(from, to);
         
         if (error) throw error;
 
         const enrichedData = await enrichPropertiesData(data || []);
+        
+        // Client-side sorting: proyecto -> edificio -> número de propiedad
+        enrichedData.sort((a, b) => {
+          // Primero por proyecto
+          const proyectoCompare = a.proyecto.localeCompare(b.proyecto, 'es', { numeric: true });
+          if (proyectoCompare !== 0) return proyectoCompare;
+          
+          // Luego por edificio
+          const edificioCompare = a.edificio.localeCompare(b.edificio, 'es', { numeric: true });
+          if (edificioCompare !== 0) return edificioCompare;
+          
+          // Finalmente por número de propiedad
+          return a.numero_propiedad.localeCompare(b.numero_propiedad, 'es', { numeric: true });
+        });
         
         // Apply only client-side filters that can't be done in SQL
         const filtered = enrichedData.filter(property => {
