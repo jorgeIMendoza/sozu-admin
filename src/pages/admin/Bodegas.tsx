@@ -63,16 +63,54 @@ const Bodegas = () => {
 
       // Si hay búsqueda, obtenemos más resultados para filtrar localmente
       if (searchTerm) {
-        const { data: allData, error, count: totalCount } = await query.range(0, 999);
+        const { data: allData, error } = await query.range(0, 999);
         
         if (error) throw error;
 
+        // Obtener nombres de proyecto para TODOS los datos
+        const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
+        
+        let entitiesData: any[] = [];
+        if (entityIds.length > 0) {
+          const { data: entities, error: entitiesError } = await supabase
+            .from('entidades_relacionadas')
+            .select(`
+              id,
+              proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
+            `)
+            .in('id', entityIds);
+          
+          if (!entitiesError) {
+            entitiesData = entities || [];
+          }
+        }
+
+        // Enriquecer TODOS los datos con nombres de proyecto
+        const enrichedData = allData.map((item: any) => {
+          const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
+          return {
+            id: item.id,
+            nombre: item.nombre,
+            m2: item.m2,
+            ubicacion: item.ubicacion,
+            es_incluido: item.es_incluido,
+            activo: item.activo,
+            proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
+            numero_propiedad: item.propiedades?.numero_propiedad || 'N/A'
+          };
+        });
+
         // Filtrar localmente por nombre de bodega o número de departamento
-        const filteredData = allData.filter(item => {
+        let filteredData = enrichedData.filter(item => {
           const matchesNombre = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesNumero = item.propiedades?.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesNumero = item.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
           return matchesNombre || matchesNumero;
         });
+
+        // Aplicar filtro de proyecto si existe
+        if (proyectoFilter && proyectoFilter !== "all") {
+          filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
+        }
 
         // Aplicar paginación local
         const from = (currentPageActive - 1) * itemsPerPage;
@@ -80,7 +118,7 @@ const Bodegas = () => {
         const paginatedData = filteredData.slice(from, to);
 
         return {
-          data: paginatedData,
+          items: paginatedData,
           count: filteredData.length
         };
       }
@@ -153,16 +191,54 @@ const Bodegas = () => {
 
       // Si hay búsqueda, obtenemos más resultados para filtrar localmente
       if (searchTerm) {
-        const { data: allData, error, count: totalCount } = await query.range(0, 999);
+        const { data: allData, error } = await query.range(0, 999);
         
         if (error) throw error;
 
+        // Obtener nombres de proyecto para TODOS los datos
+        const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
+        
+        let entitiesData: any[] = [];
+        if (entityIds.length > 0) {
+          const { data: entities, error: entitiesError } = await supabase
+            .from('entidades_relacionadas')
+            .select(`
+              id,
+              proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
+            `)
+            .in('id', entityIds);
+          
+          if (!entitiesError) {
+            entitiesData = entities || [];
+          }
+        }
+
+        // Enriquecer TODOS los datos con nombres de proyecto
+        const enrichedData = allData.map((item: any) => {
+          const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
+          return {
+            id: item.id,
+            nombre: item.nombre,
+            m2: item.m2,
+            ubicacion: item.ubicacion,
+            es_incluido: item.es_incluido,
+            activo: item.activo,
+            proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
+            numero_propiedad: item.propiedades?.numero_propiedad || 'N/A'
+          };
+        });
+
         // Filtrar localmente por nombre de bodega o número de departamento
-        const filteredData = allData.filter(item => {
+        let filteredData = enrichedData.filter(item => {
           const matchesNombre = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesNumero = item.propiedades?.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesNumero = item.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
           return matchesNombre || matchesNumero;
         });
+
+        // Aplicar filtro de proyecto si existe
+        if (proyectoFilter && proyectoFilter !== "all") {
+          filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
+        }
 
         // Aplicar paginación local
         const from = (currentPageDeleted - 1) * itemsPerPage;
@@ -170,7 +246,7 @@ const Bodegas = () => {
         const paginatedData = filteredData.slice(from, to);
 
         return {
-          data: paginatedData,
+          items: paginatedData,
           count: filteredData.length
         };
       }
