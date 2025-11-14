@@ -727,68 +727,135 @@ const Propiedades = () => {
           query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
         }
 
-        // Server-side pagination - only fetch 50 records per page
-        const { data, error, count } = await query.range(from, to);
-        
-        if (error) throw error;
+        // Determine if we need full fetch for local filtering
+        const needsFullFetch = bodegasFilter !== "" || estacionamientosFilter !== "";
 
-        const enrichedData = await enrichPropertiesData(data || []);
-        
-        // Check which projects have "Real Estate Ventures" (Sozu) as Inmobiliaria
-        const projectIds = [...new Set(enrichedData.map((p: any) => p.proyecto_id).filter(Boolean))];
-        const projectsWithSozu = new Set<number>();
-        
-        if (projectIds.length > 0) {
-          const { data: sozuEntities } = await supabase
-            .from('entidades_relacionadas')
-            .select('id_proyecto, id_persona, tipos_entidad!inner(id)')
-            .in('id_proyecto', projectIds)
-            .eq('tipos_entidad.id', 5) // 5 = Inmobiliaria
-            .eq('activo', true);
+        let enrichedData;
+        let totalCount;
+
+        if (needsFullFetch) {
+          // Fetch up to 1000 records for local filtering
+          const { data, error } = await query.range(0, 999);
           
-          if (sozuEntities) {
-            const personaIds = [...new Set(sozuEntities.map((e: any) => e.id_persona))];
-            const { data: sozuPersonas } = await supabase
-              .from('personas')
-              .select('id')
-              .in('id', personaIds)
-              .ilike('nombre_legal', '%Real Estate Ventures%')
+          if (error) throw error;
+
+          enrichedData = await enrichPropertiesData(data || []);
+          
+          // Check which projects have "Real Estate Ventures" (Sozu) as Inmobiliaria
+          const projectIds = [...new Set(enrichedData.map((p: any) => p.proyecto_id).filter(Boolean))] as number[];
+          const projectsWithSozu = new Set<number>();
+          
+          if (projectIds.length > 0) {
+            const { data: sozuEntities } = await supabase
+              .from('entidades_relacionadas')
+              .select('id_proyecto, id_persona, tipos_entidad!inner(id)')
+              .in('id_proyecto', projectIds)
+              .eq('tipos_entidad.id', 5) // 5 = Inmobiliaria
               .eq('activo', true);
             
-            if (sozuPersonas && sozuPersonas.length > 0) {
-              const sozuPersonaIds = new Set(sozuPersonas.map((p: any) => p.id));
-              sozuEntities.forEach((entity: any) => {
-                if (sozuPersonaIds.has(entity.id_persona)) {
-                  projectsWithSozu.add(entity.id_proyecto);
-                }
-              });
+            if (sozuEntities) {
+              const personaIds = [...new Set(sozuEntities.map((e: any) => e.id_persona))];
+              const { data: sozuPersonas } = await supabase
+                .from('personas')
+                .select('id')
+                .in('id', personaIds)
+                .ilike('nombre_legal', '%Real Estate Ventures%')
+                .eq('activo', true);
+              
+              if (sozuPersonas && sozuPersonas.length > 0) {
+                const sozuPersonaIds = new Set(sozuPersonas.map((p: any) => p.id));
+                sozuEntities.forEach((entity: any) => {
+                  if (sozuPersonaIds.has(entity.id_persona)) {
+                    projectsWithSozu.add(entity.id_proyecto);
+                  }
+                });
+              }
             }
           }
-        }
-        
-        // Add tiene_sozu_como_inmobiliaria flag to each property
-        const dataWithSozu = enrichedData.map((property: any) => ({
-          ...property,
-          tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
-        }));
-        
-        // Apply only client-side filters that can't be done in SQL
-        const filtered = dataWithSozu.filter(property => {
-          const matchesBodegas = bodegasFilter === "" || 
-            (bodegasFilter === "con_bodegas" && property.bodegas_count > 0) ||
-            (bodegasFilter === "sin_bodegas" && property.bodegas_count === 0);
-          const matchesEstacionamientos = estacionamientosFilter === "" || 
-            (estacionamientosFilter === "con_estacionamientos" && property.estacionamientos_count > 0) ||
-            (estacionamientosFilter === "sin_estacionamientos" && property.estacionamientos_count === 0);
-          const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
-            (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
-            (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
           
-          return matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
-        });
+          // Add tiene_sozu_como_inmobiliaria flag to each property
+          const dataWithSozu = enrichedData.map((property: any) => ({
+            ...property,
+            tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
+          }));
+          
+          // Apply all client-side filters
+          const filtered = dataWithSozu.filter(property => {
+            const matchesBodegas = bodegasFilter === "" || 
+              (bodegasFilter === "con_bodegas" && property.bodegas_count > 0) ||
+              (bodegasFilter === "sin_bodegas" && property.bodegas_count === 0);
+            const matchesEstacionamientos = estacionamientosFilter === "" || 
+              (estacionamientosFilter === "con_estacionamientos" && property.estacionamientos_count > 0) ||
+              (estacionamientosFilter === "sin_estacionamientos" && property.estacionamientos_count === 0);
+            const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
+              (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
+              (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+            
+            return matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
+          });
 
-        // Use server count for total pages, filtered data for display
-        return { properties: filtered, count: count || 0 };
+          // Apply local pagination
+          const paginatedData = filtered.slice(from, from + itemsPerPage);
+          totalCount = filtered.length;
+
+          return { properties: paginatedData, count: totalCount };
+        } else {
+          // Use server-side pagination for better performance
+          const { data, error, count } = await query.range(from, to);
+          
+          if (error) throw error;
+
+          enrichedData = await enrichPropertiesData(data || []);
+          
+          // Check which projects have "Real Estate Ventures" (Sozu) as Inmobiliaria
+          const projectIds = [...new Set(enrichedData.map((p: any) => p.proyecto_id).filter(Boolean))] as number[];
+          const projectsWithSozu = new Set<number>();
+          
+          if (projectIds.length > 0) {
+            const { data: sozuEntities } = await supabase
+              .from('entidades_relacionadas')
+              .select('id_proyecto, id_persona, tipos_entidad!inner(id)')
+              .in('id_proyecto', projectIds)
+              .eq('tipos_entidad.id', 5) // 5 = Inmobiliaria
+              .eq('activo', true);
+            
+            if (sozuEntities) {
+              const personaIds = [...new Set(sozuEntities.map((e: any) => e.id_persona))];
+              const { data: sozuPersonas } = await supabase
+                .from('personas')
+                .select('id')
+                .in('id', personaIds)
+                .ilike('nombre_legal', '%Real Estate Ventures%')
+                .eq('activo', true);
+              
+              if (sozuPersonas && sozuPersonas.length > 0) {
+                const sozuPersonaIds = new Set(sozuPersonas.map((p: any) => p.id));
+                sozuEntities.forEach((entity: any) => {
+                  if (sozuPersonaIds.has(entity.id_persona)) {
+                    projectsWithSozu.add(entity.id_proyecto);
+                  }
+                });
+              }
+            }
+          }
+          
+          // Add tiene_sozu_como_inmobiliaria flag to each property
+          const dataWithSozu = enrichedData.map((property: any) => ({
+            ...property,
+            tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
+          }));
+          
+          // Apply only cuenta cobranza filter (other filters already applied server-side)
+          const filtered = dataWithSozu.filter(property => {
+            const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
+              (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
+              (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+            
+            return matchesCuentaCobranza;
+          });
+
+          return { properties: filtered, count: count || 0 };
+        }
       } catch (error) {
         console.error('Error fetching active properties:', error);
         return { properties: [], count: 0 };
@@ -883,68 +950,135 @@ const Propiedades = () => {
           query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
         }
 
-        // Server-side pagination - only fetch 50 records per page
-        const { data, error, count } = await query.range(from, to);
-        
-        if (error) throw error;
+        // Determine if we need full fetch for local filtering
+        const needsFullFetch = bodegasFilter !== "" || estacionamientosFilter !== "";
 
-        const enrichedData = await enrichPropertiesData(data || []);
-        
-        // Check which projects have "Real Estate Ventures" (Sozu) as Inmobiliaria
-        const projectIds = [...new Set(enrichedData.map((p: any) => p.proyecto_id).filter(Boolean))];
-        const projectsWithSozu = new Set<number>();
-        
-        if (projectIds.length > 0) {
-          const { data: sozuEntities } = await supabase
-            .from('entidades_relacionadas')
-            .select('id_proyecto, id_persona, tipos_entidad!inner(id)')
-            .in('id_proyecto', projectIds)
-            .eq('tipos_entidad.id', 5) // 5 = Inmobiliaria
-            .eq('activo', true);
+        let enrichedData;
+        let totalCount;
+
+        if (needsFullFetch) {
+          // Fetch up to 1000 records for local filtering
+          const { data, error } = await query.range(0, 999);
           
-          if (sozuEntities) {
-            const personaIds = [...new Set(sozuEntities.map((e: any) => e.id_persona))];
-            const { data: sozuPersonas } = await supabase
-              .from('personas')
-              .select('id')
-              .in('id', personaIds)
-              .ilike('nombre_legal', '%Real Estate Ventures%')
+          if (error) throw error;
+
+          enrichedData = await enrichPropertiesData(data || []);
+          
+          // Check which projects have "Real Estate Ventures" (Sozu) as Inmobiliaria
+          const projectIds = [...new Set(enrichedData.map((p: any) => p.proyecto_id).filter(Boolean))] as number[];
+          const projectsWithSozu = new Set<number>();
+          
+          if (projectIds.length > 0) {
+            const { data: sozuEntities } = await supabase
+              .from('entidades_relacionadas')
+              .select('id_proyecto, id_persona, tipos_entidad!inner(id)')
+              .in('id_proyecto', projectIds)
+              .eq('tipos_entidad.id', 5) // 5 = Inmobiliaria
               .eq('activo', true);
             
-            if (sozuPersonas && sozuPersonas.length > 0) {
-              const sozuPersonaIds = new Set(sozuPersonas.map((p: any) => p.id));
-              sozuEntities.forEach((entity: any) => {
-                if (sozuPersonaIds.has(entity.id_persona)) {
-                  projectsWithSozu.add(entity.id_proyecto);
-                }
-              });
+            if (sozuEntities) {
+              const personaIds = [...new Set(sozuEntities.map((e: any) => e.id_persona))];
+              const { data: sozuPersonas } = await supabase
+                .from('personas')
+                .select('id')
+                .in('id', personaIds)
+                .ilike('nombre_legal', '%Real Estate Ventures%')
+                .eq('activo', true);
+              
+              if (sozuPersonas && sozuPersonas.length > 0) {
+                const sozuPersonaIds = new Set(sozuPersonas.map((p: any) => p.id));
+                sozuEntities.forEach((entity: any) => {
+                  if (sozuPersonaIds.has(entity.id_persona)) {
+                    projectsWithSozu.add(entity.id_proyecto);
+                  }
+                });
+              }
             }
           }
-        }
-        
-        // Add tiene_sozu_como_inmobiliaria flag to each property
-        const dataWithSozu = enrichedData.map((property: any) => ({
-          ...property,
-          tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
-        }));
-        
-        // Apply only client-side filters that can't be done in SQL
-        const filtered = dataWithSozu.filter(property => {
-          const matchesBodegas = bodegasFilter === "" || 
-            (bodegasFilter === "con_bodegas" && property.bodegas_count > 0) ||
-            (bodegasFilter === "sin_bodegas" && property.bodegas_count === 0);
-          const matchesEstacionamientos = estacionamientosFilter === "" || 
-            (estacionamientosFilter === "con_estacionamientos" && property.estacionamientos_count > 0) ||
-            (estacionamientosFilter === "sin_estacionamientos" && property.estacionamientos_count === 0);
-          const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
-            (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
-            (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
           
-          return matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
-        });
+          // Add tiene_sozu_como_inmobiliaria flag to each property
+          const dataWithSozu = enrichedData.map((property: any) => ({
+            ...property,
+            tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
+          }));
+          
+          // Apply all client-side filters
+          const filtered = dataWithSozu.filter(property => {
+            const matchesBodegas = bodegasFilter === "" || 
+              (bodegasFilter === "con_bodegas" && property.bodegas_count > 0) ||
+              (bodegasFilter === "sin_bodegas" && property.bodegas_count === 0);
+            const matchesEstacionamientos = estacionamientosFilter === "" || 
+              (estacionamientosFilter === "con_estacionamientos" && property.estacionamientos_count > 0) ||
+              (estacionamientosFilter === "sin_estacionamientos" && property.estacionamientos_count === 0);
+            const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
+              (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
+              (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+            
+            return matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
+          });
 
-        // Use server count for total pages, filtered data for display
-        return { properties: filtered, count: count || 0 };
+          // Apply local pagination
+          const paginatedData = filtered.slice(from, from + itemsPerPage);
+          totalCount = filtered.length;
+
+          return { properties: paginatedData, count: totalCount };
+        } else {
+          // Use server-side pagination for better performance
+          const { data, error, count } = await query.range(from, to);
+          
+          if (error) throw error;
+
+          enrichedData = await enrichPropertiesData(data || []);
+          
+          // Check which projects have "Real Estate Ventures" (Sozu) as Inmobiliaria
+          const projectIds = [...new Set(enrichedData.map((p: any) => p.proyecto_id).filter(Boolean))] as number[];
+          const projectsWithSozu = new Set<number>();
+          
+          if (projectIds.length > 0) {
+            const { data: sozuEntities } = await supabase
+              .from('entidades_relacionadas')
+              .select('id_proyecto, id_persona, tipos_entidad!inner(id)')
+              .in('id_proyecto', projectIds)
+              .eq('tipos_entidad.id', 5) // 5 = Inmobiliaria
+              .eq('activo', true);
+            
+            if (sozuEntities) {
+              const personaIds = [...new Set(sozuEntities.map((e: any) => e.id_persona))];
+              const { data: sozuPersonas } = await supabase
+                .from('personas')
+                .select('id')
+                .in('id', personaIds)
+                .ilike('nombre_legal', '%Real Estate Ventures%')
+                .eq('activo', true);
+              
+              if (sozuPersonas && sozuPersonas.length > 0) {
+                const sozuPersonaIds = new Set(sozuPersonas.map((p: any) => p.id));
+                sozuEntities.forEach((entity: any) => {
+                  if (sozuPersonaIds.has(entity.id_persona)) {
+                    projectsWithSozu.add(entity.id_proyecto);
+                  }
+                });
+              }
+            }
+          }
+          
+          // Add tiene_sozu_como_inmobiliaria flag to each property
+          const dataWithSozu = enrichedData.map((property: any) => ({
+            ...property,
+            tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
+          }));
+          
+          // Apply only cuenta cobranza filter (other filters already applied server-side)
+          const filtered = dataWithSozu.filter(property => {
+            const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
+              (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
+              (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+            
+            return matchesCuentaCobranza;
+          });
+
+          return { properties: filtered, count: count || 0 };
+        }
       } catch (error) {
         console.error('Error fetching draft properties:', error);
         return { properties: [], count: 0 };
@@ -1040,68 +1174,135 @@ const Propiedades = () => {
           query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
         }
 
-        // Server-side pagination - only fetch 50 records per page
-        const { data, error, count } = await query.range(from, to);
-        
-        if (error) throw error;
+        // Determine if we need full fetch for local filtering
+        const needsFullFetch = bodegasFilter !== "" || estacionamientosFilter !== "";
 
-        const enrichedData = await enrichPropertiesData(data || []);
-        
-        // Check which projects have "Real Estate Ventures" (Sozu) as Inmobiliaria
-        const projectIds = [...new Set(enrichedData.map((p: any) => p.proyecto_id).filter(Boolean))];
-        const projectsWithSozu = new Set<number>();
-        
-        if (projectIds.length > 0) {
-          const { data: sozuEntities } = await supabase
-            .from('entidades_relacionadas')
-            .select('id_proyecto, id_persona, tipos_entidad!inner(id)')
-            .in('id_proyecto', projectIds)
-            .eq('tipos_entidad.id', 5) // 5 = Inmobiliaria
-            .eq('activo', true);
+        let enrichedData;
+        let totalCount;
+
+        if (needsFullFetch) {
+          // Fetch up to 1000 records for local filtering
+          const { data, error } = await query.range(0, 999);
           
-          if (sozuEntities) {
-            const personaIds = [...new Set(sozuEntities.map((e: any) => e.id_persona))];
-            const { data: sozuPersonas } = await supabase
-              .from('personas')
-              .select('id')
-              .in('id', personaIds)
-              .ilike('nombre_legal', '%Real Estate Ventures%')
+          if (error) throw error;
+
+          enrichedData = await enrichPropertiesData(data || []);
+          
+          // Check which projects have "Real Estate Ventures" (Sozu) as Inmobiliaria
+          const projectIds = [...new Set(enrichedData.map((p: any) => p.proyecto_id).filter(Boolean))] as number[];
+          const projectsWithSozu = new Set<number>();
+          
+          if (projectIds.length > 0) {
+            const { data: sozuEntities } = await supabase
+              .from('entidades_relacionadas')
+              .select('id_proyecto, id_persona, tipos_entidad!inner(id)')
+              .in('id_proyecto', projectIds)
+              .eq('tipos_entidad.id', 5) // 5 = Inmobiliaria
               .eq('activo', true);
             
-            if (sozuPersonas && sozuPersonas.length > 0) {
-              const sozuPersonaIds = new Set(sozuPersonas.map((p: any) => p.id));
-              sozuEntities.forEach((entity: any) => {
-                if (sozuPersonaIds.has(entity.id_persona)) {
-                  projectsWithSozu.add(entity.id_proyecto);
-                }
-              });
+            if (sozuEntities) {
+              const personaIds = [...new Set(sozuEntities.map((e: any) => e.id_persona))];
+              const { data: sozuPersonas } = await supabase
+                .from('personas')
+                .select('id')
+                .in('id', personaIds)
+                .ilike('nombre_legal', '%Real Estate Ventures%')
+                .eq('activo', true);
+              
+              if (sozuPersonas && sozuPersonas.length > 0) {
+                const sozuPersonaIds = new Set(sozuPersonas.map((p: any) => p.id));
+                sozuEntities.forEach((entity: any) => {
+                  if (sozuPersonaIds.has(entity.id_persona)) {
+                    projectsWithSozu.add(entity.id_proyecto);
+                  }
+                });
+              }
             }
           }
-        }
-        
-        // Add tiene_sozu_como_inmobiliaria flag to each property
-        const dataWithSozu = enrichedData.map((property: any) => ({
-          ...property,
-          tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
-        }));
-        
-        // Apply only client-side filters that can't be done in SQL
-        const filtered = dataWithSozu.filter(property => {
-          const matchesBodegas = bodegasFilter === "" || 
-            (bodegasFilter === "con_bodegas" && property.bodegas_count > 0) ||
-            (bodegasFilter === "sin_bodegas" && property.bodegas_count === 0);
-          const matchesEstacionamientos = estacionamientosFilter === "" || 
-            (estacionamientosFilter === "con_estacionamientos" && property.estacionamientos_count > 0) ||
-            (estacionamientosFilter === "sin_estacionamientos" && property.estacionamientos_count === 0);
-          const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
-            (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
-            (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
           
-          return matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
-        });
+          // Add tiene_sozu_como_inmobiliaria flag to each property
+          const dataWithSozu = enrichedData.map((property: any) => ({
+            ...property,
+            tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
+          }));
+          
+          // Apply all client-side filters
+          const filtered = dataWithSozu.filter(property => {
+            const matchesBodegas = bodegasFilter === "" || 
+              (bodegasFilter === "con_bodegas" && property.bodegas_count > 0) ||
+              (bodegasFilter === "sin_bodegas" && property.bodegas_count === 0);
+            const matchesEstacionamientos = estacionamientosFilter === "" || 
+              (estacionamientosFilter === "con_estacionamientos" && property.estacionamientos_count > 0) ||
+              (estacionamientosFilter === "sin_estacionamientos" && property.estacionamientos_count === 0);
+            const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
+              (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
+              (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+            
+            return matchesBodegas && matchesEstacionamientos && matchesCuentaCobranza;
+          });
 
-        // Use server count for total pages, filtered data for display
-        return { properties: filtered, count: count || 0 };
+          // Apply local pagination
+          const paginatedData = filtered.slice(from, from + itemsPerPage);
+          totalCount = filtered.length;
+
+          return { properties: paginatedData, count: totalCount };
+        } else {
+          // Use server-side pagination for better performance
+          const { data, error, count } = await query.range(from, to);
+          
+          if (error) throw error;
+
+          enrichedData = await enrichPropertiesData(data || []);
+          
+          // Check which projects have "Real Estate Ventures" (Sozu) as Inmobiliaria
+          const projectIds = [...new Set(enrichedData.map((p: any) => p.proyecto_id).filter(Boolean))] as number[];
+          const projectsWithSozu = new Set<number>();
+          
+          if (projectIds.length > 0) {
+            const { data: sozuEntities } = await supabase
+              .from('entidades_relacionadas')
+              .select('id_proyecto, id_persona, tipos_entidad!inner(id)')
+              .in('id_proyecto', projectIds)
+              .eq('tipos_entidad.id', 5) // 5 = Inmobiliaria
+              .eq('activo', true);
+            
+            if (sozuEntities) {
+              const personaIds = [...new Set(sozuEntities.map((e: any) => e.id_persona))];
+              const { data: sozuPersonas } = await supabase
+                .from('personas')
+                .select('id')
+                .in('id', personaIds)
+                .ilike('nombre_legal', '%Real Estate Ventures%')
+                .eq('activo', true);
+              
+              if (sozuPersonas && sozuPersonas.length > 0) {
+                const sozuPersonaIds = new Set(sozuPersonas.map((p: any) => p.id));
+                sozuEntities.forEach((entity: any) => {
+                  if (sozuPersonaIds.has(entity.id_persona)) {
+                    projectsWithSozu.add(entity.id_proyecto);
+                  }
+                });
+              }
+            }
+          }
+          
+          // Add tiene_sozu_como_inmobiliaria flag to each property
+          const dataWithSozu = enrichedData.map((property: any) => ({
+            ...property,
+            tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
+          }));
+          
+          // Apply only cuenta cobranza filter (other filters already applied server-side)
+          const filtered = dataWithSozu.filter(property => {
+            const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
+              (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
+              (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+            
+            return matchesCuentaCobranza;
+          });
+
+          return { properties: filtered, count: count || 0 };
+        }
       } catch (error) {
         console.error('Error fetching deleted properties:', error);
         return { properties: [], count: 0 };
