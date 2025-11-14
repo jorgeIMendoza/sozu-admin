@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { BulkUploadEstacionamientosDialog } from "@/components/admin/BulkUploadEstacionamientosDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { EditEstacionamientoDialog } from "@/components/admin/EditEstacionamientoDialog";
+import { Combobox } from "@/components/ui/combobox";
 
 interface Estacionamiento {
   id: number;
@@ -362,19 +363,20 @@ const Estacionamientos = () => {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Proyecto</label>
-              <Select value={proyectoFilter} onValueChange={setProyectoFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos los proyectos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los proyectos</SelectItem>
-                  {proyectos.map((proyecto) => (
-                    <SelectItem key={proyecto.nombre} value={proyecto.nombre}>
-                      {proyecto.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                value={proyectoFilter || "all"}
+                onValueChange={setProyectoFilter}
+                options={[
+                  { value: "all", label: "Todos los proyectos" },
+                  ...proyectos.map((proyecto) => ({
+                    value: proyecto.nombre,
+                    label: proyecto.nombre,
+                  })),
+                ]}
+                placeholder="Seleccionar proyecto"
+                searchPlaceholder="Buscar proyecto..."
+                emptyText="No se encontró el proyecto"
+              />
             </div>
           </div>
         </CardContent>
