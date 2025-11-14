@@ -9,25 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PersonForm } from "@/components/admin/PersonForm";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
-import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
+import { Label } from "@/components/ui/label";
 
 type Banco = {
   id: number;
-  nombre_legal: string;
-  nombre_comercial?: string;
-  email: string;
-  telefono?: string;
-  rfc?: string;
+  nombre: string;
   activo: boolean;
-  id_entidad_relacionada_rep_leg?: number;
-  representante_legal_nombre?: string;
-  numero_proyectos: number;
-  entidad_relacionada_id: number;
-  id_tipo_entidad: number;
-  url_logo?: string;
 };
 
 export default function Bancos() {
@@ -36,13 +25,12 @@ export default function Bancos() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingEntity, setEditingEntity] = useState<Banco | null>(null);
+  const [editingBanco, setEditingBanco] = useState<Banco | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [entityToDelete, setEntityToDelete] = useState<Banco | null>(null);
+  const [bancoToDelete, setBancoToDelete] = useState<Banco | null>(null);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
-  const [entityToRestore, setEntityToRestore] = useState<Banco | null>(null);
-  const [selectedEntityForBankAccounts, setSelectedEntityForBankAccounts] = useState<Banco | null>(null);
-  const [isBankAccountsDialogOpen, setIsBankAccountsDialogOpen] = useState(false);
+  const [bancoToRestore, setBancoToRestore] = useState<Banco | null>(null);
+  const [formData, setFormData] = useState({ nombre: "" });
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -50,78 +38,13 @@ export default function Bancos() {
 
   const fetchBancos = async (activo: boolean) => {
     const { data, error } = await supabase
-      .from('personas')
-      .select(`
-        id,
-        nombre_legal,
-        nombre_comercial,
-        email,
-        telefono,
-        rfc,
-        activo,
-        url_logo,
-        id_entidad_relacionada_rep_leg,
-        entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
-          id,
-          id_tipo_entidad,
-          tipos_entidad!inner (
-            id,
-            nombre,
-            padre
-          )
-        ),
-        representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
-          id,
-          personas!entidades_relacionadas_id_persona_fkey (
-            id,
-            nombre_legal
-          )
-        )
-      `)
+      .from('bancos')
+      .select('id, nombre, activo')
       .eq('activo', activo)
-      .eq('tipo_persona', 'pm')
-      .eq('entidades_relacionadas.activo', true)
-      .neq('entidades_relacionadas.tipos_entidad.padre', 'c')
-      .eq('entidades_relacionadas.tipos_entidad.nombre', 'Banco')
-      .order('nombre_legal', { ascending: true });
+      .order('nombre', { ascending: true });
     
     if (error) throw error;
-    
-    // Get project counts for each banco
-    const bancoIds = (data || []).map(item => item.entidades_relacionadas[0]?.id).filter(Boolean);
-    let projectCounts: { [key: number]: number } = {};
-    
-    if (bancoIds.length > 0) {
-      const { data: projectData, error: projectError } = await supabase
-        .from('entidades_relacionadas')
-        .select('id, id_proyecto')
-        .in('id', bancoIds)
-        .not('id_proyecto', 'is', null)
-        .eq('activo', true);
-      
-      if (!projectError && projectData) {
-        projectCounts = projectData.reduce((acc, item) => {
-          acc[item.id] = (acc[item.id] || 0) + 1;
-          return acc;
-        }, {} as { [key: number]: number });
-      }
-    }
-    
-    return (data || []).map((item: any) => ({
-      id: item.id,
-      entidad_relacionada_id: item.entidades_relacionadas[0]?.id,
-      id_tipo_entidad: item.entidades_relacionadas[0]?.id_tipo_entidad,
-      nombre_legal: item.nombre_legal,
-      nombre_comercial: item.nombre_comercial,
-      email: item.email,
-      telefono: item.telefono,
-      rfc: item.rfc,
-      activo: item.activo,
-      id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
-      representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
-      numero_proyectos: projectCounts[item.entidades_relacionadas[0]?.id] || 0,
-      url_logo: item.url_logo,
-    })) as Banco[];
+    return data as Banco[];
   };
 
   const { data: activeBancos = [], isLoading: loadingActive } = useQuery({
@@ -136,9 +59,7 @@ export default function Bancos() {
 
   const bancos = activeTab === 'active' ? activeBancos : deletedBancos;
   const filteredBancos = bancos.filter(banco => 
-    banco.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    banco.nombre_comercial?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    banco.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
+    banco.nombre?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Pagination logic
@@ -158,48 +79,17 @@ export default function Bancos() {
   };
 
   const createMutation = useMutation({
-    mutationFn: async (personData: any) => {
-      const { representativeId, ...cleanPersonData } = personData;
+    mutationFn: async (nombre: string) => {
+      const { error } = await supabase
+        .from('bancos')
+        .insert([{ nombre }]);
       
-      const { data: personResult, error: personError } = await supabase
-        .from('personas')
-        .insert([{ ...cleanPersonData, tipo_persona: 'pm' }])
-        .select()
-        .single();
-      
-      if (personError) throw personError;
-      
-      // Get the Banco entity type ID
-      const { data: tipoEntidad, error: tipoError } = await supabase
-        .from('tipos_entidad')
-        .select('id')
-        .eq('nombre', 'Banco')
-        .single();
-      
-      if (tipoError) throw tipoError;
-      
-      const { error: entidadError } = await supabase
-        .from('entidades_relacionadas')
-        .insert([{
-          id_persona: personResult.id,
-          id_tipo_entidad: tipoEntidad.id,
-          activo: true
-        }]);
-      
-      if (entidadError) throw entidadError;
-      
-      if (representativeId) {
-        const { error: updateError } = await supabase
-          .from('personas')
-          .update({ id_entidad_relacionada_rep_leg: representativeId })
-          .eq('id', personResult.id);
-          
-        if (updateError) throw updateError;
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bancos'] });
       setIsNewDialogOpen(false);
+      setFormData({ nombre: "" });
       toast({
         title: "Éxito",
         description: "Banco creado correctamente.",
@@ -215,29 +105,19 @@ export default function Bancos() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (personData: any) => {
-      const { representativeId, ...cleanPersonData } = personData;
+    mutationFn: async ({ id, nombre }: { id: number; nombre: string }) => {
+      const { error } = await supabase
+        .from('bancos')
+        .update({ nombre })
+        .eq('id', id);
       
-      const { error: updateError } = await supabase
-        .from('personas')
-        .update(cleanPersonData)
-        .eq('id', editingEntity?.id);
-      
-      if (updateError) throw updateError;
-      
-      if (representativeId !== undefined) {
-        const { error: repError } = await supabase
-          .from('personas')
-          .update({ id_entidad_relacionada_rep_leg: representativeId || null })
-          .eq('id', editingEntity?.id);
-          
-        if (repError) throw repError;
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bancos'] });
       setIsEditDialogOpen(false);
-      setEditingEntity(null);
+      setEditingBanco(null);
+      setFormData({ nombre: "" });
       toast({
         title: "Éxito",
         description: "Banco actualizado correctamente.",
@@ -255,7 +135,7 @@ export default function Bancos() {
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       const { error } = await supabase
-        .from('personas')
+        .from('bancos')
         .update({ activo: false })
         .eq('id', id);
       
@@ -264,7 +144,7 @@ export default function Bancos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bancos'] });
       setDeleteDialogOpen(false);
-      setEntityToDelete(null);
+      setBancoToDelete(null);
       toast({
         title: "Éxito",
         description: "Banco eliminado correctamente.",
@@ -282,7 +162,7 @@ export default function Bancos() {
   const restoreMutation = useMutation({
     mutationFn: async (id: number) => {
       const { error } = await supabase
-        .from('personas')
+        .from('bancos')
         .update({ activo: true })
         .eq('id', id);
       
@@ -291,7 +171,7 @@ export default function Bancos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bancos'] });
       setRestoreDialogOpen(false);
-      setEntityToRestore(null);
+      setBancoToRestore(null);
       toast({
         title: "Éxito",
         description: "Banco restaurado correctamente.",
@@ -307,29 +187,44 @@ export default function Bancos() {
   });
 
   const handleEdit = (banco: Banco) => {
-    setEditingEntity(banco);
+    setEditingBanco(banco);
+    setFormData({ nombre: banco.nombre });
     setIsEditDialogOpen(true);
   };
 
   const handleDelete = (banco: Banco) => {
-    setEntityToDelete(banco);
+    setBancoToDelete(banco);
     setDeleteDialogOpen(true);
   };
 
   const handleConfirmDelete = () => {
-    if (entityToDelete) {
-      deleteMutation.mutate(entityToDelete.id);
+    if (bancoToDelete) {
+      deleteMutation.mutate(bancoToDelete.id);
     }
   };
 
   const handleRestore = (banco: Banco) => {
-    setEntityToRestore(banco);
+    setBancoToRestore(banco);
     setRestoreDialogOpen(true);
   };
 
   const handleConfirmRestore = () => {
-    if (entityToRestore) {
-      restoreMutation.mutate(entityToRestore.id);
+    if (bancoToRestore) {
+      restoreMutation.mutate(bancoToRestore.id);
+    }
+  };
+
+  const handleCreateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.nombre.trim()) {
+      createMutation.mutate(formData.nombre.trim());
+    }
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingBanco && formData.nombre.trim()) {
+      updateMutation.mutate({ id: editingBanco.id, nombre: formData.nombre.trim() });
     }
   };
 
@@ -367,13 +262,8 @@ export default function Bancos() {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead className="font-semibold">Razón Social</TableHead>
-              <TableHead className="font-semibold">Nombre Comercial</TableHead>
-              <TableHead className="font-semibold">RFC</TableHead>
-              <TableHead className="font-semibold">Email</TableHead>
-              <TableHead className="font-semibold">Teléfono</TableHead>
-              <TableHead className="font-semibold">Representante Legal</TableHead>
-              <TableHead className="font-semibold">Proyectos</TableHead>
+              <TableHead className="font-semibold w-20">ID</TableHead>
+              <TableHead className="font-semibold">Nombre</TableHead>
               <TableHead className="text-right font-semibold">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -383,19 +273,8 @@ export default function Bancos() {
                 key={banco.id} 
                 className={`hover:bg-muted/30 transition-colors ${!banco.activo ? 'opacity-60' : ''}`}
               >
-                <TableCell className="font-medium">
-                  {banco.nombre_legal}
-                </TableCell>
-                <TableCell>{banco.nombre_comercial || '-'}</TableCell>
-                <TableCell className="font-mono text-sm">{banco.rfc || '-'}</TableCell>
-                <TableCell>{banco.email}</TableCell>
-                <TableCell>{banco.telefono || '-'}</TableCell>
-                <TableCell>{banco.representante_legal_nombre || '-'}</TableCell>
-                <TableCell>
-                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                    {banco.numero_proyectos}
-                  </span>
-                </TableCell>
+                <TableCell className="font-mono text-sm">{banco.id}</TableCell>
+                <TableCell className="font-medium">{banco.nombre}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end space-x-2">
                     {banco.activo ? (
@@ -513,7 +392,10 @@ export default function Bancos() {
               </p>
             </div>
             <Button 
-              onClick={() => setIsNewDialogOpen(true)}
+              onClick={() => {
+                setFormData({ nombre: "" });
+                setIsNewDialogOpen(true);
+              }}
               className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -534,7 +416,7 @@ export default function Bancos() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   type="text"
-                  placeholder="Buscar por nombre, RFC..."
+                  placeholder="Buscar por nombre..."
                   value={searchTerm}
                   onChange={handleSearchChange}
                   className="pl-10 border-border focus:ring-primary/20"
@@ -555,40 +437,80 @@ export default function Bancos() {
         </CardContent>
       </Card>
 
+      {/* Nuevo Banco Dialog */}
       <Dialog open={isNewDialogOpen} onOpenChange={setIsNewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Nuevo Banco</DialogTitle>
           </DialogHeader>
-          <PersonForm
-            onSubmit={(data) => createMutation.mutate(data)}
-            isLoading={createMutation.isPending}
-            onCancel={() => setIsNewDialogOpen(false)}
-            entityType="banco"
-            fixedEntityType={true}
-          />
+          <form onSubmit={handleCreateSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="nombre">Nombre del Banco</Label>
+                <Input
+                  id="nombre"
+                  value={formData.nombre}
+                  onChange={(e) => setFormData({ nombre: e.target.value })}
+                  placeholder="Ingresa el nombre del banco"
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsNewDialogOpen(false);
+                  setFormData({ nombre: "" });
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? "Guardando..." : "Guardar"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
+      {/* Editar Banco Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Editar Banco</DialogTitle>
           </DialogHeader>
-          <PersonForm
-            initialData={{
-              ...editingEntity,
-              representativeId: editingEntity?.id_entidad_relacionada_rep_leg
-            }}
-            onSubmit={(data) => updateMutation.mutate(data)}
-            isLoading={updateMutation.isPending}
-            onCancel={() => {
-              setIsEditDialogOpen(false);
-              setEditingEntity(null);
-            }}
-            entityType="banco"
-            fixedEntityType={true}
-          />
+          <form onSubmit={handleEditSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-nombre">Nombre del Banco</Label>
+                <Input
+                  id="edit-nombre"
+                  value={formData.nombre}
+                  onChange={(e) => setFormData({ nombre: e.target.value })}
+                  placeholder="Ingresa el nombre del banco"
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setEditingBanco(null);
+                  setFormData({ nombre: "" });
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? "Guardando..." : "Guardar"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -597,7 +519,7 @@ export default function Bancos() {
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
         title="Eliminar Banco"
-        description={`¿Estás seguro de que deseas eliminar el banco "${entityToDelete?.nombre_comercial || entityToDelete?.nombre_legal}"? Esta acción se puede revertir.`}
+        description={`¿Estás seguro de que deseas eliminar el banco "${bancoToDelete?.nombre}"? Esta acción se puede revertir desde la pestaña de eliminados.`}
         isLoading={deleteMutation.isPending}
       />
 
@@ -606,9 +528,8 @@ export default function Bancos() {
         onOpenChange={setRestoreDialogOpen}
         onConfirm={handleConfirmRestore}
         title="Restaurar Banco"
-        description={`¿Estás seguro de que deseas restaurar el banco "${entityToRestore?.nombre_comercial || entityToRestore?.nombre_legal}"?`}
+        description={`¿Estás seguro de que deseas restaurar el banco "${bancoToRestore?.nombre}"?`}
         isLoading={restoreMutation.isPending}
-        actionType="restore"
       />
     </div>
   );

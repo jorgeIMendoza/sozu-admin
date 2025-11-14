@@ -134,7 +134,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           habilitar_asignar?: boolean
-          id?: never
+          id?: number
           nombre: string
           timestamp?: string
           url?: string | null
@@ -144,7 +144,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           habilitar_asignar?: boolean
-          id?: never
+          id?: number
           nombre?: string
           timestamp?: string
           url?: string | null
@@ -335,7 +335,7 @@ export type Database = {
           email?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          id?: number
           id_parentesco: number
           id_persona: number
           nombre_beneficiario: string
@@ -347,7 +347,7 @@ export type Database = {
           email?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: never
+          id?: number
           id_parentesco?: number
           id_persona?: number
           nombre_beneficiario?: string
@@ -500,6 +500,717 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      borrar_amenidades_proyectos_stagin: {
+        Row: {
+          amenidad: string | null
+          id: number
+          proyecto: string | null
+        }
+        Insert: {
+          amenidad?: string | null
+          id?: number
+          proyecto?: string | null
+        }
+        Update: {
+          amenidad?: string | null
+          id?: number
+          proyecto?: string | null
+        }
+        Relationships: []
+      }
+      borrar_bodegas_stagin: {
+        Row: {
+          edificio: string | null
+          id: number
+          id_departamento: number | null
+          id_edificio: number | null
+          id_proyecto: number | null
+          metraje: number | null
+          nombre_bodega: string | null
+          num_depa: string | null
+          proyecto: string | null
+        }
+        Insert: {
+          edificio?: string | null
+          id?: number
+          id_departamento?: number | null
+          id_edificio?: number | null
+          id_proyecto?: number | null
+          metraje?: number | null
+          nombre_bodega?: string | null
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Update: {
+          edificio?: string | null
+          id?: number
+          id_departamento?: number | null
+          id_edificio?: number | null
+          id_proyecto?: number | null
+          metraje?: number | null
+          nombre_bodega?: string | null
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Relationships: []
+      }
+      borrar_duenos_desarrolladoras_proyecto_stagin: {
+        Row: {
+          dueno: string | null
+          id: number
+          proyecto: string | null
+          tipo: number | null
+        }
+        Insert: {
+          dueno?: string | null
+          id?: number
+          proyecto?: string | null
+          tipo?: number | null
+        }
+        Update: {
+          dueno?: string | null
+          id?: number
+          proyecto?: string | null
+          tipo?: number | null
+        }
+        Relationships: []
+      }
+      borrar_edificios_stagin: {
+        Row: {
+          fecha_lanzamiento: string | null
+          id: number
+          nombre: string
+          numero_pisos: string | null
+          proyecto: string | null
+        }
+        Insert: {
+          fecha_lanzamiento?: string | null
+          id?: number
+          nombre: string
+          numero_pisos?: string | null
+          proyecto?: string | null
+        }
+        Update: {
+          fecha_lanzamiento?: string | null
+          id?: number
+          nombre?: string
+          numero_pisos?: string | null
+          proyecto?: string | null
+        }
+        Relationships: []
+      }
+      borrar_esquemas_pago_stagin: {
+        Row: {
+          id: number
+          nombre: string
+          numero_mensualidades: string | null
+          porcentaje_descuento_aumento: string | null
+          porcentaje_enganche: string | null
+          porcentaje_entrega: string | null
+          porcentaje_mensualidades: string | null
+          proyecto: string
+        }
+        Insert: {
+          id?: number
+          nombre: string
+          numero_mensualidades?: string | null
+          porcentaje_descuento_aumento?: string | null
+          porcentaje_enganche?: string | null
+          porcentaje_entrega?: string | null
+          porcentaje_mensualidades?: string | null
+          proyecto: string
+        }
+        Update: {
+          id?: number
+          nombre?: string
+          numero_mensualidades?: string | null
+          porcentaje_descuento_aumento?: string | null
+          porcentaje_enganche?: string | null
+          porcentaje_entrega?: string | null
+          porcentaje_mensualidades?: string | null
+          proyecto?: string
+        }
+        Relationships: []
+      }
+      borrar_estacionamientos_stagin: {
+        Row: {
+          edificio: string | null
+          id: number
+          id_departamento: number | null
+          id_edificio: number | null
+          id_proyecto: number | null
+          id_tipo_estacionamiento: number | null
+          metraje: number | null
+          nombre_estacionamiento: string | null
+          num_depa: string | null
+          proyecto: string | null
+        }
+        Insert: {
+          edificio?: string | null
+          id?: number
+          id_departamento?: number | null
+          id_edificio?: number | null
+          id_proyecto?: number | null
+          id_tipo_estacionamiento?: number | null
+          metraje?: number | null
+          nombre_estacionamiento?: string | null
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Update: {
+          edificio?: string | null
+          id?: number
+          id_departamento?: number | null
+          id_edificio?: number | null
+          id_proyecto?: number | null
+          id_tipo_estacionamiento?: number | null
+          metraje?: number | null
+          nombre_estacionamiento?: string | null
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Relationships: []
+      }
+      borrar_modelos_caracteristicas_stagin: {
+        Row: {
+          caracteristica: string | null
+          id: number
+          modelo: string | null
+          proyecto: string | null
+        }
+        Insert: {
+          caracteristica?: string | null
+          id?: number
+          modelo?: string | null
+          proyecto?: string | null
+        }
+        Update: {
+          caracteristica?: string | null
+          id?: number
+          modelo?: string | null
+          proyecto?: string | null
+        }
+        Relationships: []
+      }
+      borrar_modelos_stagin: {
+        Row: {
+          descripcion: string | null
+          id: number
+          nombre: string | null
+          numero_completo_banos: string | null
+          numero_medio_bano: string | null
+          numero_recamaras: string | null
+          proyecto: string | null
+        }
+        Insert: {
+          descripcion?: string | null
+          id?: number
+          nombre?: string | null
+          numero_completo_banos?: string | null
+          numero_medio_bano?: string | null
+          numero_recamaras?: string | null
+          proyecto?: string | null
+        }
+        Update: {
+          descripcion?: string | null
+          id?: number
+          nombre?: string | null
+          numero_completo_banos?: string | null
+          numero_medio_bano?: string | null
+          numero_recamaras?: string | null
+          proyecto?: string | null
+        }
+        Relationships: []
+      }
+      borrar_multimedias_modelo_stagin: {
+        Row: {
+          id: number
+          modelo: string | null
+          proyecto: string | null
+          url: string | null
+          ver_como_ubicacion_en_oferta: boolean | null
+        }
+        Insert: {
+          id?: number
+          modelo?: string | null
+          proyecto?: string | null
+          url?: string | null
+          ver_como_ubicacion_en_oferta?: boolean | null
+        }
+        Update: {
+          id?: number
+          modelo?: string | null
+          proyecto?: string | null
+          url?: string | null
+          ver_como_ubicacion_en_oferta?: boolean | null
+        }
+        Relationships: []
+      }
+      borrar_multimedias_todo_stagin: {
+        Row: {
+          id: number
+          proyecto: string | null
+          url: string | null
+        }
+        Insert: {
+          id?: number
+          proyecto?: string | null
+          url?: string | null
+        }
+        Update: {
+          id?: number
+          proyecto?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
+      borrar_personas_stagin: {
+        Row: {
+          clave_pais_telefono: string | null
+          conyuge: string | null
+          curp: string | null
+          direccion_calle: string | null
+          direccion_calle_sola: string | null
+          direccion_codigo_postal: string | null
+          direccion_colonia: string | null
+          direccion_estado: string | null
+          direccion_fiscal_calle: string | null
+          direccion_fiscal_codigo_postal: string | null
+          direccion_fiscal_colonia: string | null
+          direccion_fiscal_estado: string | null
+          direccion_fiscal_municipio: string | null
+          direccion_fiscal_num_ext: string | null
+          direccion_fiscal_num_int: string | null
+          direccion_fiscal_pais: string | null
+          direccion_municipio: string | null
+          direccion_num_ext: string | null
+          direccion_num_int: string | null
+          direccion_pais: string | null
+          email: string
+          estado_civil: string | null
+          estado_nacimiento: string | null
+          fecha_escritura: string | null
+          fecha_nacimiento: string | null
+          fecha_registro: string | null
+          folio_mercantil: string | null
+          id: number
+          id_entidad_relacionada_rep_leg: string | null
+          id_notario: string | null
+          identificador_funcion_persona: number | null
+          municipio_nacimiento: string | null
+          nombre_comercial: string | null
+          nombre_legal: string
+          numero_escritura: string | null
+          numero_libro: string | null
+          ocupacion: string | null
+          pais_nacimiento: string | null
+          regimen: string | null
+          rfc: string | null
+          sexo: string | null
+          telefono: string | null
+          tipo_identificacion: string | null
+          tipo_persona: string
+          url_logo: string | null
+          uso_cfdi: string | null
+        }
+        Insert: {
+          clave_pais_telefono?: string | null
+          conyuge?: string | null
+          curp?: string | null
+          direccion_calle?: string | null
+          direccion_calle_sola?: string | null
+          direccion_codigo_postal?: string | null
+          direccion_colonia?: string | null
+          direccion_estado?: string | null
+          direccion_fiscal_calle?: string | null
+          direccion_fiscal_codigo_postal?: string | null
+          direccion_fiscal_colonia?: string | null
+          direccion_fiscal_estado?: string | null
+          direccion_fiscal_municipio?: string | null
+          direccion_fiscal_num_ext?: string | null
+          direccion_fiscal_num_int?: string | null
+          direccion_fiscal_pais?: string | null
+          direccion_municipio?: string | null
+          direccion_num_ext?: string | null
+          direccion_num_int?: string | null
+          direccion_pais?: string | null
+          email: string
+          estado_civil?: string | null
+          estado_nacimiento?: string | null
+          fecha_escritura?: string | null
+          fecha_nacimiento?: string | null
+          fecha_registro?: string | null
+          folio_mercantil?: string | null
+          id?: number
+          id_entidad_relacionada_rep_leg?: string | null
+          id_notario?: string | null
+          identificador_funcion_persona?: number | null
+          municipio_nacimiento?: string | null
+          nombre_comercial?: string | null
+          nombre_legal: string
+          numero_escritura?: string | null
+          numero_libro?: string | null
+          ocupacion?: string | null
+          pais_nacimiento?: string | null
+          regimen?: string | null
+          rfc?: string | null
+          sexo?: string | null
+          telefono?: string | null
+          tipo_identificacion?: string | null
+          tipo_persona: string
+          url_logo?: string | null
+          uso_cfdi?: string | null
+        }
+        Update: {
+          clave_pais_telefono?: string | null
+          conyuge?: string | null
+          curp?: string | null
+          direccion_calle?: string | null
+          direccion_calle_sola?: string | null
+          direccion_codigo_postal?: string | null
+          direccion_colonia?: string | null
+          direccion_estado?: string | null
+          direccion_fiscal_calle?: string | null
+          direccion_fiscal_codigo_postal?: string | null
+          direccion_fiscal_colonia?: string | null
+          direccion_fiscal_estado?: string | null
+          direccion_fiscal_municipio?: string | null
+          direccion_fiscal_num_ext?: string | null
+          direccion_fiscal_num_int?: string | null
+          direccion_fiscal_pais?: string | null
+          direccion_municipio?: string | null
+          direccion_num_ext?: string | null
+          direccion_num_int?: string | null
+          direccion_pais?: string | null
+          email?: string
+          estado_civil?: string | null
+          estado_nacimiento?: string | null
+          fecha_escritura?: string | null
+          fecha_nacimiento?: string | null
+          fecha_registro?: string | null
+          folio_mercantil?: string | null
+          id?: number
+          id_entidad_relacionada_rep_leg?: string | null
+          id_notario?: string | null
+          identificador_funcion_persona?: number | null
+          municipio_nacimiento?: string | null
+          nombre_comercial?: string | null
+          nombre_legal?: string
+          numero_escritura?: string | null
+          numero_libro?: string | null
+          ocupacion?: string | null
+          pais_nacimiento?: string | null
+          regimen?: string | null
+          rfc?: string | null
+          sexo?: string | null
+          telefono?: string | null
+          tipo_identificacion?: string | null
+          tipo_persona?: string
+          url_logo?: string | null
+          uso_cfdi?: string | null
+        }
+        Relationships: []
+      }
+      borrar_propiedades_imagenes_360_stagin: {
+        Row: {
+          edificio: string | null
+          id: number
+          id_depa: number | null
+          id_edificio: number | null
+          id_proyecto: number | null
+          imagen: string | null
+          num_depa: string | null
+          proyecto: string | null
+        }
+        Insert: {
+          edificio?: string | null
+          id?: number
+          id_depa?: number | null
+          id_edificio?: number | null
+          id_proyecto?: number | null
+          imagen?: string | null
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Update: {
+          edificio?: string | null
+          id?: number
+          id_depa?: number | null
+          id_edificio?: number | null
+          id_proyecto?: number | null
+          imagen?: string | null
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Relationships: []
+      }
+      borrar_propiedades_imagenes_stagin: {
+        Row: {
+          edificio: string | null
+          id: number
+          id_depa: number | null
+          id_edificio: number | null
+          id_proyecto: number | null
+          imagen: string | null
+          num_depa: string | null
+          proyecto: string | null
+        }
+        Insert: {
+          edificio?: string | null
+          id?: number
+          id_depa?: number | null
+          id_edificio?: number | null
+          id_proyecto?: number | null
+          imagen?: string | null
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Update: {
+          edificio?: string | null
+          id?: number
+          id_depa?: number | null
+          id_edificio?: number | null
+          id_proyecto?: number | null
+          imagen?: string | null
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Relationships: []
+      }
+      borrar_propiedades_stagin: {
+        Row: {
+          clabe_stp_tmp_apartado: string | null
+          descripcion: string | null
+          disponibilidad_original: string | null
+          disponibilidad_traducida_texto: string | null
+          dueno: string | null
+          edificio: string | null
+          es_aprobado: boolean | null
+          id: number
+          id_edificio: number | null
+          id_estatus_disponibilidad_nuevo: number | null
+          id_modelo: number | null
+          id_persona_dueno: number | null
+          id_proyecto: number | null
+          m2_exteriores: number | null
+          m2_interiores: number | null
+          m2_loft: number | null
+          modelo: string | null
+          monto_apartado: string | null
+          num_depa: string | null
+          piso: string | null
+          precio_lista: string | null
+          proyecto: string | null
+          tipo_propiedad: string | null
+          tipo_transaccion: string | null
+          url_imagen_portada: string | null
+          vista: string | null
+        }
+        Insert: {
+          clabe_stp_tmp_apartado?: string | null
+          descripcion?: string | null
+          disponibilidad_original?: string | null
+          disponibilidad_traducida_texto?: string | null
+          dueno?: string | null
+          edificio?: string | null
+          es_aprobado?: boolean | null
+          id?: number
+          id_edificio?: number | null
+          id_estatus_disponibilidad_nuevo?: number | null
+          id_modelo?: number | null
+          id_persona_dueno?: number | null
+          id_proyecto?: number | null
+          m2_exteriores?: number | null
+          m2_interiores?: number | null
+          m2_loft?: number | null
+          modelo?: string | null
+          monto_apartado?: string | null
+          num_depa?: string | null
+          piso?: string | null
+          precio_lista?: string | null
+          proyecto?: string | null
+          tipo_propiedad?: string | null
+          tipo_transaccion?: string | null
+          url_imagen_portada?: string | null
+          vista?: string | null
+        }
+        Update: {
+          clabe_stp_tmp_apartado?: string | null
+          descripcion?: string | null
+          disponibilidad_original?: string | null
+          disponibilidad_traducida_texto?: string | null
+          dueno?: string | null
+          edificio?: string | null
+          es_aprobado?: boolean | null
+          id?: number
+          id_edificio?: number | null
+          id_estatus_disponibilidad_nuevo?: number | null
+          id_modelo?: number | null
+          id_persona_dueno?: number | null
+          id_proyecto?: number | null
+          m2_exteriores?: number | null
+          m2_interiores?: number | null
+          m2_loft?: number | null
+          modelo?: string | null
+          monto_apartado?: string | null
+          num_depa?: string | null
+          piso?: string | null
+          precio_lista?: string | null
+          proyecto?: string | null
+          tipo_propiedad?: string | null
+          tipo_transaccion?: string | null
+          url_imagen_portada?: string | null
+          vista?: string | null
+        }
+        Relationships: []
+      }
+      borrar_proyectos_stagin: {
+        Row: {
+          costo_mantenimiento_m2: string | null
+          descripcion: string | null
+          direccion: string | null
+          fecha_entrega: string | null
+          fecha_inicio_construccion: string | null
+          fecha_lanzamiento: string | null
+          id: number
+          id_estado: number | null
+          id_estatus_proyecto: number | null
+          id_municipio: number | null
+          id_pais: string | null
+          id_tipo_uso: number | null
+          latitud: number | null
+          longitud: number | null
+          nombre: string | null
+          nombre_estado: string | null
+          nombre_firmante_recibos: string | null
+          nombre_municipio: string | null
+          nombre_pais: string | null
+          tipo_transaccion: string | null
+          tipo_uso: string | null
+          url_firma_recibos: string | null
+          url_imagen_portada: string | null
+          url_logo: string | null
+        }
+        Insert: {
+          costo_mantenimiento_m2?: string | null
+          descripcion?: string | null
+          direccion?: string | null
+          fecha_entrega?: string | null
+          fecha_inicio_construccion?: string | null
+          fecha_lanzamiento?: string | null
+          id?: number
+          id_estado?: number | null
+          id_estatus_proyecto?: number | null
+          id_municipio?: number | null
+          id_pais?: string | null
+          id_tipo_uso?: number | null
+          latitud?: number | null
+          longitud?: number | null
+          nombre?: string | null
+          nombre_estado?: string | null
+          nombre_firmante_recibos?: string | null
+          nombre_municipio?: string | null
+          nombre_pais?: string | null
+          tipo_transaccion?: string | null
+          tipo_uso?: string | null
+          url_firma_recibos?: string | null
+          url_imagen_portada?: string | null
+          url_logo?: string | null
+        }
+        Update: {
+          costo_mantenimiento_m2?: string | null
+          descripcion?: string | null
+          direccion?: string | null
+          fecha_entrega?: string | null
+          fecha_inicio_construccion?: string | null
+          fecha_lanzamiento?: string | null
+          id?: number
+          id_estado?: number | null
+          id_estatus_proyecto?: number | null
+          id_municipio?: number | null
+          id_pais?: string | null
+          id_tipo_uso?: number | null
+          latitud?: number | null
+          longitud?: number | null
+          nombre?: string | null
+          nombre_estado?: string | null
+          nombre_firmante_recibos?: string | null
+          nombre_municipio?: string | null
+          nombre_pais?: string | null
+          tipo_transaccion?: string | null
+          tipo_uso?: string | null
+          url_firma_recibos?: string | null
+          url_imagen_portada?: string | null
+          url_logo?: string | null
+        }
+        Relationships: []
+      }
+      borrar_stp_propiedades: {
+        Row: {
+          clabe_stp_tmp_apartado: string | null
+          edificio: string | null
+          id: number
+          num_depa: string | null
+          proyecto: string | null
+        }
+        Insert: {
+          clabe_stp_tmp_apartado?: string | null
+          edificio?: string | null
+          id?: number
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Update: {
+          clabe_stp_tmp_apartado?: string | null
+          edificio?: string | null
+          id?: number
+          num_depa?: string | null
+          proyecto?: string | null
+        }
+        Relationships: []
+      }
+      borrar_videos_youtube_stagin: {
+        Row: {
+          id: number
+          link: string
+          nombre: string
+          proyecto: string
+        }
+        Insert: {
+          id?: number
+          link: string
+          nombre: string
+          proyecto: string
+        }
+        Update: {
+          id?: number
+          link?: string
+          nombre?: string
+          proyecto?: string
+        }
+        Relationships: []
+      }
+      borrar_vistas_stagin: {
+        Row: {
+          id: number
+          nombre: string | null
+          proyecto: string | null
+          url: string | null
+        }
+        Insert: {
+          id?: number
+          nombre?: string | null
+          proyecto?: string | null
+          url?: string | null
+        }
+        Update: {
+          id?: number
+          nombre?: string | null
+          proyecto?: string | null
+          url?: string | null
+        }
+        Relationships: []
       }
       caracteristicas: {
         Row: {
@@ -1299,9 +2010,9 @@ export type Database = {
           numero_mensualidades: number
           numero_pagos_enganche?: number
           porcentaje_descuento_aumento?: number
-          porcentaje_enganche: number
-          porcentaje_entrega: number
-          porcentaje_mensualidades: number
+          porcentaje_enganche?: number
+          porcentaje_entrega?: number
+          porcentaje_mensualidades?: number
         }
         Update: {
           activo?: boolean
@@ -1860,7 +2571,7 @@ export type Database = {
           activo?: boolean | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
-          id?: never
+          id?: number
           id_caracteristica: number
           id_modelo: number
         }
@@ -1868,7 +2579,7 @@ export type Database = {
           activo?: boolean | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
-          id?: never
+          id?: number
           id_caracteristica?: number
           id_modelo?: number
         }
@@ -2805,27 +3516,6 @@ export type Database = {
           },
         ]
       }
-      personas_fake: {
-        Row: {
-          curp: string | null
-          id: number
-          nombre: string | null
-          url_documento_identificacion: string | null
-        }
-        Insert: {
-          curp?: string | null
-          id?: number
-          nombre?: string | null
-          url_documento_identificacion?: string | null
-        }
-        Update: {
-          curp?: string | null
-          id?: number
-          nombre?: string | null
-          url_documento_identificacion?: string | null
-        }
-        Relationships: []
-      }
       productos_servicios: {
         Row: {
           activo: boolean
@@ -2923,7 +3613,7 @@ export type Database = {
           m2_loft: number
           monto_apartado: number | null
           monto_apartado_pagando: number | null
-          numero_piso: number | null
+          numero_piso: string | null
           numero_propiedad: string
           precio_lista: number
           rentado_estancia_corta: boolean
@@ -2948,7 +3638,7 @@ export type Database = {
           m2_loft?: number
           monto_apartado?: number | null
           monto_apartado_pagando?: number | null
-          numero_piso?: number | null
+          numero_piso?: string | null
           numero_propiedad: string
           precio_lista: number
           rentado_estancia_corta?: boolean
@@ -2973,7 +3663,7 @@ export type Database = {
           m2_loft?: number
           monto_apartado?: number | null
           monto_apartado_pagando?: number | null
-          numero_piso?: number | null
+          numero_piso?: string | null
           numero_propiedad?: string
           precio_lista?: number
           rentado_estancia_corta?: boolean
@@ -3308,87 +3998,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      proyectos_stagin: {
-        Row: {
-          costo_mantenimiento_m2: string | null
-          descripcion: string | null
-          direccion: string | null
-          fecha_entrega: string | null
-          fecha_inicio_construccion: string | null
-          fecha_lanzamiento: string | null
-          id: number
-          id_estado: number | null
-          id_estatus_proyecto: number | null
-          id_municipio: number | null
-          id_pais: string | null
-          id_tipo_uso: number | null
-          latitud: number | null
-          longitud: number | null
-          nombre: string | null
-          nombre_estado: string | null
-          nombre_firmante_recibos: string | null
-          nombre_municipio: string | null
-          nombre_pais: string | null
-          tipo_transaccion: string | null
-          tipo_uso: string | null
-          url_firma_recibos: string | null
-          url_imagen_portada: string | null
-          url_logo: string | null
-        }
-        Insert: {
-          costo_mantenimiento_m2?: string | null
-          descripcion?: string | null
-          direccion?: string | null
-          fecha_entrega?: string | null
-          fecha_inicio_construccion?: string | null
-          fecha_lanzamiento?: string | null
-          id?: number
-          id_estado?: number | null
-          id_estatus_proyecto?: number | null
-          id_municipio?: number | null
-          id_pais?: string | null
-          id_tipo_uso?: number | null
-          latitud?: number | null
-          longitud?: number | null
-          nombre?: string | null
-          nombre_estado?: string | null
-          nombre_firmante_recibos?: string | null
-          nombre_municipio?: string | null
-          nombre_pais?: string | null
-          tipo_transaccion?: string | null
-          tipo_uso?: string | null
-          url_firma_recibos?: string | null
-          url_imagen_portada?: string | null
-          url_logo?: string | null
-        }
-        Update: {
-          costo_mantenimiento_m2?: string | null
-          descripcion?: string | null
-          direccion?: string | null
-          fecha_entrega?: string | null
-          fecha_inicio_construccion?: string | null
-          fecha_lanzamiento?: string | null
-          id?: number
-          id_estado?: number | null
-          id_estatus_proyecto?: number | null
-          id_municipio?: number | null
-          id_pais?: string | null
-          id_tipo_uso?: number | null
-          latitud?: number | null
-          longitud?: number | null
-          nombre?: string | null
-          nombre_estado?: string | null
-          nombre_firmante_recibos?: string | null
-          nombre_municipio?: string | null
-          nombre_pais?: string | null
-          tipo_transaccion?: string | null
-          tipo_uso?: string | null
-          url_firma_recibos?: string | null
-          url_imagen_portada?: string | null
-          url_logo?: string | null
-        }
-        Relationships: []
       }
       queries_reportes: {
         Row: {
@@ -4213,10 +4822,35 @@ export type Database = {
     }
     Functions: {
       actualizar_estatus_reservas: { Args: never; Returns: undefined }
+      borrar_sp_cargar_amenidades_proyectos_desde_stagin: {
+        Args: never
+        Returns: undefined
+      }
+      borrar_sp_cargar_edificio_modelo: { Args: never; Returns: undefined }
+      borrar_sp_cargar_edificios_desde_stagin: {
+        Args: never
+        Returns: undefined
+      }
+      borrar_sp_cargar_modelos_caracteristicas_desde_stagin: {
+        Args: never
+        Returns: undefined
+      }
+      borrar_sp_cargar_modelos_desde_stagin: { Args: never; Returns: undefined }
+      borrar_sp_cargar_multimedias_modelo_desde_stagin: {
+        Args: never
+        Returns: undefined
+      }
+      borrar_sp_cargar_multimedias_proyecto: { Args: never; Returns: undefined }
       borrar_sp_cargar_proyectos_desde_stagin: {
         Args: never
         Returns: undefined
       }
+      borrar_sp_cargar_videos_youtube_proyecto: {
+        Args: never
+        Returns: undefined
+      }
+      borrar_sp_esquemas_pago_proyecto: { Args: never; Returns: undefined }
+      borrar_sp_vistas: { Args: never; Returns: undefined }
       crear_referencia_bancaria: {
         Args: { id_er_dueno: number }
         Returns: string

@@ -14,7 +14,7 @@ interface OfferData {
 interface PropertyDetails {
   id: number;
   numero_propiedad: string;
-  numero_piso: number;
+  numero_piso: string | number;
   m2_interiores: number;
   precio_lista: number;
   edificio: string;
