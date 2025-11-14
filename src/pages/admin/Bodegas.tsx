@@ -49,9 +49,6 @@ const Bodegas = () => {
   const { data: activeData, isLoading: isLoadingActive } = useQuery({
     queryKey: ['bodegas', 'active', currentPageActive, searchTerm, proyectoFilter],
     queryFn: async () => {
-      const from = (currentPageActive - 1) * itemsPerPage;
-      const to = from + itemsPerPage - 1;
-
       let query = supabase
         .from('bodegas')
         .select(`
@@ -61,15 +58,38 @@ const Bodegas = () => {
             id_entidad_relacionada_dueno
           )
         `, { count: 'exact' })
-        .eq('activo', true);
+        .eq('activo', true)
+        .order('id', { ascending: false });
 
+      // Si hay búsqueda, obtenemos más resultados para filtrar localmente
       if (searchTerm) {
-        query = query.or(`nombre.ilike.*${searchTerm}*,propiedades.numero_propiedad.ilike.*${searchTerm}*`);
+        const { data: allData, error, count: totalCount } = await query.range(0, 999);
+        
+        if (error) throw error;
+
+        // Filtrar localmente por nombre de bodega o número de departamento
+        const filteredData = allData.filter(item => {
+          const matchesNombre = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesNumero = item.propiedades?.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
+          return matchesNombre || matchesNumero;
+        });
+
+        // Aplicar paginación local
+        const from = (currentPageActive - 1) * itemsPerPage;
+        const to = from + itemsPerPage;
+        const paginatedData = filteredData.slice(from, to);
+
+        return {
+          data: paginatedData,
+          count: filteredData.length
+        };
       }
 
-      const { data, error, count } = await query
-        .order('id', { ascending: false })
-        .range(from, to);
+      // Sin búsqueda, usar paginación normal del servidor
+      const from = (currentPageActive - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+      
+      const { data, error, count } = await query.range(from, to);
 
       if (error) throw error;
 
@@ -119,9 +139,6 @@ const Bodegas = () => {
   const { data: deletedData, isLoading: isLoadingDeleted } = useQuery({
     queryKey: ['bodegas', 'deleted', currentPageDeleted, searchTerm, proyectoFilter],
     queryFn: async () => {
-      const from = (currentPageDeleted - 1) * itemsPerPage;
-      const to = from + itemsPerPage - 1;
-
       let query = supabase
         .from('bodegas')
         .select(`
@@ -131,15 +148,38 @@ const Bodegas = () => {
             id_entidad_relacionada_dueno
           )
         `, { count: 'exact' })
-        .eq('activo', false);
+        .eq('activo', false)
+        .order('id', { ascending: false });
 
+      // Si hay búsqueda, obtenemos más resultados para filtrar localmente
       if (searchTerm) {
-        query = query.or(`nombre.ilike.*${searchTerm}*,propiedades.numero_propiedad.ilike.*${searchTerm}*`);
+        const { data: allData, error, count: totalCount } = await query.range(0, 999);
+        
+        if (error) throw error;
+
+        // Filtrar localmente por nombre de bodega o número de departamento
+        const filteredData = allData.filter(item => {
+          const matchesNombre = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesNumero = item.propiedades?.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
+          return matchesNombre || matchesNumero;
+        });
+
+        // Aplicar paginación local
+        const from = (currentPageDeleted - 1) * itemsPerPage;
+        const to = from + itemsPerPage;
+        const paginatedData = filteredData.slice(from, to);
+
+        return {
+          data: paginatedData,
+          count: filteredData.length
+        };
       }
 
-      const { data, error, count } = await query
-        .order('id', { ascending: false })
-        .range(from, to);
+      // Sin búsqueda, usar paginación normal del servidor
+      const from = (currentPageDeleted - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+      
+      const { data, error, count } = await query.range(from, to);
 
       if (error) throw error;
 
