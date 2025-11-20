@@ -16,7 +16,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from "@/lib/config";
 import { NewPropertyDialog } from "@/components/admin/NewPropertyDialog";
 import { EditPropertyDialog } from "@/components/admin/EditPropertyDialog";
-import { Settings2 } from "lucide-react";
+import { Settings2, GripVertical } from "lucide-react";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { BulkUploadPropertiesDialog } from "@/components/admin/BulkUploadPropertiesDialog";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { NewProductOfferDialog } from "@/components/admin/NewProductOfferDialog";
@@ -171,6 +174,54 @@ const COLUMNS_CONFIG: ColumnConfig[] = [
 ];
 
 const STORAGE_KEY = 'propiedades-visible-columns';
+const ORDER_STORAGE_KEY = 'propiedades-columns-order';
+
+// Sortable Item Component
+const SortableColumnItem = ({ column, isVisible, onToggle }: { column: ColumnConfig; isVisible: boolean; onToggle: (key: ColumnKey) => void }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: column.key });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center space-x-2 p-2 rounded-md border bg-background ${
+        isDragging ? 'shadow-lg' : ''
+      }`}
+    >
+      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <Checkbox
+        id={column.key}
+        checked={isVisible}
+        onCheckedChange={() => onToggle(column.key)}
+        disabled={column.required}
+      />
+      <label
+        htmlFor={column.key}
+        className={`text-sm flex-1 cursor-pointer ${
+          column.required ? 'text-muted-foreground' : ''
+        }`}
+      >
+        {column.label}
+        {column.required && <span className="ml-1 text-xs">(obligatoria)</span>}
+      </label>
+    </div>
+  );
+};
 
 const Propiedades = () => {
   const [searchParams] = useSearchParams();
@@ -238,7 +289,7 @@ const Propiedades = () => {
   const [precioFilterInput, setPrecioFilterInput] = useState<number[]>([1000000, 20000000]);
   const [precioFilter, setPrecioFilter] = useState<number[]>([1000000, 20000000]);
 
-  // Column visibility state
+  // Column visibility and order state
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -250,6 +301,23 @@ const Propiedades = () => {
     }
     return new Set(COLUMNS_CONFIG.filter(col => col.defaultVisible).map(col => col.key));
   });
+
+  const [columnsOrder, setColumnsOrder] = useState<ColumnKey[]>(() => {
+    const saved = localStorage.getItem(ORDER_STORAGE_KEY);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return COLUMNS_CONFIG.map(col => col.key);
+      }
+    }
+    return COLUMNS_CONFIG.map(col => col.key);
+  });
+
+  // Get ordered columns config
+  const orderedColumns = columnsOrder
+    .map(key => COLUMNS_CONFIG.find(col => col.key === key))
+    .filter((col): col is ColumnConfig => col !== undefined);
 
   const isColumnVisible = (key: ColumnKey) => visibleColumns.has(key);
 
@@ -283,9 +351,33 @@ const Propiedades = () => {
 
   const resetToDefaults = () => {
     const defaultKeys = new Set(COLUMNS_CONFIG.filter(col => col.defaultVisible).map(col => col.key));
+    const defaultOrder = COLUMNS_CONFIG.map(col => col.key);
     setVisibleColumns(defaultKeys);
+    setColumnsOrder(defaultOrder);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(defaultKeys)));
+    localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(defaultOrder));
   };
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+
+    if (active.id !== over.id) {
+      setColumnsOrder((items) => {
+        const oldIndex = items.indexOf(active.id as ColumnKey);
+        const newIndex = items.indexOf(over.id as ColumnKey);
+        const newOrder = arrayMove(items, oldIndex, newIndex);
+        localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+        return newOrder;
+      });
+    }
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const visibleCount = visibleColumns.size;
   const totalCount = COLUMNS_CONFIG.length;
@@ -2432,30 +2524,9 @@ const Propiedades = () => {
                   />
                 </TableHead>
               )}
-              {isColumnVisible('proyecto') && <TableHead>Proyecto</TableHead>}
-              {isColumnVisible('propietario') && <TableHead>Propietario</TableHead>}
-              {isColumnVisible('edificio') && <TableHead>Edificio</TableHead>}
-              {isColumnVisible('modelo') && <TableHead>Modelo</TableHead>}
-              {isColumnVisible('numero_departamento') && <TableHead>No. Departamento</TableHead>}
-              {isColumnVisible('piso') && <TableHead>Piso</TableHead>}
-              {isColumnVisible('vista') && <TableHead>Vista</TableHead>}
-              {isColumnVisible('area') && <TableHead>Área</TableHead>}
-              {isColumnVisible('configuracion') && <TableHead>Configuración</TableHead>}
-              {isColumnVisible('precio') && <TableHead>Precio</TableHead>}
-              {isColumnVisible('precio_m2') && <TableHead>Precio por M2</TableHead>}
-              {isColumnVisible('estacionamientos') && <TableHead>Estacionamientos</TableHead>}
-              {isColumnVisible('bodegas') && <TableHead>Bodegas</TableHead>}
-              {isColumnVisible('ofertas_comerciales') && <TableHead>Ofertas Comerciales</TableHead>}
-              {isColumnVisible('ofertas_productos') && <TableHead>Ofertas de Productos</TableHead>}
-              {isColumnVisible('disponibilidad') && <TableHead>Disponibilidad</TableHead>}
-              {isColumnVisible('cuenta_cobranza') && <TableHead>Cuenta de cobranza</TableHead>}
-              {isColumnVisible('cuenta_clabe') && <TableHead>Cuenta Clabe</TableHead>}
-              {isColumnVisible('precio_final') && <TableHead>Precio Final</TableHead>}
-              {isColumnVisible('pagado') && <TableHead>Pagado</TableHead>}
-              {isColumnVisible('restante') && <TableHead>Restante</TableHead>}
-              {isColumnVisible('estado_pagos') && <TableHead>Estado de Pagos</TableHead>}
-              {isColumnVisible('factura') && <TableHead>Factura</TableHead>}
-              {isColumnVisible('acciones') && <TableHead>Acciones</TableHead>}
+              {orderedColumns.map((column) => 
+                isColumnVisible(column.key) && <TableHead key={column.key}>{column.label}</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -2506,9 +2577,10 @@ const Propiedades = () => {
                   )}
                   {isColumnVisible('numero_departamento') && <TableCell>{property.numero_propiedad}</TableCell>}
                   {isColumnVisible('piso') && <TableCell>{property.numero_piso}</TableCell>}
-                  {isColumnVisible('vista') && <TableCell>{property.vista}</TableCell>}
-                  {isColumnVisible('area') && (
-                    <TableCell>
+                      
+                      case 'area':
+                        return (
+                          <TableCell key={column.key}>
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
@@ -2527,12 +2599,16 @@ const Propiedades = () => {
                             </div>
                           </TooltipContent>
                         </Tooltip>
-                      </TooltipProvider>
-                    </TableCell>
-                  )}
-                  {isColumnVisible('configuracion') && <TableCell className="text-sm">{formatConfiguracion(property.configuracion_modelo)}</TableCell>}
-                  {isColumnVisible('precio') && (
-                    <TableCell>
+                            </TooltipProvider>
+                          </TableCell>
+                        );
+                      
+                      case 'configuracion':
+                        return <TableCell key={column.key} className="text-sm">{formatConfiguracion(property.configuracion_modelo)}</TableCell>;
+                      
+                      case 'precio':
+                        return (
+                          <TableCell key={column.key}>
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
@@ -2546,19 +2622,24 @@ const Propiedades = () => {
                             <p>{property.precio_final ? 'Precio final' : 'Precio de lista'}</p>
                           </TooltipContent>
                         </Tooltip>
-                      </TooltipProvider>
-                    </TableCell>
-                  )}
-                  {isColumnVisible('precio_m2') && (
-                    <TableCell>
+                            </TooltipProvider>
+                          </TableCell>
+                        );
+                      
+                      case 'precio_m2':
+                        return (
+                          <TableCell key={column.key}>
                       {formatPrecioPorM2(
                         property.precio_final || property.precio_lista,
                         property.m2_interiores,
                         property.m2_exteriores
-                      )}
-                    </TableCell>
-                  )}
-                   {isColumnVisible('estacionamientos') && (<TableCell>
+                            )}
+                          </TableCell>
+                        );
+                      
+                      case 'estacionamientos':
+                        return (
+                          <TableCell key={column.key}>
                      <Button
                        variant="ghost"
                        size="sm"
@@ -2572,12 +2653,14 @@ const Propiedades = () => {
                        >
                          {property.estacionamientos_count}
                          {property.estacionamientos_count > 0 && <Car className="ml-1 h-3 w-3" />}
-                        </Badge>
-                      </Button>
-                    </TableCell>
-                  )}
-                  {isColumnVisible('bodegas') && (
-                    <TableCell>
+                            </Badge>
+                          </Button>
+                          </TableCell>
+                        );
+                      
+                      case 'bodegas':
+                        return (
+                          <TableCell key={column.key}>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -2591,12 +2674,14 @@ const Propiedades = () => {
                         >
                           {property.bodegas_count}
                           {property.bodegas_count > 0 && <Warehouse className="ml-1 h-3 w-3" />}
-                        </Badge>
-                      </Button>
-                    </TableCell>
-                  )}
-                  {isColumnVisible('ofertas_comerciales') && (
-                    <TableCell>
+                            </Badge>
+                          </Button>
+                          </TableCell>
+                        );
+                      
+                      case 'ofertas_comerciales':
+                        return (
+                          <TableCell key={column.key}>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -2610,12 +2695,14 @@ const Propiedades = () => {
                         >
                           {property.tieneOfertas ? "Sí" : "No"}
                           {property.tieneOfertas && <Eye className="ml-1 h-3 w-3" />}
-                        </Badge>
-                      </Button>
-                    </TableCell>
-                  )}
-                  {isColumnVisible('ofertas_productos') && (
-                    <TableCell>
+                            </Badge>
+                          </Button>
+                          </TableCell>
+                        );
+                      
+                      case 'ofertas_productos':
+                        return (
+                          <TableCell key={column.key}>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -2629,17 +2716,21 @@ const Propiedades = () => {
                         >
                           {property.tieneOfertasProductos ? "Sí" : "No"}
                           {property.tieneOfertasProductos && <ShoppingCart className="ml-1 h-3 w-3" />}
-                        </Badge>
-                      </Button>
-                    </TableCell>
-                  )}
-                  {isColumnVisible('disponibilidad') && (
-                    <TableCell>
-                      <span className={getDisponibilidadBadgeClass(property.disponibilidad)}>{property.disponibilidad}</span>
-                    </TableCell>
-                  )}
-                  {isColumnVisible('cuenta_cobranza') && (
-                    <TableCell>
+                            </Badge>
+                          </Button>
+                          </TableCell>
+                        );
+                      
+                      case 'disponibilidad':
+                        return (
+                          <TableCell key={column.key}>
+                            <span className={getDisponibilidadBadgeClass(property.disponibilidad)}>{property.disponibilidad}</span>
+                          </TableCell>
+                        );
+                      
+                      case 'cuenta_cobranza':
+                        return (
+                          <TableCell key={column.key}>
                       {property.cuenta_cobranza_id ? (
                         <div className="flex items-center gap-2">
                           <Button
@@ -2698,12 +2789,14 @@ const Propiedades = () => {
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                        </div>
-                      )}
-                    </TableCell>
-                  )}
-                  {isColumnVisible('cuenta_clabe') && (
-                    <TableCell 
+                            </div>
+                          )}
+                          </TableCell>
+                        );
+                      
+                      case 'cuenta_clabe':
+                        return (
+                          <TableCell key={column.key}
                       className="font-mono text-sm cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => {
                         if (property.clabe_stp) {
@@ -2715,10 +2808,13 @@ const Propiedades = () => {
                         }
                       }}
                     >
-                      {property.clabe_stp || 'Sin CLABE'}
-                    </TableCell>
-                  )}
-                  {isColumnVisible('precio_final') && (<TableCell className="text-right font-semibold">
+                            {property.clabe_stp || 'Sin CLABE'}
+                          </TableCell>
+                        );
+                      
+                      case 'precio_final':
+                        return (
+                          <TableCell key={column.key} className="text-right font-semibold">
                      {property.precio_final ? (
                        <div className="flex items-center justify-end gap-2">
                          <span>{formatCurrency(property.precio_final)}</span>
@@ -2785,26 +2881,32 @@ const Propiedades = () => {
                              </>
                            );
                          })()}
-                        </div>
-                      ) : '-'}
-                    </TableCell>
-                  )}
-                  {isColumnVisible('pagado') && (
-                    <TableCell className="text-right">
-                      {property.cuenta_cobranza_id ? formatCurrency(property.total_pagado) : '-'}
-                    </TableCell>
-                  )}
-                  {isColumnVisible('restante') && (
-                    <TableCell className="text-right">
+                            </div>
+                          ) : '-'}
+                          </TableCell>
+                        );
+                      
+                      case 'pagado':
+                        return (
+                          <TableCell key={column.key} className="text-right">
+                            {property.cuenta_cobranza_id ? formatCurrency(property.total_pagado) : '-'}
+                          </TableCell>
+                        );
+                      
+                      case 'restante':
+                        return (
+                          <TableCell key={column.key} className="text-right">
                       {property.cuenta_cobranza_id ? (
                         <span className={property.restante > 0 ? 'text-orange-600 font-semibold' : 'text-green-600 font-semibold'}>
                           {formatCurrency(property.restante)}
-                        </span>
-                      ) : '-'}
-                    </TableCell>
-                  )}
-                  {isColumnVisible('estado_pagos') && (
-                    <TableCell>
+                            </span>
+                          ) : '-'}
+                          </TableCell>
+                        );
+                      
+                      case 'estado_pagos':
+                        return (
+                          <TableCell key={column.key}>
                        {property.payment_status ? (
                          <div className="flex gap-1 items-center">
                            {/* Sort payment icons by date */}
@@ -2876,18 +2978,22 @@ const Propiedades = () => {
                              });
                            })()}
                          </div>
-                       ) : (
-                         <Badge variant="outline" className="text-xs">N/A</Badge>
-                       )}
-                       </TableCell>
-                  )}
-                  {isColumnVisible('factura') && (
-                    <TableCell>
-                      <FacturaCell propertyId={property.id} />
-                    </TableCell>
-                  )}
-                  {isColumnVisible('acciones') && (
-                    <TableCell>
+                            ) : (
+                              <Badge variant="outline" className="text-xs">N/A</Badge>
+                            )}
+                          </TableCell>
+                        );
+                      
+                      case 'factura':
+                        return (
+                          <TableCell key={column.key}>
+                            <FacturaCell propertyId={property.id} />
+                          </TableCell>
+                        );
+                      
+                      case 'acciones':
+                        return (
+                          <TableCell key={column.key}>
                     {tabType === "eliminados" ? (
                       <Button
                         variant="ghost"
@@ -3028,11 +3134,92 @@ const Propiedades = () => {
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
-                       </div>
+                      </div>
+                    ) : (
+                      <div className="flex space-x-2">
+                        {property.disponibilidad === "Disponible" && property.tiene_sozu_como_inmobiliaria && (
+                          <NewOfferDialog 
+                            propertyId={property.id} 
+                            propertyNumber={property.numero_propiedad} 
+                          />
+                        )}
+                        {(property.disponibilidad === "Apartado" || 
+                          property.disponibilidad === "Vendido" || 
+                          property.disponibilidad === "En escrituración" ||
+                          property.disponibilidad === "Entregado") && (
+                          <NewProductOfferDialog 
+                            propertyId={property.id}
+                            property={property}
+                          />
+                        )}
+                        {(property.disponibilidad === "Disponible" || property.disponibilidad === "Listo") && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <AsignarPropiedadDialog 
+                                propertyId={property.id}
+                                propertyNumber={property.numero_propiedad}
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Asignar propiedad</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => setEditingProperty(property)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Editar propiedad</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              disabled={property.tieneOfertas}
+                              title={property.tieneOfertas ? "No se puede eliminar una propiedad con ofertas asociadas" : "Eliminar propiedad"}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar propiedad?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                ¿Estás seguro de que deseas eliminar la propiedad {property.numero_propiedad}? Esta acción se puede revertir posteriormente.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDelete(property.id)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Eliminar
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     )}
                   </TableCell>
-                  )}
-                </TableRow>
+                );
+              
+              default:
+                return null;
+            }
+          })}
+        </TableRow>
               ))
             )}
           </TableBody>
@@ -3302,28 +3489,30 @@ const Propiedades = () => {
                       </Button>
                     </div>
 
-                    <div className="max-h-[400px] overflow-y-auto space-y-2 border rounded-md p-3">
-                      {COLUMNS_CONFIG.map((column) => (
-                        <div key={column.key} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={column.key}
-                            checked={isColumnVisible(column.key)}
-                            onCheckedChange={() => toggleColumn(column.key)}
-                            disabled={column.required}
-                          />
-                          <label
-                            htmlFor={column.key}
-                            className={`text-sm flex-1 cursor-pointer ${
-                              column.required ? 'text-muted-foreground' : ''
-                            }`}
-                          >
-                            {column.label}
-                            {column.required && (
-                              <span className="ml-1 text-xs">(obligatoria)</span>
-                            )}
-                          </label>
-                        </div>
-                      ))}
+                    <div className="text-xs text-muted-foreground px-1 mb-1">
+                      Arrastra para reordenar
+                    </div>
+
+                    <div className="max-h-[400px] overflow-y-auto space-y-1.5 border rounded-md p-3">
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <SortableContext
+                          items={columnsOrder}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          {orderedColumns.map((column) => (
+                            <SortableColumnItem
+                              key={column.key}
+                              column={column}
+                              isVisible={isColumnVisible(column.key)}
+                              onToggle={toggleColumn}
+                            />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
                     </div>
 
                     <Button
