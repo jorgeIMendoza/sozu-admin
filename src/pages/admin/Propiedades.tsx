@@ -189,10 +189,10 @@ const Propiedades = () => {
   const [bodegasFilter, setBodegasFilter] = useState("");
   const [estacionamientosFilter, setEstacionamientosFilter] = useState("");
   const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState("");
-  const [areaFilterInput, setAreaFilterInput] = useState<number[]>([0, 1000]);
-  const [areaFilter, setAreaFilter] = useState<number[]>([0, 1000]);
-  const [precioFilterInput, setPrecioFilterInput] = useState<number[]>([0, 100000000]);
-  const [precioFilter, setPrecioFilter] = useState<number[]>([0, 100000000]);
+  const [areaFilterInput, setAreaFilterInput] = useState<number[]>([0, 500]);
+  const [areaFilter, setAreaFilter] = useState<number[]>([0, 500]);
+  const [precioFilterInput, setPrecioFilterInput] = useState<number[]>([0, 50000000]);
+  const [precioFilter, setPrecioFilter] = useState<number[]>([0, 50000000]);
 
   // Debounce filtros de texto
   useEffect(() => {
@@ -3055,7 +3055,7 @@ const Propiedades = () => {
                 <label className="text-sm font-medium mb-2 block">Área (m²): {areaFilterInput[0]} - {areaFilterInput[1]}</label>
                 <Slider
                   min={0}
-                  max={1000}
+                  max={500}
                   step={1}
                   value={areaFilterInput}
                   onValueChange={setAreaFilterInput}
@@ -3066,7 +3066,7 @@ const Propiedades = () => {
                 <label className="text-sm font-medium mb-2 block whitespace-nowrap">Precio: ${(precioFilterInput[0] / 1000000).toFixed(1)}M - ${(precioFilterInput[1] / 1000000).toFixed(1)}M</label>
                 <Slider
                   min={0}
-                  max={100000000}
+                  max={50000000}
                   step={100000}
                   value={precioFilterInput}
                   onValueChange={setPrecioFilterInput}
@@ -3094,10 +3094,10 @@ const Propiedades = () => {
                   setBodegasFilter("");
                   setEstacionamientosFilter("");
                   setCuentaCobranzaFilter("");
-                  setAreaFilterInput([0, 1000]);
-                  setAreaFilter([0, 1000]);
-                  setPrecioFilterInput([0, 100000000]);
-                  setPrecioFilter([0, 100000000]);
+                  setAreaFilterInput([0, 500]);
+                  setAreaFilter([0, 500]);
+                  setPrecioFilterInput([0, 50000000]);
+                  setPrecioFilter([0, 50000000]);
                   setSelectedProperties([]);
                 }}
               >
