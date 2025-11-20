@@ -820,7 +820,7 @@ const Propiedades = () => {
           const paginatedData = filtered.slice(from, from + itemsPerPage);
           totalCount = filtered.length;
 
-          return { properties: paginatedData, count: totalCount };
+          return { properties: paginatedData, count: totalCount, filteredCount: filtered.length };
         } else {
           // Use server-side pagination for better performance
           const { data, error, count } = await query.range(from, to);
@@ -878,7 +878,7 @@ const Propiedades = () => {
             return matchesCuentaCobranza && matchesArea && matchesPrecio;
           });
 
-          return { properties: filtered, count: filtered.length };
+          return { properties: filtered, count: count || 0, filteredCount: filtered.length };
         }
       } catch (error) {
         console.error('Error fetching active properties:', error);
@@ -1047,7 +1047,7 @@ const Propiedades = () => {
           const paginatedData = filtered.slice(from, from + itemsPerPage);
           totalCount = filtered.length;
 
-          return { properties: paginatedData, count: totalCount };
+          return { properties: paginatedData, count: totalCount, filteredCount: filtered.length };
         } else {
           // Use server-side pagination for better performance
           const { data, error, count } = await query.range(from, to);
@@ -1105,7 +1105,7 @@ const Propiedades = () => {
             return matchesCuentaCobranza && matchesArea && matchesPrecio;
           });
 
-          return { properties: filtered, count: filtered.length };
+          return { properties: filtered, count: count || 0, filteredCount: filtered.length };
         }
       } catch (error) {
         console.error('Error fetching draft properties:', error);
@@ -1275,7 +1275,7 @@ const Propiedades = () => {
           const paginatedData = filtered.slice(from, from + itemsPerPage);
           totalCount = filtered.length;
 
-          return { properties: paginatedData, count: totalCount };
+          return { properties: paginatedData, count: totalCount, filteredCount: filtered.length };
         } else {
           // Use server-side pagination for better performance
           const { data, error, count } = await query.range(from, to);
@@ -1333,7 +1333,7 @@ const Propiedades = () => {
             return matchesCuentaCobranza && matchesArea && matchesPrecio;
           });
 
-          return { properties: filtered, count: filtered.length };
+          return { properties: filtered, count: count || 0, filteredCount: filtered.length };
         }
       } catch (error) {
         console.error('Error fetching deleted properties:', error);
@@ -1345,10 +1345,13 @@ const Propiedades = () => {
 
   const activeProperties = propiedadesActivasData?.properties || [];
   const totalActivosCount = propiedadesActivasData?.count || 0;
+  const filteredActivosCount = propiedadesActivasData?.filteredCount ?? totalActivosCount;
   const draftProperties = propiedadesDraftData?.properties || [];
   const totalDraftCount = propiedadesDraftData?.count || 0;
+  const filteredDraftCount = propiedadesDraftData?.filteredCount ?? totalDraftCount;
   const inactiveProperties = propiedadesEliminadasData?.properties || [];
   const totalEliminadosCount = propiedadesEliminadasData?.count || 0;
+  const filteredEliminadosCount = propiedadesEliminadasData?.filteredCount ?? totalEliminadosCount;
 
   const isLoading = activeTab === "activos" ? loadingActivos : activeTab === "draft" ? loadingDraft : loadingEliminados;
 
@@ -3110,13 +3113,13 @@ const Propiedades = () => {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="activos">
-                Activos ({totalActivosCount})
+                Activos ({filteredActivosCount})
               </TabsTrigger>
               <TabsTrigger value="draft">
-                Draft ({totalDraftCount})
+                Draft ({filteredDraftCount})
               </TabsTrigger>
               <TabsTrigger value="eliminados">
-                Eliminados ({totalEliminadosCount})
+                Eliminados ({filteredEliminadosCount})
               </TabsTrigger>
             </TabsList>
             
