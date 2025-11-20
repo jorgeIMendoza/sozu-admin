@@ -867,13 +867,15 @@ const Propiedades = () => {
             tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
           }));
           
-          // Apply only cuenta cobranza filter (other filters already applied server-side)
+          // Apply only cuenta cobranza, area and precio filters (other filters already applied server-side)
           const filtered = dataWithSozu.filter(property => {
             const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
               (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
               (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+            const matchesArea = property.m2_reales >= areaFilter[0] && property.m2_reales <= areaFilter[1];
+            const matchesPrecio = property.precio_lista >= precioFilter[0] && property.precio_lista <= precioFilter[1];
             
-            return matchesCuentaCobranza;
+            return matchesCuentaCobranza && matchesArea && matchesPrecio;
           });
 
           return { properties: filtered, count: count || 0 };
@@ -1092,13 +1094,15 @@ const Propiedades = () => {
             tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
           }));
           
-          // Apply only cuenta cobranza filter (other filters already applied server-side)
+          // Apply only cuenta cobranza, area and precio filters (other filters already applied server-side)
           const filtered = dataWithSozu.filter(property => {
             const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
               (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
               (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+            const matchesArea = property.m2_reales >= areaFilter[0] && property.m2_reales <= areaFilter[1];
+            const matchesPrecio = property.precio_lista >= precioFilter[0] && property.precio_lista <= precioFilter[1];
             
-            return matchesCuentaCobranza;
+            return matchesCuentaCobranza && matchesArea && matchesPrecio;
           });
 
           return { properties: filtered, count: count || 0 };
@@ -1318,13 +1322,15 @@ const Propiedades = () => {
             tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
           }));
           
-          // Apply only cuenta cobranza filter (other filters already applied server-side)
+          // Apply only cuenta cobranza, area and precio filters (other filters already applied server-side)
           const filtered = dataWithSozu.filter(property => {
             const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
               (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
               (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
+            const matchesArea = property.m2_reales >= areaFilter[0] && property.m2_reales <= areaFilter[1];
+            const matchesPrecio = property.precio_lista >= precioFilter[0] && property.precio_lista <= precioFilter[1];
             
-            return matchesCuentaCobranza;
+            return matchesCuentaCobranza && matchesArea && matchesPrecio;
           });
 
           return { properties: filtered, count: count || 0 };
