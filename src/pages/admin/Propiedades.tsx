@@ -189,8 +189,8 @@ const Propiedades = () => {
   const [bodegasFilter, setBodegasFilter] = useState("");
   const [estacionamientosFilter, setEstacionamientosFilter] = useState("");
   const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState("");
-  const [areaFilterInput, setAreaFilterInput] = useState<number[]>([0, 200]);
-  const [areaFilter, setAreaFilter] = useState<number[]>([0, 200]);
+  const [areaFilterInput, setAreaFilterInput] = useState<number[]>([25, 200]);
+  const [areaFilter, setAreaFilter] = useState<number[]>([25, 200]);
   const [precioFilterInput, setPrecioFilterInput] = useState<number[]>([1000000, 20000000]);
   const [precioFilter, setPrecioFilter] = useState<number[]>([1000000, 20000000]);
 
@@ -614,10 +614,10 @@ const Propiedades = () => {
         id: property.id,
         numero_propiedad: property.numero_propiedad,
         numero_piso: property.numero_piso,
-        m2_reales: (property.m2_interiores || 0) + (property.m2_exteriores || 0),
-        m2_interiores: property.m2_interiores || 0,
-        m2_exteriores: property.m2_exteriores || 0,
-        precio_lista: property.precio_lista,
+        m2_reales: Number(property.m2_interiores || 0) + Number(property.m2_exteriores || 0),
+        m2_interiores: Number(property.m2_interiores || 0),
+        m2_exteriores: Number(property.m2_exteriores || 0),
+        precio_lista: Number(property.precio_lista || 0),
         monto_apartado: property.monto_apartado,
         monto_apartado_pagando: property.monto_apartado_pagando,
         clabe_stp_tmp_apartado: property.clabe_stp_tmp_apartado,
@@ -3048,7 +3048,7 @@ const Propiedades = () => {
               <div>
                 <label className="text-sm font-medium mb-2 block">Área (m²): {areaFilterInput[0]} - {areaFilterInput[1]}</label>
                 <Slider
-                  min={0}
+                  min={25}
                   max={200}
                   step={1}
                   value={areaFilterInput}
@@ -3088,8 +3088,8 @@ const Propiedades = () => {
                   setBodegasFilter("");
                   setEstacionamientosFilter("");
                   setCuentaCobranzaFilter("");
-                  setAreaFilterInput([0, 200]);
-                  setAreaFilter([0, 200]);
+                  setAreaFilterInput([25, 200]);
+                  setAreaFilter([25, 200]);
                   setPrecioFilterInput([1000000, 20000000]);
                   setPrecioFilter([1000000, 20000000]);
                   setSelectedProperties([]);
