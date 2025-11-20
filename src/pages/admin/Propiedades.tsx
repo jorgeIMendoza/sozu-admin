@@ -3344,25 +3344,77 @@ const Propiedades = () => {
                 </Select>
               </div>
               <div>
-                <label className="text-sm font-medium mb-2 block">Área (m²): {areaFilterInput[0]} - {areaFilterInput[1]}</label>
+                <label className="text-sm font-medium mb-2 block">Área (m²)</label>
+                <div className="flex items-center gap-2 mb-2">
+                  <Input
+                    type="number"
+                    value={areaFilterInput[0]}
+                    onChange={(e) => {
+                      const val = Math.max(25, Math.min(200, Number(e.target.value) || 25));
+                      setAreaFilterInput([val, areaFilterInput[1]]);
+                    }}
+                    className="w-20 h-8 text-xs"
+                    min={25}
+                    max={200}
+                  />
+                  <span className="text-xs text-muted-foreground">-</span>
+                  <Input
+                    type="number"
+                    value={areaFilterInput[1]}
+                    onChange={(e) => {
+                      const val = Math.max(25, Math.min(200, Number(e.target.value) || 200));
+                      setAreaFilterInput([areaFilterInput[0], val]);
+                    }}
+                    className="w-20 h-8 text-xs"
+                    min={25}
+                    max={200}
+                  />
+                </div>
                 <Slider
                   min={25}
                   max={200}
                   step={1}
                   value={areaFilterInput}
                   onValueChange={setAreaFilterInput}
-                  className="mt-2"
+                  className="mt-1"
                 />
               </div>
               <div className="min-w-[200px]">
-                <label className="text-sm font-medium mb-2 block whitespace-nowrap">Precio: ${(precioFilterInput[0] / 1000000).toFixed(1)}M - ${(precioFilterInput[1] / 1000000).toFixed(1)}M</label>
+                <label className="text-sm font-medium mb-2 block whitespace-nowrap">Precio (MXN)</label>
+                <div className="flex items-center gap-2 mb-2">
+                  <Input
+                    type="number"
+                    value={precioFilterInput[0]}
+                    onChange={(e) => {
+                      const val = Math.max(1000000, Math.min(20000000, Number(e.target.value) || 1000000));
+                      setPrecioFilterInput([val, precioFilterInput[1]]);
+                    }}
+                    className="w-28 h-8 text-xs"
+                    min={1000000}
+                    max={20000000}
+                    step={100000}
+                  />
+                  <span className="text-xs text-muted-foreground">-</span>
+                  <Input
+                    type="number"
+                    value={precioFilterInput[1]}
+                    onChange={(e) => {
+                      const val = Math.max(1000000, Math.min(20000000, Number(e.target.value) || 20000000));
+                      setPrecioFilterInput([precioFilterInput[0], val]);
+                    }}
+                    className="w-28 h-8 text-xs"
+                    min={1000000}
+                    max={20000000}
+                    step={100000}
+                  />
+                </div>
                 <Slider
                   min={1000000}
                   max={20000000}
                   step={100000}
                   value={precioFilterInput}
                   onValueChange={setPrecioFilterInput}
-                  className="mt-2"
+                  className="mt-1"
                 />
               </div>
             </div>
