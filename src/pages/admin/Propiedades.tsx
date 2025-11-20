@@ -189,8 +189,8 @@ const Propiedades = () => {
   const [bodegasFilter, setBodegasFilter] = useState("");
   const [estacionamientosFilter, setEstacionamientosFilter] = useState("");
   const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState("");
-  const [areaFilterInput, setAreaFilterInput] = useState<number[]>([1, 200]);
-  const [areaFilter, setAreaFilter] = useState<number[]>([1, 200]);
+  const [areaFilterInput, setAreaFilterInput] = useState<number[]>([25, 200]);
+  const [areaFilter, setAreaFilter] = useState<number[]>([25, 200]);
   const [precioFilterInput, setPrecioFilterInput] = useState<number[]>([1000000, 20000000]);
   const [precioFilter, setPrecioFilter] = useState<number[]>([1000000, 20000000]);
 
@@ -752,7 +752,7 @@ const Propiedades = () => {
           bodegasFilter !== "" ||
           estacionamientosFilter !== "" ||
           cuentaCobranzaFilter !== "" ||
-          areaFilter[0] !== 1 ||
+          areaFilter[0] !== 25 ||
           areaFilter[1] !== 200 ||
           precioFilter[0] !== 1000000 ||
           precioFilter[1] !== 20000000;
@@ -986,7 +986,7 @@ const Propiedades = () => {
           bodegasFilter !== "" ||
           estacionamientosFilter !== "" ||
           cuentaCobranzaFilter !== "" ||
-          areaFilter[0] !== 1 ||
+          areaFilter[0] !== 25 ||
           areaFilter[1] !== 200 ||
           precioFilter[0] !== 1000000 ||
           precioFilter[1] !== 20000000;
@@ -1221,7 +1221,7 @@ const Propiedades = () => {
           bodegasFilter !== "" ||
           estacionamientosFilter !== "" ||
           cuentaCobranzaFilter !== "" ||
-          areaFilter[0] !== 1 ||
+          areaFilter[0] !== 25 ||
           areaFilter[1] !== 200 ||
           precioFilter[0] !== 1000000 ||
           precioFilter[1] !== 20000000;
@@ -2006,7 +2006,7 @@ const Propiedades = () => {
     bodegasFilter !== "" ||
     estacionamientosFilter !== "" ||
     cuentaCobranzaFilter !== "" ||
-    areaFilter[0] !== 1 ||
+    areaFilter[0] !== 25 ||
     areaFilter[1] !== 200 ||
     precioFilter[0] !== 1000000 ||
     precioFilter[1] !== 20000000;
@@ -3087,7 +3087,7 @@ const Propiedades = () => {
               <div>
                 <label className="text-sm font-medium mb-2 block">Área (m²): {areaFilterInput[0]} - {areaFilterInput[1]}</label>
                 <Slider
-                  min={1}
+                  min={25}
                   max={200}
                   step={1}
                   value={areaFilterInput}
@@ -3127,8 +3127,8 @@ const Propiedades = () => {
                   setBodegasFilter("");
                   setEstacionamientosFilter("");
                   setCuentaCobranzaFilter("");
-                  setAreaFilterInput([1, 200]);
-                  setAreaFilter([1, 200]);
+                  setAreaFilterInput([25, 200]);
+                  setAreaFilter([25, 200]);
                   setPrecioFilterInput([1000000, 20000000]);
                   setPrecioFilter([1000000, 20000000]);
                   setSelectedProperties([]);
