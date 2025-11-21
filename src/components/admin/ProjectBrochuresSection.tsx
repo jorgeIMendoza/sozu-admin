@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Upload, FileText, ExternalLink } from "lucide-react";
+import { Trash2, Upload, FileText, ExternalLink, Eye } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ProjectBrochuresSectionProps {
   projectId: number;
@@ -12,6 +13,7 @@ interface ProjectBrochuresSectionProps {
 
 export const ProjectBrochuresSection = ({ projectId }: ProjectBrochuresSectionProps) => {
   const [isUploading, setIsUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -168,6 +170,14 @@ export const ProjectBrochuresSection = ({ projectId }: ProjectBrochuresSectionPr
                   type="button"
                   variant="outline"
                   size="sm"
+                  onClick={() => setPreviewUrl(brochure.url)}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => window.open(brochure.url, "_blank")}
                 >
                   <ExternalLink className="h-4 w-4" />
@@ -207,6 +217,23 @@ export const ProjectBrochuresSection = ({ projectId }: ProjectBrochuresSectionPr
           No hay brochures cargados para este proyecto
         </div>
       )}
+
+      <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
+        <DialogContent className="max-w-4xl h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Vista previa del brochure</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 w-full h-full">
+            {previewUrl && (
+              <iframe
+                src={previewUrl}
+                className="w-full h-full border-0"
+                title="PDF Preview"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
