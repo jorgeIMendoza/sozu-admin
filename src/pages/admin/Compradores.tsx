@@ -14,7 +14,7 @@ import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
 type Comprador = {
   id: number;
@@ -745,7 +745,7 @@ export default function Compradores() {
             <TabsContent value="active" className="mt-6">
               {renderTable()}
               {totalPages > 1 && (
-                <div className="mt-6 flex justify-center">
+                <div className="mt-6">
                   <Pagination>
                     <PaginationContent>
                       <PaginationItem>
@@ -754,17 +754,38 @@ export default function Compradores() {
                           className={currentPageActive === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                         />
                       </PaginationItem>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                        <PaginationItem key={page}>
-                          <PaginationLink
-                            onClick={() => setCurrentPageActive(page)}
-                            isActive={currentPageActive === page}
-                            className="cursor-pointer"
-                          >
-                            {page}
-                          </PaginationLink>
+                      
+                      {[...Array(Math.min(totalPages, 5))].map((_, idx) => {
+                        let pageNumber;
+                        if (totalPages <= 5) {
+                          pageNumber = idx + 1;
+                        } else if (currentPageActive <= 3) {
+                          pageNumber = idx + 1;
+                        } else if (currentPageActive >= totalPages - 2) {
+                          pageNumber = totalPages - 4 + idx;
+                        } else {
+                          pageNumber = currentPageActive - 2 + idx;
+                        }
+
+                        return (
+                          <PaginationItem key={pageNumber}>
+                            <PaginationLink
+                              onClick={() => setCurrentPageActive(pageNumber)}
+                              isActive={currentPageActive === pageNumber}
+                              className="cursor-pointer"
+                            >
+                              {pageNumber}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      })}
+                      
+                      {totalPages > 5 && currentPageActive < totalPages - 2 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
                         </PaginationItem>
-                      ))}
+                      )}
+                      
                       <PaginationItem>
                         <PaginationNext 
                           onClick={() => setCurrentPageActive(Math.min(totalPages, currentPageActive + 1))}
@@ -780,7 +801,7 @@ export default function Compradores() {
             <TabsContent value="deleted" className="mt-6">
               {renderTable()}
               {totalPages > 1 && (
-                <div className="mt-6 flex justify-center">
+                <div className="mt-6">
                   <Pagination>
                     <PaginationContent>
                       <PaginationItem>
@@ -789,17 +810,38 @@ export default function Compradores() {
                           className={currentPageDeleted === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                         />
                       </PaginationItem>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                        <PaginationItem key={page}>
-                          <PaginationLink
-                            onClick={() => setCurrentPageDeleted(page)}
-                            isActive={currentPageDeleted === page}
-                            className="cursor-pointer"
-                          >
-                            {page}
-                          </PaginationLink>
+                      
+                      {[...Array(Math.min(totalPages, 5))].map((_, idx) => {
+                        let pageNumber;
+                        if (totalPages <= 5) {
+                          pageNumber = idx + 1;
+                        } else if (currentPageDeleted <= 3) {
+                          pageNumber = idx + 1;
+                        } else if (currentPageDeleted >= totalPages - 2) {
+                          pageNumber = totalPages - 4 + idx;
+                        } else {
+                          pageNumber = currentPageDeleted - 2 + idx;
+                        }
+
+                        return (
+                          <PaginationItem key={pageNumber}>
+                            <PaginationLink
+                              onClick={() => setCurrentPageDeleted(pageNumber)}
+                              isActive={currentPageDeleted === pageNumber}
+                              className="cursor-pointer"
+                            >
+                              {pageNumber}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      })}
+                      
+                      {totalPages > 5 && currentPageDeleted < totalPages - 2 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
                         </PaginationItem>
-                      ))}
+                      )}
+                      
                       <PaginationItem>
                         <PaginationNext 
                           onClick={() => setCurrentPageDeleted(Math.min(totalPages, currentPageDeleted + 1))}
