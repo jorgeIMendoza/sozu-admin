@@ -344,12 +344,11 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
       
       if (edificiosError) throw edificiosError;
       
-      // Get all modelos for this project
+      // Get all modelos for this project (including inactive ones to preserve existing relations)
       const { data: modelosData, error: modelosError } = await supabase
         .from('modelos')
         .select('id, nombre, id_proyecto')
-        .eq('id_proyecto', propertyProject.id)
-        .eq('activo', true);
+        .eq('id_proyecto', propertyProject.id);
       
       if (modelosError) throw modelosError;
       
