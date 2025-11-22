@@ -256,25 +256,14 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
 
   // Fetch property project info first
   const { data: propertyProject } = useQuery({
-    queryKey: ['property_project', property.id],
+    queryKey: ['property_project', property.proyecto],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('propiedades')
-        .select(`
-          id,
-          edificios_modelos!fk_propiedades_edificio_modelo (
-            edificios!edificios_modelos_id_edificio_fkey (
-              proyectos!fk_edificios_proyecto (
-                id,
-                nombre
-              )
-            )
-          )
-        `)
-        .eq('id', property.id)
-        .maybeSingle();
+        .from('proyectos')
+        .select('id, nombre')
+        .ilike('nombre', property.proyecto);
       if (error) throw error;
-      return data?.edificios_modelos?.edificios?.proyectos;
+      return (data && data.length > 0) ? data[0] : null;
     }
   });
 
@@ -331,82 +320,51 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
     enabled: !!propertyProject?.id
   });
 
-  // Fetch models based on project
   const { data: edificiosModelos } = useQuery({
     queryKey: ['modelos_filtered', propertyProject?.id],
     queryFn: async () => {
       if (!propertyProject?.id) return [];
-      
-      console.log('Fetching edificios_modelos for project:', propertyProject.id);
-      
-      // 1. Obtener TODOS los edificios_modelos (sin filtrar por activo)
-      const { data: allEdificiosModelos, error: emError } = await supabase
+
+      const { data, error } = await supabase
         .from('edificios_modelos')
-        .select('id, id_edificio, id_modelo');
-      
-      if (emError) {
-        console.error('Error fetching edificios_modelos:', emError);
-        throw emError;
-      }
-      
-      console.log('All edificios_modelos:', allEdificiosModelos);
-      
-      // 2. Obtener edificios del proyecto
-      const { data: edificiosData, error: edificiosError } = await supabase
-        .from('edificios')
-        .select('id, nombre')
-        .eq('id_proyecto', propertyProject.id);
-      
-      if (edificiosError) {
-        console.error('Error fetching edificios:', edificiosError);
-        throw edificiosError;
-      }
-      
-      console.log('Edificios del proyecto:', edificiosData);
-      
-      // 3. Filtrar edificios_modelos que pertenecen a edificios del proyecto
-      const edificioIdsSet = new Set(edificiosData?.map(e => e.id) || []);
-      const relevantEdificiosModelos = (allEdificiosModelos || []).filter(em => 
-        edificioIdsSet.has(em.id_edificio)
-      );
-      
-      console.log('Relevant edificios_modelos:', relevantEdificiosModelos);
-      
-      if (relevantEdificiosModelos.length === 0) return [];
-      
-      // 4. Obtener modelos
-      const modeloIds = Array.from(new Set(relevantEdificiosModelos.map(em => em.id_modelo)));
-      const { data: modelosData, error: modelosError } = await supabase
-        .from('modelos')
-        .select('id, nombre')
-        .in('id', modeloIds);
-      
-      if (modelosError) {
-        console.error('Error fetching modelos:', modelosError);
-        throw modelosError;
-      }
-      
-      console.log('Modelos:', modelosData);
-      
-      // 5. Crear mapas
-      const edificiosMap = new Map(edificiosData?.map(e => [e.id, e]) || []);
-      const modelosMap = new Map(modelosData?.map(m => [m.id, m]) || []);
-      
-      // 6. Mapear datos
-      const result = relevantEdificiosModelos.map(em => {
-        const edificio = edificiosMap.get(em.id_edificio);
-        const modelo = modelosMap.get(em.id_modelo);
-        return {
-          id: em.id,
-          id_edificio: em.id_edificio,
-          id_modelo: em.id_modelo,
-          edificios: edificio,
-          modelos: modelo,
-        };
-      }).filter(em => em.edificios && em.modelos);
-      
-      console.log('Final result:', result);
-      return result;
+        .select(`
+          id,
+          id_edificio,
+          id_modelo,
+          edificios_rel:edificios!edificios_modelos_id_edificio_fkey!inner (
+            id,
+            nombre,
+            id_proyecto
+          ),
+          modelos_rel:modelos!edificios_modelos_id_modelo_fkey (
+            id,
+            nombre
+          )
+        `)
+        .eq('edificios_rel.id_proyecto', propertyProject.id)
+        .order('id', { ascending: true });
+
+      if (error) throw error;
+
+      type EdificioModeloRow = {
+        id: number;
+        id_edificio: number;
+        id_modelo: number;
+        edificios_rel: { id: number; nombre: string; id_proyecto: number } | null;
+        modelos_rel: { id: number; nombre: string } | null;
+      };
+
+      const rows = (data || []) as EdificioModeloRow[];
+
+      return rows
+        .filter((row) => row.edificios_rel && row.modelos_rel)
+        .map((row) => ({
+          id: row.id,
+          id_edificio: row.id_edificio,
+          id_modelo: row.id_modelo,
+          edificios: row.edificios_rel,
+          modelos: row.modelos_rel,
+        }));
     },
     enabled: !!propertyProject?.id
   });
