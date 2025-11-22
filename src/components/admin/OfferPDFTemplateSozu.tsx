@@ -156,6 +156,23 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
     // - Valor positivo: incremento (aumenta el precio)
     // - Valor negativo: descuento (reduce el precio)
     // Ejemplo: +10 = 10% más caro, -8 = 8% más barato
+    const numberToSpanishText = (num: number): string => {
+      const textMap: { [key: number]: string } = {
+        0: 'Cero',
+        1: 'Una',
+        2: 'Dos',
+        3: 'Tres',
+        4: 'Cuatro',
+        5: 'Cinco',
+        6: 'Seis',
+        7: 'Siete',
+        8: 'Ocho',
+        9: 'Nueve',
+        10: 'Diez'
+      };
+      return textMap[num] || num.toString();
+    };
+
     const calculatePaymentAmounts = (scheme: PaymentScheme) => {
       const basePrice = propertyDetails.precio_lista;
       const adjustment = basePrice * (scheme.porcentaje_descuento_aumento / 100);
@@ -169,6 +186,17 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
         adjustment
       };
     };
+
+    // Calcular resumen de estacionamientos
+    const estacionamientosResumen = estacionamientos.reduce((acc: any, est: any) => {
+      const tipo = est.tipo_estacionamiento || 'Sin especificar';
+      acc[tipo] = (acc[tipo] || 0) + 1;
+      return acc;
+    }, {});
+
+    const estacionamientosTexto = Object.entries(estacionamientosResumen)
+      .map(([tipo, cantidad]) => `${cantidad} ${tipo}`)
+      .join(', ') || 'N/A';
 
     return (
       <div 
@@ -324,67 +352,77 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               {/* Columna Izquierda */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 {/* Recámara */}
-                <div style={{ textAlign: 'center', width: '100%' }}>
-                  <img 
-                    src={recamarasIcon} 
-                    alt="Recámaras"
-                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                  />
-                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                    Una
+                {propertyDetails.model?.numero_recamaras && propertyDetails.model.numero_recamaras > 0 && (
+                  <div style={{ textAlign: 'center', width: '100%' }}>
+                    <img 
+                      src={recamarasIcon} 
+                      alt="Recámaras"
+                      style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                    />
+                    <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                      {numberToSpanishText(propertyDetails.model.numero_recamaras)}
+                    </div>
                   </div>
-                </div>
+                )}
                 
                 {/* Baño Completo */}
-                <div style={{ textAlign: 'center', width: '100%' }}>
-                  <img 
-                    src={banosIcon} 
-                    alt="Baños"
-                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                  />
-                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                    Uno
+                {propertyDetails.model?.numero_completo_banos && propertyDetails.model.numero_completo_banos > 0 && (
+                  <div style={{ textAlign: 'center', width: '100%' }}>
+                    <img 
+                      src={banosIcon} 
+                      alt="Baños"
+                      style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                    />
+                    <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                      {numberToSpanishText(propertyDetails.model.numero_completo_banos)}
+                    </div>
                   </div>
-                </div>
+                )}
                 
                 {/* Medio Baño */}
-                <div style={{ textAlign: 'center', width: '100%' }}>
-                  <img 
-                    src={mediosBanosIcon} 
-                    alt="Medios Baños"
-                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                  />
-                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                    Uno
+                {propertyDetails.model?.numero_medio_bano && propertyDetails.model.numero_medio_bano > 0 && (
+                  <div style={{ textAlign: 'center', width: '100%' }}>
+                    <img 
+                      src={mediosBanosIcon} 
+                      alt="Medios Baños"
+                      style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                    />
+                    <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                      {numberToSpanishText(propertyDetails.model.numero_medio_bano)}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
               
               {/* Columna Derecha */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 {/* Estacionamiento */}
-                <div style={{ textAlign: 'center', width: '100%' }}>
-                  <img 
-                    src={estacionamientoIcon} 
-                    alt="Estacionamiento"
-                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                  />
-                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                    1 Normal
+                {estacionamientos.length > 0 && (
+                  <div style={{ textAlign: 'center', width: '100%' }}>
+                    <img 
+                      src={estacionamientoIcon} 
+                      alt="Estacionamiento"
+                      style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                    />
+                    <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                      {estacionamientosTexto}
+                    </div>
                   </div>
-                </div>
+                )}
                 
                 {/* Bodega */}
-                <div style={{ textAlign: 'center', width: '100%' }}>
-                  <img 
-                    src={bodegaIcon} 
-                    alt="Bodega"
-                    style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
-                  />
-                  <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                    N/A
+                {bodegas.length > 0 && (
+                  <div style={{ textAlign: 'center', width: '100%' }}>
+                    <img 
+                      src={bodegaIcon} 
+                      alt="Bodega"
+                      style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
+                    />
+                    <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
+                      {bodegas.length} {bodegas.length === 1 ? 'Bodega' : 'Bodegas'}
+                    </div>
                   </div>
-                </div>
+                )}
                 
                 {/* Balcón - Mostrar solo si la propiedad tiene balcón */}
                 {propertyDetails.tieneBalcon && (
