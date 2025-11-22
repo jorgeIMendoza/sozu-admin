@@ -409,7 +409,10 @@ const Propiedades = () => {
   const { data: modelos } = useQuery({
     queryKey: ['modelos-filter', selectedProyectos, modeloSearchTerm],
     queryFn: async () => {
-      if (!modeloSearchTerm.trim()) {
+      // Si hay proyectos seleccionados, mostrar modelos aunque no haya búsqueda
+      const debeCargarModelos = selectedProyectos.length > 0 || modeloSearchTerm.trim();
+      
+      if (!debeCargarModelos) {
         return [];
       }
 
@@ -422,9 +425,13 @@ const Propiedades = () => {
           proyectos!modelos_id_proyecto_fkey!inner(id, id_tipo_uso)
         `)
         .eq('activo', true)
-        .ilike('nombre', `%${modeloSearchTerm}%`)
         .order('nombre', { ascending: true })
         .range(0, 99);
+      
+      // Si hay búsqueda, filtrar por nombre
+      if (modeloSearchTerm.trim()) {
+        query = query.ilike('nombre', `%${modeloSearchTerm}%`);
+      }
       
       // Si hay proyectos seleccionados, filtrar modelos por esos proyectos
       if (selectedProyectos.length > 0) {
@@ -476,6 +483,14 @@ const Propiedades = () => {
     }, 400);
     return () => clearTimeout(timer);
   }, [modeloSearchInput]);
+
+  // Limpiar modelos seleccionados cuando cambian los proyectos
+  useEffect(() => {
+    setSelectedModelos([]);
+    setSelectedModelosLabels({});
+    setModeloSearchInput("");
+    setModeloSearchTerm("");
+  }, [selectedProyectos]);
   
   // Paginación
   const [currentPageActive, setCurrentPageActive] = useState(1);
@@ -3373,7 +3388,10 @@ const Propiedades = () => {
                         onValueChange={setModeloSearchInput}
                       />
                       <CommandEmpty>
-                        {modeloSearchTerm ? "No se encontraron modelos." : "Escribe para buscar modelos."}
+                        {selectedProyectos.length > 0 
+                          ? "No se encontraron modelos." 
+                          : (modeloSearchTerm ? "No se encontraron modelos." : "Selecciona un proyecto o escribe para buscar modelos.")
+                        }
                       </CommandEmpty>
                       <CommandList>
                         <CommandGroup className="max-h-64 overflow-auto">
