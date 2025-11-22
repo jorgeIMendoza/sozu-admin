@@ -967,7 +967,7 @@ const Propiedades = () => {
           estacionamientosFilter !== "" ||
           cuentaCobranzaFilter !== "" ||
           areaFilter[0] !== 25 ||
-          areaFilter[1] !== 200 ||
+          areaFilter[1] !== 300 ||
           precioFilter[0] !== 1000000 ||
           precioFilter[1] !== 20000000;
 
@@ -1201,7 +1201,7 @@ const Propiedades = () => {
           estacionamientosFilter !== "" ||
           cuentaCobranzaFilter !== "" ||
           areaFilter[0] !== 25 ||
-          areaFilter[1] !== 200 ||
+          areaFilter[1] !== 300 ||
           precioFilter[0] !== 1000000 ||
           precioFilter[1] !== 20000000;
 
@@ -1436,7 +1436,7 @@ const Propiedades = () => {
           estacionamientosFilter !== "" ||
           cuentaCobranzaFilter !== "" ||
           areaFilter[0] !== 25 ||
-          areaFilter[1] !== 200 ||
+          areaFilter[1] !== 300 ||
           precioFilter[0] !== 1000000 ||
           precioFilter[1] !== 20000000;
 
