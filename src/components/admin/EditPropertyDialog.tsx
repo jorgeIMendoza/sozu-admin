@@ -325,46 +325,47 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
     queryFn: async () => {
       if (!propertyProject?.id) return [];
 
-      const { data, error } = await supabase
+      // Step 1: Get all edificios for this project
+      const { data: edificios, error: edificiosError } = await supabase
+        .from('edificios')
+        .select('id, nombre')
+        .eq('id_proyecto', propertyProject.id);
+      
+      if (edificiosError) throw edificiosError;
+      if (!edificios || edificios.length === 0) return [];
+
+      const edificioIds = edificios.map(e => e.id);
+
+      // Step 2: Get all edificios_modelos for these edificios
+      const { data: edificiosModelosData, error: emError } = await supabase
         .from('edificios_modelos')
-        .select(`
-          id,
-          id_edificio,
-          id_modelo,
-          edificios_rel:edificios!edificios_modelos_id_edificio_fkey!inner (
-            id,
-            nombre,
-            id_proyecto
-          ),
-          modelos_rel:modelos!edificios_modelos_id_modelo_fkey (
-            id,
-            nombre
-          )
-        `)
-        .eq('edificios_rel.id_proyecto', propertyProject.id)
-        .order('id', { ascending: true });
+        .select('id, id_edificio, id_modelo')
+        .in('id_edificio', edificioIds);
+      
+      if (emError) throw emError;
+      if (!edificiosModelosData || edificiosModelosData.length === 0) return [];
 
-      if (error) throw error;
+      const modeloIds = [...new Set(edificiosModelosData.map(em => em.id_modelo))];
 
-      type EdificioModeloRow = {
-        id: number;
-        id_edificio: number;
-        id_modelo: number;
-        edificios_rel: { id: number; nombre: string; id_proyecto: number } | null;
-        modelos_rel: { id: number; nombre: string } | null;
-      };
+      // Step 3: Get all modelos
+      const { data: modelos, error: modelosError } = await supabase
+        .from('modelos')
+        .select('id, nombre')
+        .in('id', modeloIds);
+      
+      if (modelosError) throw modelosError;
 
-      const rows = (data || []) as EdificioModeloRow[];
+      // Step 4: Map everything together
+      const edificiosMap = new Map(edificios.map(e => [e.id, e]));
+      const modelosMap = new Map(modelos?.map(m => [m.id, m]) || []);
 
-      return rows
-        .filter((row) => row.edificios_rel && row.modelos_rel)
-        .map((row) => ({
-          id: row.id,
-          id_edificio: row.id_edificio,
-          id_modelo: row.id_modelo,
-          edificios: row.edificios_rel,
-          modelos: row.modelos_rel,
-        }));
+      return edificiosModelosData.map(em => ({
+        id: em.id,
+        id_edificio: em.id_edificio,
+        id_modelo: em.id_modelo,
+        edificios: edificiosMap.get(em.id_edificio) || { id: em.id_edificio, nombre: '' },
+        modelos: modelosMap.get(em.id_modelo) || { id: em.id_modelo, nombre: '' }
+      }));
     },
     enabled: !!propertyProject?.id
   });
