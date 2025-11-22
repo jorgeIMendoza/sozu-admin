@@ -188,11 +188,18 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
     };
 
     // Calcular resumen de estacionamientos
+    // Debug: ver qué datos llegan
+    console.log('🔍 Estacionamientos recibidos:', estacionamientos);
+    
     const estacionamientosResumen = estacionamientos.reduce((acc: any, est: any) => {
+      // El tipo ya viene mapeado desde EditCuentaCobranzaDialog
       const tipo = est.tipo_estacionamiento || 'Sin especificar';
+      console.log('🔍 Procesando estacionamiento:', est, 'Tipo:', tipo);
       acc[tipo] = (acc[tipo] || 0) + 1;
       return acc;
     }, {});
+
+    console.log('🔍 Resumen final:', estacionamientosResumen);
 
     const estacionamientosTexto = Object.entries(estacionamientosResumen)
       .map(([tipo, cantidad]) => `${cantidad} ${tipo}`)
@@ -380,7 +387,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 )}
                 
                 {/* Medio Baño */}
-                {propertyDetails.model?.numero_medio_bano && propertyDetails.model.numero_medio_bano > 0 && (
+                {(propertyDetails.model?.numero_medio_bano ?? 0) > 0 && (
                   <div style={{ textAlign: 'center', width: '100%' }}>
                     <img 
                       src={mediosBanosIcon} 
@@ -388,7 +395,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                       style={{ width: '50px', height: '50px', margin: '0 auto 8px', display: 'block' }}
                     />
                     <div style={{ fontSize: '28px', fontWeight: '500', color: '#1a1a1a', lineHeight: '1.3' }}>
-                      {numberToSpanishText(propertyDetails.model.numero_medio_bano)}
+                      {numberToSpanishText(propertyDetails.model.numero_medio_bano!)}
                     </div>
                   </div>
                 )}
