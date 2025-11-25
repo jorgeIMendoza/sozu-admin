@@ -389,24 +389,27 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
           </div>
         )}
 
-        {/* Divider Line before Banking Data */}
-        <div style={{ 
-          width: '100%',
-          height: '4px',
-          backgroundColor: '#D3D3D3',
-          marginBottom: '32px'
-        }} />
+        {/* Divider Line before Banking Data - Only show if lead has RFC */}
+        {leadInfo?.rfc && (
+          <div style={{ 
+            width: '100%',
+            height: '4px',
+            backgroundColor: '#D3D3D3',
+            marginBottom: '32px'
+          }} />
+        )}
 
-        {/* Banking Data Section */}
-        <div style={{ marginBottom: '60px' }}>
-          <h2 style={{ 
-            fontSize: '51px', 
-            fontWeight: 'bold', 
-            color: '#000000',
-            marginBottom: '40px'
-            }}>
-              Datos Bancarios
-            </h2>
+        {/* Banking Data Section - Only show if lead has RFC */}
+        {leadInfo?.rfc && (
+          <div style={{ marginBottom: '60px' }}>
+            <h2 style={{ 
+              fontSize: '51px', 
+              fontWeight: 'bold', 
+              color: '#000000',
+              marginBottom: '40px'
+              }}>
+                Datos Bancarios
+              </h2>
             <div style={{ 
               display: 'grid', 
               gridTemplateColumns: ((offerData.clabe_stp_tmp_producto || offerData.clabe_stp) && productDetails.ownerStpBankAccount) 
@@ -499,7 +502,8 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
               </div>
             )}
           </div>
-        </div>
+          </div>
+        )}
 
         {/* Divider Line before Contact Data */}
         <div style={{ 

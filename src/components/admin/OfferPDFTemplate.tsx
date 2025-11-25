@@ -342,11 +342,12 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           
         </div>
 
-        {/* Banking Data Page */}
-        <div className="min-h-screen p-10 break-before-page">
-          <h2 className="text-xl font-bold mb-6 text-primary text-center">Datos Bancarios</h2>
-          
-          <div className="grid grid-cols-2 gap-6">
+        {/* Banking Data Page - Only show if lead has RFC */}
+        {leadInfo?.rfc && (
+          <div className="min-h-screen p-10 break-before-page">
+            <h2 className="text-xl font-bold mb-6 text-primary text-center">Datos Bancarios</h2>
+            
+            <div className="grid grid-cols-2 gap-6">
             {/* Transfer Card */}
             <div className="bg-white rounded-2xl p-6 shadow-lg border border-border">
               <h3 className="text-sm font-bold mb-4 text-primary">Transferencia</h3>
@@ -422,7 +423,8 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
               }
             </p>
           </div>
-        </div>
+          </div>
+        )}
       </div>
     );
   }
