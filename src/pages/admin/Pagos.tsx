@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload, Banknote } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,11 @@ export default function Pagos() {
   });
   const [uploadingCep, setUploadingCep] = useState(false);
   const [isGeneratingEstadoCuenta, setIsGeneratingEstadoCuenta] = useState<number | null>(null);
+
+  // Paginación
+  const [currentPageActive, setCurrentPageActive] = useState(1);
+  const [currentPageCancelled, setCurrentPageCancelled] = useState(1);
+  const itemsPerPage = 50;
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -510,16 +516,32 @@ export default function Pagos() {
         return acc;
       }, {});
 
-      // Get compradores
+      // Get compradores - include inactive personas too
       const { data: compradores } = await supabase
         .from('compradores')
         .select(`
           id_cuenta_cobranza,
           porcentaje_copropiedad,
           id_persona,
-          personas!compradores_id_persona_fkey(id, nombre_legal, rfc)
+          activo
         `)
-        .in('id_cuenta_cobranza', cuentas.map(c => c.id));
+        .in('id_cuenta_cobranza', cuentas.map(c => c.id))
+        .eq('activo', true);
+
+      // Get all persona IDs
+      const personaIds = [...new Set(compradores?.map(c => c.id_persona).filter(Boolean) || [])];
+      
+      // Fetch personas separately to avoid RLS issues
+      const { data: personas } = personaIds.length > 0 ? await supabase
+        .from('personas')
+        .select('id, nombre_legal, rfc')
+        .in('id', personaIds) : { data: [] };
+      
+      // Create personas map
+      const personasMap = new Map<number, { id: number; nombre_legal: string; rfc: string | null }>();
+      personas?.forEach(p => {
+        personasMap.set(p.id, { id: p.id, nombre_legal: p.nombre_legal, rfc: p.rfc });
+      });
 
       // Get entidades relacionadas, proyectos, edificios, modelos, productos
       const entidadIds = ofertas?.map(o => o.propiedades?.id_entidad_relacionada_dueno).filter(Boolean) || [];
@@ -672,12 +694,15 @@ export default function Pagos() {
           cash_remaining: restanteEfectivo,
           cash_percentage: porcentajeEfectivo,
           cash_payments: tipo === 'Propiedad' ? (pagosCashPorCuenta[cuenta.id] || []) : [],
-          compradores: cuentaCompradores.map(c => ({
-            nombre_legal: c.personas?.nombre_legal || '',
-            rfc: c.personas?.rfc || null,
-            porcentaje_copropiedad: c.porcentaje_copropiedad || 0,
-            id_persona: c.id_persona
-          })).filter(c => c.nombre_legal),
+          compradores: cuentaCompradores.map(c => {
+            const persona = personasMap.get(c.id_persona);
+            return {
+              nombre_legal: persona?.nombre_legal || '',
+              rfc: persona?.rfc || null,
+              porcentaje_copropiedad: c.porcentaje_copropiedad || 0,
+              id_persona: c.id_persona
+            };
+          }).filter(c => c.nombre_legal),
           dueno: entidad?.personas?.nombre_legal || 'Sin dueño',
           proyecto: entidad?.proyectos?.nombre || 'Sin proyecto',
           edificio: edificioModelo?.edificios?.nombre || 'Sin edificio',
@@ -737,8 +762,20 @@ export default function Pagos() {
     const matchesModelo = modeloFilter === "" || cuenta.modelo.toLowerCase().includes(modeloFilter.toLowerCase());
     
     return matchesSearch && matchesIdCuenta && matchesProducto && matchesCompradores && 
-           matchesClabe && matchesProyecto && matchesNoPropiedad && matchesModelo;
+      matchesClabe && matchesProyecto && matchesNoPropiedad && matchesModelo;
   });
+
+  // Pagination logic
+  const currentPage = activeTab === "activas" ? currentPageActive : currentPageCancelled;
+  const setCurrentPage = activeTab === "activas" ? setCurrentPageActive : setCurrentPageCancelled;
+  
+  const totalFilteredCount = filteredCuentas.length;
+  const totalPages = Math.ceil(totalFilteredCount / itemsPerPage);
+  
+  const paginatedCuentas = filteredCuentas.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   const handleTipoToggle = (tipo: 'Propiedad' | 'Producto' | 'Servicio') => {
     setSelectedTipos(prev => 
@@ -951,6 +988,96 @@ export default function Pagos() {
     } finally {
       setUploadingCep(false);
     }
+  };
+
+  // Helper function to generate pagination items with ellipsis
+  const getPaginationItems = (currentPage: number, totalPages: number) => {
+    const items: (number | 'ellipsis')[] = [];
+    const maxVisible = 7; // Maximum number of page buttons to show
+    
+    if (totalPages <= maxVisible) {
+      // Show all pages if total is small
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    
+    // Always show first page
+    items.push(1);
+    
+    // Calculate range around current page
+    let rangeStart = Math.max(2, currentPage - 1);
+    let rangeEnd = Math.min(totalPages - 1, currentPage + 1);
+    
+    // Adjust range if we're near the start or end
+    if (currentPage <= 3) {
+      rangeEnd = Math.min(4, totalPages - 1);
+    }
+    if (currentPage >= totalPages - 2) {
+      rangeStart = Math.max(totalPages - 3, 2);
+    }
+    
+    // Add ellipsis after first page if needed
+    if (rangeStart > 2) {
+      items.push('ellipsis');
+    }
+    
+    // Add range around current page
+    for (let i = rangeStart; i <= rangeEnd; i++) {
+      items.push(i);
+    }
+    
+    // Add ellipsis before last page if needed
+    if (rangeEnd < totalPages - 1) {
+      items.push('ellipsis');
+    }
+    
+    // Always show last page
+    if (totalPages > 1) {
+      items.push(totalPages);
+    }
+    
+    return items;
+  };
+
+  const renderPagination = (currentPage: number, totalPages: number, onPageChange: (page: number) => void) => {
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="mt-4">
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious 
+                onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+            {getPaginationItems(currentPage, totalPages).map((item, index) => (
+              item === 'ellipsis' ? (
+                <PaginationItem key={`ellipsis-${index}`}>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              ) : (
+                <PaginationItem key={item}>
+                  <PaginationLink
+                    onClick={() => onPageChange(item as number)}
+                    isActive={currentPage === item}
+                    className="cursor-pointer"
+                  >
+                    {item}
+                  </PaginationLink>
+                </PaginationItem>
+              )
+            ))}
+            <PaginationItem>
+              <PaginationNext 
+                onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
+    );
   };
 
   return (
@@ -1207,7 +1334,7 @@ export default function Pagos() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCuentas.map((cuenta) => (
+                    {paginatedCuentas.map((cuenta) => (
                       <TableRow 
                         key={cuenta.id}
                         className={Math.abs(cuenta.restante) < 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}
@@ -1540,6 +1667,7 @@ export default function Pagos() {
                   </TableBody>
                 </Table>
               )}
+              {renderPagination(currentPage, totalPages, setCurrentPage)}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1720,7 +1848,7 @@ export default function Pagos() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCuentas.map((cuenta) => (
+                    {paginatedCuentas.map((cuenta) => (
                       <TableRow 
                         key={cuenta.id}
                         className={Math.abs(cuenta.restante) < 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}
@@ -2016,6 +2144,7 @@ export default function Pagos() {
                   </TableBody>
                 </Table>
               )}
+              {renderPagination(currentPage, totalPages, setCurrentPage)}
             </CardContent>
           </Card>
         </TabsContent>
