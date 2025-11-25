@@ -832,13 +832,21 @@ export default function Pagos() {
     const absValue = Math.abs(value);
     
     if (absValue >= 1_000_000) {
-      // Format as millions with 2 decimal places
+      // Format as millions with 2 decimal places and comma separator
       const millions = value / 1_000_000;
-      return `$${millions.toFixed(2)} M`;
+      const formatted = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(millions);
+      return `$${formatted} M`;
     } else if (absValue >= 1_000) {
-      // Format as thousands with 2 decimal places
+      // Format as thousands with 2 decimal places and comma separator
       const thousands = value / 1_000;
-      return `$${thousands.toFixed(2)} K`;
+      const formatted = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(thousands);
+      return `$${formatted} K`;
     } else {
       // For amounts less than 1000, use regular format
       return new Intl.NumberFormat('es-MX', {
