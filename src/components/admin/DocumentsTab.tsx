@@ -1169,8 +1169,8 @@ export function DocumentsTab({
               <Label htmlFor="numero-documento">Número de Documento (Opcional)</Label>
               <Input
                 id="numero-documento"
-                type="number"
-                placeholder="Ej: 12345"
+                type="text"
+                placeholder="Ej: ABC123"
                 value={numeroDocumento}
                 onChange={(e) => setNumeroDocumento(e.target.value)}
               />
