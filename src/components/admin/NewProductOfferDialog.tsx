@@ -853,7 +853,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
                     name="rfc"
                     render={({ field }) => (
                       <FormItem className={selectedPersonType === "pf" ? "" : "col-span-2"}>
-                        <FormLabel>RFC *</FormLabel>
+                        <FormLabel>RFC</FormLabel>
                         <FormControl>
                           <Input
                             placeholder="Ingresa el RFC (Ej: ABC123456DEF)"

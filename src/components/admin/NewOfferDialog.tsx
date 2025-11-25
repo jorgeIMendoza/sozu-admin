@@ -873,9 +873,9 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                        control={form.control}
                        name="rfc"
                        render={({ field }) => (
-                         <FormItem>
-                           <FormLabel>RFC *</FormLabel>
-                           <FormControl>
+                       <FormItem>
+                            <FormLabel>RFC</FormLabel>
+                            <FormControl>
                              <Input 
                                placeholder="Ingresa el RFC (Ej: ABC123456DEF)" 
                                maxLength={13}
