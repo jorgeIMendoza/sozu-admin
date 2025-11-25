@@ -535,35 +535,43 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                         </div>
                       )}
                       
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#000000' }}>
-                          Enganche{scheme.numero_pagos_enganche > 1 ? ` (en ${scheme.numero_pagos_enganche} pagos)` : ''}:
-                        </span>
-                        <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                          {scheme.porcentaje_enganche}% {formatCurrency(amounts.enganche)}
-                        </span>
-                      </div>
+                      {scheme.porcentaje_enganche > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#000000' }}>
+                            Enganche{scheme.numero_pagos_enganche > 1 ? ` (en ${scheme.numero_pagos_enganche} pagos)` : ''}:
+                          </span>
+                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                            {scheme.porcentaje_enganche}% {formatCurrency(amounts.enganche)}
+                          </span>
+                        </div>
+                      )}
                       
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#000000' }}>Durante la obra:</span>
-                        <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                          {scheme.porcentaje_mensualidades}% {formatCurrency(amounts.enganche * (scheme.porcentaje_mensualidades / scheme.porcentaje_enganche))}
-                        </span>
-                      </div>
+                      {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#000000' }}>Durante la obra:</span>
+                            <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                              {scheme.porcentaje_mensualidades}% {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
+                            </span>
+                          </div>
+                          
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
+                            <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                              {formatCurrency(amounts.mensualidad)}
+                            </span>
+                          </div>
+                        </>
+                      )}
                       
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
-                        <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                          {formatCurrency(amounts.mensualidad)}
-                        </span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#000000' }}>A la entrega:</span>
-                        <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                          {scheme.porcentaje_entrega}% {formatCurrency(amounts.entrega)}
-                        </span>
-                      </div>
+                      {scheme.porcentaje_entrega > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#000000' }}>A la entrega:</span>
+                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                            {scheme.porcentaje_entrega}% {formatCurrency(amounts.entrega)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

@@ -310,23 +310,29 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                   </div>
                   
                   <div className="space-y-2">
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">
-                        Enganche{scheme.numero_pagos_enganche > 1 ? ` (en ${scheme.numero_pagos_enganche} pagos)` : ''}
-                      </p>
-                      <p className="font-bold text-xs">{formatCurrency(calculation.enganche)}</p>
-                      <p className="text-xs text-muted-foreground">({scheme.porcentaje_enganche}%)</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">Mensualidad</p>
-                      <p className="font-bold text-xs">{formatCurrency(calculation.mensualidad)}</p>
-                      <p className="text-xs text-muted-foreground">{scheme.numero_mensualidades} meses</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">Contra Entrega</p>
-                      <p className="font-bold text-xs">{formatCurrency(calculation.entrega)}</p>
-                      <p className="text-xs text-muted-foreground">({scheme.porcentaje_entrega}%)</p>
-                    </div>
+                    {scheme.porcentaje_enganche > 0 && (
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">
+                          Enganche{scheme.numero_pagos_enganche > 1 ? ` (en ${scheme.numero_pagos_enganche} pagos)` : ''}
+                        </p>
+                        <p className="font-bold text-xs">{formatCurrency(calculation.enganche)}</p>
+                        <p className="text-xs text-muted-foreground">({scheme.porcentaje_enganche}%)</p>
+                      </div>
+                    )}
+                    {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Mensualidad</p>
+                        <p className="font-bold text-xs">{formatCurrency(calculation.mensualidad)}</p>
+                        <p className="text-xs text-muted-foreground">{scheme.numero_mensualidades} meses</p>
+                      </div>
+                    )}
+                    {scheme.porcentaje_entrega > 0 && (
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Contra Entrega</p>
+                        <p className="font-bold text-xs">{formatCurrency(calculation.entrega)}</p>
+                        <p className="text-xs text-muted-foreground">({scheme.porcentaje_entrega}%)</p>
+                      </div>
+                    )}
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Precio Final</p>
                       <p className="font-bold text-primary text-xs">{formatCurrency(calculation.finalPrice)}</p>
