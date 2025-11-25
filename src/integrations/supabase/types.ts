@@ -609,6 +609,66 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_cuentas_cobranza_stagin: {
+        Row: {
+          clabe_stp: number
+          collection_id: number | null
+          comprador: string | null
+          edificio: string | null
+          fecha_compra: string | null
+          id: number
+          id_comprador: number | null
+          id_edificio_modelo: number | null
+          id_oferta: number | null
+          id_propiedad: number | null
+          id_proyecto: number | null
+          modelo: string | null
+          numero_propiedad: string | null
+          porcentaje_comision_venta: number | null
+          precio_final: number | null
+          proyecto: string | null
+          valor_uma: number | null
+        }
+        Insert: {
+          clabe_stp: number
+          collection_id?: number | null
+          comprador?: string | null
+          edificio?: string | null
+          fecha_compra?: string | null
+          id?: number
+          id_comprador?: number | null
+          id_edificio_modelo?: number | null
+          id_oferta?: number | null
+          id_propiedad?: number | null
+          id_proyecto?: number | null
+          modelo?: string | null
+          numero_propiedad?: string | null
+          porcentaje_comision_venta?: number | null
+          precio_final?: number | null
+          proyecto?: string | null
+          valor_uma?: number | null
+        }
+        Update: {
+          clabe_stp?: number
+          collection_id?: number | null
+          comprador?: string | null
+          edificio?: string | null
+          fecha_compra?: string | null
+          id?: number
+          id_comprador?: number | null
+          id_edificio_modelo?: number | null
+          id_oferta?: number | null
+          id_propiedad?: number | null
+          id_proyecto?: number | null
+          modelo?: string | null
+          numero_propiedad?: string | null
+          porcentaje_comision_venta?: number | null
+          precio_final?: number | null
+          proyecto?: string | null
+          valor_uma?: number | null
+        }
+        Relationships: []
+      }
       borrar_documentos_stagin: {
         Row: {
           documento_url: string | null
@@ -1657,6 +1717,7 @@ export type Database = {
           clabe_stp: string | null
           clave_catastral: string | null
           clave_rastreo_comision_venta: string | null
+          collection_id: number | null
           contrato_draft: string | null
           es_aprobado: boolean
           es_comision_venta_efectivo: boolean
@@ -1689,6 +1750,7 @@ export type Database = {
           clabe_stp?: string | null
           clave_catastral?: string | null
           clave_rastreo_comision_venta?: string | null
+          collection_id?: number | null
           contrato_draft?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
@@ -1721,6 +1783,7 @@ export type Database = {
           clabe_stp?: string | null
           clave_catastral?: string | null
           clave_rastreo_comision_venta?: string | null
+          collection_id?: number | null
           contrato_draft?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
