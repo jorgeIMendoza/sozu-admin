@@ -735,44 +735,52 @@ export default function Pagos() {
   const cuentasActivas = cuentasCobranza?.filter(cuenta => cuenta.activo) || [];
   const cuentasCanceladas = cuentasCobranza?.filter(cuenta => !cuenta.activo) || [];
   
-  const currentCuentas = activeTab === "activas" ? cuentasActivas : cuentasCanceladas;
+  // Filter function to apply to any list of cuentas
+  const applyFilters = (cuentas: CuentaCobranza[]) => {
+    return cuentas.filter(cuenta => {
+      // Filter by tipo
+      if (!selectedTipos.includes(cuenta.tipo)) {
+        return false;
+      }
+      
+      // Filter by search term
+      const matchesSearch = searchTerm === "" || (
+        cuenta.id.toString().includes(searchTerm) ||
+        cuenta.compradores.some(c => c.nombre_legal.toLowerCase().includes(searchTerm.toLowerCase()) || 
+          c.rfc?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        cuenta.dueno.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cuenta.clabe_stp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cuenta.proyecto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cuenta.edificio.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cuenta.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cuenta.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cuenta.producto_nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cuenta.precio_final.toString().includes(searchTerm)
+      );
+      
+      // Apply individual filters
+      const matchesIdCuenta = idCuentaFilter === "" || cuenta.id.toString().includes(idCuentaFilter);
+      const matchesProducto = productoFilter === "" || cuenta.producto_nombre?.toLowerCase().includes(productoFilter.toLowerCase());
+      const matchesCompradores = compradoresFilter === "" || cuenta.compradores.some(c => 
+        c.nombre_legal.toLowerCase().includes(compradoresFilter.toLowerCase()) || 
+        c.rfc?.toLowerCase().includes(compradoresFilter.toLowerCase())
+      );
+      const matchesClabe = clabeFilter === "" || cuenta.clabe_stp?.toLowerCase().includes(clabeFilter.toLowerCase());
+      const matchesProyecto = proyectoFilter === "" || cuenta.proyecto.toLowerCase().includes(proyectoFilter.toLowerCase());
+      const matchesNoPropiedad = noPropiedadFilter === "" || cuenta.numero_propiedad.toLowerCase().includes(noPropiedadFilter.toLowerCase());
+      const matchesModelo = modeloFilter === "" || cuenta.modelo.toLowerCase().includes(modeloFilter.toLowerCase());
+      
+      return matchesSearch && matchesIdCuenta && matchesProducto && matchesCompradores && 
+        matchesClabe && matchesProyecto && matchesNoPropiedad && matchesModelo;
+    });
+  };
+
+  // Apply filters to both activas and canceladas
+  const filteredCuentasActivas = applyFilters(cuentasActivas);
+  const filteredCuentasCanceladas = applyFilters(cuentasCanceladas);
   
-  const filteredCuentas = currentCuentas.filter(cuenta => {
-    // Filter by tipo
-    if (!selectedTipos.includes(cuenta.tipo)) {
-      return false;
-    }
-    
-    // Filter by search term
-    const matchesSearch = searchTerm === "" || (
-      cuenta.id.toString().includes(searchTerm) ||
-      cuenta.compradores.some(c => c.nombre_legal.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        c.rfc?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      cuenta.dueno.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.clabe_stp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.proyecto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.edificio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.producto_nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.precio_final.toString().includes(searchTerm)
-    );
-    
-    // Apply individual filters
-    const matchesIdCuenta = idCuentaFilter === "" || cuenta.id.toString().includes(idCuentaFilter);
-    const matchesProducto = productoFilter === "" || cuenta.producto_nombre?.toLowerCase().includes(productoFilter.toLowerCase());
-    const matchesCompradores = compradoresFilter === "" || cuenta.compradores.some(c => 
-      c.nombre_legal.toLowerCase().includes(compradoresFilter.toLowerCase()) || 
-      c.rfc?.toLowerCase().includes(compradoresFilter.toLowerCase())
-    );
-    const matchesClabe = clabeFilter === "" || cuenta.clabe_stp?.toLowerCase().includes(clabeFilter.toLowerCase());
-    const matchesProyecto = proyectoFilter === "" || cuenta.proyecto.toLowerCase().includes(proyectoFilter.toLowerCase());
-    const matchesNoPropiedad = noPropiedadFilter === "" || cuenta.numero_propiedad.toLowerCase().includes(noPropiedadFilter.toLowerCase());
-    const matchesModelo = modeloFilter === "" || cuenta.modelo.toLowerCase().includes(modeloFilter.toLowerCase());
-    
-    return matchesSearch && matchesIdCuenta && matchesProducto && matchesCompradores && 
-      matchesClabe && matchesProyecto && matchesNoPropiedad && matchesModelo;
-  });
+  const currentCuentas = activeTab === "activas" ? cuentasActivas : cuentasCanceladas;
+  const filteredCuentas = activeTab === "activas" ? filteredCuentasActivas : filteredCuentasCanceladas;
 
   // Pagination logic
   const currentPage = activeTab === "activas" ? currentPageActive : currentPageCancelled;
@@ -1166,8 +1174,8 @@ export default function Pagos() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="activas">Cuentas Activas ({cuentasActivas.length})</TabsTrigger>
-          <TabsTrigger value="canceladas">Cuentas Canceladas ({cuentasCanceladas.length})</TabsTrigger>
+          <TabsTrigger value="activas">Cuentas Activas ({filteredCuentasActivas.length})</TabsTrigger>
+          <TabsTrigger value="canceladas">Cuentas Canceladas ({filteredCuentasCanceladas.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="activas" className="mt-6">
