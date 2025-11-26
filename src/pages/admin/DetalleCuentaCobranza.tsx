@@ -88,6 +88,7 @@ interface CuentaDetalle {
   id_estatus_disponibilidad?: number;
   valor_uma?: number;
   id_propiedad?: number;
+  collection_id?: number | null;
   detalles_producto?: {
     nombre?: string;
     ubicacion?: string;
@@ -437,7 +438,8 @@ export default function DetalleCuentaCobranza() {
           fecha_compra,
           id_oferta,
           activo,
-          valor_uma
+          valor_uma,
+          collection_id
         `)
         .eq('id', cuentaId)
         .maybeSingle();
@@ -598,6 +600,7 @@ export default function DetalleCuentaCobranza() {
         estatus_disponibilidad: estatusResult.data?.nombre || undefined,
         id_estatus_disponibilidad: oferta?.propiedades?.id_estatus_disponibilidad || undefined,
         valor_uma: cuenta.valor_uma || undefined,
+        collection_id: cuenta.collection_id,
         id_propiedad: oferta?.propiedades?.id || undefined,
         detalles_producto: detallesProducto
       };
@@ -1972,6 +1975,20 @@ export default function DetalleCuentaCobranza() {
               >
                 {cuentaDetalle.tipo_cuenta}
               </Badge>
+              {cuentaDetalle.collection_id && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Badge variant="outline" className="text-xs">
+                        {cuentaDetalle.collection_id}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-sm">Cuenta anterior: {cuentaDetalle.collection_id}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {esCuentaCancelada && (
                 <Badge variant="destructive">
                   CANCELADA
