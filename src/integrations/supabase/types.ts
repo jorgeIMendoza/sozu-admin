@@ -501,6 +501,36 @@ export type Database = {
           },
         ]
       }
+      borrar_acuerdos_pago_stagin: {
+        Row: {
+          collection_id: number | null
+          concepto: string | null
+          fecha_pago: string | null
+          id: number
+          id_concepto: number | null
+          id_cuenta_cobranza: number | null
+          monto: number | null
+        }
+        Insert: {
+          collection_id?: number | null
+          concepto?: string | null
+          fecha_pago?: string | null
+          id?: number
+          id_concepto?: number | null
+          id_cuenta_cobranza?: number | null
+          monto?: number | null
+        }
+        Update: {
+          collection_id?: number | null
+          concepto?: string | null
+          fecha_pago?: string | null
+          id?: number
+          id_concepto?: number | null
+          id_cuenta_cobranza?: number | null
+          monto?: number | null
+        }
+        Relationships: []
+      }
       borrar_amenidades_proyectos_stagin: {
         Row: {
           amenidad: string | null

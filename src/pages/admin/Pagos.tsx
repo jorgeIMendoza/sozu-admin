@@ -63,6 +63,7 @@ interface CuentaCobranza {
   cash_percentage?: number;
   cash_payments?: CashPayment[];
   id_estatus_disponibilidad?: number;
+  collection_id?: number | null;
 }
 export default function Pagos() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -158,6 +159,7 @@ export default function Pagos() {
           valor_uma,
           es_comision_venta_efectivo,
           porcentaje_comision_venta,
+          collection_id,
           tipos_cancelacion:id_tipo_cancelacion(nombre)
         `).is('id_cuenta_cobranza_padre', null);
       if (cuentasError) {
@@ -652,7 +654,8 @@ export default function Pagos() {
           apartado_pagado: apartadoPagadoPorCuenta[cuenta.id],
           tiene_acuerdos: tieneAcuerdosPorCuenta[cuenta.id],
           tiene_multas_pendientes: multasPendientesPorCuenta[cuenta.id] || false,
-          id_estatus_disponibilidad: propiedad?.id_estatus_disponibilidad
+          id_estatus_disponibilidad: propiedad?.id_estatus_disponibilidad,
+          collection_id: cuenta.collection_id
         };
       });
       return transformedData.sort((a, b) => b.id - a.id);
@@ -1308,6 +1311,20 @@ export default function Pagos() {
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
                             <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
+                            {cuenta.collection_id && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">
+                                      {cuenta.collection_id}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-sm">Cuenta anterior: {cuenta.collection_id}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                             {!cuenta.tiene_acuerdos ? <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
@@ -1678,6 +1695,20 @@ export default function Pagos() {
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
                             <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
+                            {cuenta.collection_id && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">
+                                      {cuenta.collection_id}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-sm">Cuenta anterior: {cuenta.collection_id}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                             {!cuenta.tiene_acuerdos ? <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>

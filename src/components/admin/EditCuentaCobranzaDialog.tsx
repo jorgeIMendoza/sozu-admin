@@ -2172,7 +2172,23 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-[1325px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar Cuenta de Cobranza - {formatCuentaCobranzaId(cuenta.id, tipoCuenta)}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <span>Editar Cuenta de Cobranza - {formatCuentaCobranzaId(cuenta.id, tipoCuenta)}</span>
+            {cuentaDetalle?.collection_id && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge variant="outline" className="text-xs">
+                      {cuentaDetalle.collection_id}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-sm">Cuenta anterior: {cuentaDetalle.collection_id}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </DialogTitle>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
