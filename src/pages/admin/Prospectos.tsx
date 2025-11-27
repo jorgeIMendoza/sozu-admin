@@ -365,7 +365,6 @@ export default function Prospectos() {
       const { data, error } = await supabase
         .from('proyectos')
         .select('id, nombre')
-        .eq('activo', true)
         .order('nombre', { ascending: true })
         .limit(10000);
       
