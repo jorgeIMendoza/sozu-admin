@@ -1260,25 +1260,16 @@ export default function Pagos() {
               <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="text-2xl font-bold cursor-help">
-                      {formatCurrencyCompact(statsCuentas.length > 0 ? totalMonto / statsCuentas.length : 0)}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{formatCurrency(statsCuentas.length > 0 ? totalMonto / statsCuentas.length : 0)}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+              <div className="space-y-3">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="cursor-help">
-                        Propiedades: <span className="font-medium text-foreground">{formatCurrencyCompact(cuentasPropiedades.length > 0 ? cuentasPropiedades.reduce((sum, c) => sum + Number(c.precio_final), 0) / cuentasPropiedades.length : 0)}</span>
-                      </span>
+                      <div className="cursor-help">
+                        <div className="text-xs text-muted-foreground">Propiedades</div>
+                        <div className="text-xl font-bold">
+                          {formatCurrencyCompact(cuentasPropiedades.length > 0 ? cuentasPropiedades.reduce((sum, c) => sum + Number(c.precio_final), 0) / cuentasPropiedades.length : 0)}
+                        </div>
+                      </div>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>{formatCurrency(cuentasPropiedades.length > 0 ? cuentasPropiedades.reduce((sum, c) => sum + Number(c.precio_final), 0) / cuentasPropiedades.length : 0)}</p>
@@ -1288,9 +1279,12 @@ export default function Pagos() {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="cursor-help">
-                        Productos: <span className="font-medium text-foreground">{formatCurrencyCompact(promedioProductos)}</span>
-                      </span>
+                      <div className="cursor-help">
+                        <div className="text-xs text-muted-foreground">Productos</div>
+                        <div className="text-xl font-bold">
+                          {formatCurrencyCompact(promedioProductos)}
+                        </div>
+                      </div>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>{formatCurrency(promedioProductos)}</p>
