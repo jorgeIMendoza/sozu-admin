@@ -527,18 +527,35 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     enabled: entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || entityType === 'administradora' || entityType === 'banco' || (entityType === 'client' && tipoPersona === 'pm')
   });
 
-  // Query for available projects (for prospects)
+  // Query for available projects (for prospects) with pagination to get ALL projects
   const { data: proyectos = [] } = useQuery({
     queryKey: ['proyectos'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('proyectos')
-        .select('id, nombre')
-        .eq('activo', true)
-        .order('nombre', { ascending: true });
+      const allProyectos: any[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      let more = true;
       
-      if (error) throw error;
-      return data || [];
+      while (more) {
+        const { data, error } = await supabase
+          .from('proyectos')
+          .select('id, nombre')
+          .eq('activo', true)
+          .order('nombre', { ascending: true })
+          .range(from, from + pageSize - 1);
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allProyectos.push(...data);
+          from += pageSize;
+          more = data.length === pageSize;
+        } else {
+          more = false;
+        }
+      }
+      
+      return allProyectos;
     },
     enabled: entityType === 'client' && getDefaultTipoEntidad(entityType) === 7 // Only for prospects
   });
@@ -978,25 +995,6 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
               ) : (
                 // Original form structure for other entity types
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Project selection for prospects - shown as first field */}
-                {isProspectForm() && (
-                  <div className="md:col-span-2">
-                    <Label htmlFor="idProyecto">Proyecto de Interés *</Label>
-                <Select value={idProyecto} onValueChange={setIdProyecto}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un proyecto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="null">Sin proyecto</SelectItem>
-                        {proyectos.map((proyecto) => (
-                          <SelectItem key={proyecto.id} value={proyecto.id.toString()}>
-                            {proyecto.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
                 
                 <div>
                   <Label htmlFor="tipoPersona">Tipo de Persona *</Label>
