@@ -558,12 +558,41 @@ export default function Pagos() {
       // Get all persona IDs
       const personaIds = [...new Set(compradores?.map(c => c.id_persona).filter(Boolean) || [])];
 
-      // Fetch personas separately to avoid RLS issues
-      const {
-        data: personas
-      } = personaIds.length > 0 ? await supabase.from('personas').select('id, nombre_legal, rfc').in('id', personaIds) : {
-        data: []
-      };
+      // Fetch personas separately with pagination to avoid RLS issues and fetch all records
+      let personas: any[] = [];
+      if (personaIds.length > 0) {
+        const pageSize = 1000;
+        let from = 0;
+        let to = pageSize - 1;
+        let more = true;
+        
+        while (more) {
+          const { data, error } = await supabase
+            .from('personas')
+            .select('id, nombre_legal, rfc')
+            .in('id', personaIds)
+            .range(from, to);
+          
+          if (error) {
+            console.error('Error fetching personas:', error);
+            break;
+          }
+          
+          if (!data || data.length === 0) {
+            more = false;
+            break;
+          }
+          
+          personas = personas.concat(data);
+          
+          if (data.length < pageSize) {
+            more = false;
+          } else {
+            from += pageSize;
+            to += pageSize;
+          }
+        }
+      }
 
       // Create personas map
       const personasMap = new Map<number, {
