@@ -147,10 +147,7 @@ export default function Pagos() {
     queryKey: ["cuentas_cobranza"],
     queryFn: async () => {
       // Get basic cuenta cobranza data with payment sums (excluding maintenance accounts)
-      const {
-        data: cuentas,
-        error: cuentasError
-      } = await supabase.from('cuentas_cobranza').select(`
+      const selectColumns = `
           id,
           clabe_stp,
           precio_final,
@@ -161,11 +158,48 @@ export default function Pagos() {
           porcentaje_comision_venta,
           collection_id,
           tipos_cancelacion:id_tipo_cancelacion(nombre)
-        `).is('id_cuenta_cobranza_padre', null).limit(10000);
+        `;
+
+      const pageSize = 1000;
+      let cuentas: any[] = [];
+      let from = 0;
+      let to = pageSize - 1;
+      let more = true;
+      let cuentasError: any = null;
+
+      while (more) {
+        const { data, error } = await supabase
+          .from('cuentas_cobranza')
+          .select(selectColumns)
+          .is('id_cuenta_cobranza_padre', null)
+          .range(from, to);
+
+        if (error) {
+          cuentasError = error;
+          break;
+        }
+
+        if (!data || data.length === 0) {
+          more = false;
+          break;
+        }
+
+        cuentas = cuentas.concat(data);
+
+        if (data.length < pageSize) {
+          // Última página
+          more = false;
+        } else {
+          from += pageSize;
+          to += pageSize;
+        }
+      }
+
       if (cuentasError) {
         console.error('Error fetching cuentas:', cuentasError);
         return [];
       }
+
       if (!cuentas || cuentas.length === 0) return [];
 
       // Get all payment amounts for each account using aplicaciones_pago
