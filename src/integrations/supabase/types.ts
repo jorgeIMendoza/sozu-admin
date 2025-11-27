@@ -639,6 +639,57 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_cuentas_cobranza_productos_stagin: {
+        Row: {
+          clabe_stp: number | null
+          collection_id: number
+          comprador: string | null
+          edificio: string | null
+          fecha_compra: string | null
+          id_edificio_modelo: number | null
+          id_oferta: string | null
+          id_proyecto: number | null
+          modelo: string | null
+          numero_propiedad: number | null
+          porcentaje_comision_venta: number | null
+          precio_final: number | null
+          proyecto: string | null
+          valor_uma: number | null
+        }
+        Insert: {
+          clabe_stp?: number | null
+          collection_id: number
+          comprador?: string | null
+          edificio?: string | null
+          fecha_compra?: string | null
+          id_edificio_modelo?: number | null
+          id_oferta?: string | null
+          id_proyecto?: number | null
+          modelo?: string | null
+          numero_propiedad?: number | null
+          porcentaje_comision_venta?: number | null
+          precio_final?: number | null
+          proyecto?: string | null
+          valor_uma?: number | null
+        }
+        Update: {
+          clabe_stp?: number | null
+          collection_id?: number
+          comprador?: string | null
+          edificio?: string | null
+          fecha_compra?: string | null
+          id_edificio_modelo?: number | null
+          id_oferta?: string | null
+          id_proyecto?: number | null
+          modelo?: string | null
+          numero_propiedad?: number | null
+          porcentaje_comision_venta?: number | null
+          precio_final?: number | null
+          proyecto?: string | null
+          valor_uma?: number | null
+        }
+        Relationships: []
+      }
       borrar_cuentas_cobranza_stagin: {
         Row: {
           clabe_stp: number
