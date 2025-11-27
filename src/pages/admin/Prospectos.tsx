@@ -897,10 +897,26 @@ export default function Prospectos() {
                         proyectoId
                       });
                     }}
-                    options={proyectos.map((proyecto) => ({
-                      value: proyecto.id.toString(),
-                      label: proyecto.nombre
-                    }))}
+                    options={(() => {
+                      // Crear un Set con todos los proyectos disponibles
+                      const allOptions = proyectos.map((proyecto) => ({
+                        value: proyecto.id.toString(),
+                        label: proyecto.nombre
+                      }));
+                      
+                      // Si el prospecto tiene un proyecto asignado que no está en la lista, agregarlo
+                      if (prospecto.id_proyecto && prospecto.proyecto_nombre) {
+                        const exists = allOptions.some(opt => opt.value === prospecto.id_proyecto.toString());
+                        if (!exists) {
+                          allOptions.unshift({
+                            value: prospecto.id_proyecto.toString(),
+                            label: prospecto.proyecto_nombre
+                          });
+                        }
+                      }
+                      
+                      return allOptions;
+                    })()}
                     placeholder="Sin proyecto asignado"
                     emptyText="No se encontró el proyecto"
                     searchPlaceholder="Buscar proyecto..."
