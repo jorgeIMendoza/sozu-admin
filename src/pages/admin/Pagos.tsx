@@ -361,26 +361,55 @@ export default function Pagos() {
       // Get offer IDs to fetch related data
       const ofertaIds = cuentas.map(c => c.id_oferta).filter(id => id !== null);
 
-      // Get ofertas with properties and products
-      const {
-        data: ofertas,
-        error: ofertasError
-      } = ofertaIds.length > 0 ? await supabase.from('ofertas').select(`
-          id,
-          id_propiedad,
-          id_producto,
-          propiedades!ofertas_id_propiedad_fkey(
-            id,
-            numero_propiedad,
-            precio_lista,
-            id_entidad_relacionada_dueno,
-            id_edificio_modelo,
-            id_estatus_disponibilidad
-          )
-        `).in('id', ofertaIds) : {
-        data: [],
-        error: null
-      };
+      // Get ofertas with properties and products (with pagination)
+      let ofertas: any[] = [];
+      let ofertasError: any = null;
+
+      if (ofertaIds.length > 0) {
+        const pageSize = 1000;
+        let from = 0;
+        let to = pageSize - 1;
+        let more = true;
+
+        while (more) {
+          const { data, error } = await supabase
+            .from('ofertas')
+            .select(`
+              id,
+              id_propiedad,
+              id_producto,
+              propiedades!ofertas_id_propiedad_fkey(
+                id,
+                numero_propiedad,
+                precio_lista,
+                id_entidad_relacionada_dueno,
+                id_edificio_modelo,
+                id_estatus_disponibilidad
+              )
+            `)
+            .in('id', ofertaIds)
+            .range(from, to);
+
+          if (error) {
+            ofertasError = error;
+            break;
+          }
+
+          if (!data || data.length === 0) {
+            more = false;
+            break;
+          }
+
+          ofertas = ofertas.concat(data);
+
+          if (data.length < pageSize) {
+            more = false;
+          } else {
+            from += pageSize;
+            to += pageSize;
+          }
+        }
+      }
       if (ofertasError) {
         console.error('Error fetching ofertas:', ofertasError);
         return [];
