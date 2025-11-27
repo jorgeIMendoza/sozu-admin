@@ -161,7 +161,7 @@ export default function Pagos() {
           porcentaje_comision_venta,
           collection_id,
           tipos_cancelacion:id_tipo_cancelacion(nombre)
-        `).is('id_cuenta_cobranza_padre', null);
+        `).is('id_cuenta_cobranza_padre', null).limit(10000);
       if (cuentasError) {
         console.error('Error fetching cuentas:', cuentasError);
         return [];
