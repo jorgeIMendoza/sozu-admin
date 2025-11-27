@@ -545,15 +545,47 @@ export default function Pagos() {
         return acc;
       }, {});
 
-      // Get compradores - include inactive personas too
-      const {
-        data: compradores
-      } = await supabase.from('compradores').select(`
-          id_cuenta_cobranza,
-          porcentaje_copropiedad,
-          id_persona,
-          activo
-        `).in('id_cuenta_cobranza', cuentas.map(c => c.id)).eq('activo', true);
+      // Get compradores - include inactive personas too, with pagination to bypass 1000-row limit
+      let compradores: any[] = [];
+      if (cuentaIds.length > 0) {
+        const pageSize = 1000;
+        let from = 0;
+        let to = pageSize - 1;
+        let more = true;
+
+        while (more) {
+          const { data, error } = await supabase
+            .from('compradores')
+            .select(`
+              id_cuenta_cobranza,
+              porcentaje_copropiedad,
+              id_persona,
+              activo
+            `)
+            .in('id_cuenta_cobranza', cuentaIds)
+            .eq('activo', true)
+            .range(from, to);
+
+          if (error) {
+            console.error('Error fetching compradores:', error);
+            break;
+          }
+
+          if (!data || data.length === 0) {
+            more = false;
+            break;
+          }
+
+          compradores = compradores.concat(data);
+
+          if (data.length < pageSize) {
+            more = false;
+          } else {
+            from += pageSize;
+            to += pageSize;
+          }
+        }
+      }
 
       // Get all persona IDs
       const personaIds = [...new Set(compradores?.map(c => c.id_persona).filter(Boolean) || [])];
