@@ -228,8 +228,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     }
   };
 
+  // Sensors should be empty when in read-only mode
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -3761,7 +3762,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
                 {acuerdos && acuerdos.length > 0 ? (
                   <DndContext
-                    sensors={sensors}
+                    sensors={isReadOnly ? [] : sensors}
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
                   >
@@ -3786,7 +3787,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                <SortableItem 
                                  key={acuerdo.id} 
                                  id={acuerdo.id.toString()}
-                                 disabled={acuerdo.pago_completado}
+                                 disabled={isReadOnly || acuerdo.pago_completado}
                                >
                                 <TableCell>{acuerdo.concepto_nombre}</TableCell>
                                   <TableCell>
