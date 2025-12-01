@@ -2566,7 +2566,7 @@ export default function DetalleCuentaCobranza() {
                          Plan Original
                          {originalScheme && (
                            <Badge variant="secondary" className="ml-2 text-xs">
-                             {originalScheme.numero_mensualidades + 1 + 1 + 1} pagos
+                             {originalScheme.numero_mensualidades + (cuentaDetalle?.tipo_cuenta === 'Propiedad' ? 3 : 2)} pagos
                            </Badge>
                          )}
                        </label>
@@ -2607,7 +2607,7 @@ export default function DetalleCuentaCobranza() {
                         Plan Modificado
                         {currentPaymentPlan && (
                           <Badge variant="secondary" className="ml-2 text-xs">
-                            {(currentPaymentPlan.numero_mensualidades || 0) + 1 + 1 + 1} pagos
+                            {(currentPaymentPlan.numero_mensualidades || 0) + (cuentaDetalle?.tipo_cuenta === 'Propiedad' ? 3 : 2)} pagos
                           </Badge>
                         )}
                       </label>
