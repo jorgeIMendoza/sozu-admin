@@ -1179,6 +1179,48 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_pagos_stagin: {
+        Row: {
+          clave_rastreo: string | null
+          collection_id: number | null
+          descripcion: string | null
+          fecha_pago: string | null
+          id: number
+          id_cuenta_cobranza: number | null
+          id_metodos_pago: number | null
+          metodo_pago: string | null
+          monto: number | null
+          url_cep: string | null
+          url_recibo: string | null
+        }
+        Insert: {
+          clave_rastreo?: string | null
+          collection_id?: number | null
+          descripcion?: string | null
+          fecha_pago?: string | null
+          id?: number
+          id_cuenta_cobranza?: number | null
+          id_metodos_pago?: number | null
+          metodo_pago?: string | null
+          monto?: number | null
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Update: {
+          clave_rastreo?: string | null
+          collection_id?: number | null
+          descripcion?: string | null
+          fecha_pago?: string | null
+          id?: number
+          id_cuenta_cobranza?: number | null
+          id_metodos_pago?: number | null
+          metodo_pago?: string | null
+          monto?: number | null
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Relationships: []
+      }
       borrar_personas_stagin: {
         Row: {
           clave_pais_telefono: string | null
@@ -1326,6 +1368,42 @@ export type Database = {
           tipo_persona?: string
           url_logo?: string | null
           uso_cfdi?: string | null
+        }
+        Relationships: []
+      }
+      borrar_propiedades_cuenta_stp_stagin: {
+        Row: {
+          clabe_stp_tmp_apartado: number | null
+          edificio: string | null
+          id: number
+          id_edificio_modelo: number | null
+          id_propiedad: number | null
+          id_proyecto: number | null
+          modelo: string | null
+          numero_propiedad: string | null
+          proyecto: string | null
+        }
+        Insert: {
+          clabe_stp_tmp_apartado?: number | null
+          edificio?: string | null
+          id: number
+          id_edificio_modelo?: number | null
+          id_propiedad?: number | null
+          id_proyecto?: number | null
+          modelo?: string | null
+          numero_propiedad?: string | null
+          proyecto?: string | null
+        }
+        Update: {
+          clabe_stp_tmp_apartado?: number | null
+          edificio?: string | null
+          id?: number
+          id_edificio_modelo?: number | null
+          id_propiedad?: number | null
+          id_proyecto?: number | null
+          modelo?: string | null
+          numero_propiedad?: string | null
+          proyecto?: string | null
         }
         Relationships: []
       }
