@@ -811,8 +811,11 @@ export default function Pagos() {
       const matchesSearch = searchTerm === "" || formattedId.includes(searchLower) || cuenta.id.toString().includes(searchTerm) || cuenta.compradores.some(c => c.nombre_legal.toLowerCase().includes(searchLower) || c.rfc?.toLowerCase().includes(searchLower)) || cuenta.dueno.toLowerCase().includes(searchLower) || cuenta.clabe_stp?.toLowerCase().includes(searchLower) || cuenta.proyecto.toLowerCase().includes(searchLower) || cuenta.edificio.toLowerCase().includes(searchLower) || cuenta.numero_propiedad.toLowerCase().includes(searchLower) || cuenta.modelo.toLowerCase().includes(searchLower) || cuenta.producto_nombre?.toLowerCase().includes(searchLower) || cuenta.precio_final.toString().includes(searchTerm);
 
       // Apply individual filters (ID filter supports both raw ID and formatted ID like CC-000001)
-      const idFilterLower = idCuentaFilter.toLowerCase();
-      const matchesIdCuenta = idCuentaFilter === "" || formattedId.includes(idFilterLower) || cuenta.id.toString().includes(idCuentaFilter);
+      const idFilterTrimmed = idCuentaFilter.trim().toLowerCase();
+      const matchesIdCuenta = idCuentaFilter.trim() === "" || 
+        formattedId.includes(idFilterTrimmed) || 
+        formattedId === idFilterTrimmed ||
+        cuenta.id.toString() === idCuentaFilter.trim();
       const matchesProducto = productoFilter === "" || cuenta.producto_nombre?.toLowerCase().includes(productoFilter.toLowerCase());
       const matchesCompradores = compradoresFilter === "" || cuenta.compradores.some(c => c.nombre_legal.toLowerCase().includes(compradoresFilter.toLowerCase()) || c.rfc?.toLowerCase().includes(compradoresFilter.toLowerCase()));
       const matchesClabe = clabeFilter === "" || cuenta.clabe_stp?.toLowerCase().includes(clabeFilter.toLowerCase());
