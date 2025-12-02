@@ -579,6 +579,33 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_aplicacion_pagos_migracion: {
+        Row: {
+          estatus: string
+          fecha_fin: string | null
+          fecha_inicio: string | null
+          id_cuenta_cobranza: number
+          monto_aplicado: number | null
+          pagos_aplicados: number | null
+        }
+        Insert: {
+          estatus?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
+          id_cuenta_cobranza: number
+          monto_aplicado?: number | null
+          pagos_aplicados?: number | null
+        }
+        Update: {
+          estatus?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
+          id_cuenta_cobranza?: number
+          monto_aplicado?: number | null
+          pagos_aplicados?: number | null
+        }
+        Relationships: []
+      }
       borrar_bodegas_estacionamientos_daiku_stagin: {
         Row: {
           id: number
@@ -1179,17 +1206,93 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_pagos_duplicate2: {
+        Row: {
+          activo: boolean
+          clave_rastreo: string | null
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_pago: string
+          id: number
+          id_cuenta_cobranza: number
+          id_metodos_pago: number
+          monto: number
+          url_cep: string | null
+          url_recibo: string | null
+        }
+        Insert: {
+          activo?: boolean
+          clave_rastreo?: string | null
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_pago: string
+          id?: number
+          id_cuenta_cobranza: number
+          id_metodos_pago: number
+          monto: number
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Update: {
+          activo?: boolean
+          clave_rastreo?: string | null
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_pago?: string
+          id?: number
+          id_cuenta_cobranza?: number
+          id_metodos_pago?: number
+          monto?: number
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pagos_duplicate2_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pagos_duplicate2_id_cuenta_cobranza_fkey1"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pagos_duplicate2_id_metodos_pago_fkey"
+            columns: ["id_metodos_pago"]
+            isOneToOne: false
+            referencedRelation: "metodos_pago"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pagos_duplicate2_id_metodos_pago_fkey1"
+            columns: ["id_metodos_pago"]
+            isOneToOne: false
+            referencedRelation: "metodos_pago"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       borrar_pagos_stagin: {
         Row: {
           clave_rastreo: string | null
           collection_id: number | null
           descripcion: string | null
+          estatus: string | null
           fecha_pago: string | null
           id: number
           id_cuenta_cobranza: number | null
           id_metodos_pago: number | null
           metodo_pago: string | null
           monto: number | null
+          tipo_pago: string
           url_cep: string | null
           url_recibo: string | null
         }
@@ -1197,12 +1300,14 @@ export type Database = {
           clave_rastreo?: string | null
           collection_id?: number | null
           descripcion?: string | null
+          estatus?: string | null
           fecha_pago?: string | null
           id?: number
           id_cuenta_cobranza?: number | null
           id_metodos_pago?: number | null
           metodo_pago?: string | null
           monto?: number | null
+          tipo_pago?: string
           url_cep?: string | null
           url_recibo?: string | null
         }
@@ -1210,12 +1315,14 @@ export type Database = {
           clave_rastreo?: string | null
           collection_id?: number | null
           descripcion?: string | null
+          estatus?: string | null
           fecha_pago?: string | null
           id?: number
           id_cuenta_cobranza?: number | null
           id_metodos_pago?: number | null
           metodo_pago?: string | null
           monto?: number | null
+          tipo_pago?: string
           url_cep?: string | null
           url_recibo?: string | null
         }
@@ -2086,6 +2193,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "cuentas_cobranza_clave_rastreo_comision_venta_fkey"
+            columns: ["clave_rastreo_comision_venta"]
+            isOneToOne: true
+            referencedRelation: "pagos_stp_raw"
+            referencedColumns: ["claverastreo"]
+          },
+          {
             foreignKeyName: "cuentas_cobranza_id_cuenta_cobranza_padre_fkey"
             columns: ["id_cuenta_cobranza_padre"]
             isOneToOne: false
@@ -2112,13 +2226,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "ofertas"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fk_ccob_pago_stp"
-            columns: ["clave_rastreo_comision_venta"]
-            isOneToOne: true
-            referencedRelation: "pagos_stp_raw"
-            referencedColumns: ["claverastreo"]
           },
           {
             foreignKeyName: "fk_cuentas_cobranza_oferta"
@@ -5242,18 +5349,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      v_id_tipo_pago: {
-        Row: {
-          case: number | null
-        }
-        Insert: {
-          case?: number | null
-        }
-        Update: {
-          case?: number | null
-        }
-        Relationships: []
       }
       videos_youtube: {
         Row: {
