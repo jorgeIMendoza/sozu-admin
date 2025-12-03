@@ -91,10 +91,14 @@ export function ProjectCollectionSummaryDialog({
 
       const restanteDuranteObra = totalDuranteObra - pagadoDuranteObra;
       const restanteContraentrega = totalContraentrega - pagadoContraentrega;
+      
+      // Total sum of all acuerdos
+      const totalAcuerdos = totalDuranteObra + totalContraentrega;
 
       return {
         totalDuranteObra,
         totalContraentrega,
+        totalAcuerdos,
         pagadoDuranteObra,
         pagadoContraentrega,
         restanteDuranteObra,
@@ -194,6 +198,14 @@ export function ProjectCollectionSummaryDialog({
                 </TooltipProvider>
               </div>
             </div>
+
+            {/* Note about acuerdos coverage */}
+            {summaryData.totalAcuerdos > 0 && Math.abs(totalColocado - summaryData.totalAcuerdos) > 1 && (
+              <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 p-2 rounded">
+                <strong>Nota:</strong> El desglose por etapa suma {formatCurrencyCompact(summaryData.totalAcuerdos)} (acuerdos de pago generados). 
+                La diferencia de {formatCurrencyCompact(totalColocado - summaryData.totalAcuerdos)} corresponde a cuentas sin esquema de pagos asignado.
+              </div>
+            )}
 
             {/* Durante la Obra Section */}
             <div className="space-y-3">

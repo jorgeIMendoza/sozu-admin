@@ -1087,6 +1087,7 @@ export default function Pagos() {
 
   // Estadísticas para productos
   const totalMontoProductos = cuentasProductos.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
+  const totalMontoPropiedades = cuentasPropiedades.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
   const promedioProductos = cuentasProductos.length > 0 ? totalMontoProductos / cuentasProductos.length : 0;
 
   const formatCurrency = (amount: number) => {
@@ -1548,31 +1549,53 @@ export default function Pagos() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="cursor-help">
-                        Propiedades: <span className="font-medium text-green-600">{formatCurrencyCompact(totalCobradoPropiedades)}</span>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{formatCurrency(totalCobradoPropiedades)}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="cursor-help">
-                        Productos: <span className="font-medium text-green-600">{formatCurrencyCompact(totalCobradoProductos)}</span>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{formatCurrency(totalCobradoProductos)}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+              <div className="grid grid-cols-2 gap-4 mt-3 text-xs">
+                <div>
+                  <span className="text-muted-foreground block">Propiedades:</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="font-medium text-green-600 cursor-help">{formatCurrencyCompact(totalCobradoPropiedades)}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{formatCurrency(totalCobradoPropiedades)}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="block text-orange-600 cursor-help">Rest: {formatCurrencyCompact(totalMontoPropiedades - totalCobradoPropiedades)}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{formatCurrency(totalMontoPropiedades - totalCobradoPropiedades)}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Productos:</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="font-medium text-green-600 cursor-help">{formatCurrencyCompact(totalCobradoProductos)}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{formatCurrency(totalCobradoProductos)}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="block text-orange-600 cursor-help">Rest: {formatCurrencyCompact(totalMontoProductos - totalCobradoProductos)}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{formatCurrency(totalMontoProductos - totalCobradoProductos)}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </div>
             </CardContent>
           </Card>
