@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload, Banknote, ChevronDown, ChevronUp, Wallet } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload, Banknote, ChevronDown, ChevronUp, Wallet, Scale } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -1995,10 +1995,29 @@ export default function Pagos() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-{paginatedCuentas.map(cuenta => <TableRow key={cuenta.id} className={cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}>
+{paginatedCuentas.map(cuenta => <TableRow key={cuenta.id} className={
+                      cuenta.id_estatus_disponibilidad === 11
+                        ? "bg-amber-50 dark:bg-amber-950/30"
+                        : cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 
+                          ? "bg-green-50 dark:bg-green-950/20" 
+                          : ""
+                    }>
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
                             <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
+                            {cuenta.id_estatus_disponibilidad === 11 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Scale className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="font-semibold">⚖️ Propiedad En Demanda</p>
+                                    <p className="text-sm">Esta cuenta está bloqueada por un proceso legal</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                             {cuenta.collection_id && (
                               <TooltipProvider>
                                 <Tooltip>
@@ -2406,10 +2425,29 @@ export default function Pagos() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedCuentas.map(cuenta => <TableRow key={cuenta.id} className={cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}>
+                    {paginatedCuentas.map(cuenta => <TableRow key={cuenta.id} className={
+                      cuenta.id_estatus_disponibilidad === 11
+                        ? "bg-amber-50 dark:bg-amber-950/30"
+                        : cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 
+                          ? "bg-green-50 dark:bg-green-950/20" 
+                          : ""
+                    }>
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
                             <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
+                            {cuenta.id_estatus_disponibilidad === 11 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Scale className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="font-semibold">⚖️ Propiedad En Demanda</p>
+                                    <p className="text-sm">Esta cuenta está bloqueada por un proceso legal</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                             {cuenta.collection_id && (
                               <TooltipProvider>
                                 <Tooltip>

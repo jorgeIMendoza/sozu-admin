@@ -1978,6 +1978,9 @@ export default function DetalleCuentaCobranza() {
   
   // Check if property status is "Entregado" (id=8) - makes everything read-only
   const isReadOnly = cuentaDetalle?.id_estatus_disponibilidad === 8;
+  
+  // Check if property is "En demanda" (id=11) - also makes account read-only
+  const isEnDemanda = cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id_estatus_disponibilidad === 11;
 
   return (
     <div className="space-y-6 relative">
@@ -2067,7 +2070,7 @@ export default function DetalleCuentaCobranza() {
           
           <Button 
             onClick={() => setTransferDialog({ isOpen: true })}
-            disabled={!ultimoPagoSTP || esCuentaCancelada || isReadOnly || cuentaDetalle.id_estatus_disponibilidad === 11}
+            disabled={!ultimoPagoSTP || esCuentaCancelada || isReadOnly || isEnDemanda}
             variant="outline"
           >
             <ArrowRight className="h-4 w-4 mr-2" />
@@ -2075,7 +2078,7 @@ export default function DetalleCuentaCobranza() {
           </Button>
           <Button 
             onClick={() => setManualPaymentDialog(true)}
-            disabled={esCuentaCancelada || totalPagado >= (cuentaDetalle?.precio_final || 0) || isReadOnly || cuentaDetalle.id_estatus_disponibilidad === 11}
+            disabled={esCuentaCancelada || totalPagado >= (cuentaDetalle?.precio_final || 0) || isReadOnly || isEnDemanda}
           >
             <CreditCard className="h-4 w-4 mr-2" />
             Agregar pago manual
@@ -2170,7 +2173,7 @@ export default function DetalleCuentaCobranza() {
                     size="sm"
                     className="mt-3 w-full"
                     onClick={() => setTransferDialog({ isOpen: true })}
-                    disabled={!ultimoPagoSTP || !cuentaDetalle.activo || isReadOnly}
+                    disabled={!ultimoPagoSTP || !cuentaDetalle.activo || isReadOnly || isEnDemanda}
                   >
                     <ArrowRight className="h-4 w-4 mr-2" />
                     Transferir sobrepago
@@ -2567,7 +2570,7 @@ export default function DetalleCuentaCobranza() {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold">Acuerdos de Pago y Aplicaciones</h3>
                   {/* Payment scheme selection when no scheme is selected */}
-                  {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && !esCuentaCancelada && !isReadOnly && (
+                  {offerData && !offerData.id_esquema_pago_seleccionado && availableSchemes && availableSchemes.length > 0 && !esCuentaCancelada && !isReadOnly && !isEnDemanda && (
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-muted-foreground">Plan de pagos:</span>
                       <Select onValueChange={(value) => handlePaymentSchemeSelection(parseInt(value))}>
@@ -2991,7 +2994,7 @@ export default function DetalleCuentaCobranza() {
                                                             paymentId: aplicacion.pago.id
                                                           });
                                                         }}
-                                                       disabled={esCuentaCancelada || isReadOnly}
+                                                       disabled={esCuentaCancelada || isReadOnly || isEnDemanda}
                                                     >
                                                       <FileText className="h-3 w-3" />
                                                     </Button>
@@ -3033,7 +3036,7 @@ export default function DetalleCuentaCobranza() {
                                                       size="icon"
                                                       className="h-6 w-6"
                                                       onClick={() => handleEditPayment(aplicacion.id)}
-                                                      disabled={esCuentaCancelada || isReadOnly}
+                                                      disabled={esCuentaCancelada || isReadOnly || isEnDemanda}
                                                     >
                                                       <Edit className="h-4 w-4" />
                                                     </Button>
@@ -3055,7 +3058,7 @@ export default function DetalleCuentaCobranza() {
                                                       monto: aplicacion.monto,
                                                       conceptoNombre: conceptoDisplay
                                                     })}
-                                                    disabled={deletePaymentMutation.isPending || isStpPayment || esCuentaCancelada || isReadOnly}
+                                                    disabled={deletePaymentMutation.isPending || isStpPayment || esCuentaCancelada || isReadOnly || isEnDemanda}
                                                   >
                                                     <Trash2 className="h-3 w-3" />
                                                   </Button>
@@ -3085,7 +3088,7 @@ export default function DetalleCuentaCobranza() {
                                 <AlertTriangle className="h-4 w-4 text-warning" />
                                 Multas
                               </h5>
-                              {!acuerdo.pago_completado && !esCuentaCancelada && !isReadOnly && (
+                              {!acuerdo.pago_completado && !esCuentaCancelada && !isReadOnly && !isEnDemanda && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -3167,13 +3170,13 @@ export default function DetalleCuentaCobranza() {
                                               variant="destructive"
                                               size="icon"
                                               onClick={() => setDeleteMultaDialog({ isOpen: true, multa })}
-                                              disabled={deleteMultaMutation.isPending || multa.estaPagada || esCuentaCancelada || isReadOnly}
+                                              disabled={deleteMultaMutation.isPending || multa.estaPagada || esCuentaCancelada || isReadOnly || isEnDemanda}
                                             >
                                               <Trash2 className="h-4 w-4" />
                                             </Button>
                                           </TooltipTrigger>
                                            <TooltipContent>
-                                             <p>{isReadOnly ? "Propiedad entregada - no se pueden eliminar multas" : esCuentaCancelada ? "Cuenta cancelada - no se pueden eliminar multas" : multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
+                                             <p>{isEnDemanda ? "Propiedad en demanda - cuenta bloqueada" : isReadOnly ? "Propiedad entregada - no se pueden eliminar multas" : esCuentaCancelada ? "Cuenta cancelada - no se pueden eliminar multas" : multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
                                            </TooltipContent>
                                         </Tooltip>
                                       </TooltipProvider>
@@ -3267,7 +3270,7 @@ export default function DetalleCuentaCobranza() {
                                     <Badge variant="secondary" className="text-xs">
                                       {aplicacionesDelPago.length} {aplicacionesDelPago.length === 1 ? 'aplicación' : 'aplicaciones'}
                                     </Badge>
-                                    {!esCuentaCancelada && !isReadOnly && (
+                                    {!esCuentaCancelada && !isReadOnly && !isEnDemanda && (
                                       <>
                                         {(pago.url_cep || pago.url_recibo) && (
                                           <TooltipProvider>
