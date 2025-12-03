@@ -65,6 +65,7 @@ export const ProjectLegalEntitiesSection = ({
     queryFn: async () => {
       const allowedEntityTypeIds = [3, 4, 5, 6, 8, 9, 10, 13, 15]; // Desarrollador, Dueño Vendedor, Inmobiliaria, Administradora, Proveedor, Socio, Inversionista, Contratista, Aportante
 
+      // Query without nested filters - they don't work reliably with PostgREST
       const { data, error } = await supabase
         .from("personas")
         .select(`
@@ -75,24 +76,25 @@ export const ProjectLegalEntitiesSection = ({
           entidades_relacionadas!entidades_relacionadas_id_persona_fkey (
             id,
             id_tipo_entidad,
-            tipos_entidad!inner (
+            activo,
+            tipos_entidad (
               id,
               nombre
             )
           )
         `)
         .eq("activo", true)
-        .eq("tipo_persona", "pm")
-        .eq("entidades_relacionadas.activo", true)
-        .in("entidades_relacionadas.id_tipo_entidad", allowedEntityTypeIds);
+        .eq("tipo_persona", "pm");
       
       if (error) throw error;
       
       // Group entities by tipo_entidad_id to get unique combinations
+      // Filter client-side for reliability
       const entityMap = new Map();
       (data || []).forEach((item: any) => {
-        item.entidades_relacionadas.forEach((rel: any) => {
-          if (allowedEntityTypeIds.includes(rel.id_tipo_entidad)) {
+        (item.entidades_relacionadas || []).forEach((rel: any) => {
+          // Filter: must be active and in allowed types
+          if (rel.activo && allowedEntityTypeIds.includes(rel.id_tipo_entidad)) {
             const key = `${item.id}-${rel.id_tipo_entidad}`;
             if (!entityMap.has(key)) {
               entityMap.set(key, {
