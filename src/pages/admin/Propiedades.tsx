@@ -293,8 +293,8 @@ const Propiedades = () => {
   const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState("");
   const [areaFilterInput, setAreaFilterInput] = useState<number[]>([25, 300]);
   const [areaFilter, setAreaFilter] = useState<number[]>([25, 300]);
-  const [precioFilterInput, setPrecioFilterInput] = useState<number[]>([1000000, 20000000]);
-  const [precioFilter, setPrecioFilter] = useState<number[]>([1000000, 20000000]);
+  const [precioFilterInput, setPrecioFilterInput] = useState<number[]>([1000000, 100000000]);
+  const [precioFilter, setPrecioFilter] = useState<number[]>([1000000, 100000000]);
   const [precioSort, setPrecioSort] = useState<'asc' | 'desc' | null>(null);
 
   // Column visibility and order state
@@ -1063,7 +1063,7 @@ const Propiedades = () => {
           areaFilter[0] !== 25 ||
           areaFilter[1] !== 300 ||
           precioFilter[0] !== 1000000 ||
-          precioFilter[1] !== 20000000 ||
+          precioFilter[1] !== 100000000 ||
           precioSort !== null;
 
         let enrichedData;
@@ -1322,7 +1322,7 @@ const Propiedades = () => {
           areaFilter[0] !== 25 ||
           areaFilter[1] !== 300 ||
           precioFilter[0] !== 1000000 ||
-          precioFilter[1] !== 20000000 ||
+          precioFilter[1] !== 100000000 ||
           precioSort !== null;
 
         let enrichedData;
@@ -1582,7 +1582,7 @@ const Propiedades = () => {
           areaFilter[0] !== 25 ||
           areaFilter[1] !== 300 ||
           precioFilter[0] !== 1000000 ||
-          precioFilter[1] !== 20000000 ||
+          precioFilter[1] !== 100000000 ||
           precioSort !== null;
 
         let enrichedData;
@@ -2383,7 +2383,7 @@ const Propiedades = () => {
     areaFilter[0] !== 25 ||
     areaFilter[1] !== 300 ||
     precioFilter[0] !== 1000000 ||
-    precioFilter[1] !== 20000000;
+    precioFilter[1] !== 100000000;
 
   const totalActivePage = Math.ceil((hasClientSideFilters ? filteredActivosCount : totalActivosCount) / itemsPerPage);
   const totalDraftPage = Math.ceil((hasClientSideFilters ? filteredDraftCount : totalDraftCount) / itemsPerPage);
@@ -3750,7 +3750,7 @@ const Propiedades = () => {
                     }}
                     onBlur={(e) => {
                       let val = Number(e.target.value.replace(/[^0-9]/g, '')) || 1000000;
-                      val = Math.max(1000000, Math.min(20000000, val));
+                      val = Math.max(1000000, Math.min(100000000, val));
                       setPrecioFilterInput([val, Math.max(val, precioFilterInput[1])]);
                     }}
                     className="w-32 h-8 text-xs"
@@ -3762,14 +3762,14 @@ const Propiedades = () => {
                     onChange={(e) => {
                       const val = e.target.value.replace(/[^0-9]/g, '');
                       if (val === '') {
-                        setPrecioFilterInput([precioFilterInput[0], 20000000]);
+                        setPrecioFilterInput([precioFilterInput[0], 100000000]);
                       } else {
                         setPrecioFilterInput([precioFilterInput[0], Number(val)]);
                       }
                     }}
                     onBlur={(e) => {
-                      let val = Number(e.target.value.replace(/[^0-9]/g, '')) || 20000000;
-                      val = Math.max(1000000, Math.min(20000000, val));
+                      let val = Number(e.target.value.replace(/[^0-9]/g, '')) || 100000000;
+                      val = Math.max(1000000, Math.min(100000000, val));
                       setPrecioFilterInput([Math.min(precioFilterInput[0], val), val]);
                     }}
                     className="w-32 h-8 text-xs"
@@ -3777,8 +3777,8 @@ const Propiedades = () => {
                 </div>
                 <Slider
                   min={1000000}
-                  max={20000000}
-                  step={100000}
+                  max={100000000}
+                  step={1000000}
                   value={precioFilterInput}
                   onValueChange={setPrecioFilterInput}
                   className="mt-1"
@@ -3823,8 +3823,8 @@ const Propiedades = () => {
                   setCuentaCobranzaFilter("");
                   setAreaFilterInput([25, 300]);
                   setAreaFilter([25, 300]);
-                  setPrecioFilterInput([1000000, 20000000]);
-                  setPrecioFilter([1000000, 20000000]);
+                  setPrecioFilterInput([1000000, 100000000]);
+                  setPrecioFilter([1000000, 100000000]);
                   setSelectedProperties([]);
                   setPrecioSort(null);
                 }}
@@ -3911,13 +3911,13 @@ const Propiedades = () => {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="activos">
-                Activos ({hasClientSideFilters ? filteredActivosCount : totalActivosCount})
+                Activos ({filteredActivosCount})
               </TabsTrigger>
               <TabsTrigger value="draft">
-                Draft ({hasClientSideFilters ? filteredDraftCount : totalDraftCount})
+                Draft ({filteredDraftCount})
               </TabsTrigger>
               <TabsTrigger value="eliminados">
-                Eliminados ({hasClientSideFilters ? filteredEliminadosCount : totalEliminadosCount})
+                Eliminados ({filteredEliminadosCount})
               </TabsTrigger>
             </TabsList>
             
