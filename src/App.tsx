@@ -49,6 +49,7 @@ const Contratos = lazy(() => import("./pages/admin/legal/Contratos"));
 const Comisiones = lazy(() => import("./pages/admin/Comisiones"));
 const AprobacionComisiones = lazy(() => import("./pages/admin/AprobacionComisiones"));
 const PagarComisiones = lazy(() => import("./pages/admin/PagarComisiones"));
+const ReporteDiscrepancias = lazy(() => import("./pages/admin/ReporteDiscrepancias"));
 
 const queryClient = new QueryClient();
 
@@ -114,6 +115,7 @@ const App = () => (
             <Route path="consultas-ia" element={<ConsultasIA />} />
             <Route path="reservas" element={<Reservas />} />
             <Route path="legal/contratos" element={<Contratos />} />
+            <Route path="reportes/discrepancias" element={<ReporteDiscrepancias />} />
           </Route>
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
