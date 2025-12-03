@@ -1977,7 +1977,7 @@ export default function Pagos() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedCuentas.map(cuenta => <TableRow key={cuenta.id} className={Math.abs(cuenta.restante) < 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}>
+{paginatedCuentas.map(cuenta => <TableRow key={cuenta.id} className={cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}>
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
                             <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
@@ -2007,7 +2007,7 @@ export default function Pagos() {
                                     <p className="text-sm">La cuenta de cobranza fue generada pero falta seleccionar el esquema de pago para generar los acuerdos</p>
                                   </TooltipContent>
                                 </Tooltip>
-                              </TooltipProvider> : !cuenta.apartado_pagado && cuenta.id_estatus_disponibilidad !== 10 ? <TooltipProvider>
+                              </TooltipProvider> : !cuenta.apartado_pagado && cuenta.restante > 0.01 && cuenta.id_estatus_disponibilidad !== 10 ? <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
                                     <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 h-6 w-6 p-0 flex items-center justify-center">
@@ -2388,7 +2388,7 @@ export default function Pagos() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedCuentas.map(cuenta => <TableRow key={cuenta.id} className={Math.abs(cuenta.restante) < 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}>
+                    {paginatedCuentas.map(cuenta => <TableRow key={cuenta.id} className={cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}>
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-2">
                             <span>{formatCuentaCobranzaId(cuenta.id, cuenta.tipo)}</span>
@@ -2418,7 +2418,7 @@ export default function Pagos() {
                                     <p className="text-sm">La cuenta de cobranza fue generada pero falta seleccionar el esquema de pago para generar los acuerdos</p>
                                   </TooltipContent>
                                 </Tooltip>
-                              </TooltipProvider> : !cuenta.apartado_pagado && cuenta.id_estatus_disponibilidad !== 10 ? <TooltipProvider>
+                              </TooltipProvider> : !cuenta.apartado_pagado && cuenta.restante > 0.01 && cuenta.id_estatus_disponibilidad !== 10 ? <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
                                     <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 h-6 w-6 p-0 flex items-center justify-center">
