@@ -61,9 +61,9 @@ export default function ReporteDiscrepancias() {
       if (acuerdosError) throw acuerdosError;
 
       // Calculate sums per cuenta
-      const sumasPorCuenta: Record<number, number> = {};
+      const sumasPorCuenta: Record<string, number> = {};
       acuerdosData?.forEach(a => {
-        const cuentaId = a.id_cuenta_cobranza;
+        const cuentaId = String(a.id_cuenta_cobranza);
         sumasPorCuenta[cuentaId] = (sumasPorCuenta[cuentaId] || 0) + Number(a.monto);
       });
 
@@ -71,7 +71,7 @@ export default function ReporteDiscrepancias() {
       const discrepanciasResult: Discrepancia[] = [];
       
       cuentasData?.forEach(cuenta => {
-        const sumaAcuerdos = sumasPorCuenta[cuenta.id] || 0;
+        const sumaAcuerdos = sumasPorCuenta[String(cuenta.id)] || 0;
         const precioFinal = Number(cuenta.precio_final);
         const diferencia = precioFinal - sumaAcuerdos;
 
