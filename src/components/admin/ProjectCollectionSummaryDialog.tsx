@@ -60,7 +60,7 @@ export function ProjectCollectionSummaryDialog({
           .select('id, id_cuenta_cobranza, id_concepto, monto, pago_completado')
           .in('id_cuenta_cobranza', batch)
           .eq('activo', true)
-          .limit(5000); // Each batch of 100 cuentas may have ~1250 acuerdos
+          .limit(50000);
         
         if (error) throw error;
         if (batchAcuerdos) {
@@ -83,7 +83,7 @@ export function ProjectCollectionSummaryDialog({
           .in('id_acuerdo_pago', batch)
           .eq('activo', true)
           .eq('es_multa', false)
-          .limit(10000); // Each acuerdo may have multiple aplicaciones
+          .limit(100000);
         
         if (error) throw error;
         if (batchAplicaciones) {
