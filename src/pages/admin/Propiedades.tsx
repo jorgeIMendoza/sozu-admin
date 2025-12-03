@@ -663,34 +663,57 @@ const Propiedades = () => {
     });
 
     if (cuentaIds.length > 0) {
-      const { data: acuerdosData } = await supabase
-        .from('acuerdos_pago')
-        .select(`
-          id,
-          monto,
-          pago_completado,
-          id_concepto,
-          id_cuenta_cobranza,
-          fecha_pago
-        `)
-        .in('id_cuenta_cobranza', cuentaIds)
-        .eq('activo', true);
+      // Batch queries to avoid Supabase's 1000-row limit
+      const BATCH_SIZE = 30; // ~30 cuentas per batch to stay under 1000 acuerdos
+      const cuentaBatches: number[][] = [];
+      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
+        cuentaBatches.push(cuentaIds.slice(i, i + BATCH_SIZE));
+      }
+
+      // Fetch acuerdos_pago in batches
+      const acuerdosPromises = cuentaBatches.map(batch =>
+        supabase
+          .from('acuerdos_pago')
+          .select(`
+            id,
+            monto,
+            pago_completado,
+            id_concepto,
+            id_cuenta_cobranza,
+            fecha_pago
+          `)
+          .in('id_cuenta_cobranza', batch)
+          .eq('activo', true)
+      );
+      const acuerdosResults = await Promise.all(acuerdosPromises);
+      const acuerdosData = acuerdosResults.flatMap(r => r.data || []);
 
       // Get all aplicaciones_pago for these acuerdos WITH payment method info AND payment dates
-      const acuerdoIds = (acuerdosData || []).map(a => a.id);
+      const acuerdoIds = acuerdosData.map(a => a.id);
       
       let aplicacionesMap: any = {};
       let pagosPorMetodo: any = {};
       if (acuerdoIds.length > 0) {
-        const { data: aplicacionesData } = await supabase
-          .from('aplicaciones_pago')
-          .select(`
-            id_acuerdo_pago,
-            monto,
-            pagos!fk_aplicaciones_pago_pago!inner(id_metodos_pago, fecha_pago)
-          `)
-          .in('id_acuerdo_pago', acuerdoIds)
-          .eq('activo', true);
+        // Batch aplicaciones_pago queries as well
+        const ACUERDO_BATCH_SIZE = 100;
+        const acuerdoBatches: number[][] = [];
+        for (let i = 0; i < acuerdoIds.length; i += ACUERDO_BATCH_SIZE) {
+          acuerdoBatches.push(acuerdoIds.slice(i, i + ACUERDO_BATCH_SIZE));
+        }
+
+        const aplicacionesPromises = acuerdoBatches.map(batch =>
+          supabase
+            .from('aplicaciones_pago')
+            .select(`
+              id_acuerdo_pago,
+              monto,
+              pagos!fk_aplicaciones_pago_pago!inner(id_metodos_pago, fecha_pago)
+            `)
+            .in('id_acuerdo_pago', batch)
+            .eq('activo', true)
+        );
+        const aplicacionesResults = await Promise.all(aplicacionesPromises);
+        const aplicacionesData = aplicacionesResults.flatMap(r => r.data || []);
 
         aplicacionesMap = (aplicacionesData || []).reduce((acc: any, app: any) => {
           if (!acc[app.id_acuerdo_pago]) {
