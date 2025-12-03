@@ -1075,19 +1075,23 @@ export default function Pagos() {
     localStorage.setItem('pagos-stats-expanded', JSON.stringify(newValue));
   };
 
-  // Statistics should always use unfiltered data based on active tab
+  // Statistics for table counts based on active tab
   const statsCuentas = activeTab === "activas" ? cuentasActivas : cuentasCanceladas;
-  const totalMonto = statsCuentas.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
   
-  // Separar cuentas por tipo (Propiedades vs Productos/Servicios)
+  // Separar cuentas por tipo para estadísticas de tabla (según tab activo)
   const cuentasPropiedades = statsCuentas.filter(c => c.tipo === 'Propiedad');
   const cuentasProductos = statsCuentas.filter(c => c.tipo === 'Producto' || c.tipo === 'Servicio');
   
-  // Calculate total cobrado (only from ACTIVE accounts - not cancelled)
-  const cuentasActivasParaCobrado = cuentasActivas;
-  const cuentasPropiedadesActivas = cuentasActivasParaCobrado.filter(c => c.tipo === 'Propiedad');
-  const cuentasProductosActivas = cuentasActivasParaCobrado.filter(c => c.tipo === 'Producto' || c.tipo === 'Servicio');
+  // IMPORTANT: Total Colocado and Cobrado ALWAYS use ACTIVE accounts only (never cancelled)
+  const cuentasPropiedadesActivas = cuentasActivas.filter(c => c.tipo === 'Propiedad');
+  const cuentasProductosActivas = cuentasActivas.filter(c => c.tipo === 'Producto' || c.tipo === 'Servicio');
   
+  // Total Colocado (only from ACTIVE accounts - never cancelled)
+  const totalMontoPropiedades = cuentasPropiedadesActivas.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
+  const totalMontoProductos = cuentasProductosActivas.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
+  const totalMonto = totalMontoPropiedades + totalMontoProductos;
+  
+  // Total Cobrado (only from ACTIVE accounts - never cancelled)
   const totalCobradoPropiedades = cuentasPropiedadesActivas.reduce((sum, cuenta) => sum + Number(cuenta.pagado || 0), 0);
   const totalCobradoProductos = cuentasProductosActivas.reduce((sum, cuenta) => sum + Number(cuenta.pagado || 0), 0);
   const totalCobrado = totalCobradoPropiedades + totalCobradoProductos;
@@ -1118,10 +1122,8 @@ export default function Pagos() {
       cuentaIds: data.cuentaIds
     }));
 
-  // Estadísticas para productos
-  const totalMontoProductos = cuentasProductos.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
-  const totalMontoPropiedades = cuentasPropiedades.reduce((sum, cuenta) => sum + Number(cuenta.precio_final), 0);
-  const promedioProductos = cuentasProductos.length > 0 ? totalMontoProductos / cuentasProductos.length : 0;
+  // Promedio de productos (usando cuentas activas)
+  const promedioProductos = cuentasProductosActivas.length > 0 ? totalMontoProductos / cuentasProductosActivas.length : 0;
 
   const formatCurrency = (amount: number) => {
     // Aggressively eliminate -0
@@ -1539,11 +1541,11 @@ export default function Pagos() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="cursor-help">
-                        Propiedades: <span className="font-medium text-foreground">{formatCurrencyCompact(cuentasPropiedades.reduce((sum, c) => sum + Number(c.precio_final), 0))}</span>
+                        Propiedades: <span className="font-medium text-foreground">{formatCurrencyCompact(totalMontoPropiedades)}</span>
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>{formatCurrency(cuentasPropiedades.reduce((sum, c) => sum + Number(c.precio_final), 0))}</p>
+                      <p>{formatCurrency(totalMontoPropiedades)}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
