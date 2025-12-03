@@ -797,10 +797,11 @@ const Propiedades = () => {
 
     // Transform the data with counts
     const transformedData = data?.map((property: any) => {
-      // Get clabe_stp from ACTIVE cuentas_cobranza if available
-      const cuentaCobranzaData = property.ofertas?.map((oferta: any) => 
-        activeCuentasMap[oferta.id]
-      ).find((cuenta: any) => cuenta !== undefined);
+      // Get clabe_stp from ACTIVE cuentas_cobranza if available (only property offers, not products)
+      const cuentaCobranzaData = property.ofertas
+        ?.filter((oferta: any) => oferta.id_producto === null)
+        ?.map((oferta: any) => activeCuentasMap[oferta.id])
+        .find((cuenta: any) => cuenta !== undefined);
       
       // Get es_comision_venta_efectivo and porcentaje_comision_venta
       const esComisionEfectivo = cuentaCobranzaData?.es_comision_venta_efectivo || false;
