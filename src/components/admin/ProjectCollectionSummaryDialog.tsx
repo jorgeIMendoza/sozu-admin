@@ -21,8 +21,8 @@ interface ProjectCollectionSummaryDialogProps {
 // 5 = Parcialidad (Mensualidades)
 // 6 = Cesión de derechos
 
-const DURANTE_OBRA_CONCEPTS = [1, 2, 4, 5]; // Apartado, Enganche, Pago especial, Parcialidad/Mensualidades
-const CONTRAENTREGA_CONCEPT = 3; // Pago a contra entrega
+// Durante la Obra: 1, 2, 4, 5, 6 (Apartado, Enganche, Pago especial, Parcialidad, Cesión de derechos)
+// A la Entrega: 3 (Pago a contra entrega)
 
 export function ProjectCollectionSummaryDialog({ 
   isOpen, 
@@ -45,7 +45,7 @@ export function ProjectCollectionSummaryDialog({
           query_text: `
             SELECT 
               CASE 
-                WHEN id_concepto IN (1, 2, 4, 5) THEN 'durante_obra'
+                WHEN id_concepto IN (1, 2, 4, 5, 6) THEN 'durante_obra'
                 WHEN id_concepto = 3 THEN 'contraentrega'
                 ELSE 'otro'
               END as categoria,
@@ -66,7 +66,7 @@ export function ProjectCollectionSummaryDialog({
           query_text: `
             SELECT 
               CASE 
-                WHEN ap.id_concepto IN (1, 2, 4, 5) THEN 'durante_obra'
+                WHEN ap.id_concepto IN (1, 2, 4, 5, 6) THEN 'durante_obra'
                 WHEN ap.id_concepto = 3 THEN 'contraentrega'
                 ELSE 'otro'
               END as categoria,
@@ -225,7 +225,7 @@ export function ProjectCollectionSummaryDialog({
             {/* Durante la Obra Section */}
             <div className="space-y-3">
               <h3 className="font-semibold text-sm border-b pb-2">Desglose por Etapa - Durante la Obra</h3>
-              <p className="text-xs text-muted-foreground">(Apartado + Enganche + Pagos Especiales + Parcialidades)</p>
+              <p className="text-xs text-muted-foreground">(Apartado + Enganche + Pagos Especiales + Parcialidades + Cesión de derechos)</p>
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
