@@ -213,9 +213,19 @@ export default function Pagos() {
       const cuentaIds = cuentas.map(c => c.id);
       console.log('Cuenta IDs:', cuentaIds);
 
-      // First get all acuerdos for these cuentas (with pagination)
+      // Helper function to chunk arrays for batched queries (Supabase .in() has limits)
+      const chunkArray = <T,>(array: T[], chunkSize: number): T[][] => {
+        const chunks: T[][] = [];
+        for (let i = 0; i < array.length; i += chunkSize) {
+          chunks.push(array.slice(i, i + chunkSize));
+        }
+        return chunks;
+      };
+
+      // First get all acuerdos for these cuentas (batched by cuenta IDs)
       let acuerdosForPagos: any[] = [];
-      {
+      const cuentaIdChunks = chunkArray(cuentaIds, 500);
+      for (const chunk of cuentaIdChunks) {
         const pageSize = 1000;
         let from = 0;
         let more = true;
@@ -223,7 +233,7 @@ export default function Pagos() {
           const { data, error } = await supabase
             .from('acuerdos_pago')
             .select('id, id_cuenta_cobranza')
-            .in('id_cuenta_cobranza', cuentaIds)
+            .in('id_cuenta_cobranza', chunk)
             .eq('activo', true)
             .range(from, from + pageSize - 1);
           if (error || !data || data.length === 0) {
@@ -236,27 +246,31 @@ export default function Pagos() {
         }
       }
       const acuerdoIdsForPagos = acuerdosForPagos.map(a => a.id);
+      console.log('Acuerdos for pagos count:', acuerdosForPagos.length);
 
-      // Now get aplicaciones_pago for those acuerdos (with pagination)
+      // Now get aplicaciones_pago for those acuerdos (batched by acuerdo IDs)
       let aplicacionesPago: any[] = [];
       if (acuerdoIdsForPagos.length > 0) {
-        const pageSize = 1000;
-        let from = 0;
-        let more = true;
-        while (more) {
-          const { data, error } = await supabase
-            .from('aplicaciones_pago')
-            .select('monto, id_acuerdo_pago, es_multa')
-            .in('id_acuerdo_pago', acuerdoIdsForPagos)
-            .eq('activo', true)
-            .eq('es_multa', false)
-            .range(from, from + pageSize - 1);
-          if (error || !data || data.length === 0) {
-            more = false;
-          } else {
-            aplicacionesPago = aplicacionesPago.concat(data);
-            if (data.length < pageSize) more = false;
-            else from += pageSize;
+        const acuerdoIdChunks = chunkArray(acuerdoIdsForPagos, 500);
+        for (const chunk of acuerdoIdChunks) {
+          const pageSize = 1000;
+          let from = 0;
+          let more = true;
+          while (more) {
+            const { data, error } = await supabase
+              .from('aplicaciones_pago')
+              .select('monto, id_acuerdo_pago, es_multa')
+              .in('id_acuerdo_pago', chunk)
+              .eq('activo', true)
+              .eq('es_multa', false)
+              .range(from, from + pageSize - 1);
+            if (error || !data || data.length === 0) {
+              more = false;
+            } else {
+              aplicacionesPago = aplicacionesPago.concat(data);
+              if (data.length < pageSize) more = false;
+              else from += pageSize;
+            }
           }
         }
       }
@@ -274,11 +288,11 @@ export default function Pagos() {
         acc[cuenta.id] = totalPagado;
         return acc;
       }, {});
-      console.log('Pagado por cuenta:', pagadoPorCuenta);
+      console.log('Pagado por cuenta sample:', Object.entries(pagadoPorCuenta).slice(0, 5));
 
-      // Get cash payments (id_metodos_pago = 1) for all accounts (with pagination)
+      // Get cash payments (id_metodos_pago = 1) for all accounts (batched)
       let pagosCash: any[] = [];
-      {
+      for (const chunk of cuentaIdChunks) {
         const pageSize = 1000;
         let from = 0;
         let more = true;
@@ -286,7 +300,7 @@ export default function Pagos() {
           const { data, error } = await supabase
             .from('pagos')
             .select('id, fecha_pago, id_metodos_pago, activo')
-            .in('id_cuenta_cobranza', cuentaIds)
+            .in('id_cuenta_cobranza', chunk)
             .eq('id_metodos_pago', 1)
             .eq('activo', true)
             .order('fecha_pago', { ascending: false })
@@ -302,34 +316,36 @@ export default function Pagos() {
       }
       const pagosCashIds = pagosCash.map(p => p.id);
 
-      // Get aplicaciones for cash payments (with pagination)
+      // Get aplicaciones for cash payments (batched)
       let aplicacionesCash: any[] = [];
       if (pagosCashIds.length > 0 && acuerdoIdsForPagos.length > 0) {
-        const pageSize = 1000;
-        let from = 0;
-        let more = true;
-        while (more) {
-          const { data, error } = await supabase
-            .from('aplicaciones_pago')
-            .select('monto, id_acuerdo_pago, id_pago, es_multa')
-            .in('id_pago', pagosCashIds)
-            .in('id_acuerdo_pago', acuerdoIdsForPagos)
-            .eq('activo', true)
-            .eq('es_multa', false)
-            .range(from, from + pageSize - 1);
-          if (error || !data || data.length === 0) {
-            more = false;
-          } else {
-            aplicacionesCash = aplicacionesCash.concat(data);
-            if (data.length < pageSize) more = false;
-            else from += pageSize;
+        const pagosCashIdChunks = chunkArray(pagosCashIds, 500);
+        for (const chunk of pagosCashIdChunks) {
+          const pageSize = 1000;
+          let from = 0;
+          let more = true;
+          while (more) {
+            const { data, error } = await supabase
+              .from('aplicaciones_pago')
+              .select('monto, id_acuerdo_pago, id_pago, es_multa')
+              .in('id_pago', chunk)
+              .eq('activo', true)
+              .eq('es_multa', false)
+              .range(from, from + pageSize - 1);
+            if (error || !data || data.length === 0) {
+              more = false;
+            } else {
+              aplicacionesCash = aplicacionesCash.concat(data);
+              if (data.length < pageSize) more = false;
+              else from += pageSize;
+            }
           }
         }
       }
 
-      // Get acuerdos_pago to check if "Apartado" or "Enganche" is paid (with pagination)
+      // Get acuerdos_pago to check if "Apartado" or "Enganche" is paid (batched)
       let acuerdosPago: any[] = [];
-      {
+      for (const chunk of cuentaIdChunks) {
         const pageSize = 1000;
         let from = 0;
         let more = true;
@@ -337,7 +353,7 @@ export default function Pagos() {
           const { data, error } = await supabase
             .from('acuerdos_pago')
             .select('id, id_cuenta_cobranza, id_concepto, pago_completado')
-            .in('id_cuenta_cobranza', cuentaIds)
+            .in('id_cuenta_cobranza', chunk)
             .eq('activo', true)
             .range(from, from + pageSize - 1);
           if (error || !data || data.length === 0) {
@@ -351,27 +367,30 @@ export default function Pagos() {
       }
       console.log('🔍 Acuerdos de pago count:', acuerdosPago.length);
 
-      // Get aplicaciones_pago para verificar si hay pagos de cesión de derechos (with pagination)
+      // Get aplicaciones_pago para verificar si hay pagos de cesión de derechos (batched)
       const acuerdoIds = acuerdosPago.map(a => a.id);
       let cesionDerechosMap: Record<number, boolean> = {};
       if (acuerdoIds.length > 0) {
         let aplicaciones: any[] = [];
-        const pageSize = 1000;
-        let from = 0;
-        let more = true;
-        while (more) {
-          const { data, error } = await supabase
-            .from('aplicaciones_pago')
-            .select('id_acuerdo_pago, monto')
-            .in('id_acuerdo_pago', acuerdoIds)
-            .eq('activo', true)
-            .range(from, from + pageSize - 1);
-          if (error || !data || data.length === 0) {
-            more = false;
-          } else {
-            aplicaciones = aplicaciones.concat(data);
-            if (data.length < pageSize) more = false;
-            else from += pageSize;
+        const acuerdoIdChunks = chunkArray(acuerdoIds, 500);
+        for (const chunk of acuerdoIdChunks) {
+          const pageSize = 1000;
+          let from = 0;
+          let more = true;
+          while (more) {
+            const { data, error } = await supabase
+              .from('aplicaciones_pago')
+              .select('id_acuerdo_pago, monto')
+              .in('id_acuerdo_pago', chunk)
+              .eq('activo', true)
+              .range(from, from + pageSize - 1);
+            if (error || !data || data.length === 0) {
+              more = false;
+            } else {
+              aplicaciones = aplicaciones.concat(data);
+              if (data.length < pageSize) more = false;
+              else from += pageSize;
+            }
           }
         }
 
@@ -429,28 +448,31 @@ export default function Pagos() {
         return acc;
       }, {});
 
-      // Get multas pendientes para cada cuenta (with pagination)
+      // Get multas pendientes para cada cuenta (batched)
       const acuerdoIdsForMultas = acuerdosPago.map(ap => ap.id);
       let multasPendientesPorCuenta: Record<number, boolean> = {};
       if (acuerdoIdsForMultas.length > 0) {
         let multas: any[] = [];
-        const pageSize = 1000;
-        let from = 0;
-        let more = true;
-        while (more) {
-          const { data, error } = await supabase
-            .from('multas')
-            .select('id, id_acuerdo_pago, es_pagada')
-            .in('id_acuerdo_pago', acuerdoIdsForMultas)
-            .eq('activo', true)
-            .eq('es_pagada', false)
-            .range(from, from + pageSize - 1);
-          if (error || !data || data.length === 0) {
-            more = false;
-          } else {
-            multas = multas.concat(data);
-            if (data.length < pageSize) more = false;
-            else from += pageSize;
+        const acuerdoIdChunksForMultas = chunkArray(acuerdoIdsForMultas, 500);
+        for (const chunk of acuerdoIdChunksForMultas) {
+          const pageSize = 1000;
+          let from = 0;
+          let more = true;
+          while (more) {
+            const { data, error } = await supabase
+              .from('multas')
+              .select('id, id_acuerdo_pago, es_pagada')
+              .in('id_acuerdo_pago', chunk)
+              .eq('activo', true)
+              .eq('es_pagada', false)
+              .range(from, from + pageSize - 1);
+            if (error || !data || data.length === 0) {
+              more = false;
+            } else {
+              multas = multas.concat(data);
+              if (data.length < pageSize) more = false;
+              else from += pageSize;
+            }
           }
         }
 
@@ -473,53 +495,57 @@ export default function Pagos() {
       // Get offer IDs to fetch related data
       const ofertaIds = cuentas.map(c => c.id_oferta).filter(id => id !== null);
 
-      // Get ofertas with properties and products (with pagination)
+      // Get ofertas with properties and products (batched)
       let ofertas: any[] = [];
       let ofertasError: any = null;
 
       if (ofertaIds.length > 0) {
-        const pageSize = 1000;
-        let from = 0;
-        let to = pageSize - 1;
-        let more = true;
+        const ofertaIdChunks = chunkArray(ofertaIds, 500);
+        for (const chunk of ofertaIdChunks) {
+          const pageSize = 1000;
+          let from = 0;
+          let to = pageSize - 1;
+          let more = true;
 
-        while (more) {
-          const { data, error } = await supabase
-            .from('ofertas')
-            .select(`
-              id,
-              id_propiedad,
-              id_producto,
-              propiedades!ofertas_id_propiedad_fkey(
+          while (more) {
+            const { data, error } = await supabase
+              .from('ofertas')
+              .select(`
                 id,
-                numero_propiedad,
-                precio_lista,
-                id_entidad_relacionada_dueno,
-                id_edificio_modelo,
-                id_estatus_disponibilidad
-              )
-            `)
-            .in('id', ofertaIds)
-            .range(from, to);
+                id_propiedad,
+                id_producto,
+                propiedades!ofertas_id_propiedad_fkey(
+                  id,
+                  numero_propiedad,
+                  precio_lista,
+                  id_entidad_relacionada_dueno,
+                  id_edificio_modelo,
+                  id_estatus_disponibilidad
+                )
+              `)
+              .in('id', chunk)
+              .range(from, to);
 
-          if (error) {
-            ofertasError = error;
-            break;
+            if (error) {
+              ofertasError = error;
+              break;
+            }
+
+            if (!data || data.length === 0) {
+              more = false;
+              break;
+            }
+
+            ofertas = ofertas.concat(data);
+
+            if (data.length < pageSize) {
+              more = false;
+            } else {
+              from += pageSize;
+              to += pageSize;
+            }
           }
-
-          if (!data || data.length === 0) {
-            more = false;
-            break;
-          }
-
-          ofertas = ofertas.concat(data);
-
-          if (data.length < pageSize) {
-            more = false;
-          } else {
-            from += pageSize;
-            to += pageSize;
-          }
+          if (ofertasError) break;
         }
       }
       if (ofertasError) {
@@ -528,26 +554,42 @@ export default function Pagos() {
       }
 
       // Get property IDs to find non-included bodegas and estacionamientos
-      const propiedadIds = ofertas?.filter(o => o.id_propiedad)?.map(o => o.id_propiedad) || [];
+      const propiedadIds = ofertas.filter(o => o.id_propiedad).map(o => o.id_propiedad);
 
-      // Get bodegas not included for these properties
-      const {
-        data: bodegasNoIncluidas
-      } = propiedadIds.length > 0 ? await supabase.from('bodegas').select('id, id_propiedad, id_producto, es_incluido').in('id_propiedad', propiedadIds).eq('es_incluido', false).eq('activo', true) : {
-        data: []
-      };
+      // Get bodegas not included for these properties (batched)
+      let bodegasNoIncluidas: any[] = [];
+      if (propiedadIds.length > 0) {
+        const propiedadIdChunks = chunkArray(propiedadIds, 500);
+        for (const chunk of propiedadIdChunks) {
+          const { data } = await supabase
+            .from('bodegas')
+            .select('id, id_propiedad, id_producto, es_incluido')
+            .in('id_propiedad', chunk)
+            .eq('es_incluido', false)
+            .eq('activo', true);
+          if (data) bodegasNoIncluidas = bodegasNoIncluidas.concat(data);
+        }
+      }
 
-      // Get estacionamientos not included for these properties
-      const {
-        data: estacionamientosNoIncluidos
-      } = propiedadIds.length > 0 ? await supabase.from('estacionamientos').select('id, id_propiedad, id_producto, es_incluido').in('id_propiedad', propiedadIds).eq('es_incluido', false).eq('activo', true) : {
-        data: []
-      };
+      // Get estacionamientos not included for these properties (batched)
+      let estacionamientosNoIncluidos: any[] = [];
+      if (propiedadIds.length > 0) {
+        const propiedadIdChunks2 = chunkArray(propiedadIds, 500);
+        for (const chunk of propiedadIdChunks2) {
+          const { data } = await supabase
+            .from('estacionamientos')
+            .select('id, id_propiedad, id_producto, es_incluido')
+            .in('id_propiedad', chunk)
+            .eq('es_incluido', false)
+            .eq('activo', true);
+          if (data) estacionamientosNoIncluidos = estacionamientosNoIncluidos.concat(data);
+        }
+      }
 
       // Create maps: propiedad_id -> [producto_ids]
       const bodegaProductosPorPropiedad = new Map<number, number[]>();
       const estacionamientoProductosPorPropiedad = new Map<number, number[]>();
-      bodegasNoIncluidas?.forEach(b => {
+      bodegasNoIncluidas.forEach(b => {
         if (b.id_producto && b.id_propiedad) {
           if (!bodegaProductosPorPropiedad.has(b.id_propiedad)) {
             bodegaProductosPorPropiedad.set(b.id_propiedad, []);
@@ -555,7 +597,7 @@ export default function Pagos() {
           bodegaProductosPorPropiedad.get(b.id_propiedad)!.push(b.id_producto);
         }
       });
-      estacionamientosNoIncluidos?.forEach(e => {
+      estacionamientosNoIncluidos.forEach(e => {
         if (e.id_producto && e.id_propiedad) {
           if (!estacionamientoProductosPorPropiedad.has(e.id_propiedad)) {
             estacionamientoProductosPorPropiedad.set(e.id_propiedad, []);
@@ -565,22 +607,32 @@ export default function Pagos() {
       });
 
       // Get all complementary product IDs
-      const complementarioProductIds = [...(bodegasNoIncluidas?.map(b => b.id_producto).filter(Boolean) || []), ...(estacionamientosNoIncluidos?.map(e => e.id_producto).filter(Boolean) || [])];
+      const complementarioProductIds = [...(bodegasNoIncluidas.map(b => b.id_producto).filter(Boolean)), ...(estacionamientosNoIncluidos.map(e => e.id_producto).filter(Boolean))];
 
-      // Get ofertas for complementary products
+      // Get ofertas for complementary products (batched)
       let ofertasComplementarias: any[] = [];
       let cuentasComplementarias: any[] = [];
       if (complementarioProductIds.length > 0) {
-        const {
-          data: ofertasComp
-        } = await supabase.from('ofertas').select('id, id_producto').in('id_producto', complementarioProductIds).eq('activo', true);
-        ofertasComplementarias = ofertasComp || [];
+        const productIdChunks = chunkArray(complementarioProductIds, 500);
+        for (const chunk of productIdChunks) {
+          const { data: ofertasComp } = await supabase
+            .from('ofertas')
+            .select('id, id_producto')
+            .in('id_producto', chunk)
+            .eq('activo', true);
+          if (ofertasComp) ofertasComplementarias = ofertasComplementarias.concat(ofertasComp);
+        }
         if (ofertasComplementarias.length > 0) {
           const ofertaCompIds = ofertasComplementarias.map(o => o.id);
-          const {
-            data: cuentasComp
-          } = await supabase.from('cuentas_cobranza').select('id, id_oferta').in('id_oferta', ofertaCompIds).eq('activo', true);
-          cuentasComplementarias = cuentasComp || [];
+          const ofertaCompIdChunks = chunkArray(ofertaCompIds, 500);
+          for (const chunk of ofertaCompIdChunks) {
+            const { data: cuentasComp } = await supabase
+              .from('cuentas_cobranza')
+              .select('id, id_oferta')
+              .in('id_oferta', chunk)
+              .eq('activo', true);
+            if (cuentasComp) cuentasComplementarias = cuentasComplementarias.concat(cuentasComp);
+          }
         }
       }
 
@@ -601,11 +653,11 @@ export default function Pagos() {
 
       // Calculate cash paid per cuenta, including complementary units
       const pagadoEfectivoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
+        const oferta = ofertas.find(o => o.id === cuenta.id_oferta);
         const propiedadId = oferta?.id_propiedad;
 
         // 1. Cash paid for main property account
-        let totalEfectivo = aplicacionesCash?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+        let totalEfectivo = aplicacionesCash.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id).reduce((sum, ap) => sum + (ap.monto || 0), 0);
 
         // 2. Add cash paid for non-included bodegas (only for property accounts)
         if (propiedadId && bodegaProductosPorPropiedad.has(propiedadId)) {
@@ -613,7 +665,7 @@ export default function Pagos() {
           bodegaProductos.forEach(productoId => {
             const cuentaComplementariaId = productoToCuentaMap.get(productoId);
             if (cuentaComplementariaId) {
-              const efectivoBodega = aplicacionesCash?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId)?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+              const efectivoBodega = aplicacionesCash.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId).reduce((sum, ap) => sum + (ap.monto || 0), 0);
               totalEfectivo += efectivoBodega;
             }
           });
@@ -625,7 +677,7 @@ export default function Pagos() {
           estacionamientoProductos.forEach(productoId => {
             const cuentaComplementariaId = productoToCuentaMap.get(productoId);
             if (cuentaComplementariaId) {
-              const efectivoEstacionamiento = aplicacionesCash?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId)?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+              const efectivoEstacionamiento = aplicacionesCash.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuentaComplementariaId).reduce((sum, ap) => sum + (ap.monto || 0), 0);
               totalEfectivo += efectivoEstacionamiento;
             }
           });
@@ -637,7 +689,7 @@ export default function Pagos() {
       // Create a map of individual cash payments per account with aggregated amounts
       const pagosCashPorCuenta = cuentas.reduce((acc: Record<number, CashPayment[]>, cuenta) => {
         // Get all cash payment IDs for this cuenta through aplicaciones
-        const aplicacionesForCuenta = aplicacionesCash?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id) || [];
+        const aplicacionesForCuenta = aplicacionesCash.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id);
 
         // Group by payment ID and sum amounts
         const pagoAggregated = aplicacionesForCuenta.reduce((pagoAcc: Record<number, number>, ap) => {
@@ -647,7 +699,7 @@ export default function Pagos() {
 
         // Map to payment details
         const pagos = Object.entries(pagoAggregated).map(([pagoId, monto]) => {
-          const pago = pagosCash?.find(p => p.id === parseInt(pagoId));
+          const pago = pagosCash.find(p => p.id === parseInt(pagoId));
           return {
             fecha_pago: pago?.fecha_pago || '',
             monto: monto as number
@@ -657,83 +709,88 @@ export default function Pagos() {
         return acc;
       }, {});
 
-      // Get compradores - include inactive personas too, with pagination to bypass 1000-row limit
+      // Get compradores - include inactive personas too (batched)
       let compradores: any[] = [];
       if (cuentaIds.length > 0) {
-        const pageSize = 1000;
-        let from = 0;
-        let to = pageSize - 1;
-        let more = true;
+        for (const chunk of cuentaIdChunks) {
+          const pageSize = 1000;
+          let from = 0;
+          let to = pageSize - 1;
+          let more = true;
 
-        while (more) {
-          const { data, error } = await supabase
-            .from('compradores')
-            .select(`
-              id_cuenta_cobranza,
-              porcentaje_copropiedad,
-              id_persona,
-              activo
-            `)
-            .in('id_cuenta_cobranza', cuentaIds)
-            .eq('activo', true)
-            .range(from, to);
+          while (more) {
+            const { data, error } = await supabase
+              .from('compradores')
+              .select(`
+                id_cuenta_cobranza,
+                porcentaje_copropiedad,
+                id_persona,
+                activo
+              `)
+              .in('id_cuenta_cobranza', chunk)
+              .eq('activo', true)
+              .range(from, to);
 
-          if (error) {
-            console.error('Error fetching compradores:', error);
-            break;
-          }
+            if (error) {
+              console.error('Error fetching compradores:', error);
+              break;
+            }
 
-          if (!data || data.length === 0) {
-            more = false;
-            break;
-          }
+            if (!data || data.length === 0) {
+              more = false;
+              break;
+            }
 
-          compradores = compradores.concat(data);
+            compradores = compradores.concat(data);
 
-          if (data.length < pageSize) {
-            more = false;
-          } else {
-            from += pageSize;
-            to += pageSize;
+            if (data.length < pageSize) {
+              more = false;
+            } else {
+              from += pageSize;
+              to += pageSize;
+            }
           }
         }
       }
 
       // Get all persona IDs
-      const personaIds = [...new Set(compradores?.map(c => c.id_persona).filter(Boolean) || [])];
+      const personaIds = [...new Set(compradores.map(c => c.id_persona).filter(Boolean))];
 
-      // Fetch personas separately with pagination to avoid RLS issues and fetch all records
+      // Fetch personas separately (batched)
       let personas: any[] = [];
       if (personaIds.length > 0) {
-        const pageSize = 1000;
-        let from = 0;
-        let to = pageSize - 1;
-        let more = true;
-        
-        while (more) {
-          const { data, error } = await supabase
-            .from('personas')
-            .select('id, nombre_legal, rfc')
-            .in('id', personaIds)
-            .range(from, to);
+        const personaIdChunks = chunkArray(personaIds, 500);
+        for (const chunk of personaIdChunks) {
+          const pageSize = 1000;
+          let from = 0;
+          let to = pageSize - 1;
+          let more = true;
           
-          if (error) {
-            console.error('Error fetching personas:', error);
-            break;
-          }
-          
-          if (!data || data.length === 0) {
-            more = false;
-            break;
-          }
-          
-          personas = personas.concat(data);
-          
-          if (data.length < pageSize) {
-            more = false;
-          } else {
-            from += pageSize;
-            to += pageSize;
+          while (more) {
+            const { data, error } = await supabase
+              .from('personas')
+              .select('id, nombre_legal, rfc')
+              .in('id', chunk)
+              .range(from, to);
+            
+            if (error) {
+              console.error('Error fetching personas:', error);
+              break;
+            }
+            
+            if (!data || data.length === 0) {
+              more = false;
+              break;
+            }
+            
+            personas = personas.concat(data);
+            
+            if (data.length < pageSize) {
+              more = false;
+            } else {
+              from += pageSize;
+              to += pageSize;
+            }
           }
         }
       }
@@ -744,7 +801,7 @@ export default function Pagos() {
         nombre_legal: string;
         rfc: string | null;
       }>();
-      personas?.forEach(p => {
+      personas.forEach(p => {
         personasMap.set(p.id, {
           id: p.id,
           nombre_legal: p.nombre_legal,
@@ -753,9 +810,9 @@ export default function Pagos() {
       });
 
       // Get entidades relacionadas, proyectos, edificios, modelos, productos
-      const entidadIds = ofertas?.map(o => o.propiedades?.id_entidad_relacionada_dueno).filter(Boolean) || [];
-      const edificioModeloIds = ofertas?.map(o => o.propiedades?.id_edificio_modelo).filter(Boolean) || [];
-      const productoIds = ofertas?.map(o => o.id_producto).filter(Boolean) || [];
+      const entidadIds = ofertas.map(o => o.propiedades?.id_entidad_relacionada_dueno).filter(Boolean);
+      const edificioModeloIds = ofertas.map(o => o.propiedades?.id_edificio_modelo).filter(Boolean);
+      const productoIds = ofertas.map(o => o.id_producto).filter(Boolean);
 
       // Get productos_servicios data 
       let productosData: any[] = [];
@@ -802,11 +859,11 @@ export default function Pagos() {
 
       // Transform the data
       const transformedData: CuentaCobranza[] = cuentas.map(cuenta => {
-        const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
+        const oferta = ofertas.find(o => o.id === cuenta.id_oferta);
         const propiedad = oferta?.propiedades;
         const entidad = entidadesResult.data?.find(e => e.id === propiedad?.id_entidad_relacionada_dueno);
         const edificioModelo = edificiosModelosResult.data?.find(em => em.id === propiedad?.id_edificio_modelo);
-        const cuentaCompradores = compradores?.filter(c => c.id_cuenta_cobranza === cuenta.id) || [];
+        const cuentaCompradores = compradores.filter(c => c.id_cuenta_cobranza === cuenta.id);
 
         // Determine tipo based on oferta
         let tipo: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
