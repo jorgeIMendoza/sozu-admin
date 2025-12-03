@@ -61,7 +61,8 @@ export const ProjectLegalEntitiesSection = ({
 
   // Fetch available legal entities with their entity relations (only allowed types)
   const { data: availableLegalEntities = [] } = useQuery({
-    queryKey: ["available-legal-entities"],
+    queryKey: ["available-legal-entities-v2"],
+    staleTime: 0,
     queryFn: async () => {
       const allowedEntityTypeIds = [3, 4, 5, 6, 8, 9, 10, 13, 15]; // Desarrollador, Dueño Vendedor, Inmobiliaria, Administradora, Proveedor, Socio, Inversionista, Contratista, Aportante
 
