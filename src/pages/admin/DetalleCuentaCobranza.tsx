@@ -1556,6 +1556,13 @@ export default function DetalleCuentaCobranza() {
     sum + (acuerdo.aplicaciones || []).reduce((appSum, app) => appSum + (app?.monto || 0), 0), 0
   ) || 0;
 
+  // Calculate total from acuerdos_pago (sum of monto)
+  const totalAcuerdos = acuerdosPago?.reduce((sum, acuerdo) => sum + (acuerdo.monto || 0), 0) || 0;
+  
+  // Calculate discrepancy between precio_final and sum of acuerdos
+  const discrepanciaAcuerdos = (cuentaDetalle?.precio_final || 0) - totalAcuerdos;
+  const hayDiscrepancia = acuerdosPago && acuerdosPago.length > 0 && Math.abs(discrepanciaAcuerdos) > 0.01;
+
   // Calcular diferencia real y detectar sobrepagos
   const diferenciaReal = (cuentaDetalle?.precio_final || 0) - totalPagado;
   const haySobrepago = diferenciaReal < -0.01; // Tolerancia para errores de punto flotante
@@ -2044,6 +2051,23 @@ export default function DetalleCuentaCobranza() {
           </Button>
         </div>
       </div>
+
+      {/* Alert for discrepancy */}
+      {hayDiscrepancia && (
+        <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-red-700 dark:text-red-300">Discrepancia detectada</p>
+            <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+              El precio final ({formatCurrency(cuentaDetalle.precio_final)}) no coincide con la suma de los acuerdos de pago ({formatCurrency(totalAcuerdos)}).
+            </p>
+            <p className="text-sm font-medium text-red-700 dark:text-red-300 mt-1">
+              Diferencia: {formatCurrency(discrepanciaAcuerdos)}
+              {discrepanciaAcuerdos > 0 ? ' (acuerdos faltantes)' : ' (acuerdos exceden precio)'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Información general de la cuenta */}
       <div className={`grid gap-4 md:grid-cols-2 lg:grid-cols-4 ${esCuentaCancelada ? 'opacity-60' : ''}`}>

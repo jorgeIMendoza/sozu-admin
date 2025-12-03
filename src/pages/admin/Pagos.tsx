@@ -65,6 +65,8 @@ interface CuentaCobranza {
   cash_payments?: CashPayment[];
   id_estatus_disponibilidad?: number;
   collection_id?: number | null;
+  total_acuerdos?: number;
+  discrepancia?: number;
 }
 export default function Pagos() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -368,6 +370,7 @@ export default function Pagos() {
       }
 
       // Get acuerdos_pago to check if "Apartado" or "Enganche" is paid (batched)
+      // Also get monto for discrepancy calculation
       let acuerdosPago: any[] = [];
       for (const chunk of cuentaIdChunks) {
         const pageSize = 1000;
@@ -376,7 +379,7 @@ export default function Pagos() {
         while (more) {
           const { data, error } = await supabase
             .from('acuerdos_pago')
-            .select('id, id_cuenta_cobranza, id_concepto, pago_completado')
+            .select('id, id_cuenta_cobranza, id_concepto, pago_completado, monto')
             .in('id_cuenta_cobranza', chunk)
             .eq('activo', true)
             .range(from, from + pageSize - 1);
@@ -390,6 +393,14 @@ export default function Pagos() {
         }
       }
       console.log('🔍 Acuerdos de pago count:', acuerdosPago.length);
+
+      // Calculate total acuerdos per cuenta for discrepancy detection
+      const totalAcuerdosPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
+        const acuerdosCuenta = acuerdosPago.filter(ap => ap.id_cuenta_cobranza === cuenta.id);
+        const totalMonto = acuerdosCuenta.reduce((sum, ap) => sum + (Number(ap.monto) || 0), 0);
+        acc[cuenta.id] = Math.round(totalMonto * 100) / 100;
+        return acc;
+      }, {});
 
       // Get aplicaciones_pago para verificar si hay pagos de cesión de derechos (batched)
       const acuerdoIds = acuerdosPago.map(a => a.id);
@@ -978,7 +989,11 @@ export default function Pagos() {
           tiene_acuerdos: tieneAcuerdosPorCuenta[cuenta.id],
           tiene_multas_pendientes: multasPendientesPorCuenta[cuenta.id] || false,
           id_estatus_disponibilidad: propiedad?.id_estatus_disponibilidad,
-          collection_id: cuenta.collection_id
+          collection_id: cuenta.collection_id,
+          total_acuerdos: totalAcuerdosPorCuenta[cuenta.id] || 0,
+          discrepancia: tieneAcuerdosPorCuenta[cuenta.id] 
+            ? Math.round((precio_final - (totalAcuerdosPorCuenta[cuenta.id] || 0)) * 100) / 100
+            : 0
         };
       });
       return transformedData.sort((a, b) => b.id - a.id);
@@ -2005,6 +2020,27 @@ export default function Pagos() {
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider> : null}
+                            {/* Discrepancy indicator */}
+                            {cuenta.tiene_acuerdos && cuenta.discrepancia && Math.abs(cuenta.discrepancia) > 0.01 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700 h-6 w-6 p-0 flex items-center justify-center">
+                                      <AlertCircle className="h-3 w-3 text-red-600 dark:text-red-400" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="font-semibold">⚠️ Discrepancia detectada</p>
+                                    <p className="text-sm">Precio final: {formatCurrency(cuenta.precio_final)}</p>
+                                    <p className="text-sm">Suma de acuerdos: {formatCurrency(cuenta.total_acuerdos || 0)}</p>
+                                    <p className="text-sm font-medium mt-1">
+                                      Diferencia: {formatCurrency(cuenta.discrepancia)}
+                                      {cuenta.discrepancia > 0 ? ' (acuerdos faltantes)' : ' (acuerdos exceden precio)'}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
