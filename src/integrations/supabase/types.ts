@@ -239,20 +239,6 @@ export type Database = {
             referencedRelation: "pagos"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "fk_apppago_acuerdo"
-            columns: ["id_acuerdo_pago"]
-            isOneToOne: false
-            referencedRelation: "acuerdos_pago"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fk_apppago_pago"
-            columns: ["id_pago"]
-            isOneToOne: false
-            referencedRelation: "pagos"
-            referencedColumns: ["id"]
-          },
         ]
       }
       avisos_legales: {

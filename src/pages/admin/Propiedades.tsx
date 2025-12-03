@@ -613,19 +613,31 @@ const Propiedades = () => {
       return acc;
     }, {});
     
-    // Get active cuentas_cobranza separately
-    const { data: activeCuentas } = await supabase
-      .from('cuentas_cobranza')
-      .select('id, clabe_stp, id_oferta, precio_final, es_comision_venta_efectivo, porcentaje_comision_venta')
-      .eq('activo', true);
+    // Get active cuentas_cobranza ONLY for properties on the current page
+    // This avoids the 1000-row limit issue when fetching acuerdos_pago and aplicaciones_pago
+    const ofertaIdsCurrentPage = data?.flatMap((property: any) => 
+      (property.ofertas || [])
+        .filter((o: any) => o.activo && o.id_producto === null)
+        .map((o: any) => o.id)
+    ) || [];
 
-    const activeCuentasMap = (activeCuentas || []).reduce((acc: any, cuenta: any) => {
+    let activeCuentas: any[] = [];
+    if (ofertaIdsCurrentPage.length > 0) {
+      const { data: cuentasData } = await supabase
+        .from('cuentas_cobranza')
+        .select('id, clabe_stp, id_oferta, precio_final, es_comision_venta_efectivo, porcentaje_comision_venta')
+        .in('id_oferta', ofertaIdsCurrentPage)
+        .eq('activo', true);
+      activeCuentas = cuentasData || [];
+    }
+
+    const activeCuentasMap = activeCuentas.reduce((acc: any, cuenta: any) => {
       acc[cuenta.id_oferta] = cuenta;
       return acc;
     }, {});
 
     // Get payment agreements and applications for each cuenta_cobranza
-    const cuentaIds = (activeCuentas || []).map(c => c.id);
+    const cuentaIds = activeCuentas.map(c => c.id);
     
     // Build payment status map
     const paymentStatusMap: any = {};
@@ -639,7 +651,7 @@ const Propiedades = () => {
     });
     
     // Create payment status structure for each cuenta
-    (activeCuentas || []).forEach(cuenta => {
+    activeCuentas.forEach(cuenta => {
       paymentStatusMap[cuenta.id] = {
         apartado: { status: 'no_pagado', monto: 0, monto_pagado: 0, completados: 0, total: 0, fecha: null },
         enganche: { status: 'no_pagado', monto: 0, monto_pagado: 0, completados: 0, total: 0, fecha: null },
