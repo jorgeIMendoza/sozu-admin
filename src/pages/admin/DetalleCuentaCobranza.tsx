@@ -2673,52 +2673,52 @@ export default function DetalleCuentaCobranza() {
                           <label className="text-sm font-medium text-muted-foreground">Nombre del Plan</label>
                           <p className="text-sm font-semibold">{originalScheme.nombre} modificado</p>
                         </div>
-                        {(currentPaymentPlan?.porcentaje_enganche > 0 || (currentPaymentPlan?.hayCesionDerechos && (actualAmounts?.cesion || 0) > 0)) && (
+                        {((currentPaymentPlan?.porcentaje_enganche ?? 0) > 0 || (currentPaymentPlan?.hayCesionDerechos && (actualAmounts?.cesion ?? 0) > 0)) && (
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">
                               {currentPaymentPlan?.hayCesionDerechos ? 'Cesión de derechos' : 'Enganche'}
                             </label>
                             <p className="text-sm font-semibold">
                               {currentPaymentPlan?.hayCesionDerechos ? 
-                                ((actualAmounts?.cesion || 0) / (cuentaDetalle?.precio_final || 1) * 100).toFixed(1) :
-                                currentPaymentPlan?.porcentaje_enganche.toFixed(1)
+                                ((actualAmounts?.cesion ?? 0) / (cuentaDetalle?.precio_final || 1) * 100).toFixed(1) :
+                                currentPaymentPlan?.porcentaje_enganche?.toFixed(1)
                               }%
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {formatCurrency(currentPaymentPlan?.hayCesionDerechos ? (actualAmounts?.cesion || 0) : (actualAmounts?.enganche || 0))}
+                              {formatCurrency(currentPaymentPlan?.hayCesionDerechos ? (actualAmounts?.cesion ?? 0) : (actualAmounts?.enganche ?? 0))}
                             </p>
                           </div>
                         )}
-                        {(currentPaymentPlan?.numero_mensualidades || 0) > 0 && (
+                        {(currentPaymentPlan?.numero_mensualidades ?? 0) > 0 && (currentPaymentPlan?.porcentaje_mensualidades ?? 0) > 0 && (
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Mensualidades</label>
                             <p className="text-sm font-semibold">
-                              {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades.toFixed(1)}%
+                              {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades?.toFixed(1)}%
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {formatCurrency(actualAmounts?.mensualidades || 0)}
+                              {formatCurrency(actualAmounts?.mensualidades ?? 0)}
                             </p>
                           </div>
                         )}
-                        {currentPaymentPlan?.hayPagosEspeciales && (
+                        {currentPaymentPlan?.hayPagosEspeciales && (currentPaymentPlan?.numero_pagos_especiales ?? 0) > 0 && (
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Pagos Especiales</label>
                             <p className="text-sm font-semibold">
-                              {currentPaymentPlan?.numero_pagos_especiales} pagos de {currentPaymentPlan?.porcentaje_pagos_especiales.toFixed(1)}%
+                              {currentPaymentPlan?.numero_pagos_especiales} pagos de {currentPaymentPlan?.porcentaje_pagos_especiales?.toFixed(1)}%
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {formatCurrency(actualAmounts?.pagosEspeciales || 0)}
+                              {formatCurrency(actualAmounts?.pagosEspeciales ?? 0)}
                             </p>
                           </div>
                         )}
-                        {(currentPaymentPlan?.porcentaje_entrega || 0) > 0 && (
+                        {(currentPaymentPlan?.porcentaje_entrega ?? 0) > 0 && (
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Entrega</label>
                             <p className="text-sm font-semibold">
-                              {currentPaymentPlan?.porcentaje_entrega.toFixed(1)}%
+                              {currentPaymentPlan?.porcentaje_entrega?.toFixed(1)}%
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {formatCurrency(actualAmounts?.entrega || 0)}
+                              {formatCurrency(actualAmounts?.entrega ?? 0)}
                             </p>
                           </div>
                         )}
