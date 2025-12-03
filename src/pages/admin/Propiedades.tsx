@@ -1193,18 +1193,9 @@ const Propiedades = () => {
             tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
           }));
           
-          // Apply only cuenta cobranza, area and precio filters (other filters already applied server-side)
-          const filtered = dataWithSozu.filter(property => {
-            const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
-              (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
-              (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
-            const matchesArea = property.m2_reales >= areaFilter[0] && property.m2_reales <= areaFilter[1];
-            const matchesPrecio = property.precio_lista >= precioFilter[0] && property.precio_lista <= precioFilter[1];
-            
-            return matchesCuentaCobranza && matchesArea && matchesPrecio;
-          });
-
-          return { properties: filtered, count: count || 0, filteredCount: filtered.length };
+          // When needsFullFetch is false, filters are at defaults, no client-side filtering needed
+          // Use server count directly since no additional filtering is applied
+          return { properties: dataWithSozu, count: count || 0, filteredCount: count || 0 };
         }
       } catch (error) {
         console.error('Error fetching active properties:', error);
@@ -1452,18 +1443,9 @@ const Propiedades = () => {
             tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
           }));
           
-          // Apply only cuenta cobranza, area and precio filters (other filters already applied server-side)
-          const filtered = dataWithSozu.filter(property => {
-            const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
-              (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
-              (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
-            const matchesArea = property.m2_reales >= areaFilter[0] && property.m2_reales <= areaFilter[1];
-            const matchesPrecio = property.precio_lista >= precioFilter[0] && property.precio_lista <= precioFilter[1];
-            
-            return matchesCuentaCobranza && matchesArea && matchesPrecio;
-          });
-
-          return { properties: filtered, count: count || 0, filteredCount: filtered.length };
+          // When needsFullFetch is false, filters are at defaults, no client-side filtering needed
+          // Use server count directly since no additional filtering is applied
+          return { properties: dataWithSozu, count: count || 0, filteredCount: count || 0 };
         }
       } catch (error) {
         console.error('Error fetching draft properties:', error);
@@ -1712,18 +1694,9 @@ const Propiedades = () => {
             tiene_sozu_como_inmobiliaria: projectsWithSozu.has(property.proyecto_id)
           }));
           
-          // Apply only cuenta cobranza, area and precio filters (other filters already applied server-side)
-          const filtered = dataWithSozu.filter(property => {
-            const matchesCuentaCobranza = cuentaCobranzaFilter === "" ||
-              (cuentaCobranzaFilter === "si" && property.cuenta_cobranza_id !== null) ||
-              (cuentaCobranzaFilter === "no" && property.cuenta_cobranza_id === null);
-            const matchesArea = property.m2_reales >= areaFilter[0] && property.m2_reales <= areaFilter[1];
-            const matchesPrecio = property.precio_lista >= precioFilter[0] && property.precio_lista <= precioFilter[1];
-            
-            return matchesCuentaCobranza && matchesArea && matchesPrecio;
-          });
-
-          return { properties: filtered, count: count || 0, filteredCount: filtered.length };
+          // When needsFullFetch is false, filters are at defaults, no client-side filtering needed
+          // Use server count directly since no additional filtering is applied
+          return { properties: dataWithSozu, count: count || 0, filteredCount: count || 0 };
         }
       } catch (error) {
         console.error('Error fetching deleted properties:', error);
