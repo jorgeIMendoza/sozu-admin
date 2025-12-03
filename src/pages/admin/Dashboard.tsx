@@ -14,6 +14,8 @@ interface ProjectData {
   precio_m2_actual: number;
   tipo_uso: string;
   monto_total: number;
+  monto_propiedades: number;
+  monto_productos: number;
   tiene_disponibles: boolean;
 }
 
@@ -68,7 +70,9 @@ const Dashboard = () => {
               direccion: project.direccion,
               precio_m2_actual: project.precio_m2_actual || 0,
               tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
-              monto_total: 0
+              monto_total: 0,
+              monto_propiedades: 0,
+              monto_productos: 0
             };
           }
 
@@ -87,16 +91,18 @@ const Dashboard = () => {
               direccion: project.direccion,
               precio_m2_actual: project.precio_m2_actual || 0,
               tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
-              monto_total: 0
+              monto_total: 0,
+              monto_propiedades: 0,
+              monto_productos: 0
             };
           }
 
           const propiedadIds = propiedades.map(p => p.id);
 
-          // Luego las ofertas de esas propiedades
+          // Luego las ofertas de esas propiedades (incluyendo id_producto para diferenciar)
           const { data: ofertas } = await supabase
             .from('ofertas')
-            .select('id')
+            .select('id, id_producto')
             .in('id_propiedad', propiedadIds);
 
           if (!ofertas || ofertas.length === 0) {
@@ -106,32 +112,41 @@ const Dashboard = () => {
               direccion: project.direccion,
               precio_m2_actual: project.precio_m2_actual || 0,
               tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
-              monto_total: 0
+              monto_total: 0,
+              monto_propiedades: 0,
+              monto_productos: 0
             };
           }
 
-          const ofertaIds = ofertas.map(o => o.id);
+          // Separar ofertas de propiedades vs productos
+          const ofertasPropiedades = ofertas.filter(o => o.id_producto === null).map(o => o.id);
+          const ofertasProductos = ofertas.filter(o => o.id_producto !== null).map(o => o.id);
 
-          // Finalmente las cuentas de cobranza
-          const { data: cuentas, error: cuentasError } = await supabase
-            .from('cuentas_cobranza')
-            .select('precio_final')
-            .eq('activo', true)
-            .in('id_oferta', ofertaIds);
-
-          if (cuentasError) {
-            console.error('Error fetching cuentas:', cuentasError);
-            return {
-              id: project.id,
-              nombre: project.nombre,
-              direccion: project.direccion,
-              precio_m2_actual: project.precio_m2_actual || 0,
-              tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
-              monto_total: 0
-            };
+          // Obtener montos de propiedades
+          let monto_propiedades = 0;
+          if (ofertasPropiedades.length > 0) {
+            const { data: cuentasPropiedades } = await supabase
+              .from('cuentas_cobranza')
+              .select('precio_final')
+              .eq('activo', true)
+              .in('id_oferta', ofertasPropiedades);
+            
+            monto_propiedades = (cuentasPropiedades || []).reduce((sum, c) => sum + Number(c.precio_final), 0);
           }
 
-          const monto_total = (cuentas || []).reduce((sum, c) => sum + Number(c.precio_final), 0);
+          // Obtener montos de productos
+          let monto_productos = 0;
+          if (ofertasProductos.length > 0) {
+            const { data: cuentasProductos } = await supabase
+              .from('cuentas_cobranza')
+              .select('precio_final')
+              .eq('activo', true)
+              .in('id_oferta', ofertasProductos);
+            
+            monto_productos = (cuentasProductos || []).reduce((sum, c) => sum + Number(c.precio_final), 0);
+          }
+
+          const monto_total = monto_propiedades + monto_productos;
 
           // Check if project has available properties (id_estatus_disponibilidad = 2 is "Disponible")
           const { data: disponibles } = await supabase
@@ -148,6 +163,8 @@ const Dashboard = () => {
             precio_m2_actual: project.precio_m2_actual || 0,
             tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
             monto_total,
+            monto_propiedades,
+            monto_productos,
             tiene_disponibles: (disponibles && disponibles.length > 0) || false
           };
         })
@@ -309,6 +326,37 @@ const Dashboard = () => {
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                    {/* Desglose Propiedades vs Productos */}
+                    <div className="flex items-center gap-4 mt-2 text-xs">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1 cursor-help">
+                              <Home className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-muted-foreground">Propiedades:</span>
+                              <span className="font-medium text-foreground">{formatCompactCurrency(project.monto_propiedades)}</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{formatCurrency(project.monto_propiedades)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1 cursor-help">
+                              <Building2 className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-muted-foreground">Productos:</span>
+                              <span className="font-medium text-foreground">{formatCompactCurrency(project.monto_productos)}</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{formatCurrency(project.monto_productos)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
                 </div>
               </CardContent>

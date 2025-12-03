@@ -682,6 +682,24 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_cuentas_cobranza_mantenimientos_stagin: {
+        Row: {
+          clabe_stp: number | null
+          id_collection_padre: number | null
+          id_cuenta_cobranza_mantenimiento_nueva: number | null
+        }
+        Insert: {
+          clabe_stp?: number | null
+          id_collection_padre?: number | null
+          id_cuenta_cobranza_mantenimiento_nueva?: number | null
+        }
+        Update: {
+          clabe_stp?: number | null
+          id_collection_padre?: number | null
+          id_cuenta_cobranza_mantenimiento_nueva?: number | null
+        }
+        Relationships: []
+      }
       borrar_cuentas_cobranza_productos_stagin: {
         Row: {
           clabe_stp: number | null
