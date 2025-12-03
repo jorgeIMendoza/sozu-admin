@@ -9,10 +9,29 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Search, Edit, Trash2, Eye, Image, Video, MapPin } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { EditProjectDialog } from "@/components/admin/EditProjectDialog";
 import { ProjectMultimediaModal } from "@/components/admin/ProjectMultimediaModal";
+
+// Función para formatear moneda en formato corto (M/K)
+const formatCurrencyShort = (value: number): string => {
+  if (value >= 1000000) {
+    return `$${(value / 1000000).toFixed(2)}M`;
+  } else if (value >= 1000) {
+    return `$${(value / 1000).toFixed(2)}K`;
+  }
+  return `$${value.toFixed(2)}`;
+};
+
+// Función para formatear moneda completa
+const formatCurrencyFull = (value: number): string => {
+  return `$${value.toLocaleString('es-MX', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  })}`;
+};
 
 const Proyectos = () => {
   const [inputValue, setInputValue] = useState("");
@@ -550,7 +569,7 @@ const Proyectos = () => {
   };
 
   const renderProjectsTable = (projects: any[], emptyMessage: string, isDeletedTab: boolean = false) => (
-    <>
+    <TooltipProvider>
       {projects.length > 0 ? (
         <div className="rounded-md border">
           <Table>
@@ -609,22 +628,40 @@ const Proyectos = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {totalPrecioLista > 0 ? `$${totalPrecioLista.toLocaleString('es-MX', { 
-                        minimumFractionDigits: 2, 
-                        maximumFractionDigits: 2 
-                      })}` : "N/A"}
+                      {totalPrecioLista > 0 ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">{formatCurrencyShort(totalPrecioLista)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{formatCurrencyFull(totalPrecioLista)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : "N/A"}
                     </TableCell>
                     <TableCell>
-                      {avgPropertyPrice > 0 ? `$${avgPropertyPrice.toLocaleString('es-MX', { 
-                        minimumFractionDigits: 2, 
-                        maximumFractionDigits: 2 
-                      })}` : "N/A"}
+                      {avgPropertyPrice > 0 ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">{formatCurrencyShort(avgPropertyPrice)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{formatCurrencyFull(avgPropertyPrice)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : "N/A"}
                     </TableCell>
                     <TableCell>
-                      {avgPricePerM2 > 0 ? `$${avgPricePerM2.toLocaleString('es-MX', { 
-                        minimumFractionDigits: 2, 
-                        maximumFractionDigits: 2 
-                      })}` : "N/A"}
+                      {avgPricePerM2 > 0 ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">{formatCurrencyShort(avgPricePerM2)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{formatCurrencyFull(avgPricePerM2)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : "N/A"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -739,7 +776,7 @@ const Proyectos = () => {
           </p>
         </div>
       )}
-    </>
+    </TooltipProvider>
   );
 
   return (
