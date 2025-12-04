@@ -2553,6 +2553,18 @@ export type Database = {
           },
         ]
       }
+      es_propiedad_demandada: {
+        Row: {
+          "?column?": boolean | null
+        }
+        Insert: {
+          "?column?"?: boolean | null
+        }
+        Update: {
+          "?column?"?: boolean | null
+        }
+        Relationships: []
+      }
       espacios_reservables_edificio: {
         Row: {
           activo: boolean
