@@ -158,6 +158,9 @@ export default function CuentasMantenimiento() {
   const { data: cuentasCobranza, isLoading } = useQuery({
     queryKey: ["cuentas_mantenimiento"],
     queryFn: async () => {
+      // Helper function to batch queries with .in() to avoid URL length limits
+      const BATCH_SIZE = 100;
+
       // Get basic cuenta cobranza data with payment sums (ONLY maintenance accounts)
       const { data: cuentas, error: cuentasError } = await supabase
         .from('cuentas_cobranza')
@@ -199,80 +202,87 @@ export default function CuentasMantenimiento() {
       const cuentaIds = cuentas.map(c => c.id);
       console.log('Cuenta IDs:', cuentaIds);
       
-      // First get all acuerdos for these cuentas with monto
-      const { data: acuerdosForPagos } = await supabase
-        .from('acuerdos_pago')
-        .select('id, id_cuenta_cobranza, monto')
-        .in('id_cuenta_cobranza', cuentaIds)
-        .eq('activo', true)
-        .limit(50000);
+      // First get all acuerdos for these cuentas with monto - use batching to avoid URL length limits
+      let acuerdosForPagos: { id: number; id_cuenta_cobranza: number; monto: number }[] = [];
+      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
+        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
+        const { data } = await supabase
+          .from('acuerdos_pago')
+          .select('id, id_cuenta_cobranza, monto')
+          .in('id_cuenta_cobranza', batchIds)
+          .eq('activo', true);
+        if (data) acuerdosForPagos.push(...data);
+      }
 
-      const acuerdoIdsForPagos = acuerdosForPagos?.map(a => a.id) || [];
+      const acuerdoIdsForPagos = acuerdosForPagos.map(a => a.id);
       
-      console.log('🔍 Acuerdos de pago (inicial):', acuerdosForPagos);
+      console.log('🔍 Acuerdos de pago (inicial):', acuerdosForPagos?.length);
       
-      // Now get aplicaciones_pago for those acuerdos
-      const { data: aplicacionesPago, error: aplicacionesError } = await supabase
-        .from('aplicaciones_pago')
-        .select(`
-          monto,
-          id_acuerdo_pago,
-          es_multa
-        `)
-        .in('id_acuerdo_pago', acuerdoIdsForPagos)
-        .eq('activo', true)
-        .eq('es_multa', false)
-        .limit(50000);
+      // Now get aplicaciones_pago for those acuerdos - use batching
+      let aplicacionesPago: { monto: number; id_acuerdo_pago: number; es_multa: boolean }[] = [];
+      for (let i = 0; i < acuerdoIdsForPagos.length; i += BATCH_SIZE) {
+        const batchIds = acuerdoIdsForPagos.slice(i, i + BATCH_SIZE);
+        const { data } = await supabase
+          .from('aplicaciones_pago')
+          .select('monto, id_acuerdo_pago, es_multa')
+          .in('id_acuerdo_pago', batchIds)
+          .eq('activo', true)
+          .eq('es_multa', false);
+        if (data) aplicacionesPago.push(...data);
+      }
 
-      console.log('Aplicaciones pago query result:', { aplicacionesPago, aplicacionesError });
+      console.log('Aplicaciones pago query result:', aplicacionesPago?.length);
 
       // Create a map from acuerdo_id to cuenta_id
-      const acuerdoToCuentaMap = acuerdosForPagos?.reduce((acc: Record<number, number>, a) => {
+      const acuerdoToCuentaMap = acuerdosForPagos.reduce((acc: Record<number, number>, a) => {
         acc[a.id] = a.id_cuenta_cobranza;
         return acc;
-      }, {}) || {};
+      }, {});
 
       // Calculate total payments per account from aplicaciones
       const pagadoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
         const totalPagado = aplicacionesPago
-          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
-          ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+          .filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
+          .reduce((sum, ap) => sum + (ap.monto || 0), 0);
         acc[cuenta.id] = totalPagado;
-        console.log(`Cuenta ${cuenta.id}: pagado = ${totalPagado}`);
         return acc;
       }, {});
 
-      // Get cash payments (id_metodos_pago = 1) for all accounts using aplicaciones_pago
-      const { data: pagosCash } = await supabase
-        .from('pagos')
-        .select('id, fecha_pago, id_metodos_pago, activo')
-        .in('id_cuenta_cobranza', cuentaIds)
-        .eq('id_metodos_pago', 1)
-        .eq('activo', true)
-        .order('fecha_pago', { ascending: false })
-        .limit(50000);
+      // Get cash payments (id_metodos_pago = 1) for all accounts using aplicaciones_pago - batched
+      let pagosCash: { id: number; fecha_pago: string; id_metodos_pago: number; activo: boolean }[] = [];
+      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
+        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
+        const { data } = await supabase
+          .from('pagos')
+          .select('id, fecha_pago, id_metodos_pago, activo')
+          .in('id_cuenta_cobranza', batchIds)
+          .eq('id_metodos_pago', 1)
+          .eq('activo', true)
+          .order('fecha_pago', { ascending: false });
+        if (data) pagosCash.push(...data);
+      }
 
-      const pagosCashIds = pagosCash?.map(p => p.id) || [];
+      const pagosCashIds = pagosCash.map(p => p.id);
       
-      // Get aplicaciones for cash payments
-      const { data: aplicacionesCash } = await supabase
-        .from('aplicaciones_pago')
-        .select(`
-          monto,
-          id_acuerdo_pago,
-          id_pago,
-          es_multa
-        `)
-        .in('id_pago', pagosCashIds)
-        .in('id_acuerdo_pago', acuerdoIdsForPagos)
-        .eq('activo', true)
-        .eq('es_multa', false)
-        .limit(50000);
+      // Get aplicaciones for cash payments - batched
+      let aplicacionesCash: { monto: number; id_acuerdo_pago: number; id_pago: number; es_multa: boolean }[] = [];
+      for (let i = 0; i < pagosCashIds.length; i += BATCH_SIZE) {
+        const batchIds = pagosCashIds.slice(i, i + BATCH_SIZE);
+        const { data } = await supabase
+          .from('aplicaciones_pago')
+          .select('monto, id_acuerdo_pago, id_pago, es_multa')
+          .in('id_pago', batchIds)
+          .eq('activo', true)
+          .eq('es_multa', false);
+        if (data) aplicacionesCash.push(...data);
+      }
+      // Filter by acuerdo IDs that belong to our cuentas
+      aplicacionesCash = aplicacionesCash.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] !== undefined);
 
       const pagadoEfectivoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
         const totalEfectivo = aplicacionesCash
-          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
-          ?.reduce((sum, ap) => sum + (ap.monto || 0), 0) || 0;
+          .filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
+          .reduce((sum, ap) => sum + (ap.monto || 0), 0);
         acc[cuenta.id] = totalEfectivo;
         return acc;
       }, {});
@@ -281,7 +291,7 @@ export default function CuentasMantenimiento() {
       const pagosCashPorCuenta = cuentas.reduce((acc: Record<number, CashPayment[]>, cuenta) => {
         // Get all cash payment IDs for this cuenta through aplicaciones
         const aplicacionesForCuenta = aplicacionesCash
-          ?.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id) || [];
+          .filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id);
         
         // Group by payment ID and sum amounts
         const pagoAggregated = aplicacionesForCuenta.reduce((pagoAcc: Record<number, number>, ap) => {
@@ -291,7 +301,7 @@ export default function CuentasMantenimiento() {
         
         // Map to payment details
         const pagos = Object.entries(pagoAggregated).map(([pagoId, monto]) => {
-          const pago = pagosCash?.find(p => p.id === parseInt(pagoId));
+          const pago = pagosCash.find(p => p.id === parseInt(pagoId));
           return {
             fecha_pago: pago?.fecha_pago || '',
             monto: monto as number
@@ -304,44 +314,49 @@ export default function CuentasMantenimiento() {
 
       // Calculate total mensual per account (sum of acuerdos monto) - using acuerdosForPagos
       const totalMensualPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const acuerdosCuenta = acuerdosForPagos?.filter(ap => ap.id_cuenta_cobranza === cuenta.id) || [];
+        const acuerdosCuenta = acuerdosForPagos.filter(ap => ap.id_cuenta_cobranza === cuenta.id);
         const totalMensual = acuerdosCuenta.reduce((sum, acuerdo) => sum + (acuerdo.monto || 0), 0);
         acc[cuenta.id] = totalMensual;
-        console.log(`Cuenta ${cuenta.id}: total mensual (acuerdos) = ${totalMensual}`);
         return acc;
       }, {});
-      
-      console.log('✅ Pagado por cuenta:', pagadoPorCuenta);
-      console.log('✅ Total mensual por cuenta:', totalMensualPorCuenta);
 
       // Get aplicaciones_pago para verificar si hay pagos de cesión de derechos
-      const acuerdoIds = acuerdosForPagos?.map(a => a.id) || [];
+      const acuerdoIds = acuerdosForPagos.map(a => a.id);
       let cesionDerechosMap: Record<number, boolean> = {};
       
       if (acuerdoIds.length > 0) {
-        const { data: aplicaciones } = await supabase
-          .from('aplicaciones_pago')
-          .select('id_acuerdo_pago, monto')
-          .in('id_acuerdo_pago', acuerdoIds)
-          .eq('activo', true)
-          .limit(50000);
+        // Batch fetch aplicaciones
+        let aplicaciones: { id_acuerdo_pago: number; monto: number }[] = [];
+        for (let i = 0; i < acuerdoIds.length; i += BATCH_SIZE) {
+          const batchIds = acuerdoIds.slice(i, i + BATCH_SIZE);
+          const { data } = await supabase
+            .from('aplicaciones_pago')
+            .select('id_acuerdo_pago, monto')
+            .in('id_acuerdo_pago', batchIds)
+            .eq('activo', true);
+          if (data) aplicaciones.push(...data);
+        }
 
-        // Get concepto info for cesion de derechos check
-        const { data: acuerdosConConcepto } = await supabase
-          .from('acuerdos_pago')
-          .select('id, id_concepto, id_cuenta_cobranza')
-          .in('id', acuerdoIds)
-          .eq('activo', true)
-          .limit(50000);
+        // Get concepto info for cesion de derechos check - batched
+        let acuerdosConConcepto: { id: number; id_concepto: number; id_cuenta_cobranza: number }[] = [];
+        for (let i = 0; i < acuerdoIds.length; i += BATCH_SIZE) {
+          const batchIds = acuerdoIds.slice(i, i + BATCH_SIZE);
+          const { data } = await supabase
+            .from('acuerdos_pago')
+            .select('id, id_concepto, id_cuenta_cobranza')
+            .in('id', batchIds)
+            .eq('activo', true);
+          if (data) acuerdosConConcepto.push(...data);
+        }
 
         // Crear mapeo de acuerdo_id a concepto_id y cuenta_id
-        const acuerdosMap = acuerdosConConcepto?.reduce((acc: any, a) => {
+        const acuerdosMap = acuerdosConConcepto.reduce((acc: Record<number, { id_concepto: number; id_cuenta_cobranza: number }>, a) => {
           acc[a.id] = { id_concepto: a.id_concepto, id_cuenta_cobranza: a.id_cuenta_cobranza };
           return acc;
         }, {});
 
         // Crear un mapa de cuentas que tienen cesión de derechos con pagos (id_concepto = 6)
-        aplicaciones?.forEach((app: any) => {
+        aplicaciones.forEach((app) => {
           const acuerdo = acuerdosMap[app.id_acuerdo_pago];
           if (acuerdo && acuerdo.id_concepto === 6 && app.monto > 0) {
             cesionDerechosMap[acuerdo.id_cuenta_cobranza] = true;
@@ -352,28 +367,35 @@ export default function CuentasMantenimiento() {
       }
 
       // Primero necesitamos determinar qué cuentas son de productos
-      // Obtenemos las ofertas para saber cuáles tienen id_producto
-      const ofertaIdsTemp = cuentas.map(c => c.id_oferta).filter(id => id !== null);
-      const { data: ofertasTemp } = ofertaIdsTemp.length > 0 ? await supabase
-        .from('ofertas')
-        .select('id, id_producto')
-        .in('id', ofertaIdsTemp) : { data: [] };
+      // Obtenemos las ofertas para saber cuáles tienen id_producto - batched
+      const ofertaIdsTemp = cuentas.map(c => c.id_oferta).filter((id): id is number => id !== null);
+      let ofertasTemp: { id: number; id_producto: number | null }[] = [];
+      for (let i = 0; i < ofertaIdsTemp.length; i += BATCH_SIZE) {
+        const batchIds = ofertaIdsTemp.slice(i, i + BATCH_SIZE);
+        const { data } = await supabase
+          .from('ofertas')
+          .select('id, id_producto')
+          .in('id', batchIds);
+        if (data) ofertasTemp.push(...data);
+      }
 
       const cuentasProductoSet = new Set(
-        ofertasTemp?.filter(o => o.id_producto).map(o => 
+        ofertasTemp.filter(o => o.id_producto).map(o => 
           cuentas.find(c => c.id_oferta === o.id)?.id
         ).filter(Boolean) || []
       );
 
-      console.log('🔍 Cuentas de productos:', Array.from(cuentasProductoSet));
-
-      // Get acuerdos with concepto info for apartado check
-      const { data: acuerdosConceptos } = await supabase
-        .from('acuerdos_pago')
-        .select('id, id_cuenta_cobranza, id_concepto, pago_completado')
-        .in('id_cuenta_cobranza', cuentaIds)
-        .eq('activo', true)
-        .limit(50000);
+      // Get acuerdos with concepto info for apartado check - batched
+      let acuerdosConceptos: { id: number; id_cuenta_cobranza: number; id_concepto: number; pago_completado: boolean }[] = [];
+      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
+        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
+        const { data } = await supabase
+          .from('acuerdos_pago')
+          .select('id, id_cuenta_cobranza, id_concepto, pago_completado')
+          .in('id_cuenta_cobranza', batchIds)
+          .eq('activo', true);
+        if (data) acuerdosConceptos.push(...data);
+      }
 
       // Create a map of whether initial payment is made for each cuenta
       const apartadoPagadoPorCuenta = cuentas.reduce((acc: Record<number, boolean>, cuenta) => {
@@ -381,18 +403,16 @@ export default function CuentasMantenimiento() {
         
         if (esProducto) {
           // Para productos, el pago inicial es el Enganche (id_concepto = 2)
-          const acuerdoEnganche = acuerdosConceptos?.find(
+          const acuerdoEnganche = acuerdosConceptos.find(
             ap => ap.id_cuenta_cobranza === cuenta.id && ap.id_concepto === 2
           );
           acc[cuenta.id] = acuerdoEnganche?.pago_completado || false;
-          console.log(`💰 Cuenta ${cuenta.id} [PRODUCTO]: enganche_pagado = ${acc[cuenta.id]}`);
         } else {
           // Para propiedades, el pago inicial es Apartado (id_concepto = 1) o Cesión de derechos (id_concepto = 6)
-          const acuerdoApartado = acuerdosConceptos?.find(
+          const acuerdoApartado = acuerdosConceptos.find(
             ap => ap.id_cuenta_cobranza === cuenta.id && ap.id_concepto === 1
           );
           acc[cuenta.id] = (acuerdoApartado?.pago_completado || false) || (cesionDerechosMap[cuenta.id] || false);
-          console.log(`💰 Cuenta ${cuenta.id} [PROPIEDAD]: apartado_pagado = ${acc[cuenta.id]} (apartado: ${acuerdoApartado?.pago_completado}, cesión: ${cesionDerechosMap[cuenta.id]})`);
         }
         
         return acc;
@@ -400,35 +420,40 @@ export default function CuentasMantenimiento() {
 
       // Create a map to check if each cuenta has acuerdos
       const tieneAcuerdosPorCuenta = cuentas.reduce((acc: Record<number, boolean>, cuenta) => {
-        const tieneAcuerdos = acuerdosForPagos?.some(ap => ap.id_cuenta_cobranza === cuenta.id) || false;
+        const tieneAcuerdos = acuerdosForPagos.some(ap => ap.id_cuenta_cobranza === cuenta.id);
         acc[cuenta.id] = tieneAcuerdos;
         return acc;
       }, {});
 
       // Get multas pendientes para cada cuenta
-      const acuerdoIdsForMultas = acuerdosForPagos?.map(ap => ap.id) || [];
+      const acuerdoIdsForMultas = acuerdosForPagos.map(ap => ap.id);
       let multasPendientesPorCuenta: Record<number, boolean> = {};
       let montosMultasPorCuenta: Record<number, number> = {};
       
       if (acuerdoIdsForMultas.length > 0) {
-        const { data: multas } = await supabase
-          .from('multas')
-          .select('id, id_acuerdo_pago, es_pagada, monto')
-          .in('id_acuerdo_pago', acuerdoIdsForMultas)
-          .eq('activo', true)
-          .limit(50000);
+        // Batch fetch multas
+        let multas: { id: number; id_acuerdo_pago: number; es_pagada: boolean; monto: number }[] = [];
+        for (let i = 0; i < acuerdoIdsForMultas.length; i += BATCH_SIZE) {
+          const batchIds = acuerdoIdsForMultas.slice(i, i + BATCH_SIZE);
+          const { data } = await supabase
+            .from('multas')
+            .select('id, id_acuerdo_pago, es_pagada, monto')
+            .in('id_acuerdo_pago', batchIds)
+            .eq('activo', true);
+          if (data) multas.push(...data);
+        }
 
         // Crear un mapa de acuerdo_id a cuenta_id
-        const acuerdoToCuentaMapMultas = acuerdosForPagos?.reduce((acc: any, ap) => {
+        const acuerdoToCuentaMapMultas = acuerdosForPagos.reduce((acc: Record<number, number>, ap) => {
           acc[ap.id] = ap.id_cuenta_cobranza;
           return acc;
         }, {});
 
         // Calcular total de multas por cuenta (pagadas y no pagadas)
         cuentas.forEach(cuenta => {
-          const multasCuenta = multas?.filter(multa => 
+          const multasCuenta = multas.filter(multa => 
             acuerdoToCuentaMapMultas[multa.id_acuerdo_pago] === cuenta.id
-          ) || [];
+          );
           
           const totalMultas = multasCuenta.reduce((sum, multa) => sum + (multa.monto || 0), 0);
           montosMultasPorCuenta[cuenta.id] = totalMultas;
@@ -437,25 +462,26 @@ export default function CuentasMantenimiento() {
           const tieneMultasPendientes = multasCuenta.some(m => !m.es_pagada);
           multasPendientesPorCuenta[cuenta.id] = tieneMultasPendientes;
         });
-
-        console.log('🔍 Cuentas con multas pendientes:', multasPendientesPorCuenta);
-        console.log('🔍 Montos de multas por cuenta:', montosMultasPorCuenta);
       }
 
-      // Get próxima fecha de pago (fecha_pago máxima no pagada) para cada cuenta
-      const { data: proximasFechasPago } = await supabase
-        .from('acuerdos_pago')
-        .select('id_cuenta_cobranza, fecha_pago')
-        .in('id_cuenta_cobranza', cuentaIds)
-        .eq('activo', true)
-        .eq('pago_completado', false)
-        .not('fecha_pago', 'is', null)
-        .order('fecha_pago', { ascending: false })
-        .limit(50000);
+      // Get próxima fecha de pago (fecha_pago máxima no pagada) para cada cuenta - batched
+      let proximasFechasPago: { id_cuenta_cobranza: number; fecha_pago: string }[] = [];
+      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
+        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
+        const { data } = await supabase
+          .from('acuerdos_pago')
+          .select('id_cuenta_cobranza, fecha_pago')
+          .in('id_cuenta_cobranza', batchIds)
+          .eq('activo', true)
+          .eq('pago_completado', false)
+          .not('fecha_pago', 'is', null)
+          .order('fecha_pago', { ascending: false });
+        if (data) proximasFechasPago.push(...data);
+      }
 
       // Crear un mapa con la fecha máxima de pago por cuenta
       const proximaFechaPagoPorCuenta = cuentas.reduce((acc: Record<number, string | null>, cuenta) => {
-        const fechasCuenta = proximasFechasPago?.filter(f => f.id_cuenta_cobranza === cuenta.id) || [];
+        const fechasCuenta = proximasFechasPago.filter(f => f.id_cuenta_cobranza === cuenta.id);
         if (fechasCuenta.length > 0) {
           // Obtener la fecha máxima
           const fechasOrdenadas = fechasCuenta
@@ -468,8 +494,6 @@ export default function CuentasMantenimiento() {
         }
         return acc;
       }, {});
-
-      console.log('🔍 Próximas fechas de pago por cuenta:', proximaFechaPagoPorCuenta);
 
       // Get parent ofertas to fetch property/project/modelo from parent cuenta
       const parentOfertaIds = parentCuentas?.map(pc => pc.id_oferta).filter((id): id is number => id !== null) || [];
@@ -515,29 +539,37 @@ export default function CuentasMantenimiento() {
         return [];
       }
 
-      // Get compradores
-      const { data: compradores } = await supabase
-        .from('compradores')
-        .select(`
-          id_cuenta_cobranza,
-          porcentaje_copropiedad,
-          id_persona,
-          personas!compradores_id_persona_fkey(id, nombre_legal, rfc)
-        `)
-        .in('id_cuenta_cobranza', cuentas.map(c => c.id))
-        .limit(50000);
+      // Get compradores - batched
+      let compradores: { id_cuenta_cobranza: number; porcentaje_copropiedad: number; id_persona: number; personas: { id: number; nombre_legal: string; rfc: string | null } | null }[] = [];
+      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
+        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
+        const { data } = await supabase
+          .from('compradores')
+          .select(`
+            id_cuenta_cobranza,
+            porcentaje_copropiedad,
+            id_persona,
+            personas!compradores_id_persona_fkey(id, nombre_legal, rfc)
+          `)
+          .in('id_cuenta_cobranza', batchIds);
+        if (data) compradores.push(...(data as any));
+      }
 
-      // Get todos los residentes (activos e inactivos)
-      const { data: residentes } = await (supabase as any)
-        .from('residentes')
-        .select(`
-          id_cuenta_cobranza,
-          id_persona,
-          activo,
-          personas!residentes_id_persona_fkey(id, nombre_legal)
-        `)
-        .in('id_cuenta_cobranza', cuentas.map(c => c.id))
-        .limit(50000);
+      // Get todos los residentes (activos e inactivos) - batched
+      let residentes: { id_cuenta_cobranza: number; id_persona: number; activo: boolean; personas: { id: number; nombre_legal: string } | null }[] = [];
+      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
+        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
+        const { data } = await (supabase as any)
+          .from('residentes')
+          .select(`
+            id_cuenta_cobranza,
+            id_persona,
+            activo,
+            personas!residentes_id_persona_fkey(id, nombre_legal)
+          `)
+          .in('id_cuenta_cobranza', batchIds);
+        if (data) residentes.push(...data);
+      }
 
       // Get entidades relacionadas, proyectos, edificios, modelos, productos
       // Include both maintenance account ofertas AND parent ofertas
