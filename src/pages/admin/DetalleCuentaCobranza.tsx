@@ -91,6 +91,8 @@ interface CuentaDetalle {
   valor_uma?: number;
   id_propiedad?: number;
   collection_id?: number | null;
+  metraje?: number;
+  precio_por_m2?: number;
   detalles_producto?: {
     nombre?: string;
     ubicacion?: string;
@@ -461,6 +463,8 @@ export default function DetalleCuentaCobranza() {
           propiedades!ofertas_id_propiedad_fkey(
             id,
             numero_propiedad,
+            m2_interiores,
+            m2_exteriores,
             id_entidad_relacionada_dueno,
             id_edificio_modelo,
             id_estatus_disponibilidad
@@ -576,6 +580,12 @@ export default function DetalleCuentaCobranza() {
         }
       }
 
+      // Calculate metraje and precio_por_m2 for property accounts
+      const m2Interiores = oferta?.propiedades?.m2_interiores ? Number(oferta.propiedades.m2_interiores) : 0;
+      const m2Exteriores = oferta?.propiedades?.m2_exteriores ? Number(oferta.propiedades.m2_exteriores) : 0;
+      const metraje = tipoCuenta === 'Propiedad' ? m2Interiores + m2Exteriores : undefined;
+      const precio_por_m2 = tipoCuenta === 'Propiedad' && metraje && metraje > 0 ? (cuenta.precio_final || 0) / metraje : undefined;
+
       const detalle: CuentaDetalle = {
         id: cuenta.id,
         clabe_stp: cuenta.clabe_stp,
@@ -606,6 +616,8 @@ export default function DetalleCuentaCobranza() {
         valor_uma: cuenta.valor_uma || undefined,
         collection_id: cuenta.collection_id,
         id_propiedad: oferta?.propiedades?.id || undefined,
+        metraje,
+        precio_por_m2,
         detalles_producto: detallesProducto
       };
 
@@ -2394,6 +2406,18 @@ export default function DetalleCuentaCobranza() {
             
             {cuentaDetalle.tipo_cuenta === 'Propiedad' ? (
               <>
+                {cuentaDetalle.metraje !== undefined && cuentaDetalle.metraje > 0 && (
+                  <div>
+                    <label className="text-sm font-medium">Metraje</label>
+                    <p className="text-sm text-muted-foreground">{cuentaDetalle.metraje.toFixed(2)} m²</p>
+                  </div>
+                )}
+                {cuentaDetalle.precio_por_m2 !== undefined && cuentaDetalle.precio_por_m2 > 0 && (
+                  <div>
+                    <label className="text-sm font-medium">Precio por m²</label>
+                    <p className="text-sm text-muted-foreground">{formatCurrency(cuentaDetalle.precio_por_m2)}</p>
+                  </div>
+                )}
                 <div>
                   <label className="text-sm font-medium">Dueño</label>
                   <p className="text-sm text-muted-foreground">{cuentaDetalle.dueno}</p>
