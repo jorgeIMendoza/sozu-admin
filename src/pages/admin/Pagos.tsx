@@ -67,6 +67,8 @@ interface CuentaCobranza {
   collection_id?: number | null;
   total_acuerdos?: number;
   discrepancia?: number;
+  metraje?: number;
+  precio_por_m2?: number;
 }
 export default function Pagos() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -564,17 +566,19 @@ export default function Pagos() {
             const { data, error } = await supabase
               .from('ofertas')
               .select(`
+              id,
+              id_propiedad,
+              id_producto,
+              propiedades!ofertas_id_propiedad_fkey(
                 id,
-                id_propiedad,
-                id_producto,
-                propiedades!ofertas_id_propiedad_fkey(
-                  id,
-                  numero_propiedad,
-                  precio_lista,
-                  id_entidad_relacionada_dueno,
-                  id_edificio_modelo,
-                  id_estatus_disponibilidad
-                )
+                numero_propiedad,
+                precio_lista,
+                m2_interiores,
+                m2_exteriores,
+                id_entidad_relacionada_dueno,
+                id_edificio_modelo,
+                id_estatus_disponibilidad
+              )
               `)
               .in('id', chunk)
               .range(from, to);
@@ -970,6 +974,12 @@ export default function Pagos() {
         }
         restanteEfectivo = +restanteEfectivo.toFixed(2);
         const porcentajeEfectivo = limiteEfectivo > 0 ? pagadoEfectivo / limiteEfectivo * 100 : 0;
+        // Calculate metraje and precio_por_m2 for property accounts
+        const m2Interiores = propiedad?.m2_interiores ? Number(propiedad.m2_interiores) : 0;
+        const m2Exteriores = propiedad?.m2_exteriores ? Number(propiedad.m2_exteriores) : 0;
+        const metraje = tipo === 'Propiedad' ? m2Interiores + m2Exteriores : undefined;
+        const precio_por_m2 = tipo === 'Propiedad' && metraje && metraje > 0 ? precio_final / metraje : undefined;
+
         return {
           id: cuenta.id,
           tipo,
@@ -1011,7 +1021,9 @@ export default function Pagos() {
           total_acuerdos: totalAcuerdosPorCuenta[cuenta.id] || 0,
           discrepancia: tieneAcuerdosPorCuenta[cuenta.id] 
             ? Math.round((precio_final - (totalAcuerdosPorCuenta[cuenta.id] || 0)) * 100) / 100
-            : 0
+            : 0,
+          metraje,
+          precio_por_m2
         };
       });
       return transformedData.sort((a, b) => b.id - a.id);
@@ -1987,7 +1999,9 @@ export default function Pagos() {
                       <TableHead>Edificio</TableHead>
                       <TableHead>No. Propiedad</TableHead>
                       <TableHead>Modelo</TableHead>
+                      <TableHead>Metraje</TableHead>
                       <TableHead>Precio Final</TableHead>
+                      <TableHead>Precio/m²</TableHead>
                       <TableHead>Pagado</TableHead>
                       <TableHead>Restante</TableHead>
                       <TableHead>Pagos en Efectivo</TableHead>
@@ -2124,6 +2138,13 @@ export default function Pagos() {
                             </span>
                           </TableCell>
                          <TableCell>{cuenta.modelo}</TableCell>
+                         <TableCell>
+                           {cuenta.tipo === 'Propiedad' && cuenta.metraje ? (
+                             <span>{cuenta.metraje.toFixed(2)} m²</span>
+                           ) : (
+                             <span className="text-muted-foreground text-xs">N/A</span>
+                           )}
+                         </TableCell>
                          <TableCell className="font-semibold text-green-600">
                            <div className="flex items-center justify-end gap-2">
                              <span>{formatCurrency(Number(cuenta.precio_final))}</span>
@@ -2180,6 +2201,13 @@ export default function Pagos() {
                                  </>;
                       })()}
                            </div>
+                         </TableCell>
+                         <TableCell>
+                           {cuenta.tipo === 'Propiedad' && cuenta.precio_por_m2 ? (
+                             <span className="font-semibold">{formatCurrency(cuenta.precio_por_m2)}</span>
+                           ) : (
+                             <span className="text-muted-foreground text-xs">N/A</span>
+                           )}
                          </TableCell>
                         <TableCell className="font-semibold text-blue-600">
                           {formatCurrency(cuenta.pagado)}
