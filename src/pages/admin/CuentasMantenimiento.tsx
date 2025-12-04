@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Search, Eye, X, Edit, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Receipt, Wrench, Package, UserPlus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,6 @@ import { EditCuentaCobranzaDialog } from "@/components/admin/EditCuentaCobranzaD
 import { CashPaymentDetailDialog } from "@/components/admin/CashPaymentDetailDialog";
 import { ComplementosDetailDialog } from "@/components/admin/ComplementosDetailDialog";
 import { useToast } from "@/hooks/use-toast";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
 import { AddResidenteDialog } from "@/components/admin/AddResidenteDialog";
@@ -132,6 +131,15 @@ export default function CuentasMantenimiento() {
   });
   
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, idCuentaFilter, propietariosFilter, clabeFilter, proyectoFilter, noPropiedadFilter, modeloFilter]);
 
   // Debounce search input
   useEffect(() => {
@@ -853,11 +861,97 @@ export default function CuentasMantenimiento() {
     setNoPropiedadFilter("");
     setModeloFilter("");
     setSearchTerm("");
+    setInputValue("");
   };
 
   const hasActiveFilters = idCuentaFilter || propietariosFilter || 
                           clabeFilter || proyectoFilter || noPropiedadFilter || 
                           modeloFilter || searchTerm;
+
+  // Pagination logic
+  const totalFilteredCount = filteredCuentas.length;
+  const totalPages = Math.ceil(totalFilteredCount / itemsPerPage);
+  const paginatedCuentas = filteredCuentas.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Helper function to generate pagination items with ellipsis
+  const getPaginationItems = (currentPage: number, totalPages: number) => {
+    const items: (number | 'ellipsis')[] = [];
+    const maxVisible = 7;
+
+    if (totalPages <= maxVisible) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    items.push(1);
+
+    let rangeStart = Math.max(2, currentPage - 1);
+    let rangeEnd = Math.min(totalPages - 1, currentPage + 1);
+
+    if (currentPage <= 3) {
+      rangeEnd = Math.min(4, totalPages - 1);
+    }
+    if (currentPage >= totalPages - 2) {
+      rangeStart = Math.max(totalPages - 3, 2);
+    }
+
+    if (rangeStart > 2) {
+      items.push('ellipsis');
+    }
+
+    for (let i = rangeStart; i <= rangeEnd; i++) {
+      items.push(i);
+    }
+
+    if (rangeEnd < totalPages - 1) {
+      items.push('ellipsis');
+    }
+
+    if (totalPages > 1) {
+      items.push(totalPages);
+    }
+    return items;
+  };
+
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+    return (
+      <div className="mt-4">
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious 
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} 
+                className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"} 
+              />
+            </PaginationItem>
+            {getPaginationItems(currentPage, totalPages).map((item, index) => 
+              item === 'ellipsis' ? (
+                <PaginationItem key={`ellipsis-${index}`}>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              ) : (
+                <PaginationItem key={item}>
+                  <PaginationLink 
+                    onClick={() => setCurrentPage(item as number)} 
+                    isActive={currentPage === item} 
+                    className="cursor-pointer"
+                  >
+                    {item}
+                  </PaginationLink>
+                </PaginationItem>
+              )
+            )}
+            <PaginationItem>
+              <PaginationNext 
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} 
+                className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"} 
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
+    );
+  };
 
   // Navigation functions
   const handlePropertyClick = (clabe: string) => {
@@ -898,107 +992,94 @@ export default function CuentasMantenimiento() {
         </div>
       </div>
 
-      <div className="flex gap-4 items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input
-            ref={searchInputRef}
-            placeholder="Buscar por ID, propietario, RFC, CLABE, proyecto, propiedad..."
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
-        {/* Advanced Filters */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <Filter className="h-4 w-4" />
-              Filtros avanzados
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80" align="end">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium text-sm">Filtros</h4>
-                {hasActiveFilters && (
-                  <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    Limpiar
-                  </Button>
-                )}
+      <Card>
+        <CardHeader>
+          <div className="space-y-4">
+            {/* Search bar */}
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                placeholder="Buscar por ID, propietario, RFC, CLABE, proyecto, propiedad..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            
+            {/* Filters grid - always visible */}
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div>
+                <Label htmlFor="filter-id" className="text-sm font-medium mb-2 block">ID Cuenta</Label>
+                <Input
+                  id="filter-id"
+                  placeholder="Filtrar por ID..."
+                  value={idCuentaFilter}
+                  onChange={(e) => setIdCuentaFilter(e.target.value)}
+                />
               </div>
-              <div className="space-y-3">
-                <div>
-                  <Label htmlFor="filter-id">ID Cuenta</Label>
-                  <Input
-                    id="filter-id"
-                    placeholder="Buscar por ID..."
-                    value={idCuentaFilter}
-                    onChange={(e) => setIdCuentaFilter(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="filter-propietarios">Propietarios</Label>
-                  <Input
-                    id="filter-propietarios"
-                    placeholder="Buscar por propietario..."
-                    value={propietariosFilter}
-                    onChange={(e) => setPropietariosFilter(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="filter-clabe">CLABE STP</Label>
-                  <Input
-                    id="filter-clabe"
-                    placeholder="Buscar por CLABE..."
-                    value={clabeFilter}
-                    onChange={(e) => setClabeFilter(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="filter-proyecto">Proyecto</Label>
-                  <Input
-                    id="filter-proyecto"
-                    placeholder="Buscar por proyecto..."
-                    value={proyectoFilter}
-                    onChange={(e) => setProyectoFilter(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="filter-propiedad">No. Propiedad</Label>
-                  <Input
-                    id="filter-propiedad"
-                    placeholder="Buscar por no. propiedad..."
-                    value={noPropiedadFilter}
-                    onChange={(e) => setNoPropiedadFilter(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="filter-modelo">Modelo</Label>
-                  <Input
-                    id="filter-modelo"
-                    placeholder="Buscar por modelo..."
-                    value={modeloFilter}
-                    onChange={(e) => setModeloFilter(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
+              <div>
+                <Label htmlFor="filter-propietarios" className="text-sm font-medium mb-2 block">Propietarios</Label>
+                <Input
+                  id="filter-propietarios"
+                  placeholder="Filtrar por propietario..."
+                  value={propietariosFilter}
+                  onChange={(e) => setPropietariosFilter(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="filter-clabe" className="text-sm font-medium mb-2 block">CLABE STP</Label>
+                <Input
+                  id="filter-clabe"
+                  placeholder="Filtrar por CLABE..."
+                  value={clabeFilter}
+                  onChange={(e) => setClabeFilter(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="filter-proyecto" className="text-sm font-medium mb-2 block">Proyecto</Label>
+                <Input
+                  id="filter-proyecto"
+                  placeholder="Filtrar por proyecto..."
+                  value={proyectoFilter}
+                  onChange={(e) => setProyectoFilter(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="filter-propiedad" className="text-sm font-medium mb-2 block">No. Propiedad</Label>
+                <Input
+                  id="filter-propiedad"
+                  placeholder="Filtrar por propiedad..."
+                  value={noPropiedadFilter}
+                  onChange={(e) => setNoPropiedadFilter(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="filter-modelo" className="text-sm font-medium mb-2 block">Modelo</Label>
+                <Input
+                  id="filter-modelo"
+                  placeholder="Filtrar por modelo..."
+                  value={modeloFilter}
+                  onChange={(e) => setModeloFilter(e.target.value)}
+                />
               </div>
             </div>
-          </PopoverContent>
-        </Popover>
-      </div>
-
-      <div className="space-y-4">
-          <Card>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
+            
+            {/* Clear filters button */}
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={clearFilters} disabled={!hasActiveFilters}>
+                Limpiar Filtros
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Filtered count display */}
+          <div className="mb-4 text-sm text-muted-foreground">
+            Mostrando <span className="font-semibold text-foreground">{paginatedCuentas.length}</span> de <span className="font-semibold text-foreground">{filteredCuentas.length}</span> cuentas
+          </div>
+          
+          <div className="overflow-x-auto">
                   <Table>
                   <TableHeader>
                     <TableRow>
@@ -1019,14 +1100,14 @@ export default function CuentasMantenimiento() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCuentas.length === 0 ? (
+                    {paginatedCuentas.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
-                          No se encontraron cuentas de mantenimiento
+                          {hasActiveFilters ? "No se encontraron cuentas que coincidan con los filtros" : "No hay cuentas de mantenimiento"}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredCuentas.map((cuenta) => (
+                      paginatedCuentas.map((cuenta) => (
                         <TableRow key={cuenta.id}>
                           <TableCell className="font-medium">
                             {formatCuentaMantenimientoId(cuenta.id)}
@@ -1191,9 +1272,11 @@ export default function CuentasMantenimiento() {
                   </TableBody>
                 </Table>
               </div>
-            </CardContent>
-          </Card>
-      </div>
+          
+          {/* Pagination */}
+          {renderPagination()}
+        </CardContent>
+      </Card>
 
       {/* Dialogs */}
       {complementosDialog.isOpen && complementosDialog.cuenta && (
