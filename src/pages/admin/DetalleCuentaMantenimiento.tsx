@@ -973,9 +973,18 @@ export default function DetalleCuentaMantenimiento() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <Badge variant={acuerdo.pago_completado ? "default" : totalAplicado > 0 ? "secondary" : "outline"}>
-                                    {acuerdo.pago_completado ? "Pagado" : totalAplicado > 0 ? "Parcial" : "Pendiente"}
-                                  </Badge>
+                                  {(() => {
+                                    const montoTotal = esAcuerdoMulta && multaAsociada ? multaAsociada.monto : acuerdo.monto;
+                                    const pendiente = montoTotal - totalAplicado;
+                                    // Considerar pagado solo si el pendiente es 0 o menor (por redondeos)
+                                    const estaPagado = pendiente <= 0;
+                                    const esParcial = totalAplicado > 0 && pendiente > 0;
+                                    return (
+                                      <Badge variant={estaPagado ? "default" : esParcial ? "secondary" : "outline"}>
+                                        {estaPagado ? "Pagado" : esParcial ? "Parcial" : "Pendiente"}
+                                      </Badge>
+                                    );
+                                  })()}
                                   {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                 </div>
                               </div>
