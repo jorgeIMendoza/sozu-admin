@@ -193,7 +193,8 @@ export default function CuentasMantenimiento() {
           clave_catastral,
           id_oferta
         `)
-        .in('id', parentCuentaIds) : { data: [] };
+        .in('id', parentCuentaIds)
+        .limit(50000) : { data: [] };
 
       // Create map for quick parent lookup
       const parentCuentasMap = new Map((parentCuentas || []).map(pc => [pc.id, pc] as [number, typeof pc]));
@@ -509,7 +510,8 @@ export default function CuentasMantenimiento() {
             id_edificio_modelo
           )
         `)
-        .in('id', parentOfertaIds) : { data: [] };
+        .in('id', parentOfertaIds)
+        .limit(50000) : { data: [] };
 
       // Create map for quick parent oferta lookup
       const parentOfertasMap = new Map((parentOfertas || []).map(po => [po.id, po] as [number, typeof po]));
@@ -532,7 +534,8 @@ export default function CuentasMantenimiento() {
             id_edificio_modelo
           )
         `)
-        .in('id', ofertaIds) : { data: [], error: null };
+        .in('id', ofertaIds)
+        .limit(50000) : { data: [], error: null };
 
       if (ofertasError) {
         console.error('Error fetching ofertas:', ofertasError);
@@ -639,7 +642,8 @@ export default function CuentasMantenimiento() {
               id_tipo_uso
             )
           `)
-          .in('id', entidadIds),
+          .in('id', entidadIds)
+          .limit(50000),
         supabase
           .from('edificios_modelos')
           .select(`
@@ -648,6 +652,7 @@ export default function CuentasMantenimiento() {
             modelos!edificios_modelos_id_modelo_fkey(nombre)
           `)
           .in('id', edificioModeloIds)
+          .limit(50000)
       ]);
 
       // Get complementos (bodegas, estacionamientos, productos) for each property
@@ -692,7 +697,8 @@ export default function CuentasMantenimiento() {
           )
         `)
         .in('id', ofertasProductosIds)
-        .not('id_producto', 'is', null) : { data: [] };
+        .not('id_producto', 'is', null)
+        .limit(50000) : { data: [] };
 
       // Create maps for complementos by propiedad
       const bodegasPorPropiedad = (bodegasData || []).reduce((acc: Record<number, any[]>, b) => {
