@@ -771,8 +771,7 @@ export default function CuentasMantenimiento() {
 
         const pagado = pagadoPorCuenta[cuenta.id] || 0;
         const totalMensual = totalMensualPorCuenta[cuenta.id] || 0;
-        const multasMonto = montosMultasPorCuenta[cuenta.id] || 0;
-        const precio_final = totalMensual + multasMonto; // Total mensual incluye acuerdos + multas
+        const precio_final = totalMensual; // Ya incluye multas como acuerdos_pago (id_concepto=13)
         // Calculate difference and normalize to avoid -0
         let restante = precio_final - pagado;
         restante = Math.round(restante * 100) / 100;
