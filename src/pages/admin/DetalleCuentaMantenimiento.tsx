@@ -628,10 +628,17 @@ export default function DetalleCuentaMantenimiento() {
     );
   }
 
-  const totalPagado = acuerdosPago?.reduce((sum, acuerdo) => {
+  // Total aplicado a acuerdos de pago
+  const totalAplicado = acuerdosPago?.reduce((sum, acuerdo) => {
     const totalAcuerdo = acuerdo.aplicaciones.reduce((appSum, app) => appSum + app.monto, 0);
     return sum + totalAcuerdo;
   }, 0) || 0;
+
+  // Total pagado (suma de todos los pagos realizados)
+  const totalPagado = pagosData?.reduce((sum, pago) => sum + pago.monto, 0) || 0;
+
+  // Excedente = Total pagado - Total aplicado (dinero que aún no se ha aplicado a acuerdos)
+  const excedente = totalPagado - totalAplicado;
 
   // Calculate total mensual: suma de todos los acuerdos (incluyendo multas)
   // Para acuerdos de multa, usamos el monto de la multa asociada
@@ -644,8 +651,11 @@ export default function DetalleCuentaMantenimiento() {
     return sum + (acuerdo.monto || 0);
   }, 0) || 0;
 
-  // Saldo pendiente = pago mensual - total pagado
-  const saldoPendiente = pagoMensual - totalPagado;
+  // Saldo pendiente = pago mensual - total aplicado (no total pagado, porque el excedente ya está separado)
+  const saldoPendiente = pagoMensual - totalAplicado;
+  
+  // Si hay excedente y no hay saldo pendiente, mostramos saldo a favor
+  const tieneExcedente = excedente > 0.01;
 
   // Find last payment and check if it's STP
   const pagosAplicados = acuerdosPago?.flatMap(acuerdo => 
@@ -749,19 +759,37 @@ export default function DetalleCuentaMantenimiento() {
             <p className="text-xs text-muted-foreground">
               Pagado en esta cuenta
             </p>
+            {tieneExcedente && (
+              <p className="text-xs text-green-600 mt-1">
+                (Incluye {formatCurrency(excedente)} de excedente sin aplicar)
+              </p>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo Pendiente</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {tieneExcedente && saldoPendiente <= 0.01 ? 'Saldo a Favor' : 'Saldo Pendiente'}
+            </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{formatCurrency(saldoPendiente)}</div>
-            <p className="text-xs text-muted-foreground">
-              Por pagar
-            </p>
+            {tieneExcedente && saldoPendiente <= 0.01 ? (
+              <>
+                <div className="text-2xl font-bold text-green-600">{formatCurrency(excedente)}</div>
+                <p className="text-xs text-muted-foreground">
+                  Disponible para próximos pagos
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-orange-600">{formatCurrency(Math.max(0, saldoPendiente))}</div>
+                <p className="text-xs text-muted-foreground">
+                  Por pagar
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
