@@ -68,6 +68,7 @@ interface CuentaCobranza {
   precio_final: number;
   precio_lista: number | null;
   pagado: number;
+  total_pagos: number; // Total real de pagos (para calcular excedente)
   restante: number;
   compradores: Comprador[];
   residentes: Residente[];
@@ -240,12 +241,33 @@ export default function CuentasMantenimiento() {
         return acc;
       }, {});
 
-      // Calculate total payments per account from aplicaciones
+      // Calculate total payments per account from aplicaciones (lo aplicado a acuerdos)
       const pagadoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
         const totalPagado = aplicacionesPago
           .filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
           .reduce((sum, ap) => sum + (ap.monto || 0), 0);
         acc[cuenta.id] = totalPagado;
+        return acc;
+      }, {});
+
+      // Get ALL payments per account (for calculating excedente) - batched
+      let todosLosPagos: { id: number; id_cuenta_cobranza: number; monto: number }[] = [];
+      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
+        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
+        const { data } = await supabase
+          .from('pagos')
+          .select('id, id_cuenta_cobranza, monto')
+          .in('id_cuenta_cobranza', batchIds)
+          .eq('activo', true);
+        if (data) todosLosPagos.push(...data);
+      }
+
+      // Calculate total real payments per account (suma de tabla pagos)
+      const totalPagosPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
+        const totalPagos = todosLosPagos
+          .filter(p => p.id_cuenta_cobranza === cuenta.id)
+          .reduce((sum, p) => sum + (p.monto || 0), 0);
+        acc[cuenta.id] = totalPagos;
         return acc;
       }, {});
 
@@ -808,6 +830,7 @@ export default function CuentasMantenimiento() {
           precio_final,
           precio_lista: parentPropiedad?.precio_lista || null,
           pagado,
+          total_pagos: totalPagosPorCuenta[cuenta.id] || 0,
           restante,
           cash_limit: limiteEfectivo,
           cash_paid: pagadoEfectivo,
@@ -1247,7 +1270,8 @@ export default function CuentasMantenimiento() {
                           <TableCell className="text-right font-medium">
                             {(() => {
                               const saldo = normalizarSaldo(cuenta.restante);
-                              const excedente = cuenta.pagado - cuenta.precio_final;
+                              // Usar total_pagos (suma real de pagos) en lugar de pagado (aplicaciones)
+                              const excedente = cuenta.total_pagos - cuenta.precio_final;
                               const tieneSaldoAFavor = excedente > 0.01;
                               
                               if (tieneSaldoAFavor) {
