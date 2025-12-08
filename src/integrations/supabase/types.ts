@@ -712,6 +712,27 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_cuentas_bancarias_stagin: {
+        Row: {
+          comprador: string | null
+          cuenta_de_su_propiedad: string | null
+          id: number
+          id_comprador: number | null
+        }
+        Insert: {
+          comprador?: string | null
+          cuenta_de_su_propiedad?: string | null
+          id?: number
+          id_comprador?: number | null
+        }
+        Update: {
+          comprador?: string | null
+          cuenta_de_su_propiedad?: string | null
+          id?: number
+          id_comprador?: number | null
+        }
+        Relationships: []
+      }
       borrar_cuentas_cobranza_mantenimientos_stagin: {
         Row: {
           clabe_stp: number | null
