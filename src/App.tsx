@@ -56,6 +56,7 @@ const Comisiones = lazy(() => import("./pages/admin/Comisiones"));
 const AprobacionComisiones = lazy(() => import("./pages/admin/AprobacionComisiones"));
 const PagarComisiones = lazy(() => import("./pages/admin/PagarComisiones"));
 const ReporteDiscrepancias = lazy(() => import("./pages/admin/ReporteDiscrepancias"));
+const RolesPermisos = lazy(() => import("./pages/admin/RolesPermisos"));
 
 const queryClient = new QueryClient();
 
@@ -93,6 +94,7 @@ const App = () => (
                   <Route path="propiedades" element={<Propiedades />} />
                   <Route path="usuarios" element={<Usuarios />} />
                   <Route path="usuarios/nuevo" element={<NuevoUsuario />} />
+                  <Route path="roles-permisos" element={<RolesPermisos />} />
                   <Route path="entidades-legales" element={<EntidadesLegales />} />
                   <Route path="desarrolladores" element={<Desarrolladores />} />
                   <Route path="inmobiliarias" element={<Inmobiliarias />} />
