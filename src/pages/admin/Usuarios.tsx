@@ -113,19 +113,21 @@ export default function Usuarios() {
         .from('entidades_relacionadas')
         .select(`
           id_persona,
+          id_tipo_entidad,
           personas!inner (id, nombre_legal, email, activo),
-          tipos_entidad!inner (nombre)
+          tipos_entidad!inner (id, nombre)
         `)
         .in('id_tipo_entidad', [5, 19]) // 5 = Inmobiliaria, 19 = Agente
-        .is('id_proyecto', null)
-        .eq('activo', true)
-        .eq('personas.activo', true);
+        .eq('activo', true);
       
       if (error) throw error;
       
       // Transform and deduplicate by persona id
       const personasMap = new Map<number, PersonaConTipo>();
       (data || []).forEach((item: any) => {
+        // Skip if persona is not active
+        if (!item.personas?.activo) return;
+        
         const personaId = item.personas.id;
         if (!personasMap.has(personaId)) {
           personasMap.set(personaId, {
