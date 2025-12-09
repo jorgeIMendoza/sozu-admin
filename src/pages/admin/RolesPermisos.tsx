@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, ChevronDown, ChevronRight, Loader2, Check, X, Save, Plus, Pencil, Trash2 } from "lucide-react";
+import { Shield, ChevronDown, ChevronRight, Loader2, Save, Plus, Pencil, Trash2, Search, Lock, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,12 +8,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Role {
   id: number;
@@ -46,6 +47,8 @@ interface SubmenuPermiso {
   activo: boolean;
 }
 
+const SUPER_ADMIN_ROLE_ID = 1;
+
 export default function RolesPermisos() {
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [expandedMenus, setExpandedMenus] = useState<Set<number>>(new Set());
@@ -56,8 +59,11 @@ export default function RolesPermisos() {
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
   const [newRoleName, setNewRoleName] = useState("");
   const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [searchRoleName, setSearchRoleName] = useState("");
   
   const queryClient = useQueryClient();
+
+  const isSuperAdminSelected = selectedRoleId === SUPER_ADMIN_ROLE_ID;
 
   // Fetch roles
   const { data: roles = [], isLoading: loadingRoles } = useQuery({
@@ -210,7 +216,6 @@ export default function RolesPermisos() {
         const [submenuId, permisoId] = key.split('-').map(Number);
         
         if (shouldHave) {
-          // Insert or update to active
           const { error } = await supabase
             .from('submenus_permisos')
             .upsert({
@@ -223,7 +228,6 @@ export default function RolesPermisos() {
             });
           if (error) throw error;
         } else {
-          // Deactivate
           const { error } = await supabase
             .from('submenus_permisos')
             .update({ activo: false })
@@ -257,12 +261,13 @@ export default function RolesPermisos() {
 
   // Toggle permission
   const togglePermission = (submenuId: number, permisoId: number) => {
+    if (isSuperAdminSelected) return;
+    
     const key = `${submenuId}-${permisoId}`;
     const currentValue = hasPermission(submenuId, permisoId);
     
     const newChanges = new Map(pendingChanges);
     
-    // Check if the new value is the same as the original
     const originalValue = rolePermisos.some(
       rp => rp.submenu_id === submenuId && rp.permiso_id === permisoId && rp.activo
     );
@@ -272,6 +277,81 @@ export default function RolesPermisos() {
     } else {
       newChanges.set(key, !currentValue);
     }
+    
+    setPendingChanges(newChanges);
+  };
+
+  // Deselect all permissions for a submenu (row)
+  const deselectAllPermissionsForSubmenu = (submenuId: number) => {
+    if (isSuperAdminSelected) return;
+    
+    const newChanges = new Map(pendingChanges);
+    
+    permisos.forEach(permiso => {
+      const key = `${submenuId}-${permiso.id}`;
+      const originalValue = rolePermisos.some(
+        rp => rp.submenu_id === submenuId && rp.permiso_id === permiso.id && rp.activo
+      );
+      
+      if (originalValue) {
+        newChanges.set(key, false);
+      } else {
+        newChanges.delete(key);
+      }
+    });
+    
+    setPendingChanges(newChanges);
+  };
+
+  // Deselect all permissions for a menu (module)
+  const deselectAllPermissionsForMenu = (menuId: number) => {
+    if (isSuperAdminSelected) return;
+    
+    const menu = menus.find(m => m.id === menuId);
+    if (!menu) return;
+    
+    const newChanges = new Map(pendingChanges);
+    
+    menu.submenus.forEach(submenu => {
+      permisos.forEach(permiso => {
+        const key = `${submenu.id}-${permiso.id}`;
+        const originalValue = rolePermisos.some(
+          rp => rp.submenu_id === submenu.id && rp.permiso_id === permiso.id && rp.activo
+        );
+        
+        if (originalValue) {
+          newChanges.set(key, false);
+        } else {
+          newChanges.delete(key);
+        }
+      });
+    });
+    
+    setPendingChanges(newChanges);
+  };
+
+  // Deselect ALL permissions globally
+  const deselectAllPermissions = () => {
+    if (isSuperAdminSelected) return;
+    
+    const newChanges = new Map(pendingChanges);
+    
+    menus.forEach(menu => {
+      menu.submenus.forEach(submenu => {
+        permisos.forEach(permiso => {
+          const key = `${submenu.id}-${permiso.id}`;
+          const originalValue = rolePermisos.some(
+            rp => rp.submenu_id === submenu.id && rp.permiso_id === permiso.id && rp.activo
+          );
+          
+          if (originalValue) {
+            newChanges.set(key, false);
+          } else {
+            newChanges.delete(key);
+          }
+        });
+      });
+    });
     
     setPendingChanges(newChanges);
   };
@@ -299,6 +379,14 @@ export default function RolesPermisos() {
 
   const selectedRole = roles.find(r => r.id === selectedRoleId);
   const activeRoles = roles.filter(r => r.activo);
+  
+  // Filter roles by search term
+  const filteredRoles = useMemo(() => {
+    if (!searchRoleName.trim()) return activeRoles;
+    return activeRoles.filter(role => 
+      role.nombre.toLowerCase().includes(searchRoleName.toLowerCase())
+    );
+  }, [activeRoles, searchRoleName]);
 
   return (
     <div className="space-y-6">
@@ -327,6 +415,16 @@ export default function RolesPermisos() {
             <CardDescription>
               {activeRoles.length} roles activos
             </CardDescription>
+            {/* Search input */}
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar rol..."
+                value={searchRoleName}
+                onChange={(e) => setSearchRoleName(e.target.value)}
+                className="pl-9"
+              />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[500px]">
@@ -335,54 +433,68 @@ export default function RolesPermisos() {
                   <div className="flex justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
+                ) : filteredRoles.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    No se encontraron roles
+                  </div>
                 ) : (
-                  activeRoles.map((role) => (
-                    <div
-                      key={role.id}
-                      className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
-                        selectedRoleId === role.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'hover:bg-muted'
-                      }`}
-                      onClick={() => {
-                        setSelectedRoleId(role.id);
-                        setPendingChanges(new Map());
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4" />
-                        <span className="text-sm font-medium">{role.nombre}</span>
+                  filteredRoles.map((role) => {
+                    const isSuperAdmin = role.id === SUPER_ADMIN_ROLE_ID;
+                    
+                    return (
+                      <div
+                        key={role.id}
+                        className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                          selectedRoleId === role.id
+                            ? 'bg-primary text-primary-foreground'
+                            : 'hover:bg-muted'
+                        }`}
+                        onClick={() => {
+                          setSelectedRoleId(role.id);
+                          setPendingChanges(new Map());
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          {isSuperAdmin ? (
+                            <Lock className="h-4 w-4" />
+                          ) : (
+                            <Shield className="h-4 w-4" />
+                          )}
+                          <span className="text-sm font-medium">{role.nombre}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          {!isSuperAdmin && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`h-7 w-7 ${selectedRoleId === role.id ? 'hover:bg-primary-foreground/20' : ''}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingRole(role);
+                                  setIsEditRoleDialogOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`h-7 w-7 ${selectedRoleId === role.id ? 'hover:bg-primary-foreground/20' : 'hover:bg-destructive/10 hover:text-destructive'}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRoleToDelete(role);
+                                  setIsDeleteDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={`h-7 w-7 ${selectedRoleId === role.id ? 'hover:bg-primary-foreground/20' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingRole(role);
-                            setIsEditRoleDialogOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                        {role.id !== 1 && ( // Can't delete Super Admin
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className={`h-7 w-7 ${selectedRoleId === role.id ? 'hover:bg-primary-foreground/20' : 'hover:bg-destructive/10 hover:text-destructive'}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRoleToDelete(role);
-                              setIsDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </ScrollArea>
@@ -394,24 +506,58 @@ export default function RolesPermisos() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg">
-                  {selectedRole ? `Permisos: ${selectedRole.nombre}` : 'Selecciona un rol'}
+                <CardTitle className="text-lg flex items-center gap-2">
+                  {selectedRole ? (
+                    <>
+                      Permisos: {selectedRole.nombre}
+                      {isSuperAdminSelected && (
+                        <Badge variant="secondary" className="ml-2">
+                          <Lock className="h-3 w-3 mr-1" />
+                          Solo lectura
+                        </Badge>
+                      )}
+                    </>
+                  ) : (
+                    'Selecciona un rol'
+                  )}
                 </CardTitle>
                 <CardDescription>
                   {selectedRole 
-                    ? 'Configura los permisos por módulo para este rol'
+                    ? isSuperAdminSelected 
+                      ? 'Los permisos de Super Admin no pueden modificarse'
+                      : 'Configura los permisos por módulo para este rol'
                     : 'Selecciona un rol de la lista para configurar sus permisos'
                   }
                 </CardDescription>
               </div>
               {selectedRole && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap justify-end">
                   <Button variant="outline" size="sm" onClick={expandAll}>
                     Expandir todo
                   </Button>
                   <Button variant="outline" size="sm" onClick={collapseAll}>
                     Colapsar todo
                   </Button>
+                  {!isSuperAdminSelected && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={deselectAllPermissions}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Deseleccionar todos
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Quitar todos los permisos de este rol
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                   {pendingChanges.size > 0 && (
                     <Button 
                       size="sm" 
@@ -441,76 +587,134 @@ export default function RolesPermisos() {
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <ScrollArea className="h-[500px]">
-                {/* Permissions header */}
-                <div className="sticky top-0 bg-background z-10 border-b pb-2 mb-2">
-                  <div className="grid gap-2" style={{ gridTemplateColumns: `200px repeat(${permisos.length}, 80px)` }}>
-                    <div className="font-medium text-sm">Módulo</div>
-                    {permisos.map(permiso => (
-                      <div key={permiso.id} className="text-center">
-                        <Badge variant="outline" className="text-xs capitalize">
-                          {permiso.nombre}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Menus and submenus */}
-                <div className="space-y-2">
-                  {menus.map(menu => (
-                    <Collapsible 
-                      key={menu.id} 
-                      open={expandedMenus.has(menu.id)}
-                      onOpenChange={() => toggleMenu(menu.id)}
-                    >
-                      <CollapsibleTrigger asChild>
-                        <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted transition-colors">
-                          {expandedMenus.has(menu.id) ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                          <span className="font-medium text-sm">{menu.nombre}</span>
-                          <Badge variant="secondary" className="text-xs ml-auto">
-                            {menu.submenus.length} submenús
+              <>
+                {isSuperAdminSelected && (
+                  <Alert className="mb-4">
+                    <Lock className="h-4 w-4" />
+                    <AlertDescription>
+                      El rol Super Admin tiene acceso completo al sistema y no puede ser modificado.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <ScrollArea className="h-[500px]">
+                  {/* Permissions header */}
+                  <div className="sticky top-0 bg-background z-10 border-b pb-2 mb-2">
+                    <div className="grid gap-2" style={{ gridTemplateColumns: `40px 200px repeat(${permisos.length}, 80px)` }}>
+                      <div></div>
+                      <div className="font-medium text-sm">Módulo</div>
+                      {permisos.map(permiso => (
+                        <div key={permiso.id} className="text-center">
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {permiso.nombre}
                           </Badge>
                         </div>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="space-y-1 pl-6 pt-2">
-                          {menu.submenus.map(submenu => (
-                            <div 
-                              key={submenu.id} 
-                              className="grid gap-2 py-2 border-b border-border/50 last:border-0"
-                              style={{ gridTemplateColumns: `200px repeat(${permisos.length}, 80px)` }}
-                            >
-                              <div className="text-sm text-muted-foreground truncate">
-                                {submenu.nombre}
-                              </div>
-                              {permisos.map(permiso => {
-                                const isChecked = hasPermission(submenu.id, permiso.id);
-                                const key = `${submenu.id}-${permiso.id}`;
-                                const hasChange = pendingChanges.has(key);
-                                
-                                return (
-                                  <div key={permiso.id} className="flex justify-center">
-                                    <Checkbox
-                                      checked={isChecked}
-                                      onCheckedChange={() => togglePermission(submenu.id, permiso.id)}
-                                      className={hasChange ? 'border-amber-500 data-[state=checked]:bg-amber-500' : ''}
-                                    />
-                                  </div>
-                                );
-                              })}
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Menus and submenus */}
+                  <div className="space-y-2">
+                    {menus.map(menu => (
+                      <Collapsible 
+                        key={menu.id} 
+                        open={expandedMenus.has(menu.id)}
+                        onOpenChange={() => toggleMenu(menu.id)}
+                      >
+                        <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+                          <CollapsibleTrigger asChild>
+                            <div className="flex items-center gap-2 flex-1 cursor-pointer hover:bg-muted transition-colors rounded px-1">
+                              {expandedMenus.has(menu.id) ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                              <span className="font-medium text-sm">{menu.nombre}</span>
+                              <Badge variant="secondary" className="text-xs ml-auto mr-2">
+                                {menu.submenus.length} submenús
+                              </Badge>
                             </div>
-                          ))}
+                          </CollapsibleTrigger>
+                          {!isSuperAdminSelected && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deselectAllPermissionsForMenu(menu.id);
+                                    }}
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Deseleccionar todos los permisos de este módulo
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  ))}
-                </div>
-              </ScrollArea>
+                        <CollapsibleContent>
+                          <div className="space-y-1 pl-6 pt-2">
+                            {menu.submenus.map(submenu => (
+                              <div 
+                                key={submenu.id} 
+                                className="grid gap-2 py-2 border-b border-border/50 last:border-0 items-center"
+                                style={{ gridTemplateColumns: `40px 200px repeat(${permisos.length}, 80px)` }}
+                              >
+                                {/* Deselect row button */}
+                                <div className="flex justify-center">
+                                  {!isSuperAdminSelected && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                            onClick={() => deselectAllPermissionsForSubmenu(submenu.id)}
+                                          >
+                                            <XCircle className="h-3 w-3" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Deseleccionar todos los permisos de esta fila
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </div>
+                                <div className="text-sm text-muted-foreground truncate">
+                                  {submenu.nombre}
+                                </div>
+                                {permisos.map(permiso => {
+                                  const isChecked = hasPermission(submenu.id, permiso.id);
+                                  const key = `${submenu.id}-${permiso.id}`;
+                                  const hasChange = pendingChanges.has(key);
+                                  
+                                  return (
+                                    <div key={permiso.id} className="flex justify-center">
+                                      <Checkbox
+                                        checked={isChecked}
+                                        onCheckedChange={() => togglePermission(submenu.id, permiso.id)}
+                                        disabled={isSuperAdminSelected}
+                                        className={hasChange ? 'border-amber-500 data-[state=checked]:bg-amber-500' : ''}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </>
             )}
           </CardContent>
         </Card>
