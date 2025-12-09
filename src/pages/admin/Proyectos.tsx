@@ -10,10 +10,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Search, Edit, Trash2, Eye, Image, Video, MapPin } from "lucide-react";
+import { Search, Edit, Trash2, Eye, Image, Video, MapPin, Lock } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { EditProjectDialog } from "@/components/admin/EditProjectDialog";
 import { ProjectMultimediaModal } from "@/components/admin/ProjectMultimediaModal";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 
 // Función para formatear moneda en formato corto (M/K)
 const formatCurrencyShort = (value: number): string => {
@@ -43,6 +44,9 @@ const Proyectos = () => {
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   
+  // Project access hook
+  const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess, hasNoAccess } = useProjectAccess();
+  
   // Filtros específicos
   const [nombreFilter, setNombreFilter] = useState("");
   const [desarrolladorFilter, setDesarrolladorFilter] = useState("");
@@ -55,8 +59,13 @@ const Proyectos = () => {
   const itemsPerPage = 25;
 
   const { data: activeProjectsData, refetch: refetchActive } = useQuery({
-    queryKey: ["projects", "active", currentPageActive, searchTerm, nombreFilter, ciudadFilter, estatusFilter],
+    queryKey: ["projects", "active", currentPageActive, searchTerm, nombreFilter, ciudadFilter, estatusFilter, accessibleProjectIds],
     queryFn: async () => {
+      // If user has no access and is not admin, return empty
+      if (hasNoAccess) {
+        return { projects: [], count: 0 };
+      }
+
       const from = (currentPageActive - 1) * itemsPerPage;
       const to = from + itemsPerPage - 1;
       
@@ -137,6 +146,11 @@ const Proyectos = () => {
         .eq("entidades_relacionadas.id_tipo_entidad", 3)
         .eq("activo", true);
       
+      // Apply project access filter for non-admin users
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+        query = query.in("id", accessibleProjectIds);
+      }
+      
       // Aplicar filtros
       if (searchTerm) {
         query = query.ilike("nombre", `%${searchTerm}%`);
@@ -165,6 +179,7 @@ const Proyectos = () => {
       
       return { projects, count: count || 0 };
     },
+    enabled: !isLoadingAccess,
   });
 
   const activeProjects = activeProjectsData?.projects || [];
@@ -786,19 +801,29 @@ const Proyectos = () => {
           <h1 className="text-3xl font-bold text-foreground">Proyectos</h1>
           <p className="text-muted-foreground">Gestiona todos los proyectos inmobiliarios</p>
         </div>
-        <NewProjectDialog onProjectAdded={handleProjectAdded} />
+        {hasUnrestrictedAccess && <NewProjectDialog onProjectAdded={handleProjectAdded} />}
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-        <Input
-          placeholder="Buscar proyectos..."
-          ref={searchInputRef}
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+      {hasNoAccess ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Lock className="h-16 w-16 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-semibold text-foreground mb-2">Sin acceso a proyectos</h2>
+          <p className="text-muted-foreground max-w-md">
+            No tienes acceso a ningún proyecto. Contacta a un administrador para que te asigne los proyectos que necesitas ver.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Input
+              placeholder="Buscar proyectos..."
+              ref={searchInputRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              className="pl-10"
+            />
+          </div>
 
       {/* Filtros específicos */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
@@ -965,15 +990,16 @@ const Proyectos = () => {
         </TabsContent>
       </Tabs>
 
-      {selectedProjectMultimedia && (
-        <ProjectMultimediaModal
-          isOpen={true}
-          onClose={() => setSelectedProjectMultimedia(null)}
-          multimedia={selectedProjectMultimedia.multimedia}
-          projectName={selectedProjectMultimedia.projectName}
-        />
+          {selectedProjectMultimedia && (
+            <ProjectMultimediaModal
+              isOpen={true}
+              onClose={() => setSelectedProjectMultimedia(null)}
+              multimedia={selectedProjectMultimedia.multimedia}
+              projectName={selectedProjectMultimedia.projectName}
+            />
+          )}
+        </>
       )}
-
     </div>
   );
 };

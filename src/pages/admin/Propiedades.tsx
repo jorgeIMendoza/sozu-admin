@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, AlertCircle, Banknote } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, AlertCircle, Banknote, Lock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { AsignarPropiedadDialog } from "@/components/admin/AsignarPropiedadDialog";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -230,6 +231,9 @@ const Propiedades = () => {
   const [inputValue, setInputValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("activos");
+  
+  // Project access control
+  const { accessibleProjectIds, hasUnrestrictedAccess, hasNoAccess } = useProjectAccess();
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   
