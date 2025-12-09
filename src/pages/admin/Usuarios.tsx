@@ -108,26 +108,38 @@ export default function Usuarios() {
   const { data: personasConTipo = [] } = useQuery({
     queryKey: ['personas_agentes_inmobiliarias'],
     queryFn: async () => {
-      // Query to get personas that are Agente or Inmobiliaria
-      const { data, error } = await supabase
+      // Query Inmobiliarias (tipo_entidad = 5)
+      const { data: inmobiliarias, error: errInmob } = await supabase
         .from('entidades_relacionadas')
         .select(`
           id_persona,
-          id_tipo_entidad,
-          personas!inner (id, nombre_legal, email, activo),
-          tipos_entidad!inner (id, nombre)
+          personas!inner (id, nombre_legal, email),
+          tipos_entidad!inner (nombre)
         `)
-        .in('id_tipo_entidad', [5, 19]) // 5 = Inmobiliaria, 19 = Agente
-        .eq('activo', true);
+        .eq('id_tipo_entidad', 5)
+        .eq('activo', true)
+        .eq('personas.activo', true);
       
-      if (error) throw error;
+      if (errInmob) throw errInmob;
+
+      // Query Agentes (tipo_entidad = 19)
+      const { data: agentes, error: errAgentes } = await supabase
+        .from('entidades_relacionadas')
+        .select(`
+          id_persona,
+          personas!inner (id, nombre_legal, email),
+          tipos_entidad!inner (nombre)
+        `)
+        .eq('id_tipo_entidad', 19)
+        .eq('activo', true)
+        .eq('personas.activo', true);
       
-      // Transform and deduplicate by persona id
+      if (errAgentes) throw errAgentes;
+      
+      // Combine and deduplicate by persona id
       const personasMap = new Map<number, PersonaConTipo>();
-      (data || []).forEach((item: any) => {
-        // Skip if persona is not active
-        if (!item.personas?.activo) return;
-        
+      
+      [...(inmobiliarias || []), ...(agentes || [])].forEach((item: any) => {
         const personaId = item.personas.id;
         if (!personasMap.has(personaId)) {
           personasMap.set(personaId, {
@@ -480,33 +492,34 @@ export default function Usuarios() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleOpenResetPassword(usuario.email)}
-                              disabled={isCurrentUser}
-                              title={isCurrentUser ? "No puedes resetear tu propia contraseña" : "Resetear contraseña"}
-                              className="hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600"
-                            >
-                              <RotateCcw className="h-3 w-3 mr-1" />
-                              Resetear
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => toggleActiveMutation.mutate({ 
-                                email: usuario.email, 
-                                activo: !usuario.activo 
-                              })}
-                              disabled={isCurrentUser}
-                              title={isCurrentUser ? "No puedes desactivarte a ti mismo" : ""}
-                              className={usuario.activo 
-                                ? "hover:bg-destructive/10 hover:border-destructive hover:text-destructive" 
-                                : "hover:bg-green-500/10 hover:border-green-500 hover:text-green-600"
-                              }
-                            >
-                              {usuario.activo ? 'Desactivar' : 'Activar'}
-                            </Button>
+                            {!isCurrentUser && (
+                              <>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleOpenResetPassword(usuario.email)}
+                                  title="Resetear contraseña"
+                                  className="hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600"
+                                >
+                                  <RotateCcw className="h-3 w-3 mr-1" />
+                                  Resetear
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => toggleActiveMutation.mutate({ 
+                                    email: usuario.email, 
+                                    activo: !usuario.activo 
+                                  })}
+                                  className={usuario.activo 
+                                    ? "hover:bg-destructive/10 hover:border-destructive hover:text-destructive" 
+                                    : "hover:bg-green-500/10 hover:border-green-500 hover:text-green-600"
+                                  }
+                                >
+                                  {usuario.activo ? 'Desactivar' : 'Activar'}
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
