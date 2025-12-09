@@ -14,6 +14,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { UserProjectAccessDialog } from "@/components/admin/UserProjectAccessDialog";
 
 type Usuario = {
   email: string;
@@ -142,6 +143,13 @@ function UsersTable({
                 )}
                 <TableCell className="text-right">
                   <div className="flex gap-2 justify-end">
+                    {!isInactiveTab && usuario.auth_user_id && (
+                      <UserProjectAccessDialog 
+                        userId={usuario.auth_user_id}
+                        userName={usuario.nombre || 'Sin nombre'}
+                        userEmail={usuario.email}
+                      />
+                    )}
                     {!isCurrentUser && (
                       <>
                         {isInactiveTab ? (
