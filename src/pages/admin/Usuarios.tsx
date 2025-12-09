@@ -108,31 +108,29 @@ export default function Usuarios() {
   const { data: personasConTipo = [] } = useQuery({
     queryKey: ['personas_agentes_inmobiliarias'],
     queryFn: async () => {
-      // Query Inmobiliarias (tipo_entidad = 5)
+      // Query Inmobiliarias (tipo_entidad = 5) - specify FK to avoid ambiguity
       const { data: inmobiliarias, error: errInmob } = await supabase
         .from('entidades_relacionadas')
         .select(`
           id_persona,
-          personas!inner (id, nombre_legal, email),
+          personas:personas!entidades_relacionadas_id_persona_fkey (id, nombre_legal, email, activo),
           tipos_entidad!inner (nombre)
         `)
         .eq('id_tipo_entidad', 5)
-        .eq('activo', true)
-        .eq('personas.activo', true);
+        .eq('activo', true);
       
       if (errInmob) throw errInmob;
 
-      // Query Agentes (tipo_entidad = 19)
+      // Query Agentes (tipo_entidad = 19) - specify FK to avoid ambiguity
       const { data: agentes, error: errAgentes } = await supabase
         .from('entidades_relacionadas')
         .select(`
           id_persona,
-          personas!inner (id, nombre_legal, email),
+          personas:personas!entidades_relacionadas_id_persona_fkey (id, nombre_legal, email, activo),
           tipos_entidad!inner (nombre)
         `)
         .eq('id_tipo_entidad', 19)
-        .eq('activo', true)
-        .eq('personas.activo', true);
+        .eq('activo', true);
       
       if (errAgentes) throw errAgentes;
       
@@ -140,6 +138,9 @@ export default function Usuarios() {
       const personasMap = new Map<number, PersonaConTipo>();
       
       [...(inmobiliarias || []), ...(agentes || [])].forEach((item: any) => {
+        // Skip if persona is null or not active
+        if (!item.personas || !item.personas.activo) return;
+        
         const personaId = item.personas.id;
         if (!personasMap.has(personaId)) {
           personasMap.set(personaId, {
