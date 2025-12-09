@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Tooltip,
   TooltipContent,
@@ -357,21 +358,18 @@ export default function RevisionDocumentacion() {
           <div className="space-y-2">
             <Label>Seleccionar Notario</Label>
             <div className="flex gap-4 items-start">
-              <Select
+              <Combobox
                 value={selectedNotarioId?.toString() || ""}
-                onValueChange={(value) => setSelectedNotarioId(parseInt(value))}
-              >
-                <SelectTrigger className="w-full max-w-md">
-                  <SelectValue placeholder="Selecciona un notario..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {notarios.map((notario) => (
-                    <SelectItem key={notario.id} value={notario.id.toString()}>
-                      {notario.nombre} - {notario.notaria}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onValueChange={(value) => setSelectedNotarioId(value ? parseInt(value) : null)}
+                options={notarios.map((notario) => ({
+                  value: notario.id.toString(),
+                  label: `${notario.nombre} - ${notario.notaria}`
+                }))}
+                placeholder="Selecciona un notario..."
+                searchPlaceholder="Buscar notario..."
+                emptyText="No se encontraron notarios"
+                className="w-full max-w-md"
+              />
               
               {notarioSeleccionado?.genera_proyecto_escritura && (
                 <div className="flex gap-2">
