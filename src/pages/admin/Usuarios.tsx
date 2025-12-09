@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Shield, UserCheck, UserX, Key, Loader2, RotateCcw, Lock } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +43,143 @@ type PersonaConTipo = {
 const ROLE_AGENTE_INTERNO = 9;
 const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_INMOBILIARIA = 4;
+
+// UsersTable component for reuse in tabs
+interface UsersTableProps {
+  users: Usuario[];
+  currentUserEmail: string | undefined;
+  getRoleBadgeColor: (roleName: string | undefined) => string;
+  onResetPassword: (email: string) => void;
+  onToggleActive: (email: string, activo: boolean) => void;
+  showActivateButton?: boolean;
+}
+
+function UsersTable({ 
+  users, 
+  currentUserEmail, 
+  getRoleBadgeColor, 
+  onResetPassword, 
+  onToggleActive,
+  showActivateButton 
+}: UsersTableProps) {
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/50">
+            <TableHead className="font-semibold text-foreground">Usuario</TableHead>
+            <TableHead className="font-semibold text-foreground">Email</TableHead>
+            <TableHead className="font-semibold text-foreground">Rol</TableHead>
+            <TableHead className="font-semibold text-foreground">Contraseña</TableHead>
+            <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {users.map((usuario) => {
+            const isCurrentUser = usuario.email === currentUserEmail;
+            
+            return (
+              <TableRow 
+                key={usuario.email} 
+                className={`transition-colors ${
+                  isCurrentUser 
+                    ? 'bg-primary/5 hover:bg-primary/10 border-l-4 border-l-primary' 
+                    : 'hover:bg-muted/30'
+                }`}
+              >
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center w-10 h-10 rounded-full ${
+                      isCurrentUser ? 'bg-primary/20' : 'bg-primary/10'
+                    }`}>
+                      <span className="text-primary font-semibold text-sm">
+                        {usuario.nombre?.charAt(0).toUpperCase() || 'U'}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground flex items-center gap-2">
+                        {usuario.nombre || 'Sin nombre'}
+                        {isCurrentUser && (
+                          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">
+                            Tú
+                          </Badge>
+                        )}
+                      </p>
+                      {usuario.personas?.nombre_legal && (
+                        <p className="text-xs text-muted-foreground">
+                          Persona: {usuario.personas.nombre_legal}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {usuario.email}
+                </TableCell>
+                <TableCell>
+                  <Badge 
+                    variant="outline" 
+                    className={getRoleBadgeColor(usuario.roles?.nombre)}
+                  >
+                    {usuario.roles?.nombre || 'Sin rol'}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {usuario.debe_cambiar_password ? (
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                      <Key className="h-3 w-3 mr-1" />
+                      Temporal
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">Personalizada</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex gap-2 justify-end">
+                    {!isCurrentUser && (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => onResetPassword(usuario.email)}
+                          title="Resetear contraseña"
+                          className="hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600"
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          Resetear
+                        </Button>
+                        {showActivateButton ? (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => onToggleActive(usuario.email, true)}
+                            className="hover:bg-green-500/10 hover:border-green-500 hover:text-green-600"
+                          >
+                            <UserCheck className="h-3 w-3 mr-1" />
+                            Activar
+                          </Button>
+                        ) : (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => onToggleActive(usuario.email, false)}
+                            className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive"
+                          >
+                            Desactivar
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 export default function Usuarios() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -225,6 +363,9 @@ export default function Usuarios() {
     usuario.roles?.nombre?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const activeUsers = filteredUsuarios.filter(u => u.activo);
+  const inactiveUsers = filteredUsuarios.filter(u => !u.activo);
+
   const handleCreateUser = async () => {
     if (!newUserForm.email || !newUserForm.nombre || !newUserForm.rol_id) {
       toast({
@@ -389,7 +530,7 @@ export default function Usuarios() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : filteredUsuarios.length === 0 ? (
+          ) : usuarios.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-muted-foreground text-lg mb-2">
                 No hay usuarios registrados
@@ -406,129 +547,53 @@ export default function Usuarios() {
               </Button>
             </div>
           ) : (
-            <div className="border border-border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="font-semibold text-foreground">Usuario</TableHead>
-                    <TableHead className="font-semibold text-foreground">Email</TableHead>
-                    <TableHead className="font-semibold text-foreground">Rol</TableHead>
-                    <TableHead className="font-semibold text-foreground">Estado</TableHead>
-                    <TableHead className="font-semibold text-foreground">Contraseña</TableHead>
-                    <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsuarios.map((usuario) => {
-                    const isCurrentUser = usuario.email === currentUserEmail;
-                    
-                    return (
-                      <TableRow 
-                        key={usuario.email} 
-                        className={`transition-colors ${
-                          isCurrentUser 
-                            ? 'bg-primary/5 hover:bg-primary/10 border-l-4 border-l-primary' 
-                            : 'hover:bg-muted/30'
-                        }`}
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className={`flex items-center justify-center w-10 h-10 rounded-full ${
-                              isCurrentUser ? 'bg-primary/20' : 'bg-primary/10'
-                            }`}>
-                              <span className="text-primary font-semibold text-sm">
-                                {usuario.nombre?.charAt(0).toUpperCase() || 'U'}
-                              </span>
-                            </div>
-                            <div>
-                              <p className="font-medium text-foreground flex items-center gap-2">
-                                {usuario.nombre || 'Sin nombre'}
-                                {isCurrentUser && (
-                                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">
-                                    Tú
-                                  </Badge>
-                                )}
-                              </p>
-                              {usuario.personas?.nombre_legal && (
-                                <p className="text-xs text-muted-foreground">
-                                  Persona: {usuario.personas.nombre_legal}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {usuario.email}
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant="outline" 
-                            className={getRoleBadgeColor(usuario.roles?.nombre)}
-                          >
-                            {usuario.roles?.nombre || 'Sin rol'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {usuario.activo ? (
-                            <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
-                              <UserCheck className="h-3 w-3 mr-1" />
-                              Activo
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20">
-                              <UserX className="h-3 w-3 mr-1" />
-                              Inactivo
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {usuario.debe_cambiar_password ? (
-                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
-                              <Key className="h-3 w-3 mr-1" />
-                              Temporal
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">Personalizada</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-2 justify-end">
-                            {!isCurrentUser && (
-                              <>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => handleOpenResetPassword(usuario.email)}
-                                  title="Resetear contraseña"
-                                  className="hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600"
-                                >
-                                  <RotateCcw className="h-3 w-3 mr-1" />
-                                  Resetear
-                                </Button>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => toggleActiveMutation.mutate({ 
-                                    email: usuario.email, 
-                                    activo: !usuario.activo 
-                                  })}
-                                  className={usuario.activo 
-                                    ? "hover:bg-destructive/10 hover:border-destructive hover:text-destructive" 
-                                    : "hover:bg-green-500/10 hover:border-green-500 hover:text-green-600"
-                                  }
-                                >
-                                  {usuario.activo ? 'Desactivar' : 'Activar'}
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+            <Tabs defaultValue="activos" className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="activos" className="flex items-center gap-2">
+                  <UserCheck className="h-4 w-4" />
+                  Activos
+                  <Badge variant="secondary" className="ml-1">{activeUsers.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger value="inactivos" className="flex items-center gap-2">
+                  <UserX className="h-4 w-4" />
+                  Inactivos
+                  <Badge variant="secondary" className="ml-1">{inactiveUsers.length}</Badge>
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="activos">
+                {activeUsers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No hay usuarios activos que coincidan con la búsqueda.
+                  </div>
+                ) : (
+                  <UsersTable 
+                    users={activeUsers} 
+                    currentUserEmail={currentUserEmail} 
+                    getRoleBadgeColor={getRoleBadgeColor}
+                    onResetPassword={handleOpenResetPassword}
+                    onToggleActive={(email, activo) => toggleActiveMutation.mutate({ email, activo })}
+                  />
+                )}
+              </TabsContent>
+
+              <TabsContent value="inactivos">
+                {inactiveUsers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No hay usuarios inactivos.
+                  </div>
+                ) : (
+                  <UsersTable 
+                    users={inactiveUsers} 
+                    currentUserEmail={currentUserEmail} 
+                    getRoleBadgeColor={getRoleBadgeColor}
+                    onResetPassword={handleOpenResetPassword}
+                    onToggleActive={(email, activo) => toggleActiveMutation.mutate({ email, activo })}
+                    showActivateButton
+                  />
+                )}
+              </TabsContent>
+            </Tabs>
           )}
         </CardContent>
       </Card>
