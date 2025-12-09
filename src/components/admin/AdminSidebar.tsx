@@ -143,6 +143,7 @@ const navigationItems = [
     icon: Settings,
     children: [
       { title: "Usuarios", href: "/admin/usuarios", icon: UserPlus },
+      { title: "Roles y Permisos", href: "/admin/roles-permisos", icon: Shield },
     ]
   },
 ];
