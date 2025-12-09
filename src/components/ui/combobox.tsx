@@ -51,6 +51,21 @@ export function Combobox({
     );
   }, [options, search]);
 
+  // Truncate label for display in button
+  const displayLabel = React.useMemo(() => {
+    if (!selectedOption) return placeholder;
+    const label = selectedOption.label;
+    // Show only name part (before email in parentheses) if too long
+    if (label.length > 40) {
+      const parenIndex = label.indexOf('(');
+      if (parenIndex > 0) {
+        return label.substring(0, parenIndex).trim() + '...';
+      }
+      return label.substring(0, 37) + '...';
+    }
+    return label;
+  }, [selectedOption, placeholder]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -59,19 +74,19 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "w-full justify-between overflow-hidden",
+            "w-full justify-between",
             !value && "text-muted-foreground",
             className
           )}
           disabled={disabled}
         >
-          <span className="truncate flex-1 text-left">
-            {selectedOption ? selectedOption.label : placeholder}
+          <span className="truncate text-left">
+            {displayLabel}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full min-w-[400px] p-0" align="start">
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command shouldFilter={false}>
           <CommandInput 
             placeholder={searchPlaceholder} 
@@ -96,14 +111,15 @@ export function Combobox({
                       setOpen(false);
                       setSearch("");
                     }}
+                    className="text-sm"
                   >
                     <Check
                       className={cn(
-                        "mr-2 h-4 w-4",
+                        "mr-2 h-4 w-4 shrink-0",
                         value === option.value ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    {option.label}
+                    <span className="truncate">{option.label}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
