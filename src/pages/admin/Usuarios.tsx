@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Shield, UserCheck, UserX, Key, Loader2 } from "lucide-react";
+import { Plus, Search, Shield, UserCheck, UserX, Key, Loader2, RotateCcw, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,11 +31,17 @@ type Role = {
   nombre: string;
 };
 
-type Persona = {
+type PersonaConTipo = {
   id: number;
   nombre_legal: string;
   email: string | null;
+  tipo_entidad: string;
 };
+
+// Role IDs
+const ROLE_AGENTE_INTERNO = 9;
+const ROLE_AGENTE_INMOBILIARIO = 3;
+const ROLE_INMOBILIARIA = 4;
 
 export default function Usuarios() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,11 +54,16 @@ export default function Usuarios() {
     rol_id: "",
     id_persona: "",
   });
+  const [isFieldsLocked, setIsFieldsLocked] = useState(false);
+  const [selectedPersonaTipo, setSelectedPersonaTipo] = useState<string | null>(null);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
+
+  // Current user's email for highlighting
+  const currentUserEmail = profile?.email || session?.user?.email;
 
   // Fetch users
   const { data: usuarios = [], isLoading: isLoadingUsuarios } = useQuery({
@@ -85,6 +96,7 @@ export default function Usuarios() {
       const { data, error } = await supabase
         .from('roles')
         .select('id, nombre')
+        .eq('activo', true)
         .order('id', { ascending: true });
       
       if (error) throw error;
@@ -92,19 +104,42 @@ export default function Usuarios() {
     },
   });
 
-  // Fetch personas for combobox
-  const { data: personas = [] } = useQuery({
-    queryKey: ['personas_for_users'],
+  // Fetch agents and inmobiliarias for combobox
+  const { data: personasConTipo = [] } = useQuery({
+    queryKey: ['personas_agentes_inmobiliarias'],
     queryFn: async () => {
+      // Query to get personas that are Agente or Inmobiliaria
       const { data, error } = await supabase
-        .from('personas')
-        .select('id, nombre_legal, email')
+        .from('entidades_relacionadas')
+        .select(`
+          id_persona,
+          personas!inner (id, nombre_legal, email, activo),
+          tipos_entidad!inner (nombre)
+        `)
+        .in('id_tipo_entidad', [5, 19]) // 5 = Inmobiliaria, 19 = Agente
+        .is('id_proyecto', null)
         .eq('activo', true)
-        .order('nombre_legal', { ascending: true })
-        .limit(1000);
+        .eq('personas.activo', true);
       
       if (error) throw error;
-      return (data || []) as Persona[];
+      
+      // Transform and deduplicate by persona id
+      const personasMap = new Map<number, PersonaConTipo>();
+      (data || []).forEach((item: any) => {
+        const personaId = item.personas.id;
+        if (!personasMap.has(personaId)) {
+          personasMap.set(personaId, {
+            id: personaId,
+            nombre_legal: item.personas.nombre_legal,
+            email: item.personas.email,
+            tipo_entidad: item.tipos_entidad.nombre
+          });
+        }
+      });
+      
+      return Array.from(personasMap.values()).sort((a, b) => 
+        a.nombre_legal.localeCompare(b.nombre_legal)
+      );
     },
   });
 
@@ -129,6 +164,41 @@ export default function Usuarios() {
       toast({
         title: "Error",
         description: `Error al actualizar el usuario: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reset password mutation
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const response = await supabase.functions.invoke('reset-user-password', {
+        body: { email },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] });
+      toast({
+        title: "Contraseña Reseteada",
+        description: data.message || "La contraseña fue reseteada a Temporal123!",
+      });
+      setIsResetPasswordDialogOpen(false);
+      setSelectedUserEmail(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Error al resetear contraseña: ${error.message}`,
         variant: "destructive",
       });
     },
@@ -177,7 +247,7 @@ export default function Usuarios() {
 
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       setIsNewUserDialogOpen(false);
-      setNewUserForm({ email: "", nombre: "", rol_id: "", id_persona: "" });
+      resetNewUserForm();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -189,19 +259,50 @@ export default function Usuarios() {
     }
   };
 
+  const resetNewUserForm = () => {
+    setNewUserForm({ email: "", nombre: "", rol_id: "", id_persona: "" });
+    setIsFieldsLocked(false);
+    setSelectedPersonaTipo(null);
+  };
+
   const handlePersonaSelect = (personaId: string) => {
-    setNewUserForm(prev => ({ ...prev, id_persona: personaId }));
-    
-    // Auto-fill email and name from selected persona
-    const selectedPersona = personas.find(p => p.id.toString() === personaId);
-    if (selectedPersona) {
-      setNewUserForm(prev => ({
-        ...prev,
-        id_persona: personaId,
-        email: selectedPersona.email || prev.email,
-        nombre: selectedPersona.nombre_legal || prev.nombre,
-      }));
+    if (!personaId) {
+      // Clear selection
+      resetNewUserForm();
+      return;
     }
+
+    const selectedPersona = personasConTipo.find(p => p.id.toString() === personaId);
+    if (selectedPersona) {
+      // Determine the role based on type and email
+      let autoRolId = "";
+      
+      if (selectedPersona.tipo_entidad === 'Agente') {
+        // Check if email ends with @sozu.com
+        const email = selectedPersona.email?.toLowerCase() || "";
+        if (email.endsWith('@sozu.com')) {
+          autoRolId = ROLE_AGENTE_INTERNO.toString();
+        } else {
+          autoRolId = ROLE_AGENTE_INMOBILIARIO.toString();
+        }
+      } else if (selectedPersona.tipo_entidad === 'Inmobiliaria') {
+        autoRolId = ROLE_INMOBILIARIA.toString();
+      }
+
+      setNewUserForm({
+        id_persona: personaId,
+        email: selectedPersona.email || "",
+        nombre: selectedPersona.nombre_legal || "",
+        rol_id: autoRolId,
+      });
+      setSelectedPersonaTipo(selectedPersona.tipo_entidad);
+      setIsFieldsLocked(true);
+    }
+  };
+
+  const handleOpenResetPassword = (email: string) => {
+    setSelectedUserEmail(email);
+    setIsResetPasswordDialogOpen(true);
   };
 
   const getRoleBadgeColor = (roleName: string | undefined) => {
@@ -212,6 +313,8 @@ export default function Usuarios() {
         return 'bg-orange-500/10 text-orange-600 border-orange-500/20';
       case 'Agente Inmobiliario':
         return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
+      case 'Agente Interno':
+        return 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20';
       case 'Inmobiliaria':
         return 'bg-purple-500/10 text-purple-600 border-purple-500/20';
       case 'Notario':
@@ -220,6 +323,14 @@ export default function Usuarios() {
         return 'bg-muted text-muted-foreground';
     }
   };
+
+  // Combobox options for personas with type indicator
+  const personaOptions = useMemo(() => {
+    return personasConTipo.map(p => ({
+      value: p.id.toString(),
+      label: `${p.nombre_legal} ${p.email ? `(${p.email})` : ''} - ${p.tipo_entidad}`
+    }));
+  }, [personasConTipo]);
 
   return (
     <div className="container mx-auto py-6 px-4">
@@ -293,81 +404,112 @@ export default function Usuarios() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsuarios.map((usuario) => (
-                    <TableRow key={usuario.email} className="hover:bg-muted/30 transition-colors">
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-full">
-                            <span className="text-primary font-semibold text-sm">
-                              {usuario.nombre?.charAt(0).toUpperCase() || 'U'}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-foreground">
-                              {usuario.nombre || 'Sin nombre'}
-                            </p>
-                            {usuario.personas?.nombre_legal && (
-                              <p className="text-xs text-muted-foreground">
-                                Persona: {usuario.personas.nombre_legal}
+                  {filteredUsuarios.map((usuario) => {
+                    const isCurrentUser = usuario.email === currentUserEmail;
+                    
+                    return (
+                      <TableRow 
+                        key={usuario.email} 
+                        className={`transition-colors ${
+                          isCurrentUser 
+                            ? 'bg-primary/5 hover:bg-primary/10 border-l-4 border-l-primary' 
+                            : 'hover:bg-muted/30'
+                        }`}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className={`flex items-center justify-center w-10 h-10 rounded-full ${
+                              isCurrentUser ? 'bg-primary/20' : 'bg-primary/10'
+                            }`}>
+                              <span className="text-primary font-semibold text-sm">
+                                {usuario.nombre?.charAt(0).toUpperCase() || 'U'}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-foreground flex items-center gap-2">
+                                {usuario.nombre || 'Sin nombre'}
+                                {isCurrentUser && (
+                                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">
+                                    Tú
+                                  </Badge>
+                                )}
                               </p>
-                            )}
+                              {usuario.personas?.nombre_legal && (
+                                <p className="text-xs text-muted-foreground">
+                                  Persona: {usuario.personas.nombre_legal}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {usuario.email}
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant="outline" 
-                          className={getRoleBadgeColor(usuario.roles?.nombre)}
-                        >
-                          {usuario.roles?.nombre || 'Sin rol'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {usuario.activo ? (
-                          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
-                            <UserCheck className="h-3 w-3 mr-1" />
-                            Activo
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20">
-                            <UserX className="h-3 w-3 mr-1" />
-                            Inactivo
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {usuario.debe_cambiar_password ? (
-                          <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
-                            <Key className="h-3 w-3 mr-1" />
-                            Temporal
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">Personalizada</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
-                          <Button 
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {usuario.email}
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
                             variant="outline" 
-                            size="sm"
-                            onClick={() => toggleActiveMutation.mutate({ 
-                              email: usuario.email, 
-                              activo: !usuario.activo 
-                            })}
-                            className={usuario.activo 
-                              ? "hover:bg-destructive/10 hover:border-destructive hover:text-destructive" 
-                              : "hover:bg-green-500/10 hover:border-green-500 hover:text-green-600"
-                            }
+                            className={getRoleBadgeColor(usuario.roles?.nombre)}
                           >
-                            {usuario.activo ? 'Desactivar' : 'Activar'}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            {usuario.roles?.nombre || 'Sin rol'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {usuario.activo ? (
+                            <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
+                              <UserCheck className="h-3 w-3 mr-1" />
+                              Activo
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20">
+                              <UserX className="h-3 w-3 mr-1" />
+                              Inactivo
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {usuario.debe_cambiar_password ? (
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                              <Key className="h-3 w-3 mr-1" />
+                              Temporal
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">Personalizada</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex gap-2 justify-end">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleOpenResetPassword(usuario.email)}
+                              disabled={isCurrentUser}
+                              title={isCurrentUser ? "No puedes resetear tu propia contraseña" : "Resetear contraseña"}
+                              className="hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600"
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Resetear
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => toggleActiveMutation.mutate({ 
+                                email: usuario.email, 
+                                activo: !usuario.activo 
+                              })}
+                              disabled={isCurrentUser}
+                              title={isCurrentUser ? "No puedes desactivarte a ti mismo" : ""}
+                              className={usuario.activo 
+                                ? "hover:bg-destructive/10 hover:border-destructive hover:text-destructive" 
+                                : "hover:bg-green-500/10 hover:border-green-500 hover:text-green-600"
+                              }
+                            >
+                              {usuario.activo ? 'Desactivar' : 'Activar'}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -376,7 +518,10 @@ export default function Usuarios() {
       </Card>
 
       {/* New User Dialog */}
-      <Dialog open={isNewUserDialogOpen} onOpenChange={setIsNewUserDialogOpen}>
+      <Dialog open={isNewUserDialogOpen} onOpenChange={(open) => {
+        setIsNewUserDialogOpen(open);
+        if (!open) resetNewUserForm();
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -390,48 +535,67 @@ export default function Usuarios() {
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="persona">Vincular a Persona (opcional)</Label>
+              <Label htmlFor="persona">Vincular a Agente/Inmobiliaria (opcional)</Label>
               <Combobox
                 value={newUserForm.id_persona}
                 onValueChange={handlePersonaSelect}
-                options={personas.map(p => ({
-                  value: p.id.toString(),
-                  label: `${p.nombre_legal} ${p.email ? `(${p.email})` : ''}`
-                }))}
-                placeholder="Seleccionar persona..."
-                searchPlaceholder="Buscar persona..."
-                emptyText="No se encontraron personas"
+                options={personaOptions}
+                placeholder="Seleccionar agente o inmobiliaria..."
+                searchPlaceholder="Buscar..."
+                emptyText="No se encontraron resultados"
               />
+              {selectedPersonaTipo && (
+                <p className="text-xs text-muted-foreground">
+                  Tipo seleccionado: <span className="font-medium">{selectedPersonaTipo}</span>
+                  {selectedPersonaTipo === 'Agente' && newUserForm.email?.toLowerCase().endsWith('@sozu.com') && (
+                    <span className="text-cyan-600 ml-1">(Agente Interno)</span>
+                  )}
+                </p>
+              )}
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre *</Label>
+              <Label htmlFor="nombre" className="flex items-center gap-2">
+                Nombre *
+                {isFieldsLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+              </Label>
               <Input
                 id="nombre"
                 value={newUserForm.nombre}
                 onChange={(e) => setNewUserForm(prev => ({ ...prev, nombre: e.target.value }))}
                 placeholder="Nombre completo"
+                disabled={isFieldsLocked}
+                className={isFieldsLocked ? "bg-muted" : ""}
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
+              <Label htmlFor="email" className="flex items-center gap-2">
+                Email *
+                {isFieldsLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+              </Label>
               <Input
                 id="email"
                 type="email"
                 value={newUserForm.email}
                 onChange={(e) => setNewUserForm(prev => ({ ...prev, email: e.target.value }))}
                 placeholder="usuario@email.com"
+                disabled={isFieldsLocked}
+                className={isFieldsLocked ? "bg-muted" : ""}
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="rol">Rol *</Label>
+              <Label htmlFor="rol" className="flex items-center gap-2">
+                Rol *
+                {isFieldsLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+              </Label>
               <Select
                 value={newUserForm.rol_id}
                 onValueChange={(value) => setNewUserForm(prev => ({ ...prev, rol_id: value }))}
+                disabled={isFieldsLocked}
               >
-                <SelectTrigger>
+                <SelectTrigger className={isFieldsLocked ? "bg-muted" : ""}>
                   <SelectValue placeholder="Seleccionar rol..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -442,13 +606,21 @@ export default function Usuarios() {
                   ))}
                 </SelectContent>
               </Select>
+              {isFieldsLocked && (
+                <p className="text-xs text-muted-foreground">
+                  El rol se asigna automáticamente según el tipo de persona seleccionada.
+                </p>
+              )}
             </div>
           </div>
 
           <DialogFooter>
             <Button 
               variant="outline" 
-              onClick={() => setIsNewUserDialogOpen(false)}
+              onClick={() => {
+                setIsNewUserDialogOpen(false);
+                resetNewUserForm();
+              }}
               disabled={isCreatingUser}
             >
               Cancelar
@@ -459,11 +631,60 @@ export default function Usuarios() {
             >
               {isCreatingUser ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Creando...
                 </>
               ) : (
                 'Crear Usuario'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Confirmation Dialog */}
+      <Dialog open={isResetPasswordDialogOpen} onOpenChange={setIsResetPasswordDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-amber-500" />
+              Resetear Contraseña
+            </DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas resetear la contraseña del usuario <strong>{selectedUserEmail}</strong>?
+              <br /><br />
+              La nueva contraseña será: <code className="bg-muted px-2 py-1 rounded">Temporal123!</code>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsResetPasswordDialogOpen(false);
+                setSelectedUserEmail(null);
+              }}
+              disabled={resetPasswordMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="default"
+              onClick={() => {
+                if (selectedUserEmail) {
+                  resetPasswordMutation.mutate(selectedUserEmail);
+                }
+              }}
+              disabled={resetPasswordMutation.isPending}
+              className="bg-amber-500 hover:bg-amber-600"
+            >
+              {resetPasswordMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Reseteando...
+                </>
+              ) : (
+                'Confirmar Reset'
               )}
             </Button>
           </DialogFooter>
