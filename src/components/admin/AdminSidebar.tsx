@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard,
   Building2,
@@ -36,7 +37,9 @@ import {
   Wrench,
   KeyRound,
   ScrollText,
-  Bot
+  Bot,
+  LogOut,
+  UserPlus
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -135,9 +138,34 @@ const navigationItems = [
       { title: "Contratos", href: "/admin/legal/contratos", icon: FileText },
     ]
   },
+  {
+    title: "Sistema",
+    icon: Settings,
+    children: [
+      { title: "Usuarios", href: "/admin/usuarios", icon: UserPlus },
+    ]
+  },
 ];
 
 export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps) => {
+  const { profile, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth/login");
+  };
+
+  // Get user initials for avatar
+  const getInitials = (name: string | undefined) => {
+    if (!name) return "U";
+    const parts = name.split(" ");
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
   // Auto-expand the group that contains the current path
   const getInitialExpandedGroups = () => {
     const expanded = new Set<string>();
@@ -264,12 +292,21 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
         <div className="p-4 border-t border-border">
           <div className="flex items-center space-x-3 p-3 bg-accent rounded-lg">
             <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-primary-foreground font-medium text-sm">JM</span>
+              <span className="text-primary-foreground font-medium text-sm">
+                {getInitials(profile?.nombre)}
+              </span>
             </div>
-            <div className="flex-1">
-              <p className="font-medium text-sm">Jorge Mendoza</p>
-              <p className="text-xs text-muted-foreground">Super Administrador</p>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm truncate">{profile?.nombre || "Usuario"}</p>
+              <p className="text-xs text-muted-foreground truncate">{profile?.rol_nombre || "Sin rol"}</p>
             </div>
+            <button
+              onClick={handleSignOut}
+              className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors"
+              title="Cerrar sesión"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
