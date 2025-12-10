@@ -287,7 +287,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
             descripcion,
             precio_lista,
             id_categoria,
-            categorias_producto!productos_servicios_id_categoria_fkey(nombre)
+            categorias_producto!productos_servicios_id_categoria_fkey(nombre, tiene_metraje)
           )
         `)
         .eq('id', cuentaDetalle.id_oferta)
@@ -2506,13 +2506,42 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <Label>Categoría</Label>
                       <Input value={productoServicioInfo.categorias_producto?.nombre || ''} readOnly />
                     </div>
-                    <div>
-                      <Label>Precio de Lista</Label>
-                      <Input 
-                        value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(productoServicioInfo.precio_lista || 0)} 
-                        readOnly 
-                      />
-                    </div>
+                    {productoServicioInfo.categorias_producto?.tiene_metraje ? (
+                      <>
+                        <div>
+                          <Label>Precio por M²</Label>
+                          <Input 
+                            value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(productoServicioInfo.precio_lista || 0)} 
+                            readOnly 
+                          />
+                        </div>
+                        <div>
+                          <Label>Metraje</Label>
+                          <Input 
+                            value={productoServicioInfo.precio_lista && cuentaDetalle?.precio_final 
+                              ? `${(cuentaDetalle.precio_final / productoServicioInfo.precio_lista).toFixed(2)} m²`
+                              : 'N/A'
+                            } 
+                            readOnly 
+                          />
+                        </div>
+                        <div>
+                          <Label>Precio Final</Label>
+                          <Input 
+                            value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle?.precio_final || 0)} 
+                            readOnly 
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <Label>Precio de Lista</Label>
+                        <Input 
+                          value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(productoServicioInfo.precio_lista || 0)} 
+                          readOnly 
+                        />
+                      </div>
+                    )}
                     <div className="col-span-2">
                       <Label>Descripción</Label>
                       <Textarea 
