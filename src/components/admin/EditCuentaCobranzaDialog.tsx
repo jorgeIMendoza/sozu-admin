@@ -2389,8 +2389,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                       variant="secondary" 
                                       className="mt-1 cursor-pointer hover:bg-secondary/80"
                                       onClick={() => {
-                                        onClose();
-                                        navigate(`/admin/cuentas-cobranza?cuenta=${estacionamiento.cuenta_cobranza_id}`);
+                                        navigator.clipboard.writeText(formatCuentaCobranzaId(estacionamiento.cuenta_cobranza_id, 'Producto'));
+                                        toast.success('ID de cuenta copiado al portapapeles');
                                       }}
                                     >
                                       Cuenta: {formatCuentaCobranzaId(estacionamiento.cuenta_cobranza_id, 'Producto')}
@@ -2457,8 +2457,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                                       variant="secondary" 
                                       className="mt-1 cursor-pointer hover:bg-secondary/80"
                                       onClick={() => {
-                                        onClose();
-                                        navigate(`/admin/cuentas-cobranza?cuenta=${bodega.cuenta_cobranza_id}`);
+                                        navigator.clipboard.writeText(formatCuentaCobranzaId(bodega.cuenta_cobranza_id, 'Producto'));
+                                        toast.success('ID de cuenta copiado al portapapeles');
                                       }}
                                     >
                                       Cuenta: {formatCuentaCobranzaId(bodega.cuenta_cobranza_id, 'Producto')}
