@@ -90,7 +90,7 @@ serve(async (req) => {
 
     const { data: propiedadData, error: propiedadError } = await supabase
       .from("propiedades")
-      .select("id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, m2_loft, m2_reales, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno, descripcion")
+      .select("id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, m2_loft, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno, descripcion")
       .eq("id", ofertaData.id_propiedad)
       .single();
 
@@ -326,7 +326,7 @@ serve(async (req) => {
       precio_lista: propiedadData.precio_lista?.toLocaleString("es-MX", { style: "currency", currency: "MXN" }) || "",
       m2_totales: m2Totales.toString(),
       metraje: m2Totales.toString(), // Alias
-      m2_reales: propiedadData.m2_reales?.toString() || m2Totales.toString(),
+      m2_reales: m2Totales.toString(), // Calculado de interiores + exteriores + loft
       m2_interiores: (propiedadData.m2_interiores || 0).toString(),
       m2_exteriores: (propiedadData.m2_exteriores || 0).toString(),
       m2_loft: (propiedadData.m2_loft || 0).toString(),
