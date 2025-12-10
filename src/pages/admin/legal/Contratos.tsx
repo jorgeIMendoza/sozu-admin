@@ -235,7 +235,7 @@ export default function Contratos() {
       const warnings = [];
       
       if (data.warnings?.missing_placeholders?.length > 0) {
-        warnings.push(`🔴 ${data.warnings.missing_placeholders.length} placeholders faltantes (resaltados en ROJO)`);
+        warnings.push(`🟠 ${data.warnings.missing_placeholders.length} placeholders Por Solicitar (resaltados en NARANJA)`);
       }
       if (data.warnings?.empty_placeholders?.length > 0) {
         warnings.push(`🟡 ${data.warnings.empty_placeholders.length} placeholders vacíos (resaltados en AMARILLO)`);
