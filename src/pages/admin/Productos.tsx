@@ -525,7 +525,7 @@ export default function Productos() {
                 <TableCell>{producto.categoria_nombre || '-'}</TableCell>
                 <TableCell>
                   <span className="font-semibold">
-                    ${parseFloat(producto.precio_lista.toString()).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                    $ {parseFloat(producto.precio_lista.toString()).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </TableCell>
                 <TableCell>
