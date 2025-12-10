@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,7 +13,6 @@ interface Estacionamiento {
   nombre: string;
   m2: number;
   ubicacion: string;
-  es_incluido: boolean;
   activo: boolean;
   tipo_nombre: string;
   proyecto_nombre: string;
@@ -39,7 +37,6 @@ export const EditEstacionamientoDialog = ({
     nombre: estacionamiento?.nombre || "",
     m2: estacionamiento?.m2 || 0,
     ubicacion: estacionamiento?.ubicacion || "",
-    es_incluido: estacionamiento?.es_incluido || false,
     id_tipo: estacionamiento?.id_tipo || null,
   }));
 
@@ -65,7 +62,6 @@ export const EditEstacionamientoDialog = ({
         nombre: estacionamiento.nombre,
         m2: estacionamiento.m2,
         ubicacion: estacionamiento.ubicacion,
-        es_incluido: estacionamiento.es_incluido,
         id_tipo: estacionamiento.id_tipo,
       });
     }
@@ -83,7 +79,6 @@ export const EditEstacionamientoDialog = ({
       nombre: "",
       m2: 0,
       ubicacion: "",
-      es_incluido: false,
       id_tipo: null,
     });
   };
@@ -144,15 +139,6 @@ export const EditEstacionamientoDialog = ({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="es_incluido"
-              checked={formData.es_incluido}
-              disabled
-            />
-            <Label htmlFor="es_incluido">Incluido</Label>
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">

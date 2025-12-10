@@ -460,7 +460,6 @@ const Estacionamientos = () => {
                       <TableHead>M2</TableHead>
                       <TableHead>Precio por M2</TableHead>
                       <TableHead>Precio Final</TableHead>
-                      <TableHead>Incluido</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -475,11 +474,6 @@ const Estacionamientos = () => {
                         <TableCell>{estacionamiento.m2} m²</TableCell>
                         <TableCell>{formatCurrency(estacionamiento.precio_m2)}</TableCell>
                         <TableCell>{formatCurrency(estacionamiento.precio_final)}</TableCell>
-                        <TableCell>
-                          <Badge variant={estacionamiento.es_incluido ? "default" : "secondary"}>
-                            {estacionamiento.es_incluido ? "Sí" : "No"}
-                          </Badge>
-                        </TableCell>
                         <TableCell>{estacionamiento.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -565,7 +559,6 @@ const Estacionamientos = () => {
                       <TableHead>M2</TableHead>
                       <TableHead>Precio por M2</TableHead>
                       <TableHead>Precio Final</TableHead>
-                      <TableHead>Incluido</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -580,11 +573,6 @@ const Estacionamientos = () => {
                         <TableCell>{estacionamiento.m2} m²</TableCell>
                         <TableCell>{formatCurrency(estacionamiento.precio_m2)}</TableCell>
                         <TableCell>{formatCurrency(estacionamiento.precio_final)}</TableCell>
-                        <TableCell>
-                          <Badge variant={estacionamiento.es_incluido ? "default" : "secondary"}>
-                            {estacionamiento.es_incluido ? "Sí" : "No"}
-                          </Badge>
-                        </TableCell>
                         <TableCell>{estacionamiento.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">

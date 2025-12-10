@@ -1,6 +1,5 @@
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface BodegaDetalle {
@@ -8,7 +7,8 @@ interface BodegaDetalle {
   nombre: string;
   m2: number;
   ubicacion: string;
-  es_incluido: boolean;
+  precio_m2: number | null;
+  precio_final: number | null;
 }
 
 interface BodegasDetailDialogProps {
@@ -17,6 +17,16 @@ interface BodegasDetailDialogProps {
   bodegas: BodegaDetalle[];
   propertyNumber: string;
 }
+
+const formatCurrency = (value: number | null): string => {
+  if (value === null || value === undefined) return 'N/A';
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+};
 
 export const BodegasDetailDialog = ({
   open,
@@ -38,8 +48,9 @@ export const BodegasDetailDialog = ({
                 <TableRow>
                   <TableHead>Nombre</TableHead>
                   <TableHead>M2</TableHead>
+                  <TableHead>Precio por M2</TableHead>
+                  <TableHead>Precio Final</TableHead>
                   <TableHead>Ubicación</TableHead>
-                  <TableHead>Incluido</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -49,18 +60,15 @@ export const BodegasDetailDialog = ({
                       {bodega.nombre}
                     </TableCell>
                     <TableCell>{bodega.m2} m²</TableCell>
+                    <TableCell>{formatCurrency(bodega.precio_m2)}</TableCell>
+                    <TableCell>{formatCurrency(bodega.precio_final)}</TableCell>
                     <TableCell>{bodega.ubicacion || 'N/A'}</TableCell>
-                    <TableCell>
-                      <Badge variant={bodega.es_incluido ? "default" : "secondary"}>
-                        {bodega.es_incluido ? "Incluido" : "No incluido"}
-                      </Badge>
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-6 text-gray-500">
+            <div className="text-center py-6 text-muted-foreground">
               No hay bodegas asignadas a esta propiedad.
             </div>
           )}

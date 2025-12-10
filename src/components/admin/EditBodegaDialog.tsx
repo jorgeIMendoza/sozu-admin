@@ -4,14 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 
 interface Bodega {
   id: number;
   nombre: string;
   m2: number;
   ubicacion: string;
-  es_incluido: boolean;
   activo: boolean;
   proyecto_nombre: string;
   numero_propiedad: string;
@@ -34,7 +32,6 @@ export const EditBodegaDialog = ({
     nombre: bodega?.nombre || "",
     m2: bodega?.m2 || 0,
     ubicacion: bodega?.ubicacion || "",
-    es_incluido: bodega?.es_incluido || false,
   }));
 
   // Update form data when bodega changes
@@ -44,7 +41,6 @@ export const EditBodegaDialog = ({
         nombre: bodega.nombre,
         m2: bodega.m2,
         ubicacion: bodega.ubicacion,
-        es_incluido: bodega.es_incluido,
       });
     }
   }, [bodega]);
@@ -61,7 +57,6 @@ export const EditBodegaDialog = ({
       nombre: "",
       m2: 0,
       ubicacion: "",
-      es_incluido: false,
     });
   };
 
@@ -102,15 +97,6 @@ export const EditBodegaDialog = ({
               onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
               rows={3}
             />
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="es_incluido"
-              checked={formData.es_incluido}
-              disabled
-            />
-            <Label htmlFor="es_incluido">Incluido</Label>
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
