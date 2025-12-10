@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { activityLoggerService } from '@/services/activityLoggerService';
 
 interface UserProfile {
   email: string;
@@ -115,16 +116,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       
       if (error) {
+        // Registrar intento fallido
+        activityLoggerService.registrarInicioSesion(email, 'error', error.message);
         return { error };
       }
       
+      // Registrar inicio de sesión exitoso
+      activityLoggerService.registrarInicioSesion(email, 'exito');
       return { error: null };
     } catch (err) {
+      activityLoggerService.registrarInicioSesion(email, 'error', (err as Error).message);
       return { error: err as Error };
     }
   };
 
   const signOut = async () => {
+    const userEmail = profile?.email || user?.email || 'desconocido';
+    activityLoggerService.registrarCierreSesion(userEmail);
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
