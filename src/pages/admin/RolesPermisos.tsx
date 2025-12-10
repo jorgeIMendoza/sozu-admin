@@ -121,6 +121,32 @@ export default function RolesPermisos() {
     },
   });
 
+  // Fetch available permissions per submenu (which permissions are configured for each submenu)
+  const { data: availablePermissions = new Set<string>() } = useQuery<Set<string>>({
+    queryKey: ['available-permissions-per-submenu'],
+    queryFn: async (): Promise<Set<string>> => {
+      const { data, error } = await supabase
+        .from('submenus_permisos')
+        .select('submenu_id, permiso_id')
+        .eq('activo', true);
+      
+      if (error) throw error;
+      
+      // Create a Set of "submenu_id-permiso_id" combinations that exist
+      const permissionSet = new Set<string>();
+      (data || []).forEach((item: { submenu_id: number; permiso_id: number }) => {
+        permissionSet.add(`${item.submenu_id}-${item.permiso_id}`);
+      });
+      
+      return permissionSet;
+    },
+  });
+
+  // Check if a permission is available for a submenu
+  const isPermissionAvailableForSubmenu = (submenuId: number, permisoId: number): boolean => {
+    return availablePermissions.has(`${submenuId}-${permisoId}`);
+  };
+
   // Fetch submenus_permisos for selected role
   const { data: rolePermisos = [], isLoading: loadingPermisos } = useQuery({
     queryKey: ['role-permisos', selectedRoleId],
@@ -281,19 +307,27 @@ export default function RolesPermisos() {
     setPendingChanges(newChanges);
   };
 
-  // Check if all permissions are active for a submenu
+  // Check if all available permissions are active for a submenu
   const areAllPermissionsActiveForSubmenu = (submenuId: number): boolean => {
-    return permisos.every(permiso => hasPermission(submenuId, permiso.id));
+    const availablePermisos = permisos.filter(permiso => 
+      isPermissionAvailableForSubmenu(submenuId, permiso.id)
+    );
+    if (availablePermisos.length === 0) return false;
+    return availablePermisos.every(permiso => hasPermission(submenuId, permiso.id));
   };
 
-  // Toggle all permissions for a submenu (row)
+  // Toggle all available permissions for a submenu (row)
   const toggleAllPermissionsForSubmenu = (submenuId: number) => {
     if (isSuperAdminSelected) return;
+    
+    const availablePermisos = permisos.filter(permiso => 
+      isPermissionAvailableForSubmenu(submenuId, permiso.id)
+    );
     
     const allActive = areAllPermissionsActiveForSubmenu(submenuId);
     const newChanges = new Map(pendingChanges);
     
-    permisos.forEach(permiso => {
+    availablePermisos.forEach(permiso => {
       const key = `${submenuId}-${permiso.id}`;
       const originalValue = rolePermisos.some(
         rp => rp.submenu_id === submenuId && rp.permiso_id === permiso.id && rp.activo
@@ -311,17 +345,21 @@ export default function RolesPermisos() {
     setPendingChanges(newChanges);
   };
 
-  // Check if all permissions are active for a menu (module)
+  // Check if all available permissions are active for a menu (module)
   const areAllPermissionsActiveForMenu = (menuId: number): boolean => {
     const menu = menus.find(m => m.id === menuId);
     if (!menu) return false;
     
-    return menu.submenus.every(submenu => 
-      permisos.every(permiso => hasPermission(submenu.id, permiso.id))
-    );
+    return menu.submenus.every(submenu => {
+      const availablePermisos = permisos.filter(permiso => 
+        isPermissionAvailableForSubmenu(submenu.id, permiso.id)
+      );
+      if (availablePermisos.length === 0) return true;
+      return availablePermisos.every(permiso => hasPermission(submenu.id, permiso.id));
+    });
   };
 
-  // Toggle all permissions for a menu (module)
+  // Toggle all available permissions for a menu (module)
   const toggleAllPermissionsForMenu = (menuId: number) => {
     if (isSuperAdminSelected) return;
     
@@ -332,7 +370,11 @@ export default function RolesPermisos() {
     const newChanges = new Map(pendingChanges);
     
     menu.submenus.forEach(submenu => {
-      permisos.forEach(permiso => {
+      const availablePermisos = permisos.filter(permiso => 
+        isPermissionAvailableForSubmenu(submenu.id, permiso.id)
+      );
+      
+      availablePermisos.forEach(permiso => {
         const key = `${submenu.id}-${permiso.id}`;
         const originalValue = rolePermisos.some(
           rp => rp.submenu_id === submenu.id && rp.permiso_id === permiso.id && rp.activo
@@ -351,7 +393,7 @@ export default function RolesPermisos() {
     setPendingChanges(newChanges);
   };
 
-  // Deselect ALL permissions globally
+  // Deselect ALL available permissions globally
   const deselectAllPermissions = () => {
     if (isSuperAdminSelected) return;
     
@@ -359,7 +401,11 @@ export default function RolesPermisos() {
     
     menus.forEach(menu => {
       menu.submenus.forEach(submenu => {
-        permisos.forEach(permiso => {
+        const availablePermisos = permisos.filter(permiso => 
+          isPermissionAvailableForSubmenu(submenu.id, permiso.id)
+        );
+        
+        availablePermisos.forEach(permiso => {
           const key = `${submenu.id}-${permiso.id}`;
           const originalValue = rolePermisos.some(
             rp => rp.submenu_id === submenu.id && rp.permiso_id === permiso.id && rp.activo
@@ -727,6 +773,17 @@ export default function RolesPermisos() {
                                   {submenu.nombre}
                                 </div>
                                 {permisos.map(permiso => {
+                                  const isAvailable = isPermissionAvailableForSubmenu(submenu.id, permiso.id);
+                                  
+                                  // If permission is not available for this submenu, show empty cell
+                                  if (!isAvailable) {
+                                    return (
+                                      <div key={permiso.id} className="flex justify-center">
+                                        <span className="text-muted-foreground/30">—</span>
+                                      </div>
+                                    );
+                                  }
+                                  
                                   const isChecked = hasPermission(submenu.id, permiso.id);
                                   const key = `${submenu.id}-${permiso.id}`;
                                   const hasChange = pendingChanges.has(key);
