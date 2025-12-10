@@ -7,7 +7,7 @@ interface ProjectAccess {
 }
 
 export function useProjectAccess() {
-  const { session, profile } = useAuth();
+  const { session, profile, isLoading: isAuthLoading } = useAuth();
   const userEmail = session?.user?.email;
 
   // Check if user is Super Admin (has access to all projects)
@@ -16,7 +16,7 @@ export function useProjectAccess() {
   const hasUnrestrictedAccess = isSuperAdmin || isAdminProyecto;
 
   // Fetch user's project access (using email as FK, not UUID)
-  const { data: projectAccess, isLoading } = useQuery({
+  const { data: projectAccess, isLoading: isLoadingQuery } = useQuery({
     queryKey: ['user-project-access', userEmail],
     queryFn: async () => {
       if (!userEmail) return [];
@@ -30,7 +30,7 @@ export function useProjectAccess() {
       if (error) throw error;
       return data as ProjectAccess[];
     },
-    enabled: !!userEmail && !hasUnrestrictedAccess,
+    enabled: !!userEmail && !hasUnrestrictedAccess && !isAuthLoading,
   });
 
   // Get list of accessible project IDs
@@ -62,6 +62,9 @@ export function useProjectAccess() {
     return accessibleProjectIds;
   };
 
+  // Loading = auth loading OR query loading (but only if we're supposed to query)
+  const isLoading = isAuthLoading || (!hasUnrestrictedAccess && isLoadingQuery);
+
   return {
     accessibleProjectIds,
     hasAccessToProject,
@@ -69,6 +72,6 @@ export function useProjectAccess() {
     getProjectFilter,
     hasUnrestrictedAccess,
     isLoading,
-    hasNoAccess: !hasUnrestrictedAccess && accessibleProjectIds.length === 0,
+    hasNoAccess: !isAuthLoading && !hasUnrestrictedAccess && !isLoadingQuery && accessibleProjectIds.length === 0,
   };
 }
