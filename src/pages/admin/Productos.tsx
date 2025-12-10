@@ -171,7 +171,7 @@ export default function Productos() {
         .from('productos_servicios')
         .select(`
           *,
-          categorias_producto!productos_servicios_id_categoria_fkey (nombre),
+          categorias_producto!productos_servicios_id_categoria_fkey (nombre, tiene_metraje),
           entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
             personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
           ),
@@ -204,6 +204,7 @@ export default function Productos() {
         categoria_nombre: item.categorias_producto?.nombre,
         dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
         unidad_sat_descripcion: item.unidades_sat?.descripcion,
+        tiene_metraje: item.categorias_producto?.tiene_metraje || false,
       })) as Producto[];
 
       return { productos, count: count || 0 };
@@ -220,7 +221,7 @@ export default function Productos() {
         .from('productos_servicios')
         .select(`
           *,
-          categorias_producto!productos_servicios_id_categoria_fkey (nombre),
+          categorias_producto!productos_servicios_id_categoria_fkey (nombre, tiene_metraje),
           entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
             personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
           ),
@@ -253,6 +254,7 @@ export default function Productos() {
         categoria_nombre: item.categorias_producto?.nombre,
         dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
         unidad_sat_descripcion: item.unidades_sat?.descripcion,
+        tiene_metraje: item.categorias_producto?.tiene_metraje || false,
       })) as Producto[];
 
       return { productos, count: count || 0 };
