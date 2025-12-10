@@ -51,6 +51,7 @@ import { useToast } from "@/hooks/use-toast";
 import { FileText, Check, ChevronsUpDown, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/contexts/AuthContext";
 
 const baseProspectSchema = z.object({
   tipo_persona: z.string().min(1, "El tipo de persona es requerido"),
@@ -160,6 +161,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { profile } = useAuth();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -471,7 +473,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         mostrar_precio_m2_en_oferta: data.mostrar_precio_m2_en_oferta,
         mostrar_seccion_efectivo_en_oferta: data.mostrar_seccion_efectivo_en_oferta,
         activo: true,
-        email_creador: 'jorge.mendoza@sozu.com' // Fixed user email
+        email_creador: profile?.email || ''
         // Remove fecha_generacion to let the database set it with DEFAULT CURRENT_TIMESTAMP
       };
 

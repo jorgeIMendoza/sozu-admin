@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Form validation schema
 const formSchema = z.object({
@@ -99,6 +100,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
   const selectedProductRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
+  const { profile } = useAuth();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -499,7 +501,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
           id_producto: selectedProduct,
           id_propiedad: propertyId,
           id_esquema_pago_seleccionado: esquemaPago.id,
-          email_creador: 'jorge.mendoza@sozu.com', // Fixed user email
+          email_creador: profile?.email || '',
           clabe_stp_tmp_producto: clabeData,
         });
       
