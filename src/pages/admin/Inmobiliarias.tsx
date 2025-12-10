@@ -239,12 +239,12 @@ export default function Inmobiliarias() {
               .maybeSingle();
             
             if (!existingUser) {
-              // Crear usuario para el representante legal con rol Representante Legal (id: 5)
+              // Crear usuario para el representante legal con rol Agente Inmobiliario (id: 3)
               const { error: repUserError } = await supabase.functions.invoke('create-user', {
                 body: {
                   email: repPersona.email,
                   nombre: repPersona.nombre_legal,
-                  rol_id: 5, // Representante Legal
+                  rol_id: 3, // Agente Inmobiliario
                   id_persona: repPersona.id,
                   telefono: repPersona.telefono || null,
                   clave_pais_telefono: repPersona.clave_pais_telefono || null
