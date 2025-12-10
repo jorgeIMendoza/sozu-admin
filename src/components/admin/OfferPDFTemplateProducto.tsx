@@ -330,14 +330,16 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
               borderRadius: '8px',
               maxWidth: '600px'
             }}>
-              <h3 style={{ 
-                fontSize: '43px', 
-                fontWeight: 'bold', 
-                color: '#000000',
-                marginBottom: '24px'
-              }}>
-                {paymentScheme.nombre}
-              </h3>
+              {!paymentScheme.es_manual && (
+                <h3 style={{ 
+                  fontSize: '43px', 
+                  fontWeight: 'bold', 
+                  color: '#000000',
+                  marginBottom: '24px'
+                }}>
+                  {paymentScheme.nombre}
+                </h3>
+              )}
               
               <div style={{ 
                 display: 'flex',

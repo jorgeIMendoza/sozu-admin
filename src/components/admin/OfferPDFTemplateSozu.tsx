@@ -503,14 +503,16 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                       borderRadius: '8px'
                     }}
                   >
-                    <h3 style={{ 
-                      fontSize: '43px', 
-                      fontWeight: 'bold', 
-                      color: '#000000',
-                      marginBottom: '24px'
-                    }}>
-                      {scheme.nombre}
-                    </h3>
+                    {!scheme.es_manual && (
+                      <h3 style={{ 
+                        fontSize: '43px', 
+                        fontWeight: 'bold', 
+                        color: '#000000',
+                        marginBottom: '24px'
+                      }}>
+                        {scheme.nombre}
+                      </h3>
+                    )}
                     
                     <div style={{ 
                       display: 'flex',

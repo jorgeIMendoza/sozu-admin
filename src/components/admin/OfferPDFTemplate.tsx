@@ -305,9 +305,11 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
               const calculation = calculatePaymentAmounts(scheme);
               return (
                 <div key={scheme.id} className="bg-white rounded-xl p-4 shadow-lg border border-border">
-                  <div className="text-center mb-3">
-                    <h4 className="text-sm font-bold">{scheme.nombre}</h4>
-                  </div>
+                  {!scheme.es_manual && (
+                    <div className="text-center mb-3">
+                      <h4 className="text-sm font-bold">{scheme.nombre}</h4>
+                    </div>
+                  )}
                   
                   <div className="space-y-2">
                     {scheme.porcentaje_enganche > 0 && (
