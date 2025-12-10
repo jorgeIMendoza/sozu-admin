@@ -81,16 +81,22 @@ serve(async (req) => {
       .single();
 
     if (!ofertaData) throw new Error("Oferta no encontrada");
+    
+    console.log("Oferta encontrada:", ofertaData);
 
-    const { data: propiedadData } = await supabase
+    if (!ofertaData.id_propiedad) {
+      throw new Error("Esta cuenta de cobranza no está asociada a una propiedad (puede ser un producto)");
+    }
+
+    const { data: propiedadData, error: propiedadError } = await supabase
       .from("propiedades")
       .select("id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, m2_loft, m2_reales, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno, descripcion")
       .eq("id", ofertaData.id_propiedad)
       .single();
 
-    if (!propiedadData) throw new Error("Propiedad no encontrada");
+    console.log("Query propiedad resultado:", { propiedadData, propiedadError });
 
-    console.log("Datos propiedad:", propiedadData);
+    if (!propiedadData) throw new Error(`Propiedad no encontrada para id: ${ofertaData.id_propiedad}`);
 
     const m2Totales = (propiedadData.m2_interiores || 0) + (propiedadData.m2_exteriores || 0) + (propiedadData.m2_loft || 0);
 
