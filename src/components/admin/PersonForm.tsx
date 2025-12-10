@@ -708,6 +708,18 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       }
     }
 
+    // Validation for legal representative (mandatory for Inmobiliarias)
+    if (entityType === 'inmobiliaria') {
+      if (!idRepresentanteLegal || idRepresentanteLegal === 'none') {
+        toast({
+          title: "Error",
+          description: "Debes seleccionar un Representante Legal para la Inmobiliaria.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const formData: any = {
       nombre_legal: nombre.trim(),
       nombre_comercial: nombreComercial.trim() || null,
@@ -1023,7 +1035,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                   {/* Representante Legal - para entidades legales, administradoras, compradores y PM clients */}
                   {(entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || entityType === 'administradora' || entityType === 'comprador' || (entityType === 'client' && tipoPersona === 'pm')) && (
                     <div>
-                      <Label htmlFor="idRepresentanteLegal">Representante Legal</Label>
+                      <Label htmlFor="idRepresentanteLegal">
+                        Representante Legal {entityType === 'inmobiliaria' && '*'}
+                      </Label>
                       <RepresentanteLegalSelector
                         value={idRepresentanteLegal?.toString() || ''}
                         onValueChange={setIdRepresentanteLegal}
@@ -1234,7 +1248,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
 
                 {(entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || entityType === 'administradora' || entityType === 'comprador' || (entityType === 'client' && tipoPersona === 'pm')) && (
                   <div>
-                    <Label htmlFor="idRepresentanteLegal">Representante Legal</Label>
+                    <Label htmlFor="idRepresentanteLegal">
+                      Representante Legal {entityType === 'inmobiliaria' && '*'}
+                    </Label>
                     <RepresentanteLegalSelector
                       value={idRepresentanteLegal?.toString() || ''}
                       onValueChange={setIdRepresentanteLegal}
