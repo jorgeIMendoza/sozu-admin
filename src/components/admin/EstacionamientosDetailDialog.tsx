@@ -9,7 +9,8 @@ interface EstacionamientoDetalle {
   tipo_nombre: string;
   m2: number;
   ubicacion: string;
-  es_incluido: boolean;
+  precio_m2: number | null;
+  precio_final: number | null;
 }
 
 interface EstacionamientosDetailDialogProps {
@@ -18,6 +19,16 @@ interface EstacionamientosDetailDialogProps {
   estacionamientos: EstacionamientoDetalle[];
   propertyNumber: string;
 }
+
+const formatCurrency = (value: number | null): string => {
+  if (value === null || value === undefined) return 'N/A';
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+};
 
 export const EstacionamientosDetailDialog = ({
   open,
@@ -40,8 +51,9 @@ export const EstacionamientosDetailDialog = ({
                   <TableHead>Nombre</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>M2</TableHead>
+                  <TableHead>Precio por M2</TableHead>
+                  <TableHead>Precio Final</TableHead>
                   <TableHead>Ubicación</TableHead>
-                  <TableHead>Incluido</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -54,18 +66,15 @@ export const EstacionamientosDetailDialog = ({
                       <Badge variant="outline">{estacionamiento.tipo_nombre}</Badge>
                     </TableCell>
                     <TableCell>{estacionamiento.m2} m²</TableCell>
+                    <TableCell>{formatCurrency(estacionamiento.precio_m2)}</TableCell>
+                    <TableCell>{formatCurrency(estacionamiento.precio_final)}</TableCell>
                     <TableCell>{estacionamiento.ubicacion || 'N/A'}</TableCell>
-                    <TableCell>
-                      <Badge variant={estacionamiento.es_incluido ? "default" : "secondary"}>
-                        {estacionamiento.es_incluido ? "Incluido" : "No incluido"}
-                      </Badge>
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-6 text-gray-500">
+            <div className="text-center py-6 text-muted-foreground">
               No hay estacionamientos asignados a esta propiedad.
             </div>
           )}

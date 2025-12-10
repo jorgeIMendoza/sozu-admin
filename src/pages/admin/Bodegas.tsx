@@ -457,7 +457,6 @@ const Bodegas = () => {
                       <TableHead>M2</TableHead>
                       <TableHead>Precio por M2</TableHead>
                       <TableHead>Precio Final</TableHead>
-                      <TableHead>Incluido</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -471,11 +470,6 @@ const Bodegas = () => {
                         <TableCell>{bodega.m2} m²</TableCell>
                         <TableCell>{formatCurrency(bodega.precio_m2)}</TableCell>
                         <TableCell>{formatCurrency(bodega.precio_final)}</TableCell>
-                        <TableCell>
-                          <Badge variant={bodega.es_incluido ? "default" : "secondary"}>
-                            {bodega.es_incluido ? "Sí" : "No"}
-                          </Badge>
-                        </TableCell>
                         <TableCell>{bodega.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -560,7 +554,6 @@ const Bodegas = () => {
                       <TableHead>M2</TableHead>
                       <TableHead>Precio por M2</TableHead>
                       <TableHead>Precio Final</TableHead>
-                      <TableHead>Incluido</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -574,11 +567,6 @@ const Bodegas = () => {
                         <TableCell>{bodega.m2} m²</TableCell>
                         <TableCell>{formatCurrency(bodega.precio_m2)}</TableCell>
                         <TableCell>{formatCurrency(bodega.precio_final)}</TableCell>
-                        <TableCell>
-                          <Badge variant={bodega.es_incluido ? "default" : "secondary"}>
-                            {bodega.es_incluido ? "Sí" : "No"}
-                          </Badge>
-                        </TableCell>
                         <TableCell>{bodega.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">

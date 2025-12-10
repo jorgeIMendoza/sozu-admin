@@ -2030,8 +2030,8 @@ const Propiedades = () => {
         nombre,
         m2,
         ubicacion,
-        es_incluido,
-        tipos_estacionamiento!estacionamientos_id_tipo_fkey(nombre)
+        tipos_estacionamiento!estacionamientos_id_tipo_fkey(nombre),
+        productos_servicios!estacionamientos_id_producto_fkey(precio_lista)
       `)
       .eq('id_propiedad', propertyId)
       .eq('activo', true)
@@ -2042,21 +2042,32 @@ const Propiedades = () => {
       return [];
     }
 
-    return (data || []).map((item: any) => ({
-      id: item.id,
-      nombre: item.nombre,
-      tipo_nombre: item.tipos_estacionamiento?.nombre || 'N/A',
-      m2: item.m2,
-      ubicacion: item.ubicacion,
-      es_incluido: item.es_incluido
-    }));
+    return (data || []).map((item: any) => {
+      const precioM2 = item.productos_servicios?.precio_lista ?? null;
+      const precioFinal = precioM2 !== null && item.m2 ? Number(item.m2) * Number(precioM2) : null;
+      return {
+        id: item.id,
+        nombre: item.nombre,
+        tipo_nombre: item.tipos_estacionamiento?.nombre || 'N/A',
+        m2: item.m2,
+        ubicacion: item.ubicacion,
+        precio_m2: precioM2,
+        precio_final: precioFinal
+      };
+    });
   };
 
   // Función para obtener bodegas de una propiedad
   const fetchPropertyBodegas = async (propertyId: number) => {
     const { data, error } = await supabase
       .from('bodegas')
-      .select('id, nombre, m2, ubicacion, es_incluido')
+      .select(`
+        id,
+        nombre,
+        m2,
+        ubicacion,
+        productos_servicios!bodegas_id_producto_fkey(precio_lista)
+      `)
       .eq('id_propiedad', propertyId)
       .eq('activo', true)
       .order('nombre');
@@ -2066,7 +2077,18 @@ const Propiedades = () => {
       return [];
     }
 
-    return data || [];
+    return (data || []).map((item: any) => {
+      const precioM2 = item.productos_servicios?.precio_lista ?? null;
+      const precioFinal = precioM2 !== null && item.m2 ? Number(item.m2) * Number(precioM2) : null;
+      return {
+        id: item.id,
+        nombre: item.nombre,
+        m2: item.m2,
+        ubicacion: item.ubicacion,
+        precio_m2: precioM2,
+        precio_final: precioFinal
+      };
+    });
   };
 
   const handleViewOffers = async (property: Property) => {
