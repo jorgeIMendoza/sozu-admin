@@ -8,29 +8,29 @@ interface ProjectAccess {
 
 export function useProjectAccess() {
   const { session, profile } = useAuth();
-  const userId = session?.user?.id;
+  const userEmail = session?.user?.email;
 
   // Check if user is Super Admin (has access to all projects)
   const isSuperAdmin = profile?.rol_nombre === 'Super Administrador';
   const isAdminProyecto = profile?.rol_nombre === 'Administrador de Proyecto';
   const hasUnrestrictedAccess = isSuperAdmin || isAdminProyecto;
 
-  // Fetch user's project access
+  // Fetch user's project access (using email as FK, not UUID)
   const { data: projectAccess, isLoading } = useQuery({
-    queryKey: ['user-project-access', userId],
+    queryKey: ['user-project-access', userEmail],
     queryFn: async () => {
-      if (!userId) return [];
+      if (!userEmail) return [];
       
       const { data, error } = await supabase
         .from('proyectos_acceso')
         .select('proyecto_id')
-        .eq('usuario_id', userId)
+        .eq('usuario_id', userEmail)
         .eq('activo', true);
       
       if (error) throw error;
       return data as ProjectAccess[];
     },
-    enabled: !!userId && !hasUnrestrictedAccess,
+    enabled: !!userEmail && !hasUnrestrictedAccess,
   });
 
   // Get list of accessible project IDs

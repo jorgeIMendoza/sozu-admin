@@ -53,20 +53,20 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole 
     enabled: open && !isSuperAdmin,
   });
 
-  // Fetch user's current project access
+  // Fetch user's current project access (using email as FK, not UUID)
   const { data: userAccess, isLoading: loadingAccess } = useQuery({
-    queryKey: ['user-project-access', userId],
+    queryKey: ['user-project-access', userEmail],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('proyectos_acceso')
         .select('proyecto_id')
-        .eq('usuario_id', userId)
+        .eq('usuario_id', userEmail)
         .eq('activo', true);
       
       if (error) throw error;
       return data as ProyectoAcceso[];
     },
-    enabled: open && !isSuperAdmin,
+    enabled: open && !isSuperAdmin && !!userEmail,
   });
 
   // Update selected projects when data loads
@@ -94,21 +94,21 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole 
     );
   }, [proyectos, searchTerm]);
 
-  // Mutation to save access
+  // Mutation to save access (using email as FK, not UUID)
   const saveAccessMutation = useMutation({
     mutationFn: async (projectIds: number[]) => {
       // First, deactivate all current access
       const { error: deactivateError } = await supabase
         .from('proyectos_acceso')
         .update({ activo: false, fecha_actualizacion: new Date().toISOString() })
-        .eq('usuario_id', userId);
+        .eq('usuario_id', userEmail);
       
       if (deactivateError) throw deactivateError;
 
       // Then, upsert the new access
       if (projectIds.length > 0) {
         const accessRecords = projectIds.map(projectId => ({
-          usuario_id: userId,
+          usuario_id: userEmail,
           proyecto_id: projectId,
           activo: true,
           fecha_actualizacion: new Date().toISOString(),
@@ -119,15 +119,15 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole 
           const { data: existing } = await supabase
             .from('proyectos_acceso')
             .select('usuario_id')
-            .eq('usuario_id', userId)
+            .eq('usuario_id', userEmail)
             .eq('proyecto_id', record.proyecto_id)
-            .single();
+            .maybeSingle();
 
           if (existing) {
             const { error } = await supabase
               .from('proyectos_acceso')
               .update({ activo: true, fecha_actualizacion: new Date().toISOString() })
-              .eq('usuario_id', userId)
+              .eq('usuario_id', userEmail)
               .eq('proyecto_id', record.proyecto_id);
             if (error) throw error;
           } else {
@@ -141,7 +141,7 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole 
     },
     onSuccess: () => {
       toast.success('Accesos actualizados correctamente');
-      queryClient.invalidateQueries({ queryKey: ['user-project-access', userId] });
+      queryClient.invalidateQueries({ queryKey: ['user-project-access', userEmail] });
       setOpen(false);
     },
     onError: (error) => {
