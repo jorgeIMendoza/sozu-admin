@@ -8,16 +8,24 @@ interface AllowedMenu {
 }
 
 export function useAllowedMenus() {
-  const { profile, isLoading: isAuthLoading } = useAuth();
+  const { profile, isLoading: isAuthLoading, user } = useAuth();
   const [allowedPaths, setAllowedPaths] = useState<Set<string>>(new Set());
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
 
-  // Super Admin has access to everything
+  // Super Admin has access to everything - only check when profile is loaded
   const isSuperAdmin = profile?.rol_nombre === 'Super Administrador';
+  
+  // Profile is still loading if we have a user but no profile yet
+  const isProfileStillLoading = !!user && !profile && !isAuthLoading;
 
   useEffect(() => {
     // Wait for auth to finish loading
     if (isAuthLoading) {
+      return;
+    }
+
+    // If we have a user but profile hasn't loaded yet, wait
+    if (user && !profile) {
       return;
     }
 
@@ -28,7 +36,7 @@ export function useAllowedMenus() {
       return;
     }
 
-    // If no profile yet (not logged in or still loading), wait
+    // If no profile (not logged in), stop loading
     if (!profile?.rol_id) {
       setIsLoadingPermissions(false);
       return;
@@ -104,7 +112,8 @@ export function useAllowedMenus() {
     };
 
     fetchAllowedMenus();
-  }, [profile?.rol_id, isSuperAdmin, isAuthLoading]);
+  }, [profile?.rol_id, isSuperAdmin, isAuthLoading, user, profile]);
+
   const isPathAllowed = (path: string): boolean => {
     if (isSuperAdmin || allowedPaths.has('*')) {
       return true;
@@ -112,8 +121,8 @@ export function useAllowedMenus() {
     return allowedPaths.has(path);
   };
 
-  // Loading = auth loading OR permissions loading (but not if super admin already determined)
-  const isLoading = isAuthLoading || (isLoadingPermissions && !isSuperAdmin);
+  // Loading = auth loading OR profile still loading OR permissions loading (but not if super admin)
+  const isLoading = isAuthLoading || isProfileStillLoading || (isLoadingPermissions && !isSuperAdmin);
 
   return {
     isPathAllowed,
