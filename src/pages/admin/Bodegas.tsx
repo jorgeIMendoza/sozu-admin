@@ -53,7 +53,7 @@ const Bodegas = () => {
 
   // Query para obtener bodegas activas
   const { data: activeData, isLoading: isLoadingActive } = useQuery({
-    queryKey: ['bodegas', 'active', currentPageActive, searchTerm, proyectoFilter],
+    queryKey: ['bodegas', 'active', currentPageActive, searchTerm, proyectoFilter, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
       let query = supabase
         .from('bodegas')
@@ -67,78 +67,13 @@ const Bodegas = () => {
         .eq('activo', true)
         .order('id', { ascending: false });
 
-      // Si hay búsqueda, obtenemos más resultados para filtrar localmente
-      if (searchTerm) {
-        const { data: allData, error } = await query.range(0, 999);
-        
-        if (error) throw error;
-
-        // Obtener nombres de proyecto para TODOS los datos
-        const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
-        
-        let entitiesData: any[] = [];
-        if (entityIds.length > 0) {
-          const { data: entities, error: entitiesError } = await supabase
-            .from('entidades_relacionadas')
-            .select(`
-              id,
-              proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
-            `)
-            .in('id', entityIds);
-          
-          if (!entitiesError) {
-            entitiesData = entities || [];
-          }
-        }
-
-        // Enriquecer TODOS los datos con nombres de proyecto
-        const enrichedData = allData.map((item: any) => {
-          const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
-          return {
-            id: item.id,
-            nombre: item.nombre,
-            m2: item.m2,
-            ubicacion: item.ubicacion,
-            es_incluido: item.es_incluido,
-            activo: item.activo,
-            proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
-            numero_propiedad: item.propiedades?.numero_propiedad || 'N/A'
-          };
-        });
-
-        // Filtrar localmente por nombre de bodega o número de departamento
-        let filteredData = enrichedData.filter(item => {
-          const matchesNombre = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesNumero = item.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
-          return matchesNombre || matchesNumero;
-        });
-
-        // Aplicar filtro de proyecto si existe
-        if (proyectoFilter && proyectoFilter !== "all") {
-          filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
-        }
-
-        // Aplicar paginación local
-        const from = (currentPageActive - 1) * itemsPerPage;
-        const to = from + itemsPerPage;
-        const paginatedData = filteredData.slice(from, to);
-
-        return {
-          items: paginatedData,
-          count: filteredData.length
-        };
-      }
-
-      // Sin búsqueda, usar paginación normal del servidor
-      const from = (currentPageActive - 1) * itemsPerPage;
-      const to = from + itemsPerPage - 1;
+      // Siempre obtenemos más resultados para poder filtrar por proyecto accesible
+      const { data: allData, error } = await query.range(0, 2000);
       
-      const { data, error, count } = await query.range(from, to);
-
       if (error) throw error;
 
-      // Get all unique entity IDs to fetch project names
-      const entityIds = [...new Set(data.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
+      // Obtener nombres de proyecto para TODOS los datos
+      const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
       
       let entitiesData: any[] = [];
       if (entityIds.length > 0) {
@@ -146,7 +81,8 @@ const Bodegas = () => {
           .from('entidades_relacionadas')
           .select(`
             id,
-            proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
+            id_proyecto,
+            proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)
           `)
           .in('id', entityIds);
         
@@ -155,7 +91,8 @@ const Bodegas = () => {
         }
       }
 
-      const items = data.map((item: any) => {
+      // Enriquecer TODOS los datos con nombres de proyecto y project_id
+      const enrichedData = allData.map((item: any) => {
         const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
         return {
           id: item.id,
@@ -165,23 +102,53 @@ const Bodegas = () => {
           es_incluido: item.es_incluido,
           activo: item.activo,
           proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
+          proyecto_id: entity?.id_proyecto || entity?.proyectos?.id || null,
           numero_propiedad: item.propiedades?.numero_propiedad || 'N/A'
         };
       });
 
-      // Filter by project on client-side as it's a derived field
-      const filteredItems = proyectoFilter && proyectoFilter !== "all" 
-        ? items.filter(item => item.proyecto_nombre === proyectoFilter)
-        : items;
+      // FIRST: Filter by project access
+      let filteredData = enrichedData;
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+        filteredData = filteredData.filter(item => 
+          item.proyecto_id && accessibleProjectIds.includes(item.proyecto_id)
+        );
+      } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
+        // User has no project access
+        filteredData = [];
+      }
 
-      return { items: filteredItems, count: count || 0 };
+      // Then apply search filter
+      if (searchTerm) {
+        filteredData = filteredData.filter(item => {
+          const matchesNombre = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesNumero = item.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
+          return matchesNombre || matchesNumero;
+        });
+      }
+
+      // Apply project name filter if selected
+      if (proyectoFilter && proyectoFilter !== "all") {
+        filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
+      }
+
+      // Aplicar paginación local
+      const from = (currentPageActive - 1) * itemsPerPage;
+      const to = from + itemsPerPage;
+      const paginatedData = filteredData.slice(from, to);
+
+      return {
+        items: paginatedData,
+        count: filteredData.length
+      };
     },
     staleTime: 5 * 60 * 1000,
+    enabled: !isLoadingAccess,
   });
 
   // Query para obtener bodegas eliminadas
   const { data: deletedData, isLoading: isLoadingDeleted } = useQuery({
-    queryKey: ['bodegas', 'deleted', currentPageDeleted, searchTerm, proyectoFilter],
+    queryKey: ['bodegas', 'deleted', currentPageDeleted, searchTerm, proyectoFilter, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
       let query = supabase
         .from('bodegas')
@@ -195,78 +162,11 @@ const Bodegas = () => {
         .eq('activo', false)
         .order('id', { ascending: false });
 
-      // Si hay búsqueda, obtenemos más resultados para filtrar localmente
-      if (searchTerm) {
-        const { data: allData, error } = await query.range(0, 999);
-        
-        if (error) throw error;
-
-        // Obtener nombres de proyecto para TODOS los datos
-        const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
-        
-        let entitiesData: any[] = [];
-        if (entityIds.length > 0) {
-          const { data: entities, error: entitiesError } = await supabase
-            .from('entidades_relacionadas')
-            .select(`
-              id,
-              proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
-            `)
-            .in('id', entityIds);
-          
-          if (!entitiesError) {
-            entitiesData = entities || [];
-          }
-        }
-
-        // Enriquecer TODOS los datos con nombres de proyecto
-        const enrichedData = allData.map((item: any) => {
-          const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
-          return {
-            id: item.id,
-            nombre: item.nombre,
-            m2: item.m2,
-            ubicacion: item.ubicacion,
-            es_incluido: item.es_incluido,
-            activo: item.activo,
-            proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
-            numero_propiedad: item.propiedades?.numero_propiedad || 'N/A'
-          };
-        });
-
-        // Filtrar localmente por nombre de bodega o número de departamento
-        let filteredData = enrichedData.filter(item => {
-          const matchesNombre = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesNumero = item.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
-          return matchesNombre || matchesNumero;
-        });
-
-        // Aplicar filtro de proyecto si existe
-        if (proyectoFilter && proyectoFilter !== "all") {
-          filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
-        }
-
-        // Aplicar paginación local
-        const from = (currentPageDeleted - 1) * itemsPerPage;
-        const to = from + itemsPerPage;
-        const paginatedData = filteredData.slice(from, to);
-
-        return {
-          items: paginatedData,
-          count: filteredData.length
-        };
-      }
-
-      // Sin búsqueda, usar paginación normal del servidor
-      const from = (currentPageDeleted - 1) * itemsPerPage;
-      const to = from + itemsPerPage - 1;
+      const { data: allData, error } = await query.range(0, 2000);
       
-      const { data, error, count } = await query.range(from, to);
-
       if (error) throw error;
 
-      // Get all unique entity IDs to fetch project names
-      const entityIds = [...new Set(data.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
+      const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
       
       let entitiesData: any[] = [];
       if (entityIds.length > 0) {
@@ -274,7 +174,8 @@ const Bodegas = () => {
           .from('entidades_relacionadas')
           .select(`
             id,
-            proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
+            id_proyecto,
+            proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)
           `)
           .in('id', entityIds);
         
@@ -283,7 +184,7 @@ const Bodegas = () => {
         }
       }
 
-      const items = data.map((item: any) => {
+      const enrichedData = allData.map((item: any) => {
         const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
         return {
           id: item.id,
@@ -293,18 +194,44 @@ const Bodegas = () => {
           es_incluido: item.es_incluido,
           activo: item.activo,
           proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
+          proyecto_id: entity?.id_proyecto || entity?.proyectos?.id || null,
           numero_propiedad: item.propiedades?.numero_propiedad || 'N/A'
         };
       });
 
-      // Filter by project on client-side as it's a derived field
-      const filteredItems = proyectoFilter && proyectoFilter !== "all" 
-        ? items.filter(item => item.proyecto_nombre === proyectoFilter)
-        : items;
+      // Filter by project access
+      let filteredData = enrichedData;
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+        filteredData = filteredData.filter(item => 
+          item.proyecto_id && accessibleProjectIds.includes(item.proyecto_id)
+        );
+      } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
+        filteredData = [];
+      }
 
-      return { items: filteredItems, count: count || 0 };
+      if (searchTerm) {
+        filteredData = filteredData.filter(item => {
+          const matchesNombre = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesNumero = item.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
+          return matchesNombre || matchesNumero;
+        });
+      }
+
+      if (proyectoFilter && proyectoFilter !== "all") {
+        filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
+      }
+
+      const from = (currentPageDeleted - 1) * itemsPerPage;
+      const to = from + itemsPerPage;
+      const paginatedData = filteredData.slice(from, to);
+
+      return {
+        items: paginatedData,
+        count: filteredData.length
+      };
     },
     staleTime: 5 * 60 * 1000,
+    enabled: !isLoadingAccess,
   });
 
   const filteredBodegas = activeTab === 'activos' ? activeData?.items || [] : deletedData?.items || [];
