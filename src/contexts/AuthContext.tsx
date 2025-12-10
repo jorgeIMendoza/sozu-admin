@@ -59,48 +59,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    let profileFetchPromise: Promise<void> | null = null;
     
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         if (!isMounted) return;
         
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Wait for profile to load before setting isLoading to false
-          await fetchProfile();
+          // Defer profile fetch to avoid Supabase deadlock
+          profileFetchPromise = fetchProfile().finally(() => {
+            if (isMounted) {
+              setIsLoading(false);
+            }
+          });
         } else {
           setProfile(null);
-        }
-        
-        if (isMounted) {
           setIsLoading(false);
         }
       }
     );
 
     // THEN check for existing session
-    const initSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
       
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        // Wait for profile to load before setting isLoading to false
-        await fetchProfile();
-      }
-      
-      if (isMounted) {
+        fetchProfile().finally(() => {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        });
+      } else {
         setIsLoading(false);
       }
-    };
-
-    initSession();
+    });
 
     return () => {
       isMounted = false;
