@@ -306,7 +306,7 @@ export function ValidarPlaceholdersDialog({
               <Card className="p-4 border-blue-500 bg-blue-50 dark:bg-blue-950">
                 <div className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
-                  📋 Variables del Template: {validacion.total_disponibles || 0} encontradas + {validacion.total_vacios || 0} vacías + {validacion.total_faltantes || 0} faltantes = {totalTemplate} total
+                  📋 Variables del Template: {validacion.total_disponibles || 0} encontradas + {validacion.total_vacios || 0} vacías + {validacion.total_faltantes || 0} por solicitar = {totalTemplate} total
                   {searchTerm && <span className="text-xs">({filteredTodosPlaceholdersTemplate.length} resultados)</span>}
                 </div>
                 <div className="text-xs text-muted-foreground mb-2">
@@ -582,7 +582,7 @@ export function ValidarPlaceholdersDialog({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-md">
-                      <p>Si generas el contrato ahora, los placeholders faltantes aparecerán en ROJO y los vacíos en AMARILLO. Puedes continuar de todas formas, pero deberás completar manualmente esos campos en Google Docs.</p>
+                      <p>Si generas el contrato ahora, los placeholders Por Solicitar aparecerán en NARANJA y los vacíos en AMARILLO. Puedes continuar de todas formas, pero deberás completar manualmente esos campos en Google Docs.</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
