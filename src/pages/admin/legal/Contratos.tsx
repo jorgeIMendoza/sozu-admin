@@ -327,16 +327,18 @@ export default function Contratos() {
       setValidandoCuentaId(null);
       setValidacionDialogData(data);
       
-      // Toast simple y corto
-      const validation = data.validation;
+      // Toast simple y corto - use 'validacion' not 'validation'
+      const validation = data.validacion;
       
-      toast({
-        title: validation.tiene_problemas ? "⚠️ Problemas detectados" : "✅ Todo listo",
-        description: validation.tiene_problemas 
-          ? `${validation.total_faltantes} faltantes, ${validation.total_vacios} vacíos. Revisa el diálogo.`
-          : `Todos los ${validation.total_disponibles} placeholders están listos.`,
-        duration: 2000,
-      });
+      if (validation) {
+        toast({
+          title: validation.tiene_problemas ? "⚠️ Problemas detectados" : "✅ Todo listo",
+          description: validation.tiene_problemas 
+            ? `${validation.total_faltantes} faltantes, ${validation.total_vacios} vacíos. Revisa el diálogo.`
+            : `Todos los ${validation.total_disponibles} placeholders están listos.`,
+          duration: 2000,
+        });
+      }
     },
     onError: (error: any) => {
       setValidandoCuentaId(null);
