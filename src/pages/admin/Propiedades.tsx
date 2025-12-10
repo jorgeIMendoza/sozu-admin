@@ -234,7 +234,7 @@ const Propiedades = () => {
   const [activeTab, setActiveTab] = useState("activos");
   
   // Project access control
-  const { accessibleProjectIds, hasUnrestrictedAccess, hasNoAccess } = useProjectAccess();
+  const { accessibleProjectIds, hasUnrestrictedAccess, hasNoAccess, isLoading: isLoadingAccess } = useProjectAccess();
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   
@@ -395,20 +395,27 @@ const Propiedades = () => {
   const visibleCount = visibleColumns.size;
   const totalCount = COLUMNS_CONFIG.length;
 
-  // Fetch proyectos para el filtro
+  // Fetch proyectos para el filtro (filtered by access)
   const { data: proyectos } = useQuery({
-    queryKey: ['proyectos-filter'],
+    queryKey: ['proyectos-filter', accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('proyectos')
         .select('id, nombre')
         .eq('activo', true)
         .not("id_tipo_uso", "in", "(9,10,11)")
         .order('nombre', { ascending: true });
       
+      // Filter by accessible projects if user doesn't have unrestricted access
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+        query = query.in('id', accessibleProjectIds);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
+    enabled: !isLoadingAccess && (hasUnrestrictedAccess || accessibleProjectIds.length > 0),
   });
 
   // Fetch modelos para el filtro (filtrados por proyectos seleccionados o todos)
@@ -960,7 +967,7 @@ const Propiedades = () => {
 
   // Separate queries for each tab with server-side pagination
   const { data: propiedadesActivasData, isLoading: loadingActivos, refetch: refetchActivos } = useQuery({
-    queryKey: ['properties-activos', currentPageActive, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort],
+    queryKey: ['properties-activos', currentPageActive, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
       try {
         const from = (currentPageActive - 1) * itemsPerPage;
@@ -1032,6 +1039,14 @@ const Propiedades = () => {
           } else {
             query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%`);
           }
+        }
+        
+        // CRITICAL: Filter by accessible projects for users without unrestricted access
+        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+          query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
+        } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
+          // User has no project access - return empty
+          return { items: [], count: 0, totalPages: 0 };
         }
         
         if (selectedProyectos.length > 0) {
@@ -1207,10 +1222,11 @@ const Propiedades = () => {
         return { properties: [], count: 0 };
       }
     },
+    enabled: !isLoadingAccess,
   });
 
   const { data: propiedadesDraftData, isLoading: loadingDraft, refetch: refetchDraft } = useQuery({
-    queryKey: ['properties-draft', currentPageDraft, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort],
+    queryKey: ['properties-draft', currentPageDraft, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
       try {
         const from = (currentPageDraft - 1) * itemsPerPage;
@@ -1282,6 +1298,13 @@ const Propiedades = () => {
           } else {
             query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%`);
           }
+        }
+        
+        // CRITICAL: Filter by accessible projects for users without unrestricted access
+        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+          query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
+        } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
+          return { items: [], count: 0, totalPages: 0 };
         }
         
         if (selectedProyectos.length > 0) {
@@ -1457,11 +1480,11 @@ const Propiedades = () => {
         return { properties: [], count: 0 };
       }
     },
-    enabled: activeTab === "draft",
+    enabled: activeTab === "draft" && !isLoadingAccess,
   });
 
   const { data: propiedadesEliminadasData, isLoading: loadingEliminados, refetch: refetchEliminados } = useQuery({
-    queryKey: ['properties-eliminados', currentPageDeleted, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort],
+    queryKey: ['properties-eliminados', currentPageDeleted, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
       try {
         const from = (currentPageDeleted - 1) * itemsPerPage;
@@ -1533,6 +1556,13 @@ const Propiedades = () => {
           } else {
             query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%`);
           }
+        }
+        
+        // CRITICAL: Filter by accessible projects for users without unrestricted access
+        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+          query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
+        } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
+          return { items: [], count: 0, totalPages: 0 };
         }
         
         if (selectedProyectos.length > 0) {
@@ -1708,7 +1738,7 @@ const Propiedades = () => {
         return { properties: [], count: 0 };
       }
     },
-    enabled: activeTab === "eliminados",
+    enabled: activeTab === "eliminados" && !isLoadingAccess,
   });
 
   const activeProperties = propiedadesActivasData?.properties || [];

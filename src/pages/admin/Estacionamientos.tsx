@@ -161,120 +161,58 @@ const Estacionamientos = () => {
         .eq('activo', false)
         .order('id', { ascending: false });
 
-      // Si hay búsqueda, obtenemos más resultados para filtrar localmente
-      if (searchTerm) {
-        const { data: allData, error } = await query.range(0, 999);
-        
-        if (error) throw error;
-
-        // Obtener nombres de proyecto para TODOS los datos
-        const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
-        
-        let entitiesData: any[] = [];
-        if (entityIds.length > 0) {
-          const { data: entities, error: entitiesError } = await supabase
-            .from('entidades_relacionadas')
-            .select(`
-              id,
-              proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
-            `)
-            .in('id', entityIds);
-          
-          if (!entitiesError) {
-            entitiesData = entities || [];
-          }
-        }
-
-        // Enriquecer TODOS los datos con nombres de proyecto
-        const enrichedData = allData.map((item: any) => {
-          const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
-          return {
-            id: item.id,
-            nombre: item.nombre,
-            m2: item.m2,
-            ubicacion: item.ubicacion,
-            es_incluido: item.es_incluido,
-            activo: item.activo,
-            tipo_nombre: item.tipos_estacionamiento?.nombre || 'N/A',
-            proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
-            numero_propiedad: item.propiedades?.numero_propiedad || 'N/A',
-            id_tipo: item.id_tipo
-          };
-        });
-
-        // Filtrar localmente por nombre de estacionamiento o número de departamento
-        let filteredData = enrichedData.filter(item => {
-          const matchesNombre = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesNumero = item.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase());
-          return matchesNombre || matchesNumero;
-        });
-
-        // Aplicar filtro de proyecto si existe
-        if (proyectoFilter && proyectoFilter !== "all") {
-          filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
-        }
-
-        // Aplicar paginación local
-        const from = (currentPageDeleted - 1) * itemsPerPage;
-        const to = from + itemsPerPage;
-        const paginatedData = filteredData.slice(from, to);
-
-        return {
-          items: paginatedData,
-          count: filteredData.length
-        };
-      }
-
-      // Sin búsqueda, usar paginación normal del servidor
-      const from = (currentPageDeleted - 1) * itemsPerPage;
-      const to = from + itemsPerPage - 1;
-      
-      const { data, error, count } = await query.range(from, to);
-
+      const { data: allData, error } = await query.range(0, 2000);
       if (error) throw error;
 
-      // Get all unique entity IDs to fetch project names
-      const entityIds = [...new Set(data.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
-      
+      const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
       let entitiesData: any[] = [];
       if (entityIds.length > 0) {
         const { data: entities, error: entitiesError } = await supabase
           .from('entidades_relacionadas')
-          .select(`
-            id,
-            proyectos!entidades_relacionadas_id_proyecto_fkey(nombre)
-          `)
+          .select(`id, id_proyecto, proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)`)
           .in('id', entityIds);
-        
-        if (!entitiesError) {
-          entitiesData = entities || [];
-        }
+        if (!entitiesError) entitiesData = entities || [];
       }
 
-      const items = data.map((item: any) => {
+      const enrichedData = allData.map((item: any) => {
         const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
         return {
-          id: item.id,
-          nombre: item.nombre,
-          m2: item.m2,
-          ubicacion: item.ubicacion,
-          es_incluido: item.es_incluido,
-          activo: item.activo,
+          id: item.id, nombre: item.nombre, m2: item.m2, ubicacion: item.ubicacion,
+          es_incluido: item.es_incluido, activo: item.activo,
           tipo_nombre: item.tipos_estacionamiento?.nombre || 'N/A',
           proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
+          proyecto_id: entity?.id_proyecto || entity?.proyectos?.id || null,
           numero_propiedad: item.propiedades?.numero_propiedad || 'N/A',
           id_tipo: item.id_tipo
         };
       });
 
-      // Filter by project on client-side as it's a derived field
-      const filteredItems = proyectoFilter && proyectoFilter !== "all" 
-        ? items.filter(item => item.proyecto_nombre === proyectoFilter)
-        : items;
+      // Filter by project access first
+      let filteredData = enrichedData;
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+        filteredData = filteredData.filter(item => item.proyecto_id && accessibleProjectIds.includes(item.proyecto_id));
+      } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
+        filteredData = [];
+      }
 
-      return { items: filteredItems, count: count || 0 };
+      if (searchTerm) {
+        filteredData = filteredData.filter(item => 
+          item.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.numero_propiedad?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
+
+      if (proyectoFilter && proyectoFilter !== "all") {
+        filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
+      }
+
+      const from = (currentPageDeleted - 1) * itemsPerPage;
+      const paginatedData = filteredData.slice(from, from + itemsPerPage);
+
+      return { items: paginatedData, count: filteredData.length };
     },
     staleTime: 5 * 60 * 1000,
+    enabled: !isLoadingAccess,
   });
 
   const filteredEstacionamientos = activeTab === 'activos' ? activeData?.items || [] : deletedData?.items || [];
