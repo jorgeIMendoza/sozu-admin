@@ -91,6 +91,7 @@ export default function Productos() {
         .order('nombre')
         .limit(10000);
       if (error) throw error;
+      console.log('Total proyectos cargados:', data?.length, 'Ejemplo con DAIKU:', data?.find((p: any) => p.nombre.includes('DAIKU')));
       return (data || []).map((p: any) => ({
         value: p.id.toString(),
         label: p.nombre
@@ -528,7 +529,7 @@ export default function Productos() {
               <TableHead className="font-semibold">Descripción</TableHead>
               <TableHead className="font-semibold">Categoría</TableHead>
               <TableHead className="font-semibold">Precio</TableHead>
-              <TableHead className="font-semibold">Stock</TableHead>
+              
               <TableHead className="font-semibold">SAT ID</TableHead>
               <TableHead className="font-semibold">Unidad SAT</TableHead>
               <TableHead className="font-semibold">Dueño</TableHead>
@@ -559,11 +560,6 @@ export default function Productos() {
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                </TableCell>
-                <TableCell>
-                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                    {producto.stock}
-                  </span>
                 </TableCell>
                 <TableCell className="font-mono text-sm">{producto.sat_id || '-'}</TableCell>
                 <TableCell>{producto.unidad_sat_descripcion || '-'}</TableCell>
