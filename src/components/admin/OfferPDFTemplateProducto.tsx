@@ -415,8 +415,8 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
           }} />
         )}
 
-        {/* Banking Data Section - Only show if lead has RFC */}
-        {leadInfo?.rfc && (
+        {/* Banking Data Section - Only show if there's a CLABE (meaning a scheme was selected) */}
+        {(offerData.clabe_stp_tmp_producto || offerData.clabe_stp) && (
           <div style={{ marginBottom: '60px' }}>
             <h2 style={{ 
               fontSize: '51px', 
