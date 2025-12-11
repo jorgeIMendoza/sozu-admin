@@ -173,6 +173,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
+  const [productSchemeSelections, setProductSchemeSelections] = useState<Record<number, number | null>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
@@ -408,7 +409,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   }, [propertyDetails, form]);
 
   const createOfferMutation = useMutation({
-    mutationFn: async (data: FormData) => {
+    mutationFn: async ({ data, schemeSelections }: { data: FormData; schemeSelections: Record<number, number | null> }) => {
       console.log("Mutation function called with:", data);
       let personId = data.selectedPersonId;
       
@@ -696,13 +697,13 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           clabeData = generatedClabe;
         }
 
-        // Create product offer with the first available scheme
-        const firstScheme = productSchemes[0];
+        // Use user-selected scheme or null if "sin seleccionar"
+        const selectedSchemeId = schemeSelections[productId];
         const productOfferData = {
           id_propiedad: propertyId,
           id_producto: productId,
           id_persona_lead: personId, // Same client as property offer
-          id_esquema_pago_seleccionado: firstScheme.id,
+          id_esquema_pago_seleccionado: selectedSchemeId || null,
           clabe_stp_tmp_producto: clabeData,
           activo: true,
           email_creador: profile?.email || ''
@@ -912,21 +913,23 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       setShowConfirmDialog(true);
     } else {
       // No products, proceed directly
-      createOfferMutation.mutate(data);
+      createOfferMutation.mutate({ data, schemeSelections: {} });
     }
   };
 
   const handleConfirmGenerate = () => {
     if (pendingFormData) {
-      createOfferMutation.mutate(pendingFormData);
+      createOfferMutation.mutate({ data: pendingFormData, schemeSelections: productSchemeSelections });
       setShowConfirmDialog(false);
       setPendingFormData(null);
+      setProductSchemeSelections({});
     }
   };
 
   const handleCancelGenerate = () => {
     setShowConfirmDialog(false);
     setPendingFormData(null);
+    setProductSchemeSelections({});
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
@@ -1559,13 +1562,49 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
               {productsWithPriceInfo.valid.length > 0 && (
                 <div className="flex items-start gap-2 text-sm">
                   <FileText className="h-4 w-4 text-blue-600 mt-0.5" />
-                  <div>
+                  <div className="flex-1">
                     <span className="font-medium">{productsWithPriceInfo.valid.length} oferta(s) de productos:</span>
-                    <ul className="ml-4 mt-1 text-muted-foreground">
-                      {productsWithPriceInfo.valid.map((p, i) => (
-                        <li key={i}>• {p.tipo} "{p.nombre}" (${p.precioFinal.toLocaleString()})</li>
+                    <div className="mt-2 space-y-3">
+                      {productsWithPriceInfo.valid.map((p: any, i: number) => (
+                        <div key={i} className="bg-background rounded-md p-2 border">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-foreground">• {p.tipo} "{p.nombre}" (${p.precioFinal.toLocaleString()})</span>
+                          </div>
+                          <div className="ml-2">
+                            <label className="text-xs text-muted-foreground block mb-1">Esquema de pago:</label>
+                            <Select
+                              value={productSchemeSelections[p.id_producto]?.toString() || "none"}
+                              onValueChange={(value) => {
+                                setProductSchemeSelections(prev => ({
+                                  ...prev,
+                                  [p.id_producto]: value === "none" ? null : parseInt(value)
+                                }));
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Sin seleccionar" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">
+                                  <span className="text-muted-foreground italic">Sin seleccionar</span>
+                                </SelectItem>
+                                {p.paymentSchemes?.map((scheme: any) => (
+                                  <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                                    {scheme.nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {!productSchemeSelections[p.id_producto] && (
+                              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                Se generará PDF sin esquema seleccionado
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 </div>
               )}
