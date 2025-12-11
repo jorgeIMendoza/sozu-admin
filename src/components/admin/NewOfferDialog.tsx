@@ -703,9 +703,12 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           continue;
         }
 
-        // Generate CLABE for the product offer
+        // Use user-selected scheme or null if "sin seleccionar"
+        const selectedSchemeId = schemeSelections[productId];
+
+        // Generate CLABE only if a payment scheme is selected
         let clabeData: string | null = null;
-        if (productService?.id_entidad_relacionada_dueno) {
+        if (selectedSchemeId && productService?.id_entidad_relacionada_dueno) {
           const { data: generatedClabe, error: clabeError } = await supabase
             .rpc('crear_referencia_bancaria', {
               id_er_dueno: productService.id_entidad_relacionada_dueno
@@ -721,8 +724,6 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           clabeData = generatedClabe;
         }
 
-        // Use user-selected scheme or null if "sin seleccionar"
-        const selectedSchemeId = schemeSelections[productId];
         const productOfferData = {
           id_propiedad: propertyId,
           id_producto: productId,
