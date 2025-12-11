@@ -1618,12 +1618,6 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                       ))}
                     </SelectContent>
                   </Select>
-                  {!propertySchemeSelection && (
-                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" />
-                      Se generará PDF sin esquema seleccionado y sin cuenta CLABE para pagos
-                    </p>
-                  )}
                 </div>
               </div>
               
@@ -1671,7 +1665,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                             {!productSchemeSelections[p.id_producto] && (
                               <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                                 <AlertTriangle className="h-3 w-3" />
-                                Se generará PDF sin esquema seleccionado y sin cuenta CLABE para pagos
+                                Se generará PDF sin cuenta CLABE para pagos
                               </p>
                             )}
                           </div>
