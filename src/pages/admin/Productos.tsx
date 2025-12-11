@@ -80,7 +80,7 @@ export default function Productos() {
     },
   });
 
-  // Fetch proyectos for combobox
+  // Fetch proyectos for combobox (sin límite)
   const { data: proyectos = [] } = useQuery({
     queryKey: ['proyectos-productos'],
     queryFn: async () => {
@@ -88,7 +88,8 @@ export default function Productos() {
         .from('proyectos')
         .select('id, nombre')
         .eq('activo', true)
-        .order('nombre');
+        .order('nombre')
+        .limit(10000);
       if (error) throw error;
       return (data || []).map((p: any) => ({
         value: p.id.toString(),
