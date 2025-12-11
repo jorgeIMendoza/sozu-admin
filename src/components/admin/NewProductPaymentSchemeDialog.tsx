@@ -89,11 +89,11 @@ export const NewProductPaymentSchemeDialog = ({ productId, onSchemeAdded }: NewP
           id_proyecto: null,
           id_producto: productId,
           nombre: values.nombre,
-          porcentaje_enganche: enganche,
-          porcentaje_mensualidades: mensualidades,
-          porcentaje_entrega: entrega,
-          numero_mensualidades: parseInt(values.numero_mensualidades),
-          porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento),
+          porcentaje_enganche: enganche || 0,
+          porcentaje_mensualidades: mensualidades || 0,
+          porcentaje_entrega: entrega || 0,
+          numero_mensualidades: parseInt(values.numero_mensualidades) || 0,
+          porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento) || 0,
           es_manual: false,
         }]);
 

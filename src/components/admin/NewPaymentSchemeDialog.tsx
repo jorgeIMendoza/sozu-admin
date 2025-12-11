@@ -88,11 +88,11 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded }: NewPaymentS
           id_proyecto: projectId,
           id_producto: null,
           nombre: values.nombre,
-          porcentaje_enganche: enganche,
-          porcentaje_mensualidades: mensualidades,
-          porcentaje_entrega: entrega,
-          numero_mensualidades: parseInt(values.numero_mensualidades),
-          porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento),
+          porcentaje_enganche: enganche || 0,
+          porcentaje_mensualidades: mensualidades || 0,
+          porcentaje_entrega: entrega || 0,
+          numero_mensualidades: parseInt(values.numero_mensualidades) || 0,
+          porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento) || 0,
         }]);
 
       if (error) throw error;

@@ -84,11 +84,11 @@ export const EditPaymentSchemeDialog = ({ scheme, onSchemeUpdated }: EditPayment
         .from("esquemas_pago")
         .update({
           nombre: values.nombre,
-          porcentaje_enganche: parseFloat(values.porcentaje_enganche),
-          porcentaje_mensualidades: parseFloat(values.porcentaje_mensualidades),
-          porcentaje_entrega: parseFloat(values.porcentaje_entrega),
-          numero_mensualidades: parseInt(values.numero_mensualidades),
-          porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento),
+          porcentaje_enganche: parseFloat(values.porcentaje_enganche) || 0,
+          porcentaje_mensualidades: parseFloat(values.porcentaje_mensualidades) || 0,
+          porcentaje_entrega: parseFloat(values.porcentaje_entrega) || 0,
+          numero_mensualidades: parseInt(values.numero_mensualidades) || 0,
+          porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento) || 0,
         })
         .eq("id", scheme.id);
 
