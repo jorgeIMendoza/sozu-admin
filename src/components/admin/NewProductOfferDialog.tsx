@@ -249,29 +249,38 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
     ...categoriesData
   ];
 
-  // Get project name from property details for filtering products
-  const propertyProjectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
-  
-  // Extract the key project identifier for matching (e.g., "Vive DAIKU" -> "DAIKU", "Bottura" -> "Bottura")
-  const getProjectKeyword = (name: string | undefined): string => {
-    if (!name) return '';
-    // Handle names like "Vive DAIKU" -> extract "DAIKU"
-    const parts = name.split(' ');
-    if (parts.length > 1) {
-      return parts[parts.length - 1]; // Get last word (e.g., "DAIKU" from "Vive DAIKU")
-    }
-    return name;
-  };
-  
-  const projectKeyword = getProjectKeyword(propertyProjectName);
+  // Get project ID from property details for filtering products via esquemas_pago
+  const projectId = propertyDetails?.entidades_relacionadas?.proyectos?.id;
 
-  // Fetch products/services by category and filter by project name
+  // First, fetch product IDs that have esquemas_pago configured for this project
+  const { data: projectProductIds = [] } = useQuery({
+    queryKey: ['product-ids-for-project', projectId],
+    queryFn: async (): Promise<number[]> => {
+      if (!projectId) return [];
+      
+      const { data, error } = await supabase
+        .from('esquemas_pago')
+        .select('id_producto')
+        .eq('id_proyecto', projectId)
+        .eq('activo', true)
+        .not('id_producto', 'is', null);
+      
+      if (error) throw error;
+      
+      // Get unique product IDs
+      const uniqueIds = [...new Set((data || []).map(item => item.id_producto).filter(Boolean))];
+      return uniqueIds as number[];
+    },
+    enabled: !!projectId,
+  });
+
+  // Fetch products/services by category, filtered by esquemas_pago for this project
   const { data: products = [] } = useQuery({
-    queryKey: ['productos-servicios-por-categoria', selectedCategory, projectKeyword],
+    queryKey: ['productos-servicios-por-categoria', selectedCategory, projectProductIds],
     queryFn: async (): Promise<any[]> => {
       if (!selectedCategory) return [];
       
-      // If "Servicios" category is selected (id = -1)
+      // If "Servicios" category is selected (id = -1) - services are global
       if (selectedCategory === -1) {
         const { data, error } = await (supabase as any)
           .from('productos_servicios')
@@ -280,23 +289,22 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
           .eq('activo', true)
           .order('nombre');
         if (error) throw error;
-        // Servicios are global, no project filter needed
         return data || [];
       }
       
-      // Otherwise, fetch by category and filter by project name
-      let query = (supabase as any)
+      // For products: only show those with esquemas_pago for this project
+      if (projectProductIds.length === 0) {
+        return []; // No products configured for this project
+      }
+      
+      const { data, error } = await (supabase as any)
         .from('productos_servicios')
         .select('id, nombre, precio_lista, descripcion, es_producto, id_categoria, categorias_producto!fk_prodserv_categoria(tiene_metraje)')
         .eq('id_categoria', selectedCategory)
-        .eq('activo', true);
+        .eq('activo', true)
+        .in('id', projectProductIds)
+        .order('nombre');
       
-      // Filter by project keyword in product name (case insensitive)
-      if (projectKeyword) {
-        query = query.ilike('nombre', `%${projectKeyword}%`);
-      }
-      
-      const { data, error } = await query.order('nombre');
       if (error) throw error;
       return data || [];
     },
