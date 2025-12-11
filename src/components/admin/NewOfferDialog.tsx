@@ -786,7 +786,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                   {includedProducts.bodegas.map((bodega: any) => {
                     const precioLista = bodega.productos_servicios?.precio_lista || 0;
                     const m2 = bodega.m2 || 0;
-                    const precioFinal = m2 > 0 ? precioLista * m2 : precioLista;
+                    const precioFinal = precioLista * m2;
                     const isIncludedInPrice = precioFinal === 0;
                     return (
                       <Badge 
@@ -810,7 +810,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                   {includedProducts.estacionamientos.map((est: any) => {
                     const precioLista = est.productos_servicios?.precio_lista || 0;
                     const m2 = est.m2 || 0;
-                    const precioFinal = m2 > 0 ? precioLista * m2 : precioLista;
+                    const precioFinal = precioLista * m2;
                     const isIncludedInPrice = precioFinal === 0;
                     return (
                       <Badge 
@@ -836,15 +836,15 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                 {(includedProducts.bodegas.some((b: any) => {
                   const precio = b.productos_servicios?.precio_lista || 0;
                   const m2 = b.m2 || 0;
-                  return (m2 > 0 ? precio * m2 : precio) > 0;
+                  return (precio * m2) > 0;
                 }) ||
                   includedProducts.estacionamientos.some((e: any) => {
                     const precio = e.productos_servicios?.precio_lista || 0;
                     const m2 = e.m2 || 0;
-                    return (m2 > 0 ? precio * m2 : precio) > 0;
+                    return (precio * m2) > 0;
                   })) && (
                   <p className="text-xs text-muted-foreground mt-2">
-                    Los productos con precio pueden generar ofertas adicionales desde sus respectivas páginas.
+                    Los productos No incluidos generan ofertas adicionales.
                   </p>
                 )}
               </>
