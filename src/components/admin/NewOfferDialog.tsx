@@ -532,20 +532,117 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         }
       }
 
+      // Generate automatic product offers for included bodegas and estacionamientos
+      const productOffersResults: { created: number; warnings: string[] } = { created: 0, warnings: [] };
+      
+      // Fetch bodegas with es_incluido = true for this property
+      const { data: includedBodegas } = await supabase
+        .from("bodegas")
+        .select("id, nombre, id_producto, productos_servicios(id, nombre, precio)")
+        .eq("id_propiedad", propertyId)
+        .eq("es_incluido", true)
+        .eq("activo", true);
+
+      // Fetch estacionamientos with es_incluido = true for this property
+      const { data: includedEstacionamientos } = await supabase
+        .from("estacionamientos")
+        .select("id, nombre, id_producto, productos_servicios(id, nombre, precio)")
+        .eq("id_propiedad", propertyId)
+        .eq("es_incluido", true)
+        .eq("activo", true);
+
+      const allIncludedProducts = [
+        ...(includedBodegas || []).map(b => ({ ...b, tipo: 'bodega' })),
+        ...(includedEstacionamientos || []).map(e => ({ ...e, tipo: 'estacionamiento' }))
+      ];
+
+      for (const product of allIncludedProducts) {
+        const productService = product.productos_servicios as any;
+        const productId = product.id_producto;
+        const productPrice = productService?.precio || 0;
+        
+        // Only generate offer if price is greater than 0
+        if (productPrice <= 0) {
+          console.log(`Skipping product offer for ${product.nombre} - price is 0 (included in apartment)`);
+          continue;
+        }
+
+        // Fetch payment schemes for this product with es_manual = false
+        const { data: productSchemes } = await supabase
+          .from("esquemas_pago")
+          .select("*")
+          .eq("id_producto", productId)
+          .eq("es_manual", false)
+          .eq("activo", true)
+          .order("id", { ascending: true });
+
+        if (!productSchemes || productSchemes.length === 0) {
+          productOffersResults.warnings.push(
+            `${product.tipo === 'bodega' ? 'Bodega' : 'Estacionamiento'} "${product.nombre}" no tiene esquemas de pago configurados`
+          );
+          continue;
+        }
+
+        // Create product offer with the first available scheme
+        const firstScheme = productSchemes[0];
+        const productOfferData = {
+          id_propiedad: propertyId,
+          id_producto_servicio: productId,
+          id_persona_lead: personId, // Same client as property offer
+          id_esquema_pago_seleccionado: firstScheme.id,
+          activo: true,
+          email_creador: profile?.email || ''
+        };
+
+        const { error: productOfferError } = await supabase
+          .from("ofertas")
+          .insert(productOfferData);
+
+        if (productOfferError) {
+          console.error(`Error creating product offer for ${product.nombre}:`, productOfferError);
+          productOffersResults.warnings.push(
+            `Error al crear oferta para ${product.tipo === 'bodega' ? 'bodega' : 'estacionamiento'} "${product.nombre}"`
+          );
+        } else {
+          productOffersResults.created++;
+          console.log(`Created product offer for ${product.nombre}`);
+        }
+      }
+
       // Return data needed for PDF generation
       return {
         offerId: newOffer.id,
         personId,
         leadName: data.nombre_completo,
         leadEmail: data.email,
-        leadPhone: data.telefono
+        leadPhone: data.telefono,
+        productOffersResults
       };
     },
     onSuccess: async (result) => {
+      // Show main offer success message
       toast({
         title: "Oferta creada",
         description: `La oferta para la propiedad ${propertyNumber} ha sido generada exitosamente.`,
       });
+
+      // Show product offers results
+      if (result.productOffersResults.created > 0) {
+        toast({
+          title: "Ofertas de productos generadas",
+          description: `Se generaron ${result.productOffersResults.created} oferta(s) de productos incluidos.`,
+        });
+      }
+
+      if (result.productOffersResults.warnings.length > 0) {
+        result.productOffersResults.warnings.forEach(warning => {
+          toast({
+            title: "Aviso",
+            description: warning,
+            variant: "destructive",
+          });
+        });
+      }
       
       // Generate PDF
       try {
