@@ -76,7 +76,7 @@ const formSchema = z.object({
   message: "Si hay porcentaje de mensualidades, el número debe ser mayor a 0",
   path: ["numero_mensualidades"]
 }).refine((data) => {
-  // In precargada mode, a scheme must be selected
+  // In precargada mode, a scheme must be selected (but this is only available if product has schemes)
   if (data.mode === "precargada" && !data.selectedSchemeId) {
     return false;
   }
@@ -361,12 +361,12 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
     form.setValue("curp", "");
   };
 
-  const handleSelectProductService = async () => {
-    const isValid = await form.trigger();
-    if (isValid) {
-      setShowCategoryDialog(true);
+  // Effect to set mode to manual when product has no payment schemes
+  useEffect(() => {
+    if (selectedProduct && productPaymentSchemes.length === 0) {
+      form.setValue("mode", "manual");
     }
-  };
+  }, [selectedProduct, productPaymentSchemes, form]);
 
   const handleCategorySelect = (categoryId: number) => {
     setSelectedCategory(categoryId);
@@ -615,85 +615,124 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
 
           <Form {...form}>
             <div className="space-y-6">
-              {/* Mode Selection */}
-              <FormField
-                control={form.control}
-                name="mode"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>Tipo de Oferta</FormLabel>
-                    <FormControl>
-                      <RadioGroup
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        className="flex space-x-6"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="precargada" id="precargada-prod" />
-                          <Label htmlFor="precargada-prod">Precargada</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="manual" id="manual-prod" />
-                          <Label htmlFor="manual-prod">Manual</Label>
-                        </div>
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <Separator />
-
-              {/* Preloaded Scheme Selection - Only show in precargada mode and when product is selected */}
-              {selectedMode === "precargada" && selectedProduct && (
+              {/* Step 1: Product Selection - Always show first */}
+              {!selectedProductData ? (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Esquema de Pago Precargado</h3>
-                  {productPaymentSchemes.length > 0 ? (
-                    <FormField
-                      control={form.control}
-                      name="selectedSchemeId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Seleccionar Esquema *</FormLabel>
-                          <Select 
-                            onValueChange={(value) => field.onChange(parseInt(value))} 
-                            value={field.value?.toString()}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecciona un esquema de pago" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {productPaymentSchemes.map((scheme: any) => (
-                                <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                                  <div className="flex flex-col">
-                                    <span>{scheme.nombre}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      Eng: {scheme.porcentaje_enganche}% | Mens: {scheme.porcentaje_mensualidades}% ({scheme.numero_mensualidades}) | Ent: {scheme.porcentaje_entrega}%
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
+                  <h3 className="text-lg font-semibold">1. Seleccionar Producto/Servicio</h3>
+                  <Button onClick={() => setShowCategoryDialog(true)} className="w-full">
+                    Seleccionar producto/servicio
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {/* Selected Product/Service Display */}
+                  <div ref={selectedProductRef} className="bg-green-50 border border-green-200 rounded-lg p-4 dark:bg-green-900/20 dark:border-green-800">
+                    <h4 className="font-semibold text-green-900 dark:text-green-100 mb-2">
+                      ✓ Producto/Servicio Seleccionado
+                    </h4>
+                    <div className="space-y-1 text-sm">
+                      <p><span className="font-medium">Nombre:</span> {selectedProductData.nombre}</p>
+                      {selectedProductData.descripcion && (
+                        <p><span className="font-medium">Descripción:</span> {selectedProductData.descripcion}</p>
                       )}
-                    />
+                      {selectedProductData.precio_lista && (
+                        <p><span className="font-medium">Precio Lista:</span> ${parseFloat(selectedProductData.precio_lista).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100"
+                      onClick={() => {
+                        setSelectedProduct(null);
+                        setSelectedProductData(null);
+                        form.setValue("mode", "manual");
+                        form.setValue("selectedSchemeId", undefined);
+                      }}
+                    >
+                      Cambiar producto/servicio
+                    </Button>
+                  </div>
+
+                  <Separator />
+
+                  {/* Step 2: Mode Selection - Only show if product has payment schemes */}
+                  {productPaymentSchemes.length > 0 ? (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="mode"
+                        render={({ field }) => (
+                          <FormItem className="space-y-3">
+                            <FormLabel>2. Tipo de Oferta</FormLabel>
+                            <FormControl>
+                              <RadioGroup
+                                onValueChange={field.onChange}
+                                value={field.value}
+                                className="flex space-x-6"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="precargada" id="precargada-prod" />
+                                  <Label htmlFor="precargada-prod">Precargada</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="manual" id="manual-prod" />
+                                  <Label htmlFor="manual-prod">Manual</Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Preloaded Scheme Selection */}
+                      {selectedMode === "precargada" && (
+                        <div className="space-y-4">
+                          <FormField
+                            control={form.control}
+                            name="selectedSchemeId"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Seleccionar Esquema *</FormLabel>
+                                <Select 
+                                  onValueChange={(value) => field.onChange(parseInt(value))} 
+                                  value={field.value?.toString()}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Selecciona un esquema de pago" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {productPaymentSchemes.map((scheme: any) => (
+                                      <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                                        <div className="flex flex-col">
+                                          <span>{scheme.nombre}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            Eng: {scheme.porcentaje_enganche}% | Mens: {scheme.porcentaje_mensualidades}% ({scheme.numero_mensualidades}) | Ent: {scheme.porcentaje_entrega}%
+                                          </span>
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-900/20">
+                    <Card className="border-muted bg-muted/50">
                       <CardContent className="p-4">
-                        <p className="text-sm text-amber-800 dark:text-amber-200">
-                          No hay esquemas de pago configurados para este producto. 
-                          Configure esquemas en la vista de Productos o use el modo Manual.
+                        <p className="text-sm text-muted-foreground">
+                          Este producto no tiene esquemas de pago precargados. Se generará una oferta manual.
                         </p>
                       </CardContent>
                     </Card>
                   )}
-                </div>
-              )}
 
               {/* Manual Scheme - Only show in manual mode */}
               {selectedMode === "manual" && (
@@ -827,8 +866,16 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
                 </div>
               )}
 
-              <Separator />
+                  <Separator />
 
+                  {/* Comprador Section Title */}
+                  <h3 className="text-lg font-semibold">{productPaymentSchemes.length > 0 ? '3' : '2'}. Datos del Comprador</h3>
+                </>
+              )}
+
+              {/* Only show buyer fields after product is selected */}
+              {selectedProductData && (
+                <>
             {/* Comprador Actual Checkbox */}
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -1050,46 +1097,14 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
                   )}
                 </div>
               </div>
-
-              {/* Selected Product/Service Display */}
-              {selectedProductData && (
-                <div ref={selectedProductRef} className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-green-900 mb-2">
-                    ✓ Producto/Servicio Seleccionado
-                  </h4>
-                  <div className="space-y-1 text-sm">
-                    <p><span className="font-medium">Nombre:</span> {selectedProductData.nombre}</p>
-                    {selectedProductData.descripcion && (
-                      <p><span className="font-medium">Descripción:</span> {selectedProductData.descripcion}</p>
-                    )}
-                    {selectedProductData.precio_lista && (
-                      <p><span className="font-medium">Precio Lista:</span> ${parseFloat(selectedProductData.precio_lista).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-2 text-green-700 hover:text-green-900"
-                    onClick={() => {
-                      setSelectedProduct(null);
-                      setSelectedProductData(null);
-                      setShowCategoryDialog(true);
-                    }}
-                  >
-                    Cambiar producto/servicio
-                  </Button>
-                </div>
+                </>
               )}
 
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setOpen(false)}>
                   Cancelar
                 </Button>
-                {!selectedProduct ? (
-                  <Button onClick={handleSelectProductService}>
-                    Seleccionar producto/servicio
-                  </Button>
-                ) : (
+                {selectedProductData && (
                   <Button onClick={handleGenerateOffer} disabled={isGenerating}>
                     {isGenerating ? "Generando..." : "Generar Oferta"}
                   </Button>
