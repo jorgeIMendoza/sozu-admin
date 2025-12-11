@@ -8,7 +8,19 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Form,
   FormControl,
@@ -48,7 +60,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Check, ChevronsUpDown, UserPlus, Warehouse, Car, Info } from "lucide-react";
+import { FileText, Check, ChevronsUpDown, UserPlus, Warehouse, Car, Info, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -159,6 +171,8 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
@@ -316,26 +330,68 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     },
   });
 
-  // Fetch bodegas and estacionamientos for this property with product prices
+  // Fetch bodegas and estacionamientos for this property with product prices and payment schemes
   const { data: includedProducts, isLoading: isLoadingProducts } = useQuery({
-    queryKey: ["property-included-products", propertyId],
+    queryKey: ["property-included-products-with-schemes", propertyId],
     queryFn: async () => {
       const [bodegasRes, estacionamientosRes] = await Promise.all([
         supabase
           .from("bodegas")
-          .select("id, nombre, es_incluido, m2, productos_servicios!bodegas_id_producto_fkey(precio_lista)")
+          .select("id, nombre, es_incluido, m2, id_producto, productos_servicios!bodegas_id_producto_fkey(id, precio_lista, nombre, id_entidad_relacionada_dueno)")
           .eq("id_propiedad", propertyId)
           .eq("activo", true),
         supabase
           .from("estacionamientos")
-          .select("id, nombre, es_incluido, m2, productos_servicios!estacionamientos_id_producto_fkey(precio_lista)")
+          .select("id, nombre, es_incluido, m2, id_producto, productos_servicios!estacionamientos_id_producto_fkey(id, precio_lista, nombre, id_entidad_relacionada_dueno)")
           .eq("id_propiedad", propertyId)
           .eq("activo", true)
       ]);
 
+      // For each product with price > 0, fetch its payment schemes
+      const allProducts = [
+        ...(bodegasRes.data || []).map(b => ({ ...b, tipo: 'bodega' as const })),
+        ...(estacionamientosRes.data || []).map(e => ({ ...e, tipo: 'estacionamiento' as const }))
+      ];
+
+      // Fetch payment schemes for all products
+      const productIds = allProducts
+        .filter(p => {
+          const precioLista = (p.productos_servicios as any)?.precio_lista || 0;
+          const m2 = p.m2 || 0;
+          return (precioLista * m2) > 0;
+        })
+        .map(p => p.id_producto)
+        .filter((id): id is number => !!id);
+
+      let schemesMap: Record<number, any[]> = {};
+      if (productIds.length > 0) {
+        const { data: schemes } = await supabase
+          .from("esquemas_pago")
+          .select("*")
+          .in("id_producto", productIds)
+          .eq("es_manual", false)
+          .eq("activo", true);
+        
+        if (schemes) {
+          schemesMap = schemes.reduce((acc, scheme) => {
+            if (!acc[scheme.id_producto]) {
+              acc[scheme.id_producto] = [];
+            }
+            acc[scheme.id_producto].push(scheme);
+            return acc;
+          }, {} as Record<number, any[]>);
+        }
+      }
+
       return {
-        bodegas: bodegasRes.data || [],
-        estacionamientos: estacionamientosRes.data || []
+        bodegas: (bodegasRes.data || []).map(b => ({
+          ...b,
+          paymentSchemes: schemesMap[b.id_producto] || []
+        })),
+        estacionamientos: (estacionamientosRes.data || []).map(e => ({
+          ...e,
+          paymentSchemes: schemesMap[e.id_producto] || []
+        }))
       };
     },
     enabled: open && !!propertyId,
@@ -557,37 +613,51 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         }
       }
 
-      // Generate automatic product offers for included bodegas and estacionamientos
-      const productOffersResults: { created: number; warnings: string[] } = { created: 0, warnings: [] };
+      // Generate automatic product offers for bodegas and estacionamientos with price > 0
+      const productOffersResults: { 
+        created: number; 
+        warnings: string[];
+        createdOffers: Array<{
+          offerId: number;
+          productId: number;
+          productName: string;
+        }>;
+      } = { created: 0, warnings: [], createdOffers: [] };
       
-      // Fetch bodegas with es_incluido = true for this property
-      const { data: includedBodegas } = await supabase
+      // Fetch bodegas for this property
+      const { data: allBodegas } = await supabase
         .from("bodegas")
-        .select("id, nombre, id_producto, productos_servicios(id, nombre, precio)")
+        .select(`
+          id, nombre, id_producto, m2,
+          productos_servicios!bodegas_id_producto_fkey(id, nombre, precio_lista, id_entidad_relacionada_dueno)
+        `)
         .eq("id_propiedad", propertyId)
-        .eq("es_incluido", true)
         .eq("activo", true);
 
-      // Fetch estacionamientos with es_incluido = true for this property
-      const { data: includedEstacionamientos } = await supabase
+      // Fetch estacionamientos for this property
+      const { data: allEstacionamientos } = await supabase
         .from("estacionamientos")
-        .select("id, nombre, id_producto, productos_servicios(id, nombre, precio)")
+        .select(`
+          id, nombre, id_producto, m2,
+          productos_servicios!estacionamientos_id_producto_fkey(id, nombre, precio_lista, id_entidad_relacionada_dueno)
+        `)
         .eq("id_propiedad", propertyId)
-        .eq("es_incluido", true)
         .eq("activo", true);
 
-      const allIncludedProducts = [
-        ...(includedBodegas || []).map(b => ({ ...b, tipo: 'bodega' })),
-        ...(includedEstacionamientos || []).map(e => ({ ...e, tipo: 'estacionamiento' }))
+      const allProducts = [
+        ...(allBodegas || []).map(b => ({ ...b, tipo: 'bodega' })),
+        ...(allEstacionamientos || []).map(e => ({ ...e, tipo: 'estacionamiento' }))
       ];
 
-      for (const product of allIncludedProducts) {
+      for (const product of allProducts) {
         const productService = product.productos_servicios as any;
         const productId = product.id_producto;
-        const productPrice = productService?.precio || 0;
+        const precioLista = productService?.precio_lista || 0;
+        const m2 = product.m2 || 0;
+        const precioFinal = precioLista * m2;
         
         // Only generate offer if price is greater than 0
-        if (productPrice <= 0) {
+        if (precioFinal <= 0) {
           console.log(`Skipping product offer for ${product.nombre} - price is 0 (included in apartment)`);
           continue;
         }
@@ -608,20 +678,41 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           continue;
         }
 
+        // Generate CLABE for the product offer
+        let clabeData: string | null = null;
+        if (productService?.id_entidad_relacionada_dueno) {
+          const { data: generatedClabe, error: clabeError } = await supabase
+            .rpc('crear_referencia_bancaria', {
+              id_er_dueno: productService.id_entidad_relacionada_dueno
+            });
+          
+          if (clabeError) {
+            console.error(`Error generating CLABE for ${product.nombre}:`, clabeError);
+            productOffersResults.warnings.push(
+              `Error al generar CLABE para ${product.tipo === 'bodega' ? 'bodega' : 'estacionamiento'} "${product.nombre}": ${clabeError.message}`
+            );
+            continue;
+          }
+          clabeData = generatedClabe;
+        }
+
         // Create product offer with the first available scheme
         const firstScheme = productSchemes[0];
         const productOfferData = {
           id_propiedad: propertyId,
-          id_producto_servicio: productId,
+          id_producto: productId,
           id_persona_lead: personId, // Same client as property offer
           id_esquema_pago_seleccionado: firstScheme.id,
+          clabe_stp_tmp_producto: clabeData,
           activo: true,
           email_creador: profile?.email || ''
         };
 
-        const { error: productOfferError } = await supabase
+        const { data: createdProductOffer, error: productOfferError } = await supabase
           .from("ofertas")
-          .insert(productOfferData);
+          .insert(productOfferData)
+          .select('id')
+          .single();
 
         if (productOfferError) {
           console.error(`Error creating product offer for ${product.nombre}:`, productOfferError);
@@ -630,7 +721,12 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           );
         } else {
           productOffersResults.created++;
-          console.log(`Created product offer for ${product.nombre}`);
+          productOffersResults.createdOffers.push({
+            offerId: createdProductOffer.id,
+            productId: productId,
+            productName: product.nombre
+          });
+          console.log(`Created product offer for ${product.nombre} with ID ${createdProductOffer.id}`);
         }
       }
 
@@ -655,7 +751,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       if (result.productOffersResults.created > 0) {
         toast({
           title: "Ofertas de productos generadas",
-          description: `Se generaron ${result.productOffersResults.created} oferta(s) de productos incluidos.`,
+          description: `Se generaron ${result.productOffersResults.created} oferta(s) de productos.`,
         });
       }
 
@@ -669,7 +765,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         });
       }
       
-      // Generate PDF
+      // Generate main property PDF
       try {
         const { generateOfferPDF } = await import('@/services/htmlToPdfService');
         await generateOfferPDF({
@@ -679,13 +775,53 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
           leadName: result.leadName,
           leadEmail: result.leadEmail,
           leadPhone: result.leadPhone,
-          creatorEmail: 'jorge.mendoza@sozu.com'
+          creatorEmail: profile?.email || ''
         });
         
         toast({
-          title: "PDF generado",
-          description: "El PDF de la oferta se ha descargado automáticamente.",
+          title: "PDF de propiedad generado",
+          description: "El PDF de la oferta de propiedad se ha descargado.",
         });
+
+        // Generate PDFs for product offers - with delay between each to avoid browser blocking
+        if (result.productOffersResults.createdOffers.length > 0) {
+          toast({
+            title: "Generando PDFs de productos...",
+            description: `Descargando ${result.productOffersResults.createdOffers.length} PDF(s) de productos.`,
+          });
+
+          for (const productOffer of result.productOffersResults.createdOffers) {
+            // Small delay to allow browser to handle downloads
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            try {
+              await generateOfferPDF({
+                propertyId,
+                offerId: productOffer.offerId,
+                propertyNumber,
+                leadName: result.leadName,
+                leadEmail: result.leadEmail,
+                leadPhone: result.leadPhone,
+                creatorEmail: profile?.email || '',
+                isProductOffer: true,
+                productId: productOffer.productId
+              });
+              console.log(`PDF generated for product offer ${productOffer.offerId} - ${productOffer.productName}`);
+            } catch (productPdfError) {
+              console.error(`Error generating PDF for product ${productOffer.productName}:`, productPdfError);
+              toast({
+                title: "Aviso",
+                description: `No se pudo generar el PDF para ${productOffer.productName}`,
+                variant: "destructive",
+              });
+            }
+          }
+          
+          toast({
+            title: "PDFs de productos generados",
+            description: `Se descargaron ${result.productOffersResults.createdOffers.length} PDF(s) de productos.`,
+          });
+        }
       } catch (pdfError) {
         console.error('Error generating PDF:', pdfError);
         toast({
@@ -742,15 +878,61 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     },
   });
 
+  // Calculate products with price > 0 and their scheme status
+  const productsWithPriceInfo = React.useMemo(() => {
+    if (!includedProducts) return { valid: [], invalid: [], total: 0 };
+    
+    const allProducts = [
+      ...includedProducts.bodegas.map((b: any) => ({
+        ...b,
+        tipo: 'Bodega',
+        precioFinal: ((b.productos_servicios as any)?.precio_lista || 0) * (b.m2 || 0),
+        hasSchemes: (b.paymentSchemes?.length || 0) > 0
+      })),
+      ...includedProducts.estacionamientos.map((e: any) => ({
+        ...e,
+        tipo: 'Estacionamiento', 
+        precioFinal: ((e.productos_servicios as any)?.precio_lista || 0) * (e.m2 || 0),
+        hasSchemes: (e.paymentSchemes?.length || 0) > 0
+      }))
+    ].filter(p => p.precioFinal > 0);
+
+    const valid = allProducts.filter(p => p.hasSchemes);
+    const invalid = allProducts.filter(p => !p.hasSchemes);
+    
+    return { valid, invalid, total: allProducts.length };
+  }, [includedProducts]);
+
   const onSubmit = (data: FormData) => {
     console.log("Form submitted successfully!");
-    console.log("Starting mutation...");
-    createOfferMutation.mutate(data);
+    
+    // If there are products with price > 0, show confirmation dialog
+    if (productsWithPriceInfo.total > 0) {
+      setPendingFormData(data);
+      setShowConfirmDialog(true);
+    } else {
+      // No products, proceed directly
+      createOfferMutation.mutate(data);
+    }
+  };
+
+  const handleConfirmGenerate = () => {
+    if (pendingFormData) {
+      createOfferMutation.mutate(pendingFormData);
+      setShowConfirmDialog(false);
+      setPendingFormData(null);
+    }
+  };
+
+  const handleCancelGenerate = () => {
+    setShowConfirmDialog(false);
+    setPendingFormData(null);
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
@@ -1353,5 +1535,81 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         </Form>
       </DialogContent>
     </Dialog>
+
+    {/* Confirmation Dialog for generating multiple offers */}
+    <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+      <AlertDialogContent className="max-w-lg">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            Confirmar generación de ofertas
+          </AlertDialogTitle>
+          <AlertDialogDescription className="space-y-4">
+            <p>
+              Esta propiedad tiene {productsWithPriceInfo.total} producto(s) con precio mayor a cero. 
+              Se generarán las siguientes ofertas:
+            </p>
+            
+            <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <FileText className="h-4 w-4 text-green-600" />
+                <span className="font-medium">1 oferta de propiedad</span>
+              </div>
+              
+              {productsWithPriceInfo.valid.length > 0 && (
+                <div className="flex items-start gap-2 text-sm">
+                  <FileText className="h-4 w-4 text-blue-600 mt-0.5" />
+                  <div>
+                    <span className="font-medium">{productsWithPriceInfo.valid.length} oferta(s) de productos:</span>
+                    <ul className="ml-4 mt-1 text-muted-foreground">
+                      {productsWithPriceInfo.valid.map((p, i) => (
+                        <li key={i}>• {p.tipo} "{p.nombre}" (${p.precioFinal.toLocaleString()})</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {productsWithPriceInfo.invalid.length > 0 && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 space-y-2">
+                <div className="flex items-start gap-2 text-sm text-destructive">
+                  <AlertTriangle className="h-4 w-4 mt-0.5" />
+                  <div>
+                    <span className="font-medium">
+                      {productsWithPriceInfo.invalid.length} producto(s) NO tienen esquemas de pago configurados:
+                    </span>
+                    <ul className="ml-4 mt-1">
+                      {productsWithPriceInfo.invalid.map((p, i) => (
+                        <li key={i}>• {p.tipo} "{p.nombre}"</li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-xs">
+                      Estos productos NO generarán oferta. Configure sus esquemas de pago primero.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground">
+              Se descargarán {1 + productsWithPriceInfo.valid.length} PDF(s) automáticamente.
+            </p>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={handleCancelGenerate}>
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction 
+            onClick={handleConfirmGenerate}
+            disabled={createOfferMutation.isPending}
+          >
+            {createOfferMutation.isPending ? "Generando..." : "Generar Ofertas"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
