@@ -262,7 +262,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       if (selectedCategory === -1) {
         const { data, error } = await (supabase as any)
           .from('productos_servicios')
-          .select('id, nombre, precio, es_producto, id_categoria, categorias_producto(tiene_metraje)')
+          .select('id, nombre, precio_lista, descripcion, es_producto, id_categoria, categorias_producto(tiene_metraje)')
           .eq('es_producto', false)
           .eq('activo', true)
           .order('nombre');
@@ -273,7 +273,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
       // Otherwise, fetch by category
       const { data, error } = await (supabase as any)
         .from('productos_servicios')
-        .select('id, nombre, precio, es_producto, id_categoria, categorias_producto(tiene_metraje)')
+        .select('id, nombre, precio_lista, descripcion, es_producto, id_categoria, categorias_producto(tiene_metraje)')
         .eq('id_categoria', selectedCategory)
         .eq('activo', true)
         .order('nombre');
