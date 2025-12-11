@@ -249,12 +249,25 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
     ...categoriesData
   ];
 
-  // Get project ID from property details (kept for reference but not used for filtering)
-  const projectId = propertyDetails?.entidades_relacionadas?.proyectos?.id;
+  // Get project name from property details for filtering products
+  const propertyProjectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
+  
+  // Extract the key project identifier for matching (e.g., "Vive DAIKU" -> "DAIKU", "Bottura" -> "Bottura")
+  const getProjectKeyword = (name: string | undefined): string => {
+    if (!name) return '';
+    // Handle names like "Vive DAIKU" -> extract "DAIKU"
+    const parts = name.split(' ');
+    if (parts.length > 1) {
+      return parts[parts.length - 1]; // Get last word (e.g., "DAIKU" from "Vive DAIKU")
+    }
+    return name;
+  };
+  
+  const projectKeyword = getProjectKeyword(propertyProjectName);
 
-  // Fetch products/services by category (products are global, not tied to specific projects)
+  // Fetch products/services by category and filter by project name
   const { data: products = [] } = useQuery({
-    queryKey: ['productos-servicios-por-categoria', selectedCategory],
+    queryKey: ['productos-servicios-por-categoria', selectedCategory, projectKeyword],
     queryFn: async (): Promise<any[]> => {
       if (!selectedCategory) return [];
       
@@ -267,16 +280,23 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
           .eq('activo', true)
           .order('nombre');
         if (error) throw error;
+        // Servicios are global, no project filter needed
         return data || [];
       }
       
-      // Otherwise, fetch by category
-      const { data, error } = await (supabase as any)
+      // Otherwise, fetch by category and filter by project name
+      let query = (supabase as any)
         .from('productos_servicios')
         .select('id, nombre, precio_lista, descripcion, es_producto, id_categoria, categorias_producto!fk_prodserv_categoria(tiene_metraje)')
         .eq('id_categoria', selectedCategory)
-        .eq('activo', true)
-        .order('nombre');
+        .eq('activo', true);
+      
+      // Filter by project keyword in product name (case insensitive)
+      if (projectKeyword) {
+        query = query.ilike('nombre', `%${projectKeyword}%`);
+      }
+      
+      const { data, error } = await query.order('nombre');
       if (error) throw error;
       return data || [];
     },
