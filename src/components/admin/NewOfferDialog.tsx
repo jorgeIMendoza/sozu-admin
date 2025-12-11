@@ -174,6 +174,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
   const [productSchemeSelections, setProductSchemeSelections] = useState<Record<number, number | null>>({});
+  const [propertySchemeSelection, setPropertySchemeSelection] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
@@ -398,6 +399,24 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     enabled: open && !!propertyId,
   });
 
+  // Fetch property payment schemes for the confirmation dialog
+  const { data: propertyPaymentSchemes = [] } = useQuery({
+    queryKey: ["property-payment-schemes-dialog", propertyId],
+    queryFn: async () => {
+      // @ts-ignore - Supabase type inference is too deep
+      const { data, error } = await supabase
+        .from("esquemas_pago")
+        .select("id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades, porcentaje_descuento_aumento")
+        .eq("id_propiedad", propertyId)
+        .eq("es_manual", false)
+        .eq("activo", true);
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: open && !!propertyId,
+  });
+
   // Update form values when project config loads
   useEffect(() => {
     if (propertyDetails?.entidades_relacionadas?.proyectos) {
@@ -409,7 +428,11 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
   }, [propertyDetails, form]);
 
   const createOfferMutation = useMutation({
-    mutationFn: async ({ data, schemeSelections }: { data: FormData; schemeSelections: Record<number, number | null> }) => {
+    mutationFn: async ({ data, schemeSelections, propertySchemeId }: { 
+      data: FormData; 
+      schemeSelections: Record<number, number | null>;
+      propertySchemeId?: number | null;
+    }) => {
       console.log("Mutation function called with:", data);
       let personId = data.selectedPersonId;
       
@@ -488,7 +511,8 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         }
       }
 
-      let schemeId = null;
+      // Use propertySchemeId if provided from confirmation dialog, otherwise null for manual mode
+      let schemeId: number | null = propertySchemeId || null;
 
       // If manual mode, create payment scheme
       if (data.mode === "manual") {
@@ -912,17 +936,22 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
       setPendingFormData(data);
       setShowConfirmDialog(true);
     } else {
-      // No products, proceed directly
-      createOfferMutation.mutate({ data, schemeSelections: {} });
+      // No products, proceed directly (note: no confirmation dialog means no scheme selection for property)
+      createOfferMutation.mutate({ data, schemeSelections: {}, propertySchemeId: null });
     }
   };
 
   const handleConfirmGenerate = () => {
     if (pendingFormData) {
-      createOfferMutation.mutate({ data: pendingFormData, schemeSelections: productSchemeSelections });
+      createOfferMutation.mutate({ 
+        data: pendingFormData, 
+        schemeSelections: productSchemeSelections,
+        propertySchemeId: propertySchemeSelection
+      });
       setShowConfirmDialog(false);
       setPendingFormData(null);
       setProductSchemeSelections({});
+      setPropertySchemeSelection(null);
     }
   };
 
@@ -930,6 +959,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     setShowConfirmDialog(false);
     setPendingFormData(null);
     setProductSchemeSelections({});
+    setPropertySchemeSelection(null);
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
@@ -1553,10 +1583,48 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
               Se generarán las siguientes ofertas:
             </p>
             
-            <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-              <div className="flex items-center gap-2 text-sm">
-                <FileText className="h-4 w-4 text-green-600" />
-                <span className="font-medium">1 oferta de propiedad</span>
+            <div className="bg-muted/50 rounded-lg p-3 space-y-4">
+              {/* Property offer with scheme selector */}
+              <div className="bg-background rounded-md p-3 border">
+                <div className="flex items-center gap-2 text-sm mb-2">
+                  <FileText className="h-4 w-4 text-green-600" />
+                  <span className="font-medium text-foreground">Oferta de propiedad</span>
+                </div>
+                <div className="ml-6">
+                  <label className="text-xs text-muted-foreground block mb-1">Esquema de pago:</label>
+                  <Select
+                    value={propertySchemeSelection?.toString() || "none"}
+                    onValueChange={(value) => {
+                      setPropertySchemeSelection(value === "none" ? null : parseInt(value));
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Sin seleccionar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        <span className="text-muted-foreground italic">Sin seleccionar</span>
+                      </SelectItem>
+                      {propertyPaymentSchemes?.map((scheme: any) => (
+                        <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                          <div className="flex flex-col">
+                            <span>{scheme.nombre}</span>
+                            <span className="text-xs text-muted-foreground">
+                              Eng: {scheme.porcentaje_enganche || 0}% | Mens: {scheme.porcentaje_mensualidades || 0}% ({scheme.numero_mensualidades || 0} pagos) | Ent: {scheme.porcentaje_entrega || 0}%
+                              {scheme.porcentaje_descuento_aumento ? ` | ${scheme.porcentaje_descuento_aumento > 0 ? '+' : ''}${scheme.porcentaje_descuento_aumento}%` : ''}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!propertySchemeSelection && (
+                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Se generará PDF sin esquema seleccionado y sin cuenta CLABE para pagos
+                    </p>
+                  )}
+                </div>
               </div>
               
               {productsWithPriceInfo.valid.length > 0 && (
@@ -1590,7 +1658,12 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                                 </SelectItem>
                                 {p.paymentSchemes?.map((scheme: any) => (
                                   <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                                    {scheme.nombre}
+                                    <div className="flex flex-col">
+                                      <span>{scheme.nombre}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        Eng: {scheme.porcentaje_enganche || 0}% | Mens: {scheme.porcentaje_mensualidades || 0}% ({scheme.numero_mensualidades || 0} pagos) | Ent: {scheme.porcentaje_entrega || 0}%
+                                      </span>
+                                    </div>
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -1598,7 +1671,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                             {!productSchemeSelections[p.id_producto] && (
                               <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                                 <AlertTriangle className="h-3 w-3" />
-                                Se generará PDF sin esquema seleccionado
+                                Se generará PDF sin esquema seleccionado y sin cuenta CLABE para pagos
                               </p>
                             )}
                           </div>
