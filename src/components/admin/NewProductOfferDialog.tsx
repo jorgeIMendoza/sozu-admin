@@ -258,13 +258,25 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
     queryFn: async (): Promise<any[]> => {
       if (!selectedCategory || !projectId) return [];
       
+      // First get entidades_relacionadas IDs for this project
+      const { data: entidadesData, error: entidadesError } = await supabase
+        .from('entidades_relacionadas')
+        .select('id')
+        .eq('id_proyecto', projectId)
+        .eq('activo', true);
+      
+      if (entidadesError) throw entidadesError;
+      if (!entidadesData || entidadesData.length === 0) return [];
+      
+      const entidadIds = entidadesData.map(e => e.id);
+      
       // If "Servicios" category is selected (id = -1)
       if (selectedCategory === -1) {
         const { data, error } = await (supabase as any)
           .from('productos_servicios')
           .select('id, nombre, precio, es_producto, id_categoria, categorias_producto(tiene_metraje)')
           .eq('es_producto', false)
-          .eq('id_proyecto', Number(projectId))
+          .in('id_entidad_relacionada_dueno', entidadIds)
           .eq('activo', true)
           .order('nombre');
         if (error) throw error;
@@ -276,7 +288,7 @@ export function NewProductOfferDialog({ propertyId, property }: NewProductOfferD
         .from('productos_servicios')
         .select('id, nombre, precio, es_producto, id_categoria, categorias_producto(tiene_metraje)')
         .eq('id_categoria', selectedCategory)
-        .eq('id_proyecto', Number(projectId))
+        .in('id_entidad_relacionada_dueno', entidadIds)
         .eq('activo', true)
         .order('nombre');
       if (error) throw error;
