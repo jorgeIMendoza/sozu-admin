@@ -186,8 +186,8 @@ class HTMLToPDFService {
       // Fetch property details (simplified for products)
       const propertyDetails = await this.fetchPropertyDetails(offerData.propertyId);
       
-      // Fetch product details
-      const productDetails = await this.fetchProductDetails(offerData.productId!);
+      // Fetch product details - pass propertyId to calculate metraje-based pricing
+      const productDetails = await this.fetchProductDetails(offerData.productId!, offerData.propertyId);
       
       // Fetch cuenta de cobranza to get clabe_stp
       let clabeStp = offerDetails.clabe_stp_tmp_producto;
@@ -1206,7 +1206,7 @@ class HTMLToPDFService {
     return data || [];
   }
 
-  private async fetchProductDetails(productId: number): Promise<any> {
+  private async fetchProductDetails(productId: number, propertyId?: number): Promise<any> {
     console.log('Fetching product details for ID:', productId);
     
     const { data: product, error } = await supabase
@@ -1226,16 +1226,52 @@ class HTMLToPDFService {
       throw error;
     }
 
-    // Fetch category name separately
+    // Fetch category info including tiene_metraje
     let categoria_nombre = null;
+    let tiene_metraje = false;
     if (product.id_categoria) {
       const { data: categoria } = await supabase
         .from('categorias_producto')
-        .select('nombre')
+        .select('nombre, tiene_metraje')
         .eq('id', product.id_categoria)
         .single();
       
       categoria_nombre = categoria?.nombre;
+      tiene_metraje = categoria?.tiene_metraje || false;
+    }
+
+    // Calculate final price - if tiene_metraje, get metraje from bodega or estacionamiento
+    let precio_final = product.precio_lista;
+    let metraje = null;
+    
+    if (tiene_metraje && propertyId) {
+      // Try to find the metraje from bodegas first
+      const { data: bodega } = await supabase
+        .from('bodegas')
+        .select('m2')
+        .eq('id_producto', productId)
+        .eq('id_propiedad', propertyId)
+        .eq('activo', true)
+        .maybeSingle();
+      
+      if (bodega?.m2) {
+        metraje = bodega.m2;
+        precio_final = product.precio_lista * metraje;
+      } else {
+        // Try estacionamientos
+        const { data: estacionamiento } = await supabase
+          .from('estacionamientos')
+          .select('m2')
+          .eq('id_producto', productId)
+          .eq('id_propiedad', propertyId)
+          .eq('activo', true)
+          .maybeSingle();
+        
+        if (estacionamiento?.m2) {
+          metraje = estacionamiento.m2;
+          precio_final = product.precio_lista * metraje;
+        }
+      }
     }
 
     // Fetch owner bank account data
@@ -1299,7 +1335,9 @@ class HTMLToPDFService {
     return {
       id: product.id,
       nombre: product.nombre,
-      precio_lista: product.precio_lista,
+      precio_lista: precio_final, // Use calculated price (includes metraje if applicable)
+      precio_por_m2: tiene_metraje ? product.precio_lista : null,
+      metraje: metraje,
       categoria_nombre,
       ownerData,
       ownerStpBankAccount
