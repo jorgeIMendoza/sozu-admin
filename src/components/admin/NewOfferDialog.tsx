@@ -401,22 +401,27 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     enabled: open && !!propertyId,
   });
 
-  // Fetch property payment schemes for the confirmation dialog
+  // Get project ID from property details
+  const projectId = propertyDetails?.entidades_relacionadas?.proyectos?.id;
+
+  // Fetch property payment schemes for the confirmation dialog (by project, not property)
   const { data: propertyPaymentSchemes = [] } = useQuery({
-    queryKey: ["property-payment-schemes-dialog", propertyId],
+    queryKey: ["property-payment-schemes-dialog", projectId],
     queryFn: async () => {
-      // @ts-ignore - Supabase type inference is too deep
+      if (!projectId) return [];
+      
       const { data, error } = await supabase
         .from("esquemas_pago")
         .select("id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades, porcentaje_descuento_aumento")
-        .eq("id_propiedad", propertyId)
+        .eq("id_proyecto", projectId)
+        .is("id_producto", null)
         .eq("es_manual", false)
         .eq("activo", true);
       
       if (error) throw error;
       return data || [];
     },
-    enabled: open && !!propertyId,
+    enabled: open && !!projectId,
   });
 
   // Update form values when project config loads
