@@ -459,6 +459,25 @@ export default function Prospectos() {
     mutationFn: async (personData: any) => {
       const { entityType, representativeId, pendingDocuments, id_proyecto, id_persona_duena_lead, ...cleanPersonData } = personData;
       
+      // Obtener id_persona del usuario actual si no es admin
+      let finalIdPersonaDuenaLead = id_persona_duena_lead ? parseInt(id_persona_duena_lead) : null;
+      
+      if (!finalIdPersonaDuenaLead) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          const { data: currentUser } = await supabase
+            .from('usuarios')
+            .select('id_persona, rol_id')
+            .eq('auth_user_id', session.user.id)
+            .single();
+          
+          // Si no es admin (rol 1 o 2), asignar automáticamente
+          if (currentUser && currentUser.rol_id !== 1 && currentUser.rol_id !== 2 && currentUser.id_persona) {
+            finalIdPersonaDuenaLead = currentUser.id_persona;
+          }
+        }
+      }
+      
       const { data: personResult, error: personError } = await supabase
         .from('personas')
         .insert([cleanPersonData])
@@ -473,7 +492,7 @@ export default function Prospectos() {
           id_persona: personResult.id,
           id_tipo_entidad: 7, // Prospecto
           id_proyecto: id_proyecto !== "null" && id_proyecto ? parseInt(id_proyecto) : null,
-          id_persona_duena_lead: id_persona_duena_lead ? parseInt(id_persona_duena_lead) : null,
+          id_persona_duena_lead: finalIdPersonaDuenaLead,
           activo: true
         }]);
       

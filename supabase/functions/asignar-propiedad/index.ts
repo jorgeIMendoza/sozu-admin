@@ -342,6 +342,44 @@ serve(async (req) => {
       console.log('✅ Comprador insertado correctamente');
     }
 
+    // 11. Crear entidad_relacionada de tipo Comprador (2) heredando id_persona_duena_lead del prospecto
+    const { data: existingComprador } = await supabase
+      .from('entidades_relacionadas')
+      .select('id')
+      .eq('id_persona', id_persona)
+      .eq('id_tipo_entidad', 2)
+      .eq('activo', true)
+      .maybeSingle();
+
+    if (!existingComprador) {
+      // Obtener id_persona_duena_lead del prospecto (si existe)
+      const { data: prospecto } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_persona_duena_lead')
+        .eq('id_persona', id_persona)
+        .eq('id_tipo_entidad', 7)
+        .eq('activo', true)
+        .maybeSingle();
+
+      // Crear entidad de comprador heredando el agente del prospecto
+      const { error: entidadCompradorError } = await supabase
+        .from('entidades_relacionadas')
+        .insert({
+          id_persona: id_persona,
+          id_tipo_entidad: 2, // Comprador
+          id_persona_duena_lead: prospecto?.id_persona_duena_lead || null,
+          activo: true
+        });
+
+      if (entidadCompradorError) {
+        console.error('❌ Error al crear entidad de comprador:', entidadCompradorError);
+      } else {
+        console.log('✅ Entidad de comprador creada con id_persona_duena_lead heredado:', prospecto?.id_persona_duena_lead);
+      }
+    } else {
+      console.log('ℹ️ Ya existe entidad de comprador para persona:', id_persona);
+    }
+
     console.log('🎉 Proceso de asignación completado exitosamente');
 
     return new Response(
