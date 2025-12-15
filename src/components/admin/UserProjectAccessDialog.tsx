@@ -7,16 +7,18 @@ import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Building2, Loader2, Search, Filter } from 'lucide-react';
+import { Building2, Loader2, Search, Filter, AlertTriangle } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Toggle } from '@/components/ui/toggle';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface UserProjectAccessDialogProps {
   userId: string;
   userName: string;
   userEmail: string;
   userRole?: string;
+  userRoleId?: number;
 }
 
 interface Proyecto {
@@ -28,7 +30,11 @@ interface ProyectoAcceso {
   proyecto_id: number;
 }
 
-export function UserProjectAccessDialog({ userId, userName, userEmail, userRole }: UserProjectAccessDialogProps) {
+interface RoleConfig {
+  ver_todos_proyectos_propiedades: boolean;
+}
+
+export function UserProjectAccessDialog({ userId, userName, userEmail, userRole, userRoleId }: UserProjectAccessDialogProps) {
   const [open, setOpen] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState<number[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,6 +43,25 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole 
 
   // Check if user is Super Admin
   const isSuperAdmin = userRole === 'Super Administrador';
+
+  // Fetch role configuration to check if ver_todos_proyectos_propiedades is enabled
+  const { data: roleConfig, isLoading: loadingRoleConfig } = useQuery({
+    queryKey: ['role-config', userRoleId],
+    queryFn: async () => {
+      if (!userRoleId) return null;
+      const { data, error } = await supabase
+        .from('roles')
+        .select('ver_todos_proyectos_propiedades')
+        .eq('id', userRoleId)
+        .single();
+      
+      if (error) throw error;
+      return data as RoleConfig;
+    },
+    enabled: open && !isSuperAdmin && !!userRoleId,
+  });
+
+  const hasUnrestrictedProjectAccess = roleConfig?.ver_todos_proyectos_propiedades || false;
 
   // Fetch all active projects (paginating to get all)
   const { data: proyectos, isLoading: loadingProyectos } = useQuery({
@@ -69,7 +94,7 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole 
       
       return allProjects;
     },
-    enabled: open && !isSuperAdmin,
+    enabled: open && !isSuperAdmin && !hasUnrestrictedProjectAccess,
   });
 
   // Fetch user's current project access (using email as FK, not UUID)
@@ -85,7 +110,7 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole 
       if (error) throw error;
       return data as ProyectoAcceso[];
     },
-    enabled: open && !isSuperAdmin && !!userEmail,
+    enabled: open && !isSuperAdmin && !!userEmail && !hasUnrestrictedProjectAccess,
   });
 
   // Update selected projects when data loads
@@ -203,7 +228,7 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole 
     saveAccessMutation.mutate(selectedProjects);
   };
 
-  const isLoading = loadingProyectos || loadingAccess;
+  const isLoading = loadingProyectos || loadingAccess || loadingRoleConfig;
 
   // Don't show button for Super Admins
   if (isSuperAdmin) {
@@ -237,6 +262,24 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole 
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : hasUnrestrictedProjectAccess ? (
+          <div className="space-y-4">
+            <Alert variant="default" className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800 dark:text-amber-200">
+                <strong>Este usuario tiene acceso a todos los proyectos/propiedades</strong>
+                <p className="mt-1 text-sm">
+                  El rol "{userRole}" tiene habilitada la opción "Ver todos los proyectos/propiedades", 
+                  por lo que no es necesario asignar proyectos específicos. El usuario puede ver todos los proyectos del sistema.
+                </p>
+              </AlertDescription>
+            </Alert>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cerrar
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
