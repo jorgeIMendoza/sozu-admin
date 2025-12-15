@@ -5774,6 +5774,7 @@ export type Database = {
         Args: { max_rows?: number; query_text: string }
         Returns: Json
       }
+      get_current_user_persona_id: { Args: never; Returns: number }
       get_current_user_profile: {
         Args: never
         Returns: {
@@ -5786,6 +5787,7 @@ export type Database = {
           rol_nombre: string
         }[]
       }
+      get_current_user_role: { Args: never; Returns: number }
       get_offers_with_agent: {
         Args: { property_id: number }
         Returns: {
@@ -5865,6 +5867,7 @@ export type Database = {
         }
         Returns: Json
       }
+      is_admin_user: { Args: never; Returns: boolean }
       is_super_admin: { Args: { user_id: string }; Returns: boolean }
       mark_password_changed: { Args: never; Returns: undefined }
       sync_conyuge_compradores: {
