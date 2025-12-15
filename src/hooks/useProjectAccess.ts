@@ -6,14 +6,38 @@ interface ProjectAccess {
   proyecto_id: number;
 }
 
+interface RoleConfig {
+  ver_todos_proyectos_propiedades: boolean;
+}
+
 export function useProjectAccess() {
   const { session, profile, isLoading: isAuthLoading } = useAuth();
   const userEmail = session?.user?.email;
+  const rolId = profile?.rol_id;
 
   // Check if user is Super Admin (has access to all projects)
   const isSuperAdmin = profile?.rol_nombre === 'Super Administrador';
   const isAdminProyecto = profile?.rol_nombre === 'Administrador de Proyecto';
-  const hasUnrestrictedAccess = isSuperAdmin || isAdminProyecto;
+
+  // Fetch role configuration to check if ver_todos_proyectos_propiedades is enabled
+  const { data: roleConfig, isLoading: isLoadingRoleConfig } = useQuery({
+    queryKey: ['role-project-config', rolId],
+    queryFn: async () => {
+      if (!rolId) return null;
+      const { data, error } = await supabase
+        .from('roles')
+        .select('ver_todos_proyectos_propiedades')
+        .eq('id', rolId)
+        .single();
+      
+      if (error) throw error;
+      return data as RoleConfig;
+    },
+    enabled: !!rolId && !isSuperAdmin && !isAdminProyecto && !isAuthLoading,
+  });
+
+  const hasVerTodosProyectos = roleConfig?.ver_todos_proyectos_propiedades || false;
+  const hasUnrestrictedAccess = isSuperAdmin || isAdminProyecto || hasVerTodosProyectos;
 
   // Fetch user's project access (using email as FK, not UUID)
   const { data: projectAccess, isLoading: isLoadingQuery } = useQuery({
@@ -30,7 +54,7 @@ export function useProjectAccess() {
       if (error) throw error;
       return data as ProjectAccess[];
     },
-    enabled: !!userEmail && !hasUnrestrictedAccess && !isAuthLoading,
+    enabled: !!userEmail && !hasUnrestrictedAccess && !isAuthLoading && !isLoadingRoleConfig,
   });
 
   // Get list of accessible project IDs
@@ -62,8 +86,8 @@ export function useProjectAccess() {
     return accessibleProjectIds;
   };
 
-  // Loading = auth loading OR query loading (but only if we're supposed to query)
-  const isLoading = isAuthLoading || (!hasUnrestrictedAccess && isLoadingQuery);
+  // Loading = auth loading OR role config loading OR query loading (but only if we're supposed to query)
+  const isLoading = isAuthLoading || isLoadingRoleConfig || (!hasUnrestrictedAccess && isLoadingQuery);
 
   return {
     accessibleProjectIds,
@@ -72,6 +96,6 @@ export function useProjectAccess() {
     getProjectFilter,
     hasUnrestrictedAccess,
     isLoading,
-    hasNoAccess: !isAuthLoading && !hasUnrestrictedAccess && !isLoadingQuery && accessibleProjectIds.length === 0,
+    hasNoAccess: !isAuthLoading && !isLoadingRoleConfig && !hasUnrestrictedAccess && !isLoadingQuery && accessibleProjectIds.length === 0,
   };
 }

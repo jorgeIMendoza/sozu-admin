@@ -21,6 +21,7 @@ interface Role {
   nombre: string;
   activo: boolean;
   ver_todos_prospectos_compradores: boolean;
+  ver_todos_proyectos_propiedades: boolean;
 }
 
 interface Permiso {
@@ -72,7 +73,7 @@ export default function RolesPermisos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roles')
-        .select('id, nombre, activo, ver_todos_prospectos_compradores')
+        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades')
         .order('id');
       
       if (error) throw error;
@@ -241,6 +242,28 @@ export default function RolesPermisos() {
         .from('roles')
         .update({ 
           ver_todos_prospectos_compradores: value,
+          fecha_actualizacion: new Date().toISOString() 
+        })
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      toast.success('Configuración actualizada');
+    },
+    onError: (error) => {
+      toast.error(`Error al actualizar: ${error.message}`);
+    },
+  });
+
+  // Update ver_todos_proyectos_propiedades mutation
+  const updateVerTodosProyectosMutation = useMutation({
+    mutationFn: async ({ id, value }: { id: number; value: boolean }) => {
+      const { error } = await supabase
+        .from('roles')
+        .update({ 
+          ver_todos_proyectos_propiedades: value,
           fecha_actualizacion: new Date().toISOString() 
         })
         .eq('id', id);
@@ -703,24 +726,44 @@ export default function RolesPermisos() {
                 {!isSuperAdminSelected && selectedRole && (
                   <div className="mb-4 p-4 bg-muted/50 rounded-lg border">
                     <h4 className="text-sm font-semibold mb-3">Configuración especial</h4>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <Checkbox
-                        checked={selectedRole.ver_todos_prospectos_compradores || false}
-                        onCheckedChange={(checked) => {
-                          updateVerTodosProspectosMutation.mutate({
-                            id: selectedRole.id,
-                            value: checked === true
-                          });
-                        }}
-                        disabled={updateVerTodosProspectosMutation.isPending}
-                      />
-                      <div>
-                        <span className="text-sm font-medium">Ver todos los prospectos/compradores</span>
-                        <p className="text-xs text-muted-foreground">
-                          Permite ver prospectos y compradores creados por otros usuarios
-                        </p>
-                      </div>
-                    </label>
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <Checkbox
+                          checked={selectedRole.ver_todos_prospectos_compradores || false}
+                          onCheckedChange={(checked) => {
+                            updateVerTodosProspectosMutation.mutate({
+                              id: selectedRole.id,
+                              value: checked === true
+                            });
+                          }}
+                          disabled={updateVerTodosProspectosMutation.isPending}
+                        />
+                        <div>
+                          <span className="text-sm font-medium">Ver todos los prospectos/compradores</span>
+                          <p className="text-xs text-muted-foreground">
+                            Permite ver prospectos y compradores creados por otros usuarios
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <Checkbox
+                          checked={selectedRole.ver_todos_proyectos_propiedades || false}
+                          onCheckedChange={(checked) => {
+                            updateVerTodosProyectosMutation.mutate({
+                              id: selectedRole.id,
+                              value: checked === true
+                            });
+                          }}
+                          disabled={updateVerTodosProyectosMutation.isPending}
+                        />
+                        <div>
+                          <span className="text-sm font-medium">Ver todos los proyectos/propiedades</span>
+                          <p className="text-xs text-muted-foreground">
+                            Permite ver todos los proyectos y propiedades sin necesidad de asignación específica
+                          </p>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 )}
                 <div className="h-[500px] overflow-auto">

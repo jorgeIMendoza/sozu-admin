@@ -5078,6 +5078,7 @@ export type Database = {
           id: number
           nombre: string
           ver_todos_prospectos_compradores: boolean | null
+          ver_todos_proyectos_propiedades: boolean | null
         }
         Insert: {
           activo?: boolean | null
@@ -5086,6 +5087,7 @@ export type Database = {
           id?: never
           nombre: string
           ver_todos_prospectos_compradores?: boolean | null
+          ver_todos_proyectos_propiedades?: boolean | null
         }
         Update: {
           activo?: boolean | null
@@ -5094,6 +5096,7 @@ export type Database = {
           id?: never
           nombre?: string
           ver_todos_prospectos_compradores?: boolean | null
+          ver_todos_proyectos_propiedades?: boolean | null
         }
         Relationships: []
       }
