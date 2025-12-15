@@ -279,12 +279,21 @@ export default function Usuarios() {
         .from('roles')
         .select('id, nombre')
         .eq('activo', true)
-        .order('id', { ascending: true });
+        .order('nombre', { ascending: true });
       
       if (error) throw error;
       return (data || []) as Role[];
     },
   });
+
+  // Convert roles to combobox options
+  const roleOptions = useMemo(() => 
+    roles.map(rol => ({
+      value: rol.id.toString(),
+      label: rol.nombre
+    })),
+    [roles]
+  );
 
   // Fetch agents and inmobiliarias for combobox
   const { data: personasConTipo = [] } = useQuery({
@@ -805,22 +814,16 @@ export default function Usuarios() {
                 Rol *
                 {isFieldsLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
               </Label>
-              <Select
+              <Combobox
                 value={newUserForm.rol_id}
                 onValueChange={(value) => setNewUserForm(prev => ({ ...prev, rol_id: value }))}
+                options={roleOptions}
+                placeholder="Seleccionar rol..."
+                searchPlaceholder="Buscar rol..."
+                emptyText="No se encontraron roles"
                 disabled={isFieldsLocked}
-              >
-                <SelectTrigger className={isFieldsLocked ? "bg-muted" : ""}>
-                  <SelectValue placeholder="Seleccionar rol..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((rol) => (
-                    <SelectItem key={rol.id} value={rol.id.toString()}>
-                      {rol.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                className={isFieldsLocked ? "bg-muted" : ""}
+              />
               {isFieldsLocked && (
                 <p className="text-xs text-muted-foreground">
                   El rol se asigna automáticamente según el tipo de persona seleccionada.
