@@ -1115,19 +1115,23 @@ export default function DetalleCuentaCobranza() {
         .eq('es_incluido', false)
         .eq('activo', true);
 
-      // Get all payment IDs from aplicaciones_pago for this cuenta
-      const { data: aplicaciones } = await supabase
-        .from('aplicaciones_pago')
-        .select(`
-          id_pago,
-          monto,
-          acuerdos_pago!aplicaciones_pago_id_acuerdo_pago_fkey(id_cuenta_cobranza)
-        `)
+      // Get acuerdo IDs for this cuenta first
+      const { data: acuerdosDeEstaCuenta } = await supabase
+        .from('acuerdos_pago')
+        .select('id')
+        .eq('id_cuenta_cobranza', cuentaId)
         .eq('activo', true);
 
-      const aplicacionesDeEstaCuenta = aplicaciones?.filter(
-        a => a.acuerdos_pago?.[0]?.id_cuenta_cobranza === cuentaId
-      );
+      const acuerdoIds = acuerdosDeEstaCuenta?.map(a => a.id) || [];
+
+      // Get aplicaciones only for this cuenta's acuerdos
+      const { data: aplicacionesDeEstaCuenta } = acuerdoIds.length > 0 
+        ? await supabase
+            .from('aplicaciones_pago')
+            .select('id_pago, monto')
+            .in('id_acuerdo_pago', acuerdoIds)
+            .eq('activo', true)
+        : { data: [] };
 
       // Get cash payments for property - sum from aplicaciones_pago to avoid duplicates
       let pagosPropiedadEfectivo = 0;
@@ -1180,19 +1184,23 @@ export default function DetalleCuentaCobranza() {
             if (cuentasBodegas && cuentasBodegas.length > 0) {
               const cuentaBodegaIds = cuentasBodegas.map(c => c.id);
               
-              // Get aplicaciones_pago for these cuentas to avoid duplicates
-              const { data: aplicacionesBodegas } = await supabase
-                .from('aplicaciones_pago')
-                .select(`
-                  id_pago,
-                  monto,
-                  acuerdos_pago!aplicaciones_pago_id_acuerdo_pago_fkey(id_cuenta_cobranza)
-                `)
+              // Get acuerdo IDs for these bodegas cuentas
+              const { data: acuerdosBodegas } = await supabase
+                .from('acuerdos_pago')
+                .select('id')
+                .in('id_cuenta_cobranza', cuentaBodegaIds)
                 .eq('activo', true);
 
-              const aplicacionesBodegasDeEstaCuenta = aplicacionesBodegas?.filter(
-                a => cuentaBodegaIds.includes(a.acuerdos_pago?.[0]?.id_cuenta_cobranza)
-              );
+              const acuerdoBodegaIds = acuerdosBodegas?.map(a => a.id) || [];
+
+              // Get aplicaciones only for these acuerdos
+              const { data: aplicacionesBodegasDeEstaCuenta } = acuerdoBodegaIds.length > 0
+                ? await supabase
+                    .from('aplicaciones_pago')
+                    .select('id_pago, monto')
+                    .in('id_acuerdo_pago', acuerdoBodegaIds)
+                    .eq('activo', true)
+                : { data: [] };
 
               if (aplicacionesBodegasDeEstaCuenta && aplicacionesBodegasDeEstaCuenta.length > 0) {
                 const pagoBodegaIds = aplicacionesBodegasDeEstaCuenta.map(a => a.id_pago).filter(Boolean);
@@ -1242,19 +1250,23 @@ export default function DetalleCuentaCobranza() {
             if (cuentasEstacionamientos && cuentasEstacionamientos.length > 0) {
               const cuentaEstacionamientoIds = cuentasEstacionamientos.map(c => c.id);
               
-              // Get aplicaciones_pago for these cuentas to avoid duplicates
-              const { data: aplicacionesEstacionamientos } = await supabase
-                .from('aplicaciones_pago')
-                .select(`
-                  id_pago,
-                  monto,
-                  acuerdos_pago!aplicaciones_pago_id_acuerdo_pago_fkey(id_cuenta_cobranza)
-                `)
+              // Get acuerdo IDs for these estacionamientos cuentas
+              const { data: acuerdosEstacionamientos } = await supabase
+                .from('acuerdos_pago')
+                .select('id')
+                .in('id_cuenta_cobranza', cuentaEstacionamientoIds)
                 .eq('activo', true);
 
-              const aplicacionesEstacionamientosDeEstaCuenta = aplicacionesEstacionamientos?.filter(
-                a => cuentaEstacionamientoIds.includes(a.acuerdos_pago?.[0]?.id_cuenta_cobranza)
-              );
+              const acuerdoEstacionamientoIds = acuerdosEstacionamientos?.map(a => a.id) || [];
+
+              // Get aplicaciones only for these acuerdos
+              const { data: aplicacionesEstacionamientosDeEstaCuenta } = acuerdoEstacionamientoIds.length > 0
+                ? await supabase
+                    .from('aplicaciones_pago')
+                    .select('id_pago, monto')
+                    .in('id_acuerdo_pago', acuerdoEstacionamientoIds)
+                    .eq('activo', true)
+                : { data: [] };
 
               if (aplicacionesEstacionamientosDeEstaCuenta && aplicacionesEstacionamientosDeEstaCuenta.length > 0) {
                 const pagoEstacionamientoIds = aplicacionesEstacionamientosDeEstaCuenta.map(a => a.id_pago).filter(Boolean);
