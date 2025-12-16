@@ -1126,7 +1126,7 @@ export default function DetalleCuentaCobranza() {
         .eq('activo', true);
 
       const aplicacionesDeEstaCuenta = aplicaciones?.filter(
-        a => a.acuerdos_pago?.id_cuenta_cobranza === cuentaId
+        a => a.acuerdos_pago?.[0]?.id_cuenta_cobranza === cuentaId
       );
 
       // Get cash payments for property - sum from aplicaciones_pago to avoid duplicates
@@ -1191,7 +1191,7 @@ export default function DetalleCuentaCobranza() {
                 .eq('activo', true);
 
               const aplicacionesBodegasDeEstaCuenta = aplicacionesBodegas?.filter(
-                a => cuentaBodegaIds.includes(a.acuerdos_pago?.id_cuenta_cobranza)
+                a => cuentaBodegaIds.includes(a.acuerdos_pago?.[0]?.id_cuenta_cobranza)
               );
 
               if (aplicacionesBodegasDeEstaCuenta && aplicacionesBodegasDeEstaCuenta.length > 0) {
@@ -1253,7 +1253,7 @@ export default function DetalleCuentaCobranza() {
                 .eq('activo', true);
 
               const aplicacionesEstacionamientosDeEstaCuenta = aplicacionesEstacionamientos?.filter(
-                a => cuentaEstacionamientoIds.includes(a.acuerdos_pago?.id_cuenta_cobranza)
+                a => cuentaEstacionamientoIds.includes(a.acuerdos_pago?.[0]?.id_cuenta_cobranza)
               );
 
               if (aplicacionesEstacionamientosDeEstaCuenta && aplicacionesEstacionamientosDeEstaCuenta.length > 0) {
