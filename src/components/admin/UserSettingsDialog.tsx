@@ -8,7 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { User, Mail, Shield, Key, Eye, EyeOff, CheckCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { User, Mail, Shield, Key, Eye, EyeOff, CheckCircle, Building2 } from "lucide-react";
 
 interface UserSettingsDialogProps {
   open: boolean;
@@ -25,6 +26,38 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Check if user is super admin (rol_id 1 or 2)
+  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+
+  // Query for user's project access
+  const { data: userProjects, isLoading: projectsLoading } = useQuery({
+    queryKey: ["user_projects_access", profile?.email],
+    queryFn: async () => {
+      if (!profile?.email || isSuperAdmin) return [];
+
+      // Get projects the user has access to
+      const { data: proyectosAcceso } = await supabase
+        .from('proyectos_acceso')
+        .select('proyecto_id')
+        .eq('usuario_id', profile.email)
+        .eq('activo', true);
+
+      if (!proyectosAcceso || proyectosAcceso.length === 0) return [];
+
+      const projectIds = proyectosAcceso.map(p => p.proyecto_id);
+
+      // Get project names
+      const { data: proyectos } = await supabase
+        .from('proyectos')
+        .select('id, nombre')
+        .in('id', projectIds)
+        .eq('activo', true);
+
+      return proyectos || [];
+    },
+    enabled: open && !!profile?.email && !isSuperAdmin,
+  });
 
   const passwordRequirements = [
     { text: 'Al menos 8 caracteres', valid: newPassword.length >= 8 },
@@ -117,7 +150,7 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
       if (!newOpen) resetForm();
       onOpenChange(newOpen);
     }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Configuración de Usuario</DialogTitle>
           <DialogDescription>
@@ -157,6 +190,37 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
                 <Badge className={getRoleBadgeColor(profile?.rol_nombre || "")}>
                   {profile?.rol_nombre || "Sin rol"}
                 </Badge>
+              </div>
+            </div>
+
+            {/* Project Access Section */}
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 shrink-0">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-muted-foreground">Acceso a proyectos</p>
+                {isSuperAdmin ? (
+                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 mt-1">
+                    Todos los proyectos
+                  </Badge>
+                ) : projectsLoading ? (
+                  <p className="text-sm text-muted-foreground">Cargando...</p>
+                ) : userProjects && userProjects.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {userProjects.map((project: any) => (
+                      <Badge 
+                        key={project.id} 
+                        variant="secondary"
+                        className="text-xs"
+                      >
+                        {project.nombre}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Sin proyectos asignados</p>
+                )}
               </div>
             </div>
           </div>
