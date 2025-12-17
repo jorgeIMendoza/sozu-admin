@@ -24,6 +24,9 @@ type Agente = {
   activo: boolean;
   id_entidad_relacionada_rep_leg?: number;
   representante_legal_nombre?: string;
+  entidad_relacionada_id?: number;
+  id_inmobiliaria?: number;
+  inmobiliaria_nombre?: string;
 };
 
 export default function Agentes() {
@@ -58,7 +61,8 @@ export default function Agentes() {
           id_entidad_relacionada_rep_leg,
           entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
             id,
-            id_tipo_entidad
+            id_tipo_entidad,
+            id_persona_duena_lead
           ),
           representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
             id,
@@ -76,6 +80,30 @@ export default function Agentes() {
       
       if (error) throw error;
       
+      // Get inmobiliaria names for agents that have one
+      const inmobiliariaIds = (data || [])
+        .map((item: any) => item.entidades_relacionadas[0]?.id_persona_duena_lead)
+        .filter(Boolean);
+      
+      let inmobiliariasMap: Record<number, string> = {};
+      if (inmobiliariaIds.length > 0) {
+        const { data: inmobData } = await supabase
+          .from('entidades_relacionadas')
+          .select(`
+            id,
+            personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
+          `)
+          .in('id', inmobiliariaIds)
+          .eq('activo', true);
+        
+        if (inmobData) {
+          inmobiliariasMap = inmobData.reduce((acc: Record<number, string>, item: any) => {
+            acc[item.id] = item.personas?.nombre_legal || '';
+            return acc;
+          }, {});
+        }
+      }
+      
       return (data || []).map((item: any) => ({
         id: item.id,
         entidad_relacionada_id: item.entidades_relacionadas[0].id,
@@ -89,6 +117,8 @@ export default function Agentes() {
         activo: item.activo,
         id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
         representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
+        id_inmobiliaria: item.entidades_relacionadas[0]?.id_persona_duena_lead || null,
+        inmobiliaria_nombre: inmobiliariasMap[item.entidades_relacionadas[0]?.id_persona_duena_lead] || null,
       })) as (Agente & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
@@ -110,7 +140,8 @@ export default function Agentes() {
           id_entidad_relacionada_rep_leg,
           entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
             id,
-            id_tipo_entidad
+            id_tipo_entidad,
+            id_persona_duena_lead
           ),
           representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
             id,
@@ -128,6 +159,30 @@ export default function Agentes() {
       
       if (error) throw error;
       
+      // Get inmobiliaria names for agents that have one
+      const inmobiliariaIds = (data || [])
+        .map((item: any) => item.entidades_relacionadas[0]?.id_persona_duena_lead)
+        .filter(Boolean);
+      
+      let inmobiliariasMap: Record<number, string> = {};
+      if (inmobiliariaIds.length > 0) {
+        const { data: inmobData } = await supabase
+          .from('entidades_relacionadas')
+          .select(`
+            id,
+            personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
+          `)
+          .in('id', inmobiliariaIds)
+          .eq('activo', true);
+        
+        if (inmobData) {
+          inmobiliariasMap = inmobData.reduce((acc: Record<number, string>, item: any) => {
+            acc[item.id] = item.personas?.nombre_legal || '';
+            return acc;
+          }, {});
+        }
+      }
+      
       return (data || []).map((item: any) => ({
         id: item.id,
         entidad_relacionada_id: item.entidades_relacionadas[0].id,
@@ -141,6 +196,8 @@ export default function Agentes() {
         activo: item.activo,
         id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
         representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
+        id_inmobiliaria: item.entidades_relacionadas[0]?.id_persona_duena_lead || null,
+        inmobiliaria_nombre: inmobiliariasMap[item.entidades_relacionadas[0]?.id_persona_duena_lead] || null,
       })) as (Agente & { entidad_relacionada_id: number; id_tipo_entidad: number })[];
     },
   });
@@ -150,7 +207,7 @@ export default function Agentes() {
 
   const createMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { entityType, representativeId, ...cleanPersonData } = personData;
+      const { entityType, representativeId, inmobiliariaId, ...cleanPersonData } = personData;
       
       const { data: personResult, error: personError } = await supabase
         .from('personas')
@@ -160,14 +217,17 @@ export default function Agentes() {
       
       if (personError) throw personError;
       
-      const { error: entidadError } = await supabase
+      const { data: entidadResult, error: entidadError } = await supabase
         .from('entidades_relacionadas')
         .insert([{
           id_persona: personResult.id,
           id_tipo_entidad: 19, // Agente
           id_proyecto: null,
+          id_persona_duena_lead: inmobiliariaId || null,
           activo: true
-        }]);
+        }])
+        .select()
+        .single();
       
       if (entidadError) throw entidadError;
 
@@ -224,7 +284,7 @@ export default function Agentes() {
 
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { entityType, representativeId, ...cleanPersonData } = personData;
+      const { entityType, representativeId, inmobiliariaId, ...cleanPersonData } = personData;
       
       const { error: updateError } = await supabase
         .from('personas')
@@ -240,6 +300,16 @@ export default function Agentes() {
           .eq('id', editingAgente?.id);
           
         if (repError) throw repError;
+      }
+
+      // Update inmobiliaria on entidades_relacionadas
+      if (inmobiliariaId !== undefined && (editingAgente as any)?.entidad_relacionada_id) {
+        const { error: inmobError } = await supabase
+          .from('entidades_relacionadas')
+          .update({ id_persona_duena_lead: inmobiliariaId || null })
+          .eq('id', (editingAgente as any).entidad_relacionada_id);
+          
+        if (inmobError) throw inmobError;
       }
     },
     onSuccess: () => {
@@ -313,7 +383,8 @@ export default function Agentes() {
   const filteredAgentes = agentes.filter(agente => 
     agente.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     agente.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    agente.telefono?.toLowerCase().includes(searchTerm.toLowerCase())
+    agente.telefono?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    agente.inmobiliaria_nombre?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleEdit = (agente: Agente) => {
@@ -384,7 +455,7 @@ export default function Agentes() {
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
               <TableHead className="font-semibold text-foreground">Tipo persona</TableHead>
               <TableHead className="font-semibold text-foreground">RFC</TableHead>
-              <TableHead className="font-semibold text-foreground">CURP</TableHead>
+              <TableHead className="font-semibold text-foreground">Inmobiliaria</TableHead>
               <TableHead className="font-semibold text-foreground">Representante legal</TableHead>
               <TableHead className="font-semibold text-foreground text-center">Acciones</TableHead>
             </TableRow>
@@ -414,7 +485,7 @@ export default function Agentes() {
                   {agente.rfc || 'N/A'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {agente.curp || 'N/A'}
+                  {agente.inmobiliaria_nombre || 'N/A'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {agente.representante_legal_nombre || 'N/A'}
@@ -546,7 +617,8 @@ export default function Agentes() {
            <PersonForm
              initialData={{
                ...editingAgente,
-               representativeId: editingAgente?.id_entidad_relacionada_rep_leg
+               representativeId: editingAgente?.id_entidad_relacionada_rep_leg,
+               id_inmobiliaria: editingAgente?.id_inmobiliaria
              }}
              onSubmit={(data) => updateMutation.mutate(data)}
              isLoading={updateMutation.isPending}
