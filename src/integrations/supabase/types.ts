@@ -446,6 +446,7 @@ export type Database = {
           id_propiedad: number | null
           m2_bodega: string | null
           nombre_bodega: string | null
+          nombre_producto: string | null
           nombre_proyecto: string | null
           numero_departamento: string | null
           ubicacion_bodega: string | null
@@ -456,6 +457,7 @@ export type Database = {
           id_propiedad?: number | null
           m2_bodega?: string | null
           nombre_bodega?: string | null
+          nombre_producto?: string | null
           nombre_proyecto?: string | null
           numero_departamento?: string | null
           ubicacion_bodega?: string | null
@@ -466,6 +468,7 @@ export type Database = {
           id_propiedad?: number | null
           m2_bodega?: string | null
           nombre_bodega?: string | null
+          nombre_producto?: string | null
           nombre_proyecto?: string | null
           numero_departamento?: string | null
           ubicacion_bodega?: string | null
@@ -3089,6 +3092,7 @@ export type Database = {
           id_producto: number | null
           id_propiedad: number | null
           m2_estacionamientos: string | null
+          nombre_producto: string | null
           nombre_proyecto: string | null
           nombres_estacionamientos: string | null
           numero_estacionamientos: string | null
@@ -3101,6 +3105,7 @@ export type Database = {
           id_producto?: number | null
           id_propiedad?: number | null
           m2_estacionamientos?: string | null
+          nombre_producto?: string | null
           nombre_proyecto?: string | null
           nombres_estacionamientos?: string | null
           numero_estacionamientos?: string | null
@@ -3113,6 +3118,7 @@ export type Database = {
           id_producto?: number | null
           id_propiedad?: number | null
           m2_estacionamientos?: string | null
+          nombre_producto?: string | null
           nombre_proyecto?: string | null
           nombres_estacionamientos?: string | null
           numero_estacionamientos?: string | null
