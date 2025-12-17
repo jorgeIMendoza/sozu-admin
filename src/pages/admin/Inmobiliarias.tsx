@@ -23,7 +23,9 @@ type Inmobiliaria = {
   rfc?: string;
   activo: boolean;
   id_entidad_relacionada_rep_leg?: number;
+  id_entidad_relacionada_rep_com?: number;
   representante_legal_nombre?: string;
+  representante_comercial_nombre?: string;
   numero_proyectos: number;
   entidad_relacionada_id: number;
   id_tipo_entidad: number;
@@ -61,6 +63,7 @@ export default function Inmobiliarias() {
         activo,
         url_logo,
         id_entidad_relacionada_rep_leg,
+        id_entidad_relacionada_rep_com,
         entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
           id,
           id_tipo_entidad,
@@ -71,6 +74,13 @@ export default function Inmobiliarias() {
           )
         ),
         representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
+          id,
+          personas!entidades_relacionadas_id_persona_fkey (
+            id,
+            nombre_legal
+          )
+        ),
+        representante_comercial:entidades_relacionadas!fk_personas_entidad_relacionada_rep_com (
           id,
           personas!entidades_relacionadas_id_persona_fkey (
             id,
@@ -118,7 +128,9 @@ export default function Inmobiliarias() {
       rfc: item.rfc,
       activo: item.activo,
       id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
+      id_entidad_relacionada_rep_com: item.id_entidad_relacionada_rep_com,
       representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
+      representante_comercial_nombre: item.representante_comercial?.personas?.nombre_legal,
       numero_proyectos: projectCounts[item.entidades_relacionadas[0]?.id] || 0,
       url_logo: item.url_logo,
     })) as Inmobiliaria[];
@@ -160,7 +172,7 @@ export default function Inmobiliarias() {
 
   const createMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { representativeId, entityType, tempBankAccounts, tempBeneficiaries, pendingDocuments, ...cleanPersonData } = personData;
+      const { representativeId, commercialRepresentativeId, entityType, tempBankAccounts, tempBeneficiaries, pendingDocuments, ...cleanPersonData } = personData;
       
       const { data: personResult, error: personError } = await supabase
         .from('personas')
@@ -189,10 +201,15 @@ export default function Inmobiliarias() {
       
       if (entidadError) throw entidadError;
       
-      if (representativeId) {
+      // Update representantes if provided
+      if (representativeId || commercialRepresentativeId) {
+        const updateData: any = {};
+        if (representativeId) updateData.id_entidad_relacionada_rep_leg = representativeId;
+        if (commercialRepresentativeId) updateData.id_entidad_relacionada_rep_com = commercialRepresentativeId;
+        
         const { error: updateError } = await supabase
           .from('personas')
-          .update({ id_entidad_relacionada_rep_leg: representativeId })
+          .update(updateData)
           .eq('id', personResult.id);
           
         if (updateError) throw updateError;
@@ -281,7 +298,7 @@ export default function Inmobiliarias() {
 
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { representativeId, entityType, tempBankAccounts, tempBeneficiaries, pendingDocuments, ...cleanPersonData } = personData;
+      const { representativeId, commercialRepresentativeId, entityType, tempBankAccounts, tempBeneficiaries, pendingDocuments, ...cleanPersonData } = personData;
       
       const { error: updateError } = await supabase
         .from('personas')
@@ -290,10 +307,19 @@ export default function Inmobiliarias() {
       
       if (updateError) throw updateError;
       
+      // Update representantes
+      const repUpdateData: any = {};
       if (representativeId !== undefined) {
+        repUpdateData.id_entidad_relacionada_rep_leg = representativeId || null;
+      }
+      if (commercialRepresentativeId !== undefined) {
+        repUpdateData.id_entidad_relacionada_rep_com = commercialRepresentativeId || null;
+      }
+      
+      if (Object.keys(repUpdateData).length > 0) {
         const { error: repError } = await supabase
           .from('personas')
-          .update({ id_entidad_relacionada_rep_leg: representativeId || null })
+          .update(repUpdateData)
           .eq('id', editingEntity?.id);
           
         if (repError) throw repError;
@@ -477,7 +503,8 @@ export default function Inmobiliarias() {
           <PersonForm
             initialData={{
               ...editingEntity,
-              representativeId: editingEntity?.id_entidad_relacionada_rep_leg
+              representativeId: editingEntity?.id_entidad_relacionada_rep_leg,
+              id_entidad_relacionada_rep_com: editingEntity?.id_entidad_relacionada_rep_com
             }}
             onSubmit={(data) => updateMutation.mutate(data)}
             isLoading={updateMutation.isPending}
@@ -607,7 +634,8 @@ export default function Inmobiliarias() {
               <TableHead className="font-semibold text-foreground">Proyectos</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-              <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
+              <TableHead className="font-semibold text-foreground">Rep. Legal</TableHead>
+              <TableHead className="font-semibold text-foreground">Rep. Comercial</TableHead>
               <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -646,6 +674,9 @@ export default function Inmobiliarias() {
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {inmobiliaria.representante_legal_nombre || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {inmobiliaria.representante_comercial_nombre || '-'}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-2 justify-end">
