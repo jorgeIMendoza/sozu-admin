@@ -1109,12 +1109,157 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                         <RadioGroupItem value="manual" id="manual" />
                         <Label htmlFor="manual">Manual</Label>
                       </div>
-                    </RadioGroup>
+            </RadioGroup>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {/* Manual Payment Scheme Section */}
+            {selectedMode === "manual" && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Esquema de Pago Personalizado</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="porcentaje_enganche"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Porcentaje Enganche (%) *</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {parseFloat(watchedEnganche || "0") >= 10 && (
+                      <FormField
+                        control={form.control}
+                        name="numero_pagos_enganche"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Número de Pagos de Enganche *</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                min="1"
+                                max="2"
+                                step="1"
+                                placeholder="1" 
+                                {...field}
+                                onChange={(e) => {
+                                  const value = e.target.value.replace(/\D/g, '');
+                                  const numValue = parseInt(value) || 1;
+                                  const clampedValue = Math.min(Math.max(numValue, 1), 2);
+                                  field.onChange(clampedValue.toString());
+                                }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                            {parseInt(field.value || "1") > 1 && (
+                              <p className="text-sm text-muted-foreground mt-1">
+                                Cada pago será del {porcentajePorPago}%
+                              </p>
+                            )}
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="porcentaje_mensualidades"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Porcentaje Mensualidades (%) *</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="porcentaje_entrega"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Porcentaje Entrega (%) *
+                            {selectedMode === "manual" && remainingPercentage !== 100 && (
+                              <span className="text-sm text-muted-foreground ml-1">
+                                (Restante: {remainingPercentage.toFixed(2)}%)
+                              </span>
+                            )}
+                          </FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="numero_mensualidades"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número de Mensualidades *</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="12" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="porcentaje_descuento_aumento"
+                    render={({ field }) => {
+                      const value = parseFloat(field.value || "0");
+                      const isDiscount = value < 0;
+                      const isIncrease = value > 0;
+                      
+                      return (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-2">
+                            Porcentaje Descuento/Aumento (%)
+                            {isDiscount && (
+                              <Badge variant="destructive" className="text-xs">
+                                Descuento
+                              </Badge>
+                            )}
+                            {isIncrease && (
+                              <Badge variant="default" className="text-xs">
+                                Aumento
+                              </Badge>
+                            )}
+                          </FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0" {...field} />
+                          </FormControl>
+                          <FormDescription>
+                            Usa valores negativos para descuentos (ej: -5 = 5% descuento) y valores positivos para aumentos (ej: 3 = 3% aumento)
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
+                </div>
+              </>
+            )}
 
             <Separator />
 
@@ -1422,152 +1567,6 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                  />
                )}
              </div>
-
-             {/* Manual Payment Scheme Section */}
-             {selectedMode === "manual" && (
-              <>
-                <Separator />
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Esquema de Pago Personalizado</h3>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                     <FormField
-                       control={form.control}
-                       name="porcentaje_enganche"
-                       render={({ field }) => (
-                         <FormItem>
-                           <FormLabel>Porcentaje Enganche (%) *</FormLabel>
-                           <FormControl>
-                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                           </FormControl>
-                           <FormMessage />
-                         </FormItem>
-                       )}
-                     />
-
-                     {parseFloat(watchedEnganche || "0") >= 10 && (
-                       <FormField
-                         control={form.control}
-                         name="numero_pagos_enganche"
-                         render={({ field }) => (
-                           <FormItem>
-                             <FormLabel>Número de Pagos de Enganche *</FormLabel>
-                             <FormControl>
-                               <Input 
-                                 type="number" 
-                                 min="1"
-                                 max="2"
-                                 step="1"
-                                 placeholder="1" 
-                                 {...field}
-                                 onChange={(e) => {
-                                   // Solo permitir números enteros entre 1 y 2
-                                   const value = e.target.value.replace(/\D/g, '');
-                                   const numValue = parseInt(value) || 1;
-                                   const clampedValue = Math.min(Math.max(numValue, 1), 2);
-                                   field.onChange(clampedValue.toString());
-                                 }}
-                               />
-                             </FormControl>
-                             <FormMessage />
-                             {parseInt(field.value || "1") > 1 && (
-                               <p className="text-sm text-muted-foreground mt-1">
-                                 Cada pago será del {porcentajePorPago}%
-                               </p>
-                             )}
-                           </FormItem>
-                         )}
-                       />
-                     )}
-                   </div>
-
-                   <div className="grid grid-cols-2 gap-4">
-                     <FormField
-                       control={form.control}
-                       name="porcentaje_mensualidades"
-                       render={({ field }) => (
-                         <FormItem>
-                           <FormLabel>Porcentaje Mensualidades (%) *</FormLabel>
-                           <FormControl>
-                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                           </FormControl>
-                           <FormMessage />
-                         </FormItem>
-                       )}
-                     />
-                     <FormField
-                       control={form.control}
-                       name="porcentaje_entrega"
-                       render={({ field }) => (
-                         <FormItem>
-                           <FormLabel>
-                             Porcentaje Entrega (%) *
-                             {selectedMode === "manual" && remainingPercentage !== 100 && (
-                               <span className="text-sm text-muted-foreground ml-1">
-                                 (Restante: {remainingPercentage.toFixed(2)}%)
-                               </span>
-                             )}
-                           </FormLabel>
-                           <FormControl>
-                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                           </FormControl>
-                           <FormMessage />
-                         </FormItem>
-                       )}
-                     />
-
-                     <FormField
-                       control={form.control}
-                       name="numero_mensualidades"
-                       render={({ field }) => (
-                         <FormItem>
-                           <FormLabel>Número de Mensualidades *</FormLabel>
-                           <FormControl>
-                             <Input type="number" placeholder="12" {...field} />
-                           </FormControl>
-                           <FormMessage />
-                         </FormItem>
-                       )}
-                     />
-                   </div>
-
-                    <FormField
-                      control={form.control}
-                      name="porcentaje_descuento_aumento"
-                      render={({ field }) => {
-                        const value = parseFloat(field.value || "0");
-                        const isDiscount = value < 0;
-                        const isIncrease = value > 0;
-                        
-                        return (
-                          <FormItem>
-                            <FormLabel className="flex items-center gap-2">
-                              Porcentaje Descuento/Aumento (%)
-                              {isDiscount && (
-                                <Badge variant="destructive" className="text-xs">
-                                  Descuento
-                                </Badge>
-                              )}
-                              {isIncrease && (
-                                <Badge variant="default" className="text-xs">
-                                  Aumento
-                                </Badge>
-                              )}
-                            </FormLabel>
-                            <FormControl>
-                              <Input type="number" step="0.01" placeholder="0" {...field} />
-                            </FormControl>
-                            <FormDescription>
-                              Usa valores negativos para descuentos (ej: -5 = 5% descuento) y valores positivos para aumentos (ej: 3 = 3% aumento)
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        );
-                      }}
-                    />
-                </div>
-              </>
-            )}
 
             <div className="flex justify-end space-x-2 pt-4">
               <Button
