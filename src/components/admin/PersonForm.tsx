@@ -51,6 +51,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [idTipoEntidad, setIdTipoEntidad] = useState(initialData?.id_tipo_entidad || getDefaultTipoEntidad(entityType));
   const [idRepresentanteLegal, setIdRepresentanteLegal] = useState(initialData?.id_entidad_relacionada_rep_leg || '');
   const [idRepresentanteComercial, setIdRepresentanteComercial] = useState(initialData?.id_entidad_relacionada_rep_com || '');
+  const [idInmobiliaria, setIdInmobiliaria] = useState(initialData?.id_inmobiliaria || '');
   
   // Project selection for prospects (clients with tipo_entidad = 7)
   const [idProyecto, setIdProyecto] = useState(
@@ -532,6 +533,35 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     enabled: entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria' || entityType === 'administradora' || entityType === 'banco' || entityType === 'comprador' || (entityType === 'client' && tipoPersona === 'pm')
   });
 
+  // Fetch inmobiliarias for agent selector
+  const { data: inmobiliarias = [] } = useQuery({
+    queryKey: ['inmobiliarias_select'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('entidades_relacionadas')
+        .select(`
+          id,
+          personas!entidades_relacionadas_id_persona_fkey!inner (
+            id,
+            nombre_legal,
+            activo
+          )
+        `)
+        .eq('personas.activo', true)
+        .eq('activo', true)
+        .eq('id_tipo_entidad', 5) // Inmobiliaria
+        .is('id_proyecto', null)
+        .order('personas(nombre_legal)');
+      
+      if (error) throw error;
+      return (data || []).map((item: any) => ({
+        id: item.id,
+        nombre_legal: item.personas.nombre_legal
+      }));
+    },
+    enabled: entityType === 'agente'
+  });
+
   // Query for available projects (for prospects) with pagination to get ALL projects
   const { data: proyectos = [] } = useQuery({
     queryKey: ['proyectos'],
@@ -835,6 +865,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         entityType: idTipoEntidad,
         representativeId: idRepresentanteLegal === 'none' || !idRepresentanteLegal ? null : parseInt(idRepresentanteLegal),
         commercialRepresentativeId: idRepresentanteComercial === 'none' || !idRepresentanteComercial ? null : parseInt(idRepresentanteComercial),
+        inmobiliariaId: entityType === 'agente' && idInmobiliaria && idInmobiliaria !== 'none' ? parseInt(idInmobiliaria) : null,
       };
       onSubmit(extendedFormData);
     }
@@ -1058,6 +1089,26 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         value={idRepresentanteComercial?.toString() || ''}
                         onValueChange={setIdRepresentanteComercial}
                       />
+                    </div>
+                  )}
+
+                  {/* Inmobiliaria - para agentes */}
+                  {entityType === 'agente' && (
+                    <div>
+                      <Label htmlFor="idInmobiliaria">Inmobiliaria</Label>
+                      <Select value={idInmobiliaria?.toString() || ''} onValueChange={setIdInmobiliaria}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona una inmobiliaria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin inmobiliaria</SelectItem>
+                          {inmobiliarias.map((inmob) => (
+                            <SelectItem key={inmob.id} value={inmob.id.toString()}>
+                              {inmob.nombre_legal}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
 
