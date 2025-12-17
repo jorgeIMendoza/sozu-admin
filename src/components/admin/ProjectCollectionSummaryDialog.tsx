@@ -8,9 +8,13 @@ interface ProjectCollectionSummaryDialogProps {
   isOpen: boolean;
   onClose: () => void;
   projectName: string;
+  projectId: number;
   cuentaIds: number[];
   totalColocado: number;
   totalCobrado: number;
+  valorProyecto: number;
+  isRepresentanteEmpresaDuena?: boolean;
+  ownershipEntityIds?: number[];
 }
 
 // Concept IDs (from conceptos_pago table):
@@ -28,9 +32,13 @@ export function ProjectCollectionSummaryDialog({
   isOpen, 
   onClose, 
   projectName, 
+  projectId,
   cuentaIds,
   totalColocado,
-  totalCobrado
+  totalCobrado,
+  valorProyecto,
+  isRepresentanteEmpresaDuena,
+  ownershipEntityIds
 }: ProjectCollectionSummaryDialogProps) {
   
   const { data: summaryData, isLoading } = useQuery({
