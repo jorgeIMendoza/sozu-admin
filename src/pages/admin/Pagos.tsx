@@ -1051,13 +1051,27 @@ export default function Pagos() {
     }
   });
 
+  // Debug log for project access
+  console.log('🔍 Project Access Debug:', { 
+    isLoadingAccess, 
+    hasUnrestrictedAccess, 
+    accessibleProjectIds: accessibleProjectIds?.length,
+    isRepresentanteEmpresaDuena,
+    ownershipEntityIds: ownershipEntityIds?.length 
+  });
+
   // Query to calculate valor total del proyecto (precio_final of accounts + precio_lista of available properties)
-  const { data: valorProyectosData } = useQuery({
-    queryKey: ["valor-proyectos", accessibleProjectIds, hasUnrestrictedAccess, ownershipEntityIds],
+  const { data: valorProyectosData, isLoading: isLoadingValorProyectos } = useQuery({
+    queryKey: ["valor-proyectos", accessibleProjectIds, hasUnrestrictedAccess, ownershipEntityIds, isRepresentanteEmpresaDuena],
     queryFn: async () => {
+      console.log('🏗️ Running valor proyectos query...');
       // Build WHERE clause based on access
       let projectFilter = '';
-      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+      if (!hasUnrestrictedAccess) {
+        if (accessibleProjectIds.length === 0) {
+          // No access to any projects
+          return {};
+        }
         projectFilter = `AND p.id IN (${accessibleProjectIds.join(',')})`;
       }
 
@@ -1095,6 +1109,8 @@ export default function Pagos() {
         ORDER BY valor_total_proyecto DESC
       `;
 
+      console.log('Valor proyectos query:', query);
+
       const { data, error } = await supabase.rpc('execute_safe_query', {
         query_text: query,
         max_rows: 1000
@@ -1104,6 +1120,8 @@ export default function Pagos() {
         console.error('Error fetching valor proyectos:', error);
         return {};
       }
+
+      console.log('Valor proyectos data:', data);
 
       const result = (data as Array<{
         id_proyecto: number;
