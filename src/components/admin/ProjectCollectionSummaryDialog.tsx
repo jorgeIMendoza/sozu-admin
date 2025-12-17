@@ -40,6 +40,7 @@ interface OwnerSummary {
   total_colocado: number;
   total_cobrado: number;
   total_restante: number;
+  valor_proyecto: number;
 }
 
 export function ProjectCollectionSummaryDialog({ 
@@ -57,7 +58,7 @@ export function ProjectCollectionSummaryDialog({
 }: ProjectCollectionSummaryDialogProps) {
   const [activeTab, setActiveTab] = useState("todos");
   
-  // Query for owner breakdown
+  // Query for owner breakdown - includes valor_proyecto (all properties, not just sold ones)
   const { data: ownerBreakdown, isLoading: isLoadingOwners } = useQuery({
     queryKey: ["project-owner-breakdown", projectId, cuentaIds.length],
     queryFn: async () => {
@@ -65,33 +66,62 @@ export function ProjectCollectionSummaryDialog({
 
       const { data, error } = await supabase.rpc('execute_safe_query', {
         query_text: `
-          SELECT 
-            er.id as id_entidad,
-            p.nombre_legal as dueno_nombre,
-            te.nombre as tipo_entidad,
-            er.id_tipo_entidad,
-            COUNT(cc.id) as cuentas_count,
-            SUM(cc.precio_final) as total_colocado,
-            SUM(COALESCE(pagos.total_pagado, 0)) as total_cobrado
-          FROM cuentas_cobranza cc
-          JOIN ofertas o ON cc.id_oferta = o.id
-          JOIN propiedades prop ON o.id_propiedad = prop.id
-          JOIN entidades_relacionadas er ON prop.id_entidad_relacionada_dueno = er.id
-          JOIN personas p ON er.id_persona = p.id
-          JOIN tipos_entidad te ON er.id_tipo_entidad = te.id
-          LEFT JOIN (
+          WITH owner_accounts AS (
             SELECT 
-              ap.id_cuenta_cobranza,
-              SUM(apl.monto) as total_pagado
-            FROM aplicaciones_pago apl
-            JOIN acuerdos_pago ap ON apl.id_acuerdo_pago = ap.id
-            WHERE apl.activo = true AND apl.es_multa = false AND ap.activo = true
-            GROUP BY ap.id_cuenta_cobranza
-          ) pagos ON pagos.id_cuenta_cobranza = cc.id
-          WHERE cc.id IN (${cuentaIds.join(',')})
-            AND cc.activo = true
-            AND o.id_producto IS NULL
-          GROUP BY er.id, p.nombre_legal, te.nombre, er.id_tipo_entidad
+              er.id as id_entidad,
+              p.nombre_legal as dueno_nombre,
+              te.nombre as tipo_entidad,
+              er.id_tipo_entidad,
+              cc.id as cuenta_id,
+              cc.precio_final,
+              COALESCE(pagos.total_pagado, 0) as total_pagado
+            FROM cuentas_cobranza cc
+            JOIN ofertas o ON cc.id_oferta = o.id
+            JOIN propiedades prop ON o.id_propiedad = prop.id
+            JOIN entidades_relacionadas er ON prop.id_entidad_relacionada_dueno = er.id
+            JOIN personas p ON er.id_persona = p.id
+            JOIN tipos_entidad te ON er.id_tipo_entidad = te.id
+            LEFT JOIN (
+              SELECT 
+                ap.id_cuenta_cobranza,
+                SUM(apl.monto) as total_pagado
+              FROM aplicaciones_pago apl
+              JOIN acuerdos_pago ap ON apl.id_acuerdo_pago = ap.id
+              WHERE apl.activo = true AND apl.es_multa = false AND ap.activo = true
+              GROUP BY ap.id_cuenta_cobranza
+            ) pagos ON pagos.id_cuenta_cobranza = cc.id
+            WHERE cc.id IN (${cuentaIds.join(',')})
+              AND cc.activo = true
+              AND o.id_producto IS NULL
+          ),
+          owner_all_properties AS (
+            SELECT 
+              er.id as id_entidad,
+              SUM(CASE 
+                WHEN cc.id IS NOT NULL AND cc.activo = true THEN cc.precio_final 
+                ELSE COALESCE(prop.precio_lista, 0) 
+              END) as valor_proyecto
+            FROM entidades_relacionadas er
+            JOIN propiedades prop ON prop.id_entidad_relacionada_dueno = er.id AND prop.activo = true
+            LEFT JOIN ofertas o ON o.id_propiedad = prop.id AND o.activo = true AND o.id_producto IS NULL
+            LEFT JOIN cuentas_cobranza cc ON cc.id_oferta = o.id AND cc.id_cuenta_cobranza_padre IS NULL
+            WHERE er.id_proyecto = ${projectId}
+              AND er.activo = true
+              AND er.id_tipo_entidad IN (4, 15)
+            GROUP BY er.id
+          )
+          SELECT 
+            oa.id_entidad,
+            oa.dueno_nombre,
+            oa.tipo_entidad,
+            oa.id_tipo_entidad,
+            COUNT(oa.cuenta_id) as cuentas_count,
+            SUM(oa.precio_final) as total_colocado,
+            SUM(oa.total_pagado) as total_cobrado,
+            COALESCE(oap.valor_proyecto, 0) as valor_proyecto
+          FROM owner_accounts oa
+          LEFT JOIN owner_all_properties oap ON oa.id_entidad = oap.id_entidad
+          GROUP BY oa.id_entidad, oa.dueno_nombre, oa.tipo_entidad, oa.id_tipo_entidad, oap.valor_proyecto
           ORDER BY total_colocado DESC
         `,
         max_rows: 100
@@ -108,7 +138,8 @@ export function ProjectCollectionSummaryDialog({
         total_colocado: Number(row.total_colocado) || 0,
         total_cobrado: Number(row.total_cobrado) || 0,
         total_restante: (Number(row.total_colocado) || 0) - (Number(row.total_cobrado) || 0),
-        cuentas_count: Number(row.cuentas_count) || 0
+        cuentas_count: Number(row.cuentas_count) || 0,
+        valor_proyecto: Number(row.valor_proyecto) || 0
       })) || [];
     },
     enabled: isOpen && cuentaIds.length > 0,
@@ -280,9 +311,22 @@ export function ProjectCollectionSummaryDialog({
           <div key={owner.id_entidad} className="p-3 bg-muted/30 rounded-lg space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-medium text-sm">{owner.dueno_nombre}</span>
-              <span className="text-xs text-muted-foreground">{owner.cuentas_count} propiedades</span>
+              <span className="text-xs text-muted-foreground">{owner.cuentas_count} propiedades vendidas</span>
             </div>
-            <div className="grid grid-cols-3 gap-2 text-xs">
+            <div className="grid grid-cols-4 gap-2 text-xs">
+              <div>
+                <span className="text-muted-foreground block">Valor Proy</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="font-semibold text-blue-600 cursor-help">{formatCurrencyCompact(owner.valor_proyecto)}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{formatCurrency(owner.valor_proyecto)}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <div>
                 <span className="text-muted-foreground block">Colocado</span>
                 <TooltipProvider>
