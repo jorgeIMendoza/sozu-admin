@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, ChevronDown, ChevronRight, Loader2, Save, Plus, Pencil, Trash2, Search, Lock, XCircle, CheckCircle2 } from "lucide-react";
+import { Shield, ChevronDown, ChevronRight, Loader2, Save, Plus, Pencil, Trash2, Search, Lock, XCircle, CheckCircle2, ChevronsUpDown, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface Role {
   id: number;
@@ -162,6 +164,18 @@ const EstatusDisponibilidadSelector = ({ rolId, isSuperAdmin }: { rolId: number;
   const hasEstatus = (estatusId: number) => rolEstatus.includes(estatusId);
   const isLoading = toggleEstatusMutation.isPending || selectAllMutation.isPending || deselectAllMutation.isPending;
 
+  const [open, setOpen] = useState(false);
+
+  const selectedLabels = estatusDisponibilidad
+    .filter(e => rolEstatus.includes(e.id))
+    .map(e => e.nombre);
+
+  const displayText = selectedLabels.length === 0
+    ? "Seleccionar estatus..."
+    : selectedLabels.length === estatusDisponibilidad.length
+    ? "Todos los estatus"
+    : `${selectedLabels.length} estatus seleccionados`;
+
   return (
     <div className="mt-4 pt-4 border-t">
       <div className="flex items-center justify-between mb-2">
@@ -171,43 +185,72 @@ const EstatusDisponibilidadSelector = ({ rolId, isSuperAdmin }: { rolId: number;
             Define qué estatus de propiedades puede ver este rol
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => selectAllMutation.mutate()}
+      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between"
             disabled={isLoading}
           >
-            Todos
+            <span className="truncate">{displayText}</span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => deselectAllMutation.mutate()}
-            disabled={isLoading}
-          >
-            Ninguno
-          </Button>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2 p-3 bg-background rounded-md border">
-        {estatusDisponibilidad.map(estatus => (
-          <label 
-            key={estatus.id} 
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors"
-          >
-            <Checkbox
-              checked={hasEstatus(estatus.id)}
-              onCheckedChange={() => toggleEstatusMutation.mutate({ 
-                estatusId: estatus.id, 
-                isActive: hasEstatus(estatus.id)
-              })}
-              disabled={isLoading}
-            />
-            <span className="text-sm">{estatus.nombre}</span>
-          </label>
-        ))}
-      </div>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <div className="flex flex-col">
+            {/* Quick actions */}
+            <div className="flex border-b px-2 py-2 gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="flex-1 h-8"
+                onClick={() => selectAllMutation.mutate()}
+                disabled={isLoading}
+              >
+                Seleccionar todos
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="flex-1 h-8"
+                onClick={() => deselectAllMutation.mutate()}
+                disabled={isLoading}
+              >
+                Quitar todos
+              </Button>
+            </div>
+            {/* Options list */}
+            <ScrollArea className="max-h-[200px]">
+              <div className="p-1">
+                {estatusDisponibilidad.map((estatus) => (
+                  <div
+                    key={estatus.id}
+                    onClick={() => toggleEstatusMutation.mutate({ 
+                      estatusId: estatus.id, 
+                      isActive: hasEstatus(estatus.id)
+                    })}
+                    className={cn(
+                      "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                      hasEstatus(estatus.id) && "bg-accent/50"
+                    )}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4 shrink-0",
+                        hasEstatus(estatus.id) ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    <span>{estatus.nombre}</span>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+        </PopoverContent>
+      </Popover>
       <p className="text-xs text-muted-foreground mt-2">
         Seleccionados: {rolEstatus.length} de {estatusDisponibilidad.length}
       </p>
