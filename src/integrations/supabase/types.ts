@@ -5183,6 +5183,7 @@ export type Database = {
           fecha_creacion: string | null
           id: number
           nombre: string
+          ver_filtros_avanzados_eliminados: boolean
           ver_todos_prospectos_compradores: boolean | null
           ver_todos_proyectos_propiedades: boolean | null
         }
@@ -5192,6 +5193,7 @@ export type Database = {
           fecha_creacion?: string | null
           id?: never
           nombre: string
+          ver_filtros_avanzados_eliminados?: boolean
           ver_todos_prospectos_compradores?: boolean | null
           ver_todos_proyectos_propiedades?: boolean | null
         }
@@ -5201,6 +5203,7 @@ export type Database = {
           fecha_creacion?: string | null
           id?: never
           nombre?: string
+          ver_filtros_avanzados_eliminados?: boolean
           ver_todos_prospectos_compradores?: boolean | null
           ver_todos_proyectos_propiedades?: boolean | null
         }
