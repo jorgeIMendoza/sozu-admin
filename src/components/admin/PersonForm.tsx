@@ -23,6 +23,7 @@ import { ImageUploadField } from "./ImageUploadField";
 import { DocumentsTab } from "./DocumentsTab";
 import { isFiscalDataComplete } from '@/utils/fiscalDataValidation';
 import { RepresentanteLegalSelector } from "./RepresentanteLegalSelector";
+import { RepresentanteComercialSelector } from "./RepresentanteComercialSelector";
 
 interface PersonFormProps {
   onSubmit: (data: any) => void;
@@ -49,6 +50,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   );
   const [idTipoEntidad, setIdTipoEntidad] = useState(initialData?.id_tipo_entidad || getDefaultTipoEntidad(entityType));
   const [idRepresentanteLegal, setIdRepresentanteLegal] = useState(initialData?.id_entidad_relacionada_rep_leg || '');
+  const [idRepresentanteComercial, setIdRepresentanteComercial] = useState(initialData?.id_entidad_relacionada_rep_com || '');
   
   // Project selection for prospects (clients with tipo_entidad = 7)
   const [idProyecto, setIdProyecto] = useState(
@@ -832,6 +834,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         ...formData,
         entityType: idTipoEntidad,
         representativeId: idRepresentanteLegal === 'none' || !idRepresentanteLegal ? null : parseInt(idRepresentanteLegal),
+        commercialRepresentativeId: idRepresentanteComercial === 'none' || !idRepresentanteComercial ? null : parseInt(idRepresentanteComercial),
       };
       onSubmit(extendedFormData);
     }
@@ -1045,6 +1048,19 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     </div>
                   )}
 
+                  {/* Representante Comercial - solo para inmobiliarias */}
+                  {entityType === 'inmobiliaria' && (
+                    <div>
+                      <Label htmlFor="idRepresentanteComercial">
+                        Representante Comercial
+                      </Label>
+                      <RepresentanteComercialSelector
+                        value={idRepresentanteComercial?.toString() || ''}
+                        onValueChange={setIdRepresentanteComercial}
+                      />
+                    </div>
+                  )}
+
                   {/* Uso CFDI */}
                   {shouldShowTaxFields() && (
                     <div>
@@ -1254,6 +1270,18 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     <RepresentanteLegalSelector
                       value={idRepresentanteLegal?.toString() || ''}
                       onValueChange={setIdRepresentanteLegal}
+                    />
+                  </div>
+                )}
+
+                {entityType === 'inmobiliaria' && (
+                  <div>
+                    <Label htmlFor="idRepresentanteComercial">
+                      Representante Comercial
+                    </Label>
+                    <RepresentanteComercialSelector
+                      value={idRepresentanteComercial?.toString() || ''}
+                      onValueChange={setIdRepresentanteComercial}
                     />
                   </div>
                 )}
