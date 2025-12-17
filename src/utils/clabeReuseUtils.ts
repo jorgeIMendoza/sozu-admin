@@ -66,23 +66,23 @@ export async function getOrCreateProductClabe(
     const clabeToReuse = offersWithoutAccount[0].clabe_stp_tmp_producto;
     console.log('♻️ Reutilizando CLABE existente:', clabeToReuse);
 
-    // 4. Limpiar las CLABEs de las demás ofertas (todas excepto la que usamos)
-    const offerIdsToClean = offersWithoutAccount.slice(1).map(o => o.id);
+    // 4. PRIMERO limpiar las CLABEs de TODAS las ofertas (incluyendo la que vamos a reutilizar)
+    // Esto evita violaciones de constraint de unicidad
+    const allOfferIds = offersWithoutAccount.map(o => o.id);
     
-    if (offerIdsToClean.length > 0) {
-      console.log('🧹 Limpiando CLABEs de ofertas:', offerIdsToClean);
-      
-      const { error: updateError } = await supabase
-        .from('ofertas')
-        .update({ clabe_stp_tmp_producto: null })
-        .in('id', offerIdsToClean);
-      
-      if (updateError) {
-        console.error('⚠️ Error limpiando CLABEs anteriores:', updateError);
-        // No lanzamos error, continuamos con la CLABE reutilizada
-      }
+    console.log('🧹 Limpiando CLABEs de TODAS las ofertas antes de reutilizar:', allOfferIds);
+    
+    const { error: updateError } = await supabase
+      .from('ofertas')
+      .update({ clabe_stp_tmp_producto: null })
+      .in('id', allOfferIds);
+    
+    if (updateError) {
+      console.error('❌ Error limpiando CLABEs anteriores:', updateError);
+      throw updateError; // Ahora sí lanzamos error porque es crítico
     }
 
+    console.log('✅ CLABEs limpiadas, retornando CLABE para nueva oferta:', clabeToReuse);
     return clabeToReuse;
   }
 
