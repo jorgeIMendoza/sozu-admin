@@ -2388,7 +2388,7 @@ export default function Pagos() {
                           </TableCell>
                          <TableCell>{cuenta.modelo}</TableCell>
                          <TableCell>
-                           {cuenta.tipo === 'Propiedad' && cuenta.estatus_propiedad ? (
+                           {cuenta.estatus_propiedad ? (
                              <Badge variant="outline" className="text-xs">
                                {cuenta.estatus_propiedad}
                              </Badge>
@@ -2860,7 +2860,7 @@ export default function Pagos() {
                           </TableCell>
                          <TableCell>{cuenta.modelo}</TableCell>
                          <TableCell>
-                           {cuenta.tipo === 'Propiedad' && cuenta.estatus_propiedad ? (
+                           {cuenta.estatus_propiedad ? (
                              <Badge variant="outline" className="text-xs">
                                {cuenta.estatus_propiedad}
                              </Badge>
