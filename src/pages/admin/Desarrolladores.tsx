@@ -23,6 +23,8 @@ type Desarrollador = {
   activo: boolean;
   id_entidad_relacionada_rep_leg?: number;
   representante_legal_nombre?: string;
+  id_entidad_relacionada_rep_com?: number;
+  representante_comercial_nombre?: string;
   numero_proyectos: number;
   url_logo?: string;
 };
@@ -56,6 +58,7 @@ export default function Desarrolladores() {
         activo,
         url_logo,
         id_entidad_relacionada_rep_leg,
+        id_entidad_relacionada_rep_com,
         entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
           id,
           id_tipo_entidad,
@@ -66,6 +69,13 @@ export default function Desarrolladores() {
           )
         ),
         representante_legal:entidades_relacionadas!fk_personas_entidad_relacionada_rep_leg (
+          id,
+          personas!entidades_relacionadas_id_persona_fkey (
+            id,
+            nombre_legal
+          )
+        ),
+        representante_comercial:entidades_relacionadas!fk_personas_entidad_relacionada_rep_com (
           id,
           personas!entidades_relacionadas_id_persona_fkey (
             id,
@@ -114,6 +124,8 @@ export default function Desarrolladores() {
       activo: item.activo,
       id_entidad_relacionada_rep_leg: item.id_entidad_relacionada_rep_leg,
       representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
+      id_entidad_relacionada_rep_com: item.id_entidad_relacionada_rep_com,
+      representante_comercial_nombre: item.representante_comercial?.personas?.nombre_legal,
       numero_proyectos: projectCounts[item.entidades_relacionadas[0]?.id] || 0,
       url_logo: item.url_logo,
     })) as Desarrollador[];
@@ -155,7 +167,7 @@ export default function Desarrolladores() {
 
   const createMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { representativeId, ...cleanPersonData } = personData;
+      const { representativeId, commercialRepresentativeId, ...cleanPersonData } = personData;
       
       const { data: personResult, error: personError } = await supabase
         .from('personas')
@@ -184,17 +196,65 @@ export default function Desarrolladores() {
       
       if (entidadError) throw entidadError;
       
-      if (representativeId) {
+      // Update representatives if provided
+      if (representativeId || commercialRepresentativeId) {
+        const updateData: any = {};
+        if (representativeId) updateData.id_entidad_relacionada_rep_leg = representativeId;
+        if (commercialRepresentativeId) updateData.id_entidad_relacionada_rep_com = commercialRepresentativeId;
+        
         const { error: updateError } = await supabase
           .from('personas')
-          .update({ id_entidad_relacionada_rep_leg: representativeId })
+          .update(updateData)
           .eq('id', personResult.id);
           
         if (updateError) throw updateError;
       }
+
+      // Crear usuario para el representante comercial si se asignó
+      if (commercialRepresentativeId) {
+        try {
+          const { data: repComData, error: repComError } = await supabase
+            .from('entidades_relacionadas')
+            .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal, email, telefono, clave_pais_telefono)')
+            .eq('id', commercialRepresentativeId)
+            .single();
+          
+          if (!repComError && repComData?.personas) {
+            const repPersona = repComData.personas as any;
+            
+            // Verificar si ya existe un usuario con ese email
+            const { data: existingUser } = await supabase
+              .from('usuarios')
+              .select('email')
+              .eq('email', repPersona.email)
+              .maybeSingle();
+            
+            if (!existingUser) {
+              // Crear usuario para el representante comercial con rol Desarrollador (id: 15)
+              const { error: repUserError } = await supabase.functions.invoke('create-user', {
+                body: {
+                  email: repPersona.email,
+                  nombre: repPersona.nombre_legal,
+                  rol_id: 15, // Desarrollador
+                  id_persona: repPersona.id,
+                  telefono: repPersona.telefono || null,
+                  clave_pais_telefono: repPersona.clave_pais_telefono || null
+                }
+              });
+              
+              if (repUserError) {
+                console.error('Error al crear usuario para representante comercial:', repUserError);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error al crear usuario para representante comercial:', e);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['desarrolladores'] });
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       setIsNewDialogOpen(false);
       toast({
         title: "Éxito",
@@ -212,7 +272,7 @@ export default function Desarrolladores() {
 
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { representativeId, ...cleanPersonData } = personData;
+      const { representativeId, commercialRepresentativeId, ...cleanPersonData } = personData;
       
       const { error: updateError } = await supabase
         .from('personas')
@@ -221,17 +281,69 @@ export default function Desarrolladores() {
       
       if (updateError) throw updateError;
       
+      // Update representatives
+      const repUpdateData: any = {};
       if (representativeId !== undefined) {
+        repUpdateData.id_entidad_relacionada_rep_leg = representativeId || null;
+      }
+      if (commercialRepresentativeId !== undefined) {
+        repUpdateData.id_entidad_relacionada_rep_com = commercialRepresentativeId || null;
+      }
+      
+      if (Object.keys(repUpdateData).length > 0) {
         const { error: repError } = await supabase
           .from('personas')
-          .update({ id_entidad_relacionada_rep_leg: representativeId || null })
+          .update(repUpdateData)
           .eq('id', editingEntity?.id);
           
         if (repError) throw repError;
       }
+
+      // Crear usuario para el representante comercial si se asignó uno nuevo
+      if (commercialRepresentativeId && commercialRepresentativeId !== editingEntity?.id_entidad_relacionada_rep_com) {
+        try {
+          const { data: repComData, error: repComError } = await supabase
+            .from('entidades_relacionadas')
+            .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal, email, telefono, clave_pais_telefono)')
+            .eq('id', commercialRepresentativeId)
+            .single();
+          
+          if (!repComError && repComData?.personas) {
+            const repPersona = repComData.personas as any;
+            
+            // Verificar si ya existe un usuario con ese email
+            const { data: existingUser } = await supabase
+              .from('usuarios')
+              .select('email')
+              .eq('email', repPersona.email)
+              .maybeSingle();
+            
+            if (!existingUser) {
+              // Crear usuario para el representante comercial con rol Desarrollador (id: 15)
+              const { error: repUserError } = await supabase.functions.invoke('create-user', {
+                body: {
+                  email: repPersona.email,
+                  nombre: repPersona.nombre_legal,
+                  rol_id: 15, // Desarrollador
+                  id_persona: repPersona.id,
+                  telefono: repPersona.telefono || null,
+                  clave_pais_telefono: repPersona.clave_pais_telefono || null
+                }
+              });
+              
+              if (repUserError) {
+                console.error('Error al crear usuario para representante comercial:', repUserError);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error al crear usuario para representante comercial:', e);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['desarrolladores'] });
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       setIsEditDialogOpen(false);
       setEditingEntity(null);
       toast({
@@ -424,7 +536,8 @@ export default function Desarrolladores() {
               <TableHead className="font-semibold text-foreground">Proyectos</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
-              <TableHead className="font-semibold text-foreground">Representante Legal</TableHead>
+              <TableHead className="font-semibold text-foreground">Rep. Legal</TableHead>
+              <TableHead className="font-semibold text-foreground">Rep. Comercial</TableHead>
               <TableHead className="font-semibold text-foreground text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -463,6 +576,9 @@ export default function Desarrolladores() {
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {desarrollador.representante_legal_nombre || '-'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {desarrollador.representante_comercial_nombre || '-'}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-2 justify-end">
@@ -586,7 +702,8 @@ export default function Desarrolladores() {
           <PersonForm
             initialData={{
               ...editingEntity,
-              representativeId: editingEntity?.id_entidad_relacionada_rep_leg
+              representativeId: editingEntity?.id_entidad_relacionada_rep_leg,
+              commercialRepresentativeId: editingEntity?.id_entidad_relacionada_rep_com
             }}
             onSubmit={(data) => updateMutation.mutate(data)}
             isLoading={updateMutation.isPending}
