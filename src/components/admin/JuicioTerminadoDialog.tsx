@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -15,11 +16,14 @@ interface JuicioTerminadoDialogProps {
   propiedadId?: number;
 }
 
+type AccionJuicio = 'liberar' | 'vendido';
+
 export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propiedadId }: JuicioTerminadoDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [descripcion, setDescripcion] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; url: string }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [accionSeleccionada, setAccionSeleccionada] = useState<AccionJuicio>('liberar');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -79,7 +83,6 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
       });
     } finally {
       setIsUploading(false);
-      // Reset file input
       event.target.value = '';
     }
   };
@@ -139,33 +142,50 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
         if (docError) throw docError;
       }
 
-      // 2. Update property status to "Disponible" (id=2)
-      const { error: propError } = await supabase
-        .from('propiedades')
-        .update({ 
-          id_estatus_disponibilidad: 2,
-          fecha_actualizacion: new Date().toISOString()
-        })
-        .eq('id', propiedadId);
+      if (accionSeleccionada === 'liberar') {
+        // OPCIÓN 1: Liberar propiedad (comportamiento original)
+        const { error: propError } = await supabase
+          .from('propiedades')
+          .update({ 
+            id_estatus_disponibilidad: 2,
+            fecha_actualizacion: new Date().toISOString()
+          })
+          .eq('id', propiedadId);
 
-      if (propError) throw propError;
+        if (propError) throw propError;
 
-      // 3. Cancel the cuenta de cobranza with the resolution description
-      const { error: cuentaError } = await supabase
-        .from('cuentas_cobranza')
-        .update({ 
-          activo: false,
-          url_evidencia_cancelacion: descripcion,
-          fecha_actualizacion: new Date().toISOString()
-        })
-        .eq('id', cuentaCobranzaId);
+        const { error: cuentaError } = await supabase
+          .from('cuentas_cobranza')
+          .update({ 
+            activo: false,
+            url_evidencia_cancelacion: descripcion,
+            fecha_actualizacion: new Date().toISOString()
+          })
+          .eq('id', cuentaCobranzaId);
 
-      if (cuentaError) throw cuentaError;
+        if (cuentaError) throw cuentaError;
 
-      toast({
-        title: "Juicio terminado",
-        description: "La cuenta ha sido cancelada y la propiedad liberada exitosamente",
-      });
+        toast({
+          title: "Juicio terminado",
+          description: "La cuenta ha sido cancelada y la propiedad liberada exitosamente",
+        });
+      } else {
+        // OPCIÓN 2: Solo cambiar a Vendido
+        const { error: propError } = await supabase
+          .from('propiedades')
+          .update({ 
+            id_estatus_disponibilidad: 5,
+            fecha_actualizacion: new Date().toISOString()
+          })
+          .eq('id', propiedadId);
+
+        if (propError) throw propError;
+
+        toast({
+          title: "Juicio terminado",
+          description: "La propiedad ha sido marcada como vendida exitosamente",
+        });
+      }
 
       queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
       queryClient.invalidateQueries({ queryKey: ["propiedades"] });
@@ -174,6 +194,7 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
       // Reset state
       setDescripcion("");
       setUploadedFiles([]);
+      setAccionSeleccionada('liberar');
       onClose();
     } catch (error) {
       console.error('Error finishing lawsuit:', error);
@@ -202,11 +223,44 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
             Juicio Terminado
           </DialogTitle>
           <DialogDescription className="text-left pt-2">
-            Ingrese la documentación y resolución del juicio. Al confirmar, la cuenta será cancelada y la propiedad quedará disponible nuevamente.
+            Ingrese la documentación y resolución del juicio. Seleccione la acción a realizar con la propiedad.
           </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 py-4">
+          {/* Acción a realizar */}
+          <div className="space-y-3">
+            <Label>Acción a realizar *</Label>
+            <RadioGroup 
+              value={accionSeleccionada} 
+              onValueChange={(value) => setAccionSeleccionada(value as AccionJuicio)}
+              className="space-y-2"
+            >
+              <div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer">
+                <RadioGroupItem value="liberar" id="liberar" className="mt-0.5" />
+                <div className="flex-1">
+                  <Label htmlFor="liberar" className="cursor-pointer font-medium">
+                    Liberar propiedad
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Cancela la cuenta de cobranza y pone la propiedad en estado "Disponible"
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer">
+                <RadioGroupItem value="vendido" id="vendido" className="mt-0.5" />
+                <div className="flex-1">
+                  <Label htmlFor="vendido" className="cursor-pointer font-medium">
+                    Cambiar a Vendido
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Mantiene la cuenta activa y cambia la propiedad a estado "Vendido"
+                  </p>
+                </div>
+              </div>
+            </RadioGroup>
+          </div>
+
           {/* File Upload */}
           <div className="space-y-2">
             <Label htmlFor="documentos">Documentos del Juicio *</Label>
@@ -283,7 +337,7 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
             disabled={isLoading || !canSubmit}
             className="bg-green-600 hover:bg-green-700"
           >
-            {isLoading ? "Procesando..." : "Confirmar y Liberar Propiedad"}
+            {isLoading ? "Procesando..." : accionSeleccionada === 'liberar' ? "Confirmar y Liberar" : "Confirmar y Marcar Vendido"}
           </Button>
         </DialogFooter>
       </DialogContent>

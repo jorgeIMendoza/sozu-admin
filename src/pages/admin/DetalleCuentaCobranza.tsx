@@ -25,6 +25,7 @@ import { formatCuentaCobranzaId, formatOfertaId } from "@/utils/cuentaCobranzaUt
 import { ReciboPagoService } from "@/services/reciboPagoService";
 import { EnDemandaDialog } from "@/components/admin/EnDemandaDialog";
 import { JuicioTerminadoDialog } from "@/components/admin/JuicioTerminadoDialog";
+import { EditCuentaCobranzaDialog } from "@/components/admin/EditCuentaCobranzaDialog";
 
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -426,6 +427,7 @@ export default function DetalleCuentaCobranza() {
   const [uploadingEvidence, setUploadingEvidence] = useState<number | null>(null);
   const [enDemandaDialog, setEnDemandaDialog] = useState(false);
   const [juicioTerminadoDialog, setJuicioTerminadoDialog] = useState(false);
+  const [editCuentaDialog, setEditCuentaDialog] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -2065,6 +2067,15 @@ export default function DetalleCuentaCobranza() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {/* Botón Editar Cuenta */}
+          <Button 
+            onClick={() => setEditCuentaDialog(true)}
+            variant="outline"
+          >
+            <Edit className="h-4 w-4 mr-2" />
+            Editar Cuenta
+          </Button>
+          
           {/* Botón En Demanda - solo para propiedades no pagadas completamente, que no están en demanda ni canceladas */}
           {cuentaDetalle.tipo_cuenta === 'Propiedad' && 
            cuentaDetalle.id_estatus_disponibilidad !== 11 && 
@@ -3631,6 +3642,17 @@ export default function DetalleCuentaCobranza() {
         cuentaCobranzaId={cuentaId}
         propiedadId={cuentaDetalle?.id_propiedad}
       />
+
+      {editCuentaDialog && cuentaDetalle && (
+        <EditCuentaCobranzaDialog
+          cuenta={{ id: cuentaId, precio_final: cuentaDetalle.precio_final }}
+          onClose={() => setEditCuentaDialog(false)}
+          onUpdate={() => {
+            queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+          }}
+        />
+      )}
     </div>
   );
 }
