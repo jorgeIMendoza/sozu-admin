@@ -3120,8 +3120,8 @@ const Propiedades = () => {
                         );
                       
                       case 'ofertas_productos':
-                        // Only show product offers when property is at least Apartado (id_estatus_disponibilidad > 3)
-                        const canShowProductOffers = property.id_estatus_disponibilidad > 3;
+                        // Show product offers when property has existing offers OR is at least Apartado (id_estatus_disponibilidad > 3)
+                        const canShowProductOffers = property.id_estatus_disponibilidad > 3 || property.tieneOfertasProductos;
                         return (
                           <TableCell key={column.key}>
                             {canShowProductOffers ? (
