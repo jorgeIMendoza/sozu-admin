@@ -1048,8 +1048,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     </div>
                   )}
 
-                  {/* Representante Comercial - para inmobiliarias y entidades legales */}
-                  {(entityType === 'inmobiliaria' || entityType === 'legal') && (
+                  {/* Representante Comercial - para inmobiliarias, entidades legales y desarrolladores */}
+                  {(entityType === 'inmobiliaria' || entityType === 'legal' || entityType === 'desarrollador') && (
                     <div>
                       <Label htmlFor="idRepresentanteComercial">
                         Representante Comercial
@@ -1274,7 +1274,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                   </div>
                 )}
 
-                {(entityType === 'inmobiliaria' || entityType === 'legal') && (
+                {(entityType === 'inmobiliaria' || entityType === 'legal' || entityType === 'desarrollador') && (
                   <div>
                     <Label htmlFor="idRepresentanteComercial">
                       Representante Comercial
