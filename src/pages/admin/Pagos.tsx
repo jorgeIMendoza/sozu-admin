@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload, Banknote, ChevronDown, ChevronUp, Wallet, Scale } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload, Banknote, ChevronDown, ChevronUp, Wallet, Scale, Building2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { EstadoCuentaService } from "@/services/estadoCuentaService";
 import { N8N_WEBHOOK_BASE_URL } from "@/lib/config";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 interface Comprador {
   nombre_legal: string;
   rfc: string | null;
@@ -69,6 +70,8 @@ interface CuentaCobranza {
   discrepancia?: number;
   metraje?: number;
   precio_por_m2?: number;
+  id_proyecto?: number;
+  id_entidad_relacionada_dueno?: number;
 }
 export default function Pagos() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -125,15 +128,19 @@ export default function Pagos() {
   const [projectSummaryDialog, setProjectSummaryDialog] = useState<{
     isOpen: boolean;
     projectName: string;
+    projectId: number;
     cuentaIds: number[];
     totalColocado: number;
     totalCobrado: number;
+    valorProyecto: number;
   }>({
     isOpen: false,
     projectName: "",
+    projectId: 0,
     cuentaIds: [],
     totalColocado: 0,
-    totalCobrado: 0
+    totalCobrado: 0,
+    valorProyecto: 0
   });
 
   // Paginación
@@ -145,6 +152,16 @@ export default function Pagos() {
   } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  
+  // Project access control
+  const { 
+    accessibleProjectIds, 
+    hasUnrestrictedAccess, 
+    isLoading: isLoadingAccess,
+    isRepresentanteEmpresaDuena,
+    isDesarrollador,
+    ownershipEntityIds 
+  } = useProjectAccess();
 
   // Reset pagination when filters change
   useEffect(() => {
@@ -903,8 +920,10 @@ export default function Pagos() {
       }
       const [entidadesResult, edificiosModelosResult] = await Promise.all([supabase.from('entidades_relacionadas').select(`
             id,
+            id_proyecto,
             personas!fk_entrel_persona(nombre_legal),
             proyectos!entidades_relacionadas_id_proyecto_fkey(
+              id,
               nombre,
               id_tipo_uso
             )
@@ -1023,16 +1042,52 @@ export default function Pagos() {
             ? Math.round((precio_final - (totalAcuerdosPorCuenta[cuenta.id] || 0)) * 100) / 100
             : 0,
           metraje,
-          precio_por_m2
+          precio_por_m2,
+          id_proyecto: entidad?.id_proyecto || undefined,
+          id_entidad_relacionada_dueno: propiedad?.id_entidad_relacionada_dueno || undefined
         };
       });
       return transformedData.sort((a, b) => b.id - a.id);
     }
   });
 
-  // Filter by active status and search term
-  const cuentasActivas = cuentasCobranza?.filter(cuenta => cuenta.activo) || [];
-  const cuentasCanceladas = cuentasCobranza?.filter(cuenta => !cuenta.activo) || [];
+  // Filter by active status and project access
+  const allCuentasActivas = cuentasCobranza?.filter(cuenta => cuenta.activo) || [];
+  const allCuentasCanceladas = cuentasCobranza?.filter(cuenta => !cuenta.activo) || [];
+  
+  // Apply project access filtering
+  const cuentasActivas = useMemo(() => {
+    if (hasUnrestrictedAccess) return allCuentasActivas;
+    
+    let filtered = allCuentasActivas.filter(cuenta => 
+      cuenta.id_proyecto && accessibleProjectIds.includes(cuenta.id_proyecto)
+    );
+    
+    // For Representante de empresa dueña, additionally filter by ownership entity
+    if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+      filtered = filtered.filter(cuenta => 
+        cuenta.id_entidad_relacionada_dueno && ownershipEntityIds.includes(cuenta.id_entidad_relacionada_dueno)
+      );
+    }
+    
+    return filtered;
+  }, [allCuentasActivas, hasUnrestrictedAccess, accessibleProjectIds, isRepresentanteEmpresaDuena, ownershipEntityIds]);
+  
+  const cuentasCanceladas = useMemo(() => {
+    if (hasUnrestrictedAccess) return allCuentasCanceladas;
+    
+    let filtered = allCuentasCanceladas.filter(cuenta => 
+      cuenta.id_proyecto && accessibleProjectIds.includes(cuenta.id_proyecto)
+    );
+    
+    if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+      filtered = filtered.filter(cuenta => 
+        cuenta.id_entidad_relacionada_dueno && ownershipEntityIds.includes(cuenta.id_entidad_relacionada_dueno)
+      );
+    }
+    
+    return filtered;
+  }, [allCuentasCanceladas, hasUnrestrictedAccess, accessibleProjectIds, isRepresentanteEmpresaDuena, ownershipEntityIds]);
 
   // Filter function to apply to any list of cuentas
   const applyFilters = (cuentas: CuentaCobranza[]) => {
@@ -1111,15 +1166,17 @@ export default function Pagos() {
   // Calculate top 3 projects by number of accounts with totals (unfiltered) - SOLO PROPIEDADES ACTIVAS
   const proyectosDataMap = cuentasPropiedadesActivas.reduce((acc, cuenta) => {
     const proyecto = cuenta.proyecto;
+    const id_proyecto = cuenta.id_proyecto || 0;
     if (!acc[proyecto]) {
-      acc[proyecto] = { count: 0, total: 0, cobrado: 0, cuentaIds: [] as number[] };
+      acc[proyecto] = { count: 0, total: 0, cobrado: 0, cuentaIds: [] as number[], id_proyecto, valorProyecto: 0 };
     }
     acc[proyecto].count += 1;
     acc[proyecto].total += Number(cuenta.precio_final);
     acc[proyecto].cobrado += Number(cuenta.pagado || 0);
     acc[proyecto].cuentaIds.push(cuenta.id);
+    if (!acc[proyecto].id_proyecto) acc[proyecto].id_proyecto = id_proyecto;
     return acc;
-  }, {} as Record<string, { count: number; total: number; cobrado: number; cuentaIds: number[] }>);
+  }, {} as Record<string, { count: number; total: number; cobrado: number; cuentaIds: number[]; id_proyecto: number; valorProyecto: number }>);
 
   const top3Proyectos = Object.entries(proyectosDataMap)
     .sort(([, a], [, b]) => b.count - a.count)
@@ -1131,7 +1188,9 @@ export default function Pagos() {
       promedio: data.total / data.count,
       cobrado: data.cobrado,
       restante: data.total - data.cobrado,
-      cuentaIds: data.cuentaIds
+      cuentaIds: data.cuentaIds,
+      id_proyecto: data.id_proyecto,
+      valorProyecto: data.total // For now, use total colocado as valor proyecto
     }));
 
   // Promedio de productos (usando cuentas activas)
@@ -1710,9 +1769,11 @@ export default function Pagos() {
                             onClick={() => setProjectSummaryDialog({
                               isOpen: true,
                               projectName: item.proyecto,
+                              projectId: item.id_proyecto,
                               cuentaIds: item.cuentaIds,
                               totalColocado: item.total,
-                              totalCobrado: item.cobrado
+                              totalCobrado: item.cobrado,
+                              valorProyecto: item.valorProyecto
                             })}
                           >
                             {item.proyecto}
@@ -2752,11 +2813,15 @@ export default function Pagos() {
 
       <ProjectCollectionSummaryDialog
         isOpen={projectSummaryDialog.isOpen}
-        onClose={() => setProjectSummaryDialog({ isOpen: false, projectName: "", cuentaIds: [], totalColocado: 0, totalCobrado: 0 })}
+        onClose={() => setProjectSummaryDialog({ isOpen: false, projectName: "", projectId: 0, cuentaIds: [], totalColocado: 0, totalCobrado: 0, valorProyecto: 0 })}
         projectName={projectSummaryDialog.projectName}
+        projectId={projectSummaryDialog.projectId}
         cuentaIds={projectSummaryDialog.cuentaIds}
         totalColocado={projectSummaryDialog.totalColocado}
         totalCobrado={projectSummaryDialog.totalCobrado}
+        valorProyecto={projectSummaryDialog.valorProyecto}
+        isRepresentanteEmpresaDuena={isRepresentanteEmpresaDuena}
+        ownershipEntityIds={ownershipEntityIds}
       />
     </div>;
 }
