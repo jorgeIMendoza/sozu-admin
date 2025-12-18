@@ -3626,9 +3626,9 @@ export default function DetalleCuentaCobranza() {
                       {pagos.map((pago) => {
                         const aplicacionesDelPago = aplicacionesPorPago?.filter(a => a.id_pago === pago.id) || [];
                         const isPagoOpen = openAcuerdos[pago.id];
-                        // IDs de métodos que permiten editar clave_rastreo: STP (6), STP-manual (7), Transferencia bancaria (3)
+                        // IDs de métodos que permiten editar clave_rastreo: Transferencia bancaria (5), STP (6), STP-manual (7)
                         // Permitir edición si clave_rastreo es null, undefined, o cadena vacía
-                        const canEditClaveRastreo = [3, 6, 7].includes(pago.id_metodos_pago) && (!pago.clave_rastreo || pago.clave_rastreo.trim() === '');
+                        const canEditClaveRastreo = [5, 6, 7].includes(pago.id_metodos_pago) && (!pago.clave_rastreo || pago.clave_rastreo.trim() === '');
                         return (
                           <Collapsible 
                             key={pago.id} 
