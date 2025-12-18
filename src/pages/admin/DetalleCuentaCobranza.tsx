@@ -3949,8 +3949,8 @@ export default function DetalleCuentaCobranza() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="2">Efectivo</SelectItem>
-                                      <SelectItem value="3">Transferencia</SelectItem>
-                                      <SelectItem value="6">STP</SelectItem>
+                                      <SelectItem value="4">Cheque</SelectItem>
+                                      <SelectItem value="5">Transferencia</SelectItem>
                                       <SelectItem value="7">STP-manual</SelectItem>
                                     </SelectContent>
                                   </Select>
