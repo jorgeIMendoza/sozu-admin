@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -794,35 +795,36 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                   <div className="space-y-2">
                     <Label htmlFor="estatus_propiedad">Estatus de propiedad *</Label>
                     {(() => {
-                      // Solo Super Admin (1) y Administrador de data (10) pueden editar
                       const userCanEdit = profile?.rol_id === ROL_SUPER_ADMIN || profile?.rol_id === ROL_ADMIN_DATA;
-                      // Solo se puede editar si el estatus actual es Inventario (1) o Disponible (2)
                       const statusIsEditable = originalStatusId !== null && allowedStatusIds.includes(originalStatusId);
                       const fieldEnabled = userCanEdit && statusIsEditable;
                       
-                      console.log('Estatus field debug:', { userCanEdit, statusIsEditable, fieldEnabled, originalStatusId, rolId: profile?.rol_id });
-                      
-                      // Solo mostrar Inventario y Disponible si el campo está habilitado
-                      const statusOptions = fieldEnabled
-                        ? (estatusDisponibilidad?.filter(e => allowedStatusIds.includes(e.id)).map(e => ({
-                            value: e.id.toString(),
-                            label: e.nombre,
-                          })) || [])
-                        : (estatusDisponibilidad?.map(e => ({
-                            value: e.id.toString(),
-                            label: e.nombre,
-                          })) || []);
-                      
                       return (
-                        <Combobox
+                        <Select
                           value={formData.id_estatus_disponibilidad}
                           onValueChange={(val) => setFormData(prev => ({ ...prev, id_estatus_disponibilidad: val }))}
-                          options={statusOptions}
-                          placeholder="Selecciona estatus"
-                          searchPlaceholder="Buscar estatus..."
-                          emptyText="No se encontró el estatus."
                           disabled={!fieldEnabled}
-                        />
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona estatus" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {estatusDisponibilidad?.map((estatus) => {
+                              const isAllowed = allowedStatusIds.includes(estatus.id);
+                              const isCurrent = estatus.id.toString() === formData.id_estatus_disponibilidad;
+                              return (
+                                <SelectItem 
+                                  key={estatus.id} 
+                                  value={estatus.id.toString()}
+                                  disabled={!isAllowed && !isCurrent}
+                                  className={!isAllowed && !isCurrent ? "opacity-50" : ""}
+                                >
+                                  {estatus.nombre}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
                       );
                     })()}
                   </div>
