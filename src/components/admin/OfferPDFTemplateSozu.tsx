@@ -739,7 +739,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               <div style={{ fontSize: '33px', lineHeight: '1.2', fontFamily: 'Arial, sans-serif' }}>
                 <p style={{ color: '#000000', marginBottom: '4px' }}>
                   <span style={{ fontWeight: '600' }}>Nombre: </span>
-                  <span style={{ fontWeight: '400' }}>{creatorInfo?.nombre || creatorInfo?.nombre_legal || offerData.email_creador}</span>
+                  <span style={{ fontWeight: '400' }}>{creatorInfo?.nombre_legal || creatorInfo?.nombre || offerData.email_creador}</span>
                 </p>
                 <p style={{ color: '#000000', marginBottom: '4px' }}>
                   <span style={{ fontWeight: '600' }}>Email: </span>
