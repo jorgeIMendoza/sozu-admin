@@ -790,34 +790,38 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                     />
                   </div>
 
+                  {/* Campo de Estatus de propiedad - Solo editable por Super Admin y Admin de Data */}
                   <div className="space-y-2">
-                    <Label htmlFor="estatus_disponibilidad">Estatus de propiedad *</Label>
+                    <Label htmlFor="estatus_propiedad">Estatus de propiedad *</Label>
                     {(() => {
-                      // Determinar si el campo debe estar habilitado
-                      const currentOriginalStatus = originalStatusId;
-                      const isEditableStatus = currentOriginalStatus !== null && allowedStatusIds.includes(currentOriginalStatus);
-                      const shouldBeEnabled = canEditPropertyStatus && isEditableStatus;
+                      // Solo Super Admin (1) y Administrador de data (10) pueden editar
+                      const userCanEdit = profile?.rol_id === ROL_SUPER_ADMIN || profile?.rol_id === ROL_ADMIN_DATA;
+                      // Solo se puede editar si el estatus actual es Inventario (1) o Disponible (2)
+                      const statusIsEditable = originalStatusId !== null && allowedStatusIds.includes(originalStatusId);
+                      const fieldEnabled = userCanEdit && statusIsEditable;
                       
-                      // Filtrar opciones si puede editar y el estatus es editable
-                      const filteredOptions = shouldBeEnabled
-                        ? (estatusDisponibilidad?.filter(estatus => allowedStatusIds.includes(estatus.id)).map((estatus) => ({
-                            value: estatus.id.toString(),
-                            label: estatus.nombre,
+                      console.log('Estatus field debug:', { userCanEdit, statusIsEditable, fieldEnabled, originalStatusId, rolId: profile?.rol_id });
+                      
+                      // Solo mostrar Inventario y Disponible si el campo está habilitado
+                      const statusOptions = fieldEnabled
+                        ? (estatusDisponibilidad?.filter(e => allowedStatusIds.includes(e.id)).map(e => ({
+                            value: e.id.toString(),
+                            label: e.nombre,
                           })) || [])
-                        : (estatusDisponibilidad?.map((estatus) => ({
-                            value: estatus.id.toString(),
-                            label: estatus.nombre,
+                        : (estatusDisponibilidad?.map(e => ({
+                            value: e.id.toString(),
+                            label: e.nombre,
                           })) || []);
                       
                       return (
                         <Combobox
                           value={formData.id_estatus_disponibilidad}
-                          onValueChange={(value) => setFormData(prev => ({ ...prev, id_estatus_disponibilidad: value }))}
-                          options={filteredOptions}
+                          onValueChange={(val) => setFormData(prev => ({ ...prev, id_estatus_disponibilidad: val }))}
+                          options={statusOptions}
                           placeholder="Selecciona estatus"
                           searchPlaceholder="Buscar estatus..."
                           emptyText="No se encontró el estatus."
-                          disabled={!shouldBeEnabled}
+                          disabled={!fieldEnabled}
                         />
                       );
                     })()}
