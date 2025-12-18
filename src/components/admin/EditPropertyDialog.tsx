@@ -15,6 +15,13 @@ import { PropertyCharacteristicsSection } from "./PropertyCharacteristicsSection
 import { PropertyYouTubeVideosSection } from "./PropertyYouTubeVideosSection";
 import React from "react";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAuth } from "@/contexts/AuthContext";
+
+// Constantes para roles y estatus
+const ROL_SUPER_ADMIN = 1;
+const ROL_ADMIN_DATA = 10;
+const ESTATUS_INVENTARIO = 1;
+const ESTATUS_DISPONIBLE = 2;
 
 // Funciones para formatear moneda
 const formatCurrency = (value: string | number | undefined): string => {
@@ -193,10 +200,16 @@ interface EditPropertyDialogProps {
 
 export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropertyDialogProps) => {
   const { toast } = useToast();
+  const { profile } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [modeloId, setModeloId] = useState<string | undefined>(undefined);
   const { registrarActualizacion } = useActivityLogger();
   const [excludedCharacteristicIds, setExcludedCharacteristicIds] = useState<number[]>([]);
+  const [originalStatusId, setOriginalStatusId] = useState<number | null>(null);
+
+  // Verificar si el usuario puede editar el estatus de propiedad
+  const canEditPropertyStatus = profile?.rol_id === ROL_SUPER_ADMIN || profile?.rol_id === ROL_ADMIN_DATA;
+  const allowedStatusIds = [ESTATUS_INVENTARIO, ESTATUS_DISPONIBLE];
   const [formData, setFormData] = useState({
     numero_propiedad: property.numero_propiedad,
     numero_piso: property.numero_piso || '',
@@ -433,6 +446,9 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
         }
       }
 
+      // Guardar el estatus original para validación posterior
+      setOriginalStatusId(fullPropertyData.id_estatus_disponibilidad || null);
+
       setFormData({
         numero_propiedad: fullPropertyData.numero_propiedad,
         numero_piso: fullPropertyData.numero_piso?.toString() || '',
@@ -461,6 +477,32 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
     setIsLoading(true);
 
     try {
+      // Validar cambio de estatus de propiedad
+      const currentStatusId = parseInt(formData.id_estatus_disponibilidad);
+      
+      if (originalStatusId !== null && currentStatusId !== originalStatusId) {
+        // Si no es Super Admin o Admin de Data, rechazar
+        if (!canEditPropertyStatus) {
+          toast({
+            title: "Error",
+            description: "No tienes permiso para cambiar el estatus de la propiedad.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        // Validar que el cambio solo es entre Inventario y Disponible
+        if (!allowedStatusIds.includes(currentStatusId) || !allowedStatusIds.includes(originalStatusId)) {
+          toast({
+            title: "Error",
+            description: "Solo se permite cambiar entre Inventario y Disponible.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
       const { error } = await supabase
         .from('propiedades')
         .update({
@@ -746,18 +788,25 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="estatus_disponibilidad">Estatus de Disponibilidad *</Label>
+                    <Label htmlFor="estatus_disponibilidad">Estatus de propiedad *</Label>
                     <Combobox
                       value={formData.id_estatus_disponibilidad}
                       onValueChange={(value) => setFormData(prev => ({ ...prev, id_estatus_disponibilidad: value }))}
-                      options={estatusDisponibilidad?.map((estatus) => ({
-                        value: estatus.id.toString(),
-                        label: estatus.nombre,
-                      })) || []}
+                      options={
+                        canEditPropertyStatus && originalStatusId !== null && allowedStatusIds.includes(originalStatusId)
+                          ? (estatusDisponibilidad?.filter(estatus => allowedStatusIds.includes(estatus.id)).map((estatus) => ({
+                              value: estatus.id.toString(),
+                              label: estatus.nombre,
+                            })) || [])
+                          : (estatusDisponibilidad?.map((estatus) => ({
+                              value: estatus.id.toString(),
+                              label: estatus.nombre,
+                            })) || [])
+                      }
                       placeholder="Selecciona estatus"
                       searchPlaceholder="Buscar estatus..."
                       emptyText="No se encontró el estatus."
-                      disabled={true}
+                      disabled={!canEditPropertyStatus || originalStatusId === null || !allowedStatusIds.includes(originalStatusId)}
                     />
                   </div>
 
