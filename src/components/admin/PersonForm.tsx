@@ -851,8 +851,11 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     // For backwards compatibility with user form
     if (entityType === 'user') {
       onSubmit({
-        nombre: nombre.trim(),
-        curp: curp.trim(),
+        nombre_legal: nombre.trim(),
+        email: email.trim(),
+        telefono: telefono.trim() || null,
+        clave_pais_telefono: clavePaisTelefono || null,
+        curp: curp.trim() || null,
         url_documento_identificacion: documentImageUrl || undefined,
       });
     } else if (entityType === 'comprador' && restrictToBasicTab) {
@@ -1982,9 +1985,48 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
                 placeholder="Ingresa el nombre completo"
-                readOnly
-                className="bg-muted"
               />
+            </div>
+
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Ingresa el email"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="telefono">Teléfono</Label>
+              <div className="flex gap-2">
+                <Select value={clavePaisTelefono} onValueChange={setClavePaisTelefono}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue placeholder="País" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MX">+52 MX</SelectItem>
+                    <SelectItem value="US">+1 US</SelectItem>
+                    <SelectItem value="CA">+1 CA</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  id="telefono"
+                  type="tel"
+                  value={telefono}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '');
+                    if (value.length <= 10) {
+                      setTelefono(value);
+                    }
+                  }}
+                  placeholder="10 dígitos"
+                  className="flex-1"
+                  maxLength={10}
+                />
+              </div>
             </div>
 
             <div>
@@ -1993,10 +2035,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 id="curp"
                 type="text"
                 value={curp}
-                onChange={(e) => setCurp(e.target.value)}
+                onChange={(e) => setCurp(e.target.value.toUpperCase())}
                 placeholder="Ingresa la CURP"
-                readOnly
-                className="bg-muted"
+                maxLength={18}
               />
             </div>
           </div>
