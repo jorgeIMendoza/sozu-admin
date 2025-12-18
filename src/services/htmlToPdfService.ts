@@ -1044,7 +1044,19 @@ class HTMLToPDFService {
   private async fetchCreatorInfo(creatorEmail: string): Promise<any> {
     console.log('Fetching creator info for email:', creatorEmail);
 
-    // Try to fetch from usuarios table first
+    // First try personas table (where agents update their data)
+    const { data: persona, error: personaError } = await supabase
+      .from('personas')
+      .select('id, nombre_legal, email, telefono')
+      .eq('email', creatorEmail)
+      .single();
+
+    if (!personaError && persona) {
+      console.log('Found persona with phone:', persona.telefono);
+      return persona;
+    }
+
+    // Fallback to usuarios table
     const { data: usuario, error: usuarioError } = await supabase
       .from('usuarios')
       .select('nombre, email, telefono')
@@ -1059,19 +1071,8 @@ class HTMLToPDFService {
       };
     }
 
-    // If not found in usuarios, try personas table
-    const { data: persona, error } = await supabase
-      .from('personas')
-      .select('id, nombre_legal, email, telefono')
-      .eq('email', creatorEmail)
-      .single();
-
-    if (error) {
-      console.error('Error fetching creator info:', error);
-      return null;
-    }
-
-    return persona;
+    console.error('Error fetching creator info:', personaError || usuarioError);
+    return null;
   }
 
   private async fetchLeadInfo(leadId: number): Promise<any> {
