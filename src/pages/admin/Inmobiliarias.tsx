@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, RotateCcw, Building } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RotateCcw, Building, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
+import { Badge } from "@/components/ui/badge";
 
 type Inmobiliaria = {
   id: number;
@@ -33,6 +34,13 @@ type Inmobiliaria = {
   url_logo?: string;
 };
 
+type Agente = {
+  id: number;
+  nombre_legal: string;
+  email: string;
+  telefono?: string;
+};
+
 export default function Inmobiliarias() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
@@ -46,6 +54,8 @@ export default function Inmobiliarias() {
   const [entityToRestore, setEntityToRestore] = useState<Inmobiliaria | null>(null);
   const [selectedEntityForBankAccounts, setSelectedEntityForBankAccounts] = useState<Inmobiliaria | null>(null);
   const [isBankAccountsDialogOpen, setIsBankAccountsDialogOpen] = useState(false);
+  const [isAgentesDialogOpen, setIsAgentesDialogOpen] = useState(false);
+  const [selectedInmobiliariaForAgentes, setSelectedInmobiliariaForAgentes] = useState<Inmobiliaria | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -162,6 +172,42 @@ export default function Inmobiliarias() {
   const { data: deletedInmobiliarias = [], isLoading: loadingDeleted } = useQuery({
     queryKey: ['inmobiliarias', 'deleted'],
     queryFn: () => fetchInmobiliarias(false),
+  });
+
+  // Query to fetch agents for a specific inmobiliaria
+  const { data: agentesDeInmobiliaria = [], isLoading: loadingAgentes } = useQuery({
+    queryKey: ['agentes_inmobiliaria', selectedInmobiliariaForAgentes?.id],
+    queryFn: async () => {
+      if (!selectedInmobiliariaForAgentes) return [];
+      
+      const { data, error } = await supabase
+        .from('personas')
+        .select(`
+          id,
+          nombre_legal,
+          email,
+          telefono,
+          entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
+            id,
+            id_tipo_entidad,
+            id_persona_duena_lead
+          )
+        `)
+        .eq('activo', true)
+        .eq('entidades_relacionadas.activo', true)
+        .eq('entidades_relacionadas.id_tipo_entidad', 19) // Agentes
+        .eq('entidades_relacionadas.id_persona_duena_lead', selectedInmobiliariaForAgentes.id)
+        .order('nombre_legal', { ascending: true });
+      
+      if (error) throw error;
+      return (data || []).map((item: any) => ({
+        id: item.id,
+        nombre_legal: item.nombre_legal,
+        email: item.email,
+        telefono: item.telefono,
+      })) as Agente[];
+    },
+    enabled: !!selectedInmobiliariaForAgentes && isAgentesDialogOpen,
   });
 
   const inmobiliarias = activeTab === 'active' ? activeInmobiliarias : deletedInmobiliarias;
@@ -554,6 +600,47 @@ export default function Inmobiliarias() {
         isLoading={restoreMutation.isPending}
         actionType="restore"
       />
+
+      {/* Modal de Agentes */}
+      <Dialog open={isAgentesDialogOpen} onOpenChange={(open) => {
+        setIsAgentesDialogOpen(open);
+        if (!open) setSelectedInmobiliariaForAgentes(null);
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Agentes de {selectedInmobiliariaForAgentes?.nombre_comercial || selectedInmobiliariaForAgentes?.nombre_legal}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {loadingAgentes ? (
+              <div className="text-center py-8 text-muted-foreground">Cargando agentes...</div>
+            ) : agentesDeInmobiliaria.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No hay agentes asignados a esta inmobiliaria</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Teléfono</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agentesDeInmobiliaria.map((agente) => (
+                    <TableRow key={agente.id}>
+                      <TableCell className="font-medium">{agente.nombre_legal}</TableCell>
+                      <TableCell className="text-muted-foreground">{agente.email}</TableCell>
+                      <TableCell className="text-muted-foreground">{agente.telefono || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
@@ -685,8 +772,23 @@ export default function Inmobiliarias() {
                 <TableCell className="text-muted-foreground">
                   {inmobiliaria.numero_proyectos} proyecto{inmobiliaria.numero_proyectos !== 1 ? 's' : ''}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {inmobiliaria.numero_agentes} agente{inmobiliaria.numero_agentes !== 1 ? 's' : ''}
+                <TableCell>
+                  {inmobiliaria.numero_agentes > 0 ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-primary hover:text-primary/80 hover:bg-primary/10 p-0 h-auto font-normal"
+                      onClick={() => {
+                        setSelectedInmobiliariaForAgentes(inmobiliaria);
+                        setIsAgentesDialogOpen(true);
+                      }}
+                    >
+                      <Users className="h-4 w-4 mr-1" />
+                      {inmobiliaria.numero_agentes} agente{inmobiliaria.numero_agentes !== 1 ? 's' : ''}
+                    </Button>
+                  ) : (
+                    <span className="text-muted-foreground">0 agentes</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {inmobiliaria.email}
