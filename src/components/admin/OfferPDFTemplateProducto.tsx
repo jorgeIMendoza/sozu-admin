@@ -572,19 +572,17 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
                 <div style={{ marginBottom: '8px' }}>
                   <span style={{ fontWeight: 'normal' }}>Nombre: </span>
                   <span style={{ fontWeight: 'bold' }}>
-                    {creatorInfo?.nombre || offerData.email_creador}
+                    {creatorInfo?.nombre_legal || creatorInfo?.nombre || offerData.email_creador}
                   </span>
                 </div>
                 <div style={{ marginBottom: '8px' }}>
                   <span style={{ fontWeight: 'normal' }}>Email: </span>
                   <span style={{ fontWeight: 'bold' }}>{offerData.email_creador}</span>
                 </div>
-                {creatorInfo?.telefono && (
-                  <div style={{ marginBottom: '8px' }}>
-                    <span style={{ fontWeight: 'normal' }}>Teléfono: </span>
-                    <span style={{ fontWeight: 'bold' }}>{creatorInfo.telefono}</span>
-                  </div>
-                )}
+                <div style={{ marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 'normal' }}>Teléfono: </span>
+                  <span style={{ fontWeight: 'bold' }}>{creatorInfo?.telefono || 'N/A'}</span>
+                </div>
               </div>
             </div>
 
