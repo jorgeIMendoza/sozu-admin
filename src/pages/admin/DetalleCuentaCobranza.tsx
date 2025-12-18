@@ -3871,12 +3871,13 @@ export default function DetalleCuentaCobranza() {
                         <div className="bg-background p-2 rounded text-xs">
                           <p className="font-medium mb-1">Cambios pendientes:</p>
                           <ul className="list-disc list-inside space-y-1">
-                            {Object.entries(aplicacionMontoEdit).map(([aplicacionId, newMonto]) => {
-                              const originalMonto = originalAplicacionMontos[parseInt(aplicacionId)] || 0;
+                            {Object.entries(aplicacionMontoEdit).map(([key, newMonto]) => {
+                              const originalMonto = originalAplicacionMontos[key] || 0;
                               const diff = newMonto - originalMonto;
+                              const displayId = key.startsWith('pago_') ? key.replace('pago_', '') : key;
                               return (
-                                <li key={aplicacionId}>
-                                  Aplicación #{aplicacionId}: {formatCurrency(originalMonto)} → {formatCurrency(newMonto)} 
+                                <li key={key}>
+                                  Pago #{displayId}: {formatCurrency(originalMonto)} → {formatCurrency(newMonto)} 
                                   <span className={diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : ''}>
                                     {diff > 0 ? ` (+${formatCurrency(diff)})` : diff < 0 ? ` (${formatCurrency(diff)})` : ''}
                                   </span>
