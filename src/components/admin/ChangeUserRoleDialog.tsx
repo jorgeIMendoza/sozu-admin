@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Shield } from "lucide-react";
+import { Shield, Check, ChevronsUpDown } from "lucide-react";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { cn } from "@/lib/utils";
 
 interface ChangeUserRoleDialogProps {
   open: boolean;
@@ -108,21 +110,50 @@ export function ChangeUserRoleDialog({
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="role">Nuevo rol</Label>
-            <Select
-              value={selectedRoleId}
-              onValueChange={setSelectedRoleId}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecciona un rol" />
-              </SelectTrigger>
-              <SelectContent>
-                {roles.map((role) => (
-                  <SelectItem key={role.id} value={role.id.toString()}>
-                    {role.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className={cn(
+                    "w-full justify-between",
+                    !selectedRoleId && "text-muted-foreground"
+                  )}
+                >
+                  {selectedRoleId
+                    ? roles.find((role) => role.id.toString() === selectedRoleId)?.nombre
+                    : "Selecciona un rol"}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar rol..." />
+                  <CommandList>
+                    <CommandEmpty>No se encontró el rol.</CommandEmpty>
+                    <CommandGroup>
+                      {roles.map((role) => (
+                        <CommandItem
+                          key={role.id}
+                          value={role.nombre}
+                          onSelect={() => setSelectedRoleId(role.id.toString())}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              selectedRoleId === role.id.toString()
+                                ? "opacity-100"
+                                : "opacity-0"
+                            )}
+                          />
+                          {role.nombre}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
