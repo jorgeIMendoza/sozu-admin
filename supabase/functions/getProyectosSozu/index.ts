@@ -31,8 +31,10 @@ serve(async (req) => {
       throw entidadesError;
     }
 
-    // Get unique project IDs
-    const proyectoIds = [...new Set(entidades?.map(e => e.id_proyecto) || [])];
+    // Get unique project IDs, filtering out nulls
+    const proyectoIds = [...new Set(
+      entidades?.map(e => e.id_proyecto).filter(id => id !== null && id !== undefined) || []
+    )];
     
     if (proyectoIds.length === 0) {
       console.log('[getProyectosSozu] No proyectos found with id_tipo_entidad = 5');
