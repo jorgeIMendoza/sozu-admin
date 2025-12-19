@@ -71,8 +71,9 @@ export default function RastreoClabeSTP() {
       const stats: ClabeStats[] = [];
 
       for (const [cuentaMadre, info] of cuentaMadreMap) {
-        // Count all CLABEs for this cuenta_madre
-        const prefix = `6461802874${cuentaMadre}`;
+        // cuenta_madre_stp ya tiene los 14 dígitos (ej: 64618028740013)
+        // Usarla directamente como prefijo
+        const prefix = cuentaMadre;
 
         // Get all CLABEs that start with this prefix
         const { data: propiedadesClabes } = await supabase
@@ -110,11 +111,12 @@ export default function RastreoClabeSTP() {
         const clabesAsignadas = clabesArray.length;
 
         // Find última secuencial (highest 3-digit counter)
+        // CLABE = 14 dígitos cuenta_madre + 3 dígitos contador + 1 dígito verificador = 18 total
         let ultimaSecuencial = "";
         let maxCounter = 0;
 
         clabesArray.forEach(clabe => {
-          // Extract the 3-digit counter (positions 15-17, before the last digit)
+          // Extract the 3-digit counter (positions 14-16, before the last digit)
           if (clabe.length === 18) {
             const counter = parseInt(clabe.substring(14, 17), 10);
             if (counter > maxCounter) {
@@ -126,8 +128,11 @@ export default function RastreoClabeSTP() {
 
         const porcentajeUso = (clabesAsignadas / 999) * 100;
 
+        // Extraer los últimos 4 dígitos de la cuenta madre (ej: de 64618028740013 -> 0013)
+        const cuentaMadreCorta = cuentaMadre.length >= 4 ? cuentaMadre.slice(-4) : cuentaMadre;
+
         stats.push({
-          cuenta_madre: cuentaMadre,
+          cuenta_madre: cuentaMadreCorta,
           persona_nombre: info.persona_nombre,
           proyecto_nombre: info.proyecto_nombre,
           clabes_asignadas: clabesAsignadas,
