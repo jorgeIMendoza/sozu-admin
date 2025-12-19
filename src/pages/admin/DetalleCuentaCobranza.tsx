@@ -2298,11 +2298,6 @@ export default function DetalleCuentaCobranza() {
                   </Tooltip>
                 </TooltipProvider>
               )}
-              {esCuentaCancelada && (
-                <Badge variant="destructive">
-                  CANCELADA
-                </Badge>
-              )}
             </div>
             <p className="text-muted-foreground">
               Información detallada de pagos y acuerdos
@@ -2310,59 +2305,69 @@ export default function DetalleCuentaCobranza() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {/* Botón Editar Cuenta */}
-          <Button 
-            onClick={() => setEditCuentaDialog(true)}
-            variant="outline"
-          >
-            <Edit className="h-4 w-4 mr-2" />
-            Editar Cuenta
-          </Button>
-          
-          {/* Botón En Demanda - solo para propiedades no pagadas completamente, que no están en demanda ni canceladas */}
-          {cuentaDetalle.tipo_cuenta === 'Propiedad' && 
-           cuentaDetalle.id_estatus_disponibilidad !== 11 && 
-           !esCuentaCancelada &&
-           totalPagado < (cuentaDetalle?.precio_final || 0) && (
-            <Button
-              onClick={() => setEnDemandaDialog(true)}
-              variant="outline"
-              className="border-amber-500 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
-            >
-              <Scale className="h-4 w-4 mr-2" />
-              Poner en Demanda
-            </Button>
-          )}
-          
-          {/* Botón Juicio Terminado - solo cuando está en demanda */}
-          {cuentaDetalle.tipo_cuenta === 'Propiedad' && 
-           cuentaDetalle.id_estatus_disponibilidad === 11 && (
+        
+        {/* Mostrar badge grande cuando está cancelada, ocultar botones */}
+        {esCuentaCancelada ? (
+          <div className="flex items-center">
+            <Badge variant="destructive" className="text-lg px-6 py-2 font-bold">
+              <X className="h-5 w-5 mr-2" />
+              CUENTA CANCELADA
+            </Badge>
+          </div>
+        ) : (
+          <div className="flex gap-2 flex-wrap">
+            {/* Botón Editar Cuenta */}
             <Button 
-              onClick={() => setJuicioTerminadoDialog(true)}
-              className="bg-green-600 hover:bg-green-700"
+              onClick={() => setEditCuentaDialog(true)}
+              variant="outline"
             >
-              <Gavel className="h-4 w-4 mr-2" />
-              Juicio Terminado
+              <Edit className="h-4 w-4 mr-2" />
+              Editar Cuenta
             </Button>
-          )}
-          
-          <Button 
-            onClick={() => setTransferDialog({ isOpen: true })}
-            disabled={!ultimoPagoSTP || esCuentaCancelada || isReadOnly || isEnDemanda}
-            variant="outline"
-          >
-            <ArrowRight className="h-4 w-4 mr-2" />
-            Transferir entre cuentas
-          </Button>
-          <Button 
-            onClick={() => setManualPaymentDialog(true)}
-            disabled={esCuentaCancelada || totalPagado >= (cuentaDetalle?.precio_final || 0) || isReadOnly || isEnDemanda}
-          >
-            <CreditCard className="h-4 w-4 mr-2" />
-            Agregar pago manual
-          </Button>
-        </div>
+            
+            {/* Botón En Demanda - solo para propiedades no pagadas completamente, que no están en demanda ni canceladas */}
+            {cuentaDetalle.tipo_cuenta === 'Propiedad' && 
+             cuentaDetalle.id_estatus_disponibilidad !== 11 && 
+             totalPagado < (cuentaDetalle?.precio_final || 0) && (
+              <Button
+                onClick={() => setEnDemandaDialog(true)}
+                variant="outline"
+                className="border-amber-500 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+              >
+                <Scale className="h-4 w-4 mr-2" />
+                Poner en Demanda
+              </Button>
+            )}
+            
+            {/* Botón Juicio Terminado - solo cuando está en demanda */}
+            {cuentaDetalle.tipo_cuenta === 'Propiedad' && 
+             cuentaDetalle.id_estatus_disponibilidad === 11 && (
+              <Button 
+                onClick={() => setJuicioTerminadoDialog(true)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Gavel className="h-4 w-4 mr-2" />
+                Juicio Terminado
+              </Button>
+            )}
+            
+            <Button 
+              onClick={() => setTransferDialog({ isOpen: true })}
+              disabled={!ultimoPagoSTP || isReadOnly || isEnDemanda}
+              variant="outline"
+            >
+              <ArrowRight className="h-4 w-4 mr-2" />
+              Transferir entre cuentas
+            </Button>
+            <Button 
+              onClick={() => setManualPaymentDialog(true)}
+              disabled={totalPagado >= (cuentaDetalle?.precio_final || 0) || isReadOnly || isEnDemanda}
+            >
+              <CreditCard className="h-4 w-4 mr-2" />
+              Agregar pago manual
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Alert for discrepancy */}
