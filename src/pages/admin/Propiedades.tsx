@@ -3600,36 +3600,50 @@ const Propiedades = () => {
                           </Tooltip>
                         )}
                         {(canDelete || isSuperAdmin) && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                disabled={property.tieneOfertas}
-                                title={property.tieneOfertas ? "No se puede eliminar una propiedad con ofertas asociadas" : "Eliminar propiedad"}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>¿Eliminar propiedad?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  ¿Estás seguro de que deseas eliminar la propiedad {property.numero_propiedad}? Esta acción se puede revertir posteriormente.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleDelete(property.id)}
-                                  className="bg-red-600 hover:bg-red-700"
-                                >
-                                  Eliminar
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                      disabled={property.tieneOfertas || property.id_estatus_disponibilidad === 11}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>¿Eliminar propiedad?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        ¿Estás seguro de que deseas eliminar la propiedad {property.numero_propiedad}? Esta acción se puede revertir posteriormente.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => handleDelete(property.id)}
+                                        className="bg-red-600 hover:bg-red-700"
+                                      >
+                                        Eliminar
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {property.id_estatus_disponibilidad === 11 
+                                  ? "No se puede eliminar una propiedad en estatus En demanda" 
+                                  : property.tieneOfertas 
+                                    ? "No se puede eliminar una propiedad con ofertas asociadas" 
+                                    : "Eliminar propiedad"}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                      ) : (
@@ -3681,36 +3695,50 @@ const Propiedades = () => {
                            </Tooltip>
                           )}
                           {(canDelete || isSuperAdmin) && (
-                         <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                              disabled={property.tieneOfertas}
-                              title={property.tieneOfertas ? "No se puede eliminar una propiedad con ofertas asociadas" : "Eliminar propiedad"}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Eliminar propiedad?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                ¿Estás seguro de que deseas eliminar la propiedad {property.numero_propiedad}? Esta acción se puede revertir posteriormente.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDelete(property.id)}
-                                className="bg-red-600 hover:bg-red-700"
-                              >
-                                Eliminar
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                        disabled={property.tieneOfertas || property.id_estatus_disponibilidad === 11}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>¿Eliminar propiedad?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          ¿Estás seguro de que deseas eliminar la propiedad {property.numero_propiedad}? Esta acción se puede revertir posteriormente.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleDelete(property.id)}
+                                          className="bg-red-600 hover:bg-red-700"
+                                        >
+                                          Eliminar
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>
+                                  {property.id_estatus_disponibilidad === 11 
+                                    ? "No se puede eliminar una propiedad en estatus En demanda" 
+                                    : property.tieneOfertas 
+                                      ? "No se puede eliminar una propiedad con ofertas asociadas" 
+                                      : "Eliminar propiedad"}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
                           )}
                       </div>
                     )}
