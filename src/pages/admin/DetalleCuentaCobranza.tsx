@@ -2315,15 +2315,19 @@ export default function DetalleCuentaCobranza() {
             </Badge>
           </div>
         ) : (
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Botón Editar Cuenta */}
             <Button 
               onClick={() => setEditCuentaDialog(true)}
               variant="outline"
+              size="sm"
             >
               <Edit className="h-4 w-4 mr-2" />
               Editar Cuenta
             </Button>
+            
+            {/* Separador visual */}
+            <div className="hidden sm:block h-6 w-px bg-border" />
             
             {/* Botón En Demanda - solo para propiedades no pagadas completamente, que no están en demanda ni canceladas */}
             {cuentaDetalle.tipo_cuenta === 'Propiedad' && 
@@ -2332,6 +2336,7 @@ export default function DetalleCuentaCobranza() {
               <Button
                 onClick={() => setEnDemandaDialog(true)}
                 variant="outline"
+                size="sm"
                 className="border-amber-500 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
               >
                 <Scale className="h-4 w-4 mr-2" />
@@ -2344,6 +2349,7 @@ export default function DetalleCuentaCobranza() {
              cuentaDetalle.id_estatus_disponibilidad === 11 && (
               <Button 
                 onClick={() => setJuicioTerminadoDialog(true)}
+                size="sm"
                 className="bg-green-600 hover:bg-green-700"
               >
                 <Gavel className="h-4 w-4 mr-2" />
@@ -2355,13 +2361,20 @@ export default function DetalleCuentaCobranza() {
               onClick={() => setTransferDialog({ isOpen: true })}
               disabled={!ultimoPagoSTP || isReadOnly || isEnDemanda}
               variant="outline"
+              size="sm"
             >
               <ArrowRight className="h-4 w-4 mr-2" />
               Transferir entre cuentas
             </Button>
+            
+            {/* Separador visual */}
+            <div className="hidden sm:block h-6 w-px bg-border" />
+            
             <Button 
               onClick={() => setManualPaymentDialog(true)}
               disabled={totalPagado >= (cuentaDetalle?.precio_final || 0) || isReadOnly || isEnDemanda}
+              size="sm"
+              className="bg-primary hover:bg-primary/90"
             >
               <CreditCard className="h-4 w-4 mr-2" />
               Agregar pago manual
