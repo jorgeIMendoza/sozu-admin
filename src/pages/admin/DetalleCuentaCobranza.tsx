@@ -2316,6 +2316,32 @@ export default function DetalleCuentaCobranza() {
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            {/* Grupo de acciones de pago */}
+            <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
+              <Button 
+                onClick={() => setTransferDialog({ isOpen: true })}
+                disabled={!ultimoPagoSTP || isReadOnly || isEnDemanda}
+                variant="ghost"
+                size="sm"
+                className="h-9"
+              >
+                <ArrowRight className="h-4 w-4 mr-2" />
+                Transferir
+              </Button>
+              
+              <div className="h-5 w-px bg-border" />
+              
+              <Button 
+                onClick={() => setManualPaymentDialog(true)}
+                disabled={totalPagado >= (cuentaDetalle?.precio_final || 0) || isReadOnly || isEnDemanda}
+                size="sm"
+                className="h-9 bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                Agregar Pago
+              </Button>
+            </div>
+
             {/* Grupo de acciones de cuenta */}
             <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
               <Button 
@@ -2361,32 +2387,6 @@ export default function DetalleCuentaCobranza() {
                   </Button>
                 </>
               )}
-            </div>
-
-            {/* Grupo de acciones de pago */}
-            <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
-              <Button 
-                onClick={() => setTransferDialog({ isOpen: true })}
-                disabled={!ultimoPagoSTP || isReadOnly || isEnDemanda}
-                variant="ghost"
-                size="sm"
-                className="h-9"
-              >
-                <ArrowRight className="h-4 w-4 mr-2" />
-                Transferir
-              </Button>
-              
-              <div className="h-5 w-px bg-border" />
-              
-              <Button 
-                onClick={() => setManualPaymentDialog(true)}
-                disabled={totalPagado >= (cuentaDetalle?.precio_final || 0) || isReadOnly || isEnDemanda}
-                size="sm"
-                className="h-9 bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                <CreditCard className="h-4 w-4 mr-2" />
-                Agregar Pago
-              </Button>
             </div>
           </div>
         )}
