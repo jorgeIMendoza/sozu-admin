@@ -316,6 +316,7 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
         .select(`
           id,
           numero_propiedad,
+          precio_lista,
           entidades_relacionadas!id_entidad_relacionada_dueno(
             proyectos!entidades_relacionadas_id_proyecto_fkey(
               id,
@@ -925,6 +926,32 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     },
   });
 
+  // Calculate property price and products total
+  const priceCalculations = React.useMemo(() => {
+    const propertyPrice = propertyDetails?.precio_lista || 0;
+    
+    let productsTotal = 0;
+    if (includedProducts) {
+      // Products with price > 0 (not included in property price)
+      includedProducts.bodegas.forEach((b: any) => {
+        const precio = (b.productos_servicios as any)?.precio_lista || 0;
+        const m2 = b.m2 || 0;
+        productsTotal += precio * m2;
+      });
+      includedProducts.estacionamientos.forEach((e: any) => {
+        const precio = (e.productos_servicios as any)?.precio_lista || 0;
+        const m2 = e.m2 || 0;
+        productsTotal += precio * m2;
+      });
+    }
+    
+    return {
+      propertyPrice,
+      productsTotal,
+      grandTotal: propertyPrice + productsTotal
+    };
+  }, [propertyDetails?.precio_lista, includedProducts]);
+
   // Calculate products with price > 0 and their scheme status
   const productsWithPriceInfo = React.useMemo(() => {
     if (!includedProducts) return { valid: [], invalid: [], total: 0 };
@@ -949,6 +976,38 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
     
     return { valid, invalid, total: allProducts.length };
   }, [includedProducts]);
+
+  // Calculate manual scheme amounts
+  const watchedEntrega = form.watch("porcentaje_entrega");
+  const watchedNumeroMensualidades = form.watch("numero_mensualidades");
+  const watchedDescuentoAumento = form.watch("porcentaje_descuento_aumento");
+  
+  const manualSchemeCalculations = React.useMemo(() => {
+    const basePrice = priceCalculations.propertyPrice;
+    const descuentoAumento = parseFloat(watchedDescuentoAumento || "0");
+    const precioAjustado = basePrice * (1 + descuentoAumento / 100);
+    
+    const enganchePct = parseFloat(watchedEnganche || "0");
+    const mensualidadesPct = parseFloat(watchedMensualidades || "0");
+    const entregaPct = parseFloat(watchedEntrega || "0");
+    const numMensualidades = parseInt(watchedNumeroMensualidades || "0");
+    
+    const montoEnganche = precioAjustado * (enganchePct / 100);
+    const montoMensualidades = precioAjustado * (mensualidadesPct / 100);
+    const montoEntrega = precioAjustado * (entregaPct / 100);
+    const montoPorMensualidad = numMensualidades > 0 ? montoMensualidades / numMensualidades : 0;
+    
+    return {
+      precioOriginal: basePrice,
+      precioAjustado,
+      diferencia: precioAjustado - basePrice,
+      montoEnganche,
+      montoMensualidades,
+      montoEntrega,
+      montoPorMensualidad,
+      numMensualidades
+    };
+  }, [priceCalculations.propertyPrice, watchedEnganche, watchedMensualidades, watchedEntrega, watchedNumeroMensualidades, watchedDescuentoAumento]);
 
   const onSubmit = (data: FormData) => {
     console.log("Form submitted successfully!");
@@ -1006,6 +1065,30 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
             Propiedad <span className="font-semibold">{propertyNumber}</span>
             {projectName && <span className="font-semibold"> de {projectName}</span>}
           </p>
+          
+          {/* Price Summary Section */}
+          <div className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Precio Propiedad:</span>
+                <p className="font-semibold text-lg">${priceCalculations.propertyPrice.toLocaleString()}</p>
+              </div>
+              {priceCalculations.productsTotal > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Productos adicionales:</span>
+                  <p className="font-medium text-amber-600">+${priceCalculations.productsTotal.toLocaleString()}</p>
+                </div>
+              )}
+            </div>
+            {priceCalculations.productsTotal > 0 && (
+              <div className="mt-2 pt-2 border-t border-primary/20">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Total:</span>
+                  <span className="font-bold text-xl text-primary">${priceCalculations.grandTotal.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
+          </div>
           
           {/* Badges for included products */}
           <div className="mt-3 p-3 bg-muted/50 rounded-lg border">
@@ -1266,6 +1349,68 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                       );
                     }}
                   />
+
+                  {/* Calculated amounts preview */}
+                  {priceCalculations.propertyPrice > 0 && (parseFloat(watchedEnganche || "0") > 0 || parseFloat(watchedMensualidades || "0") > 0 || parseFloat(watchedEntrega || "0") > 0) && (
+                    <div className="mt-4 p-4 bg-muted/50 rounded-lg border">
+                      <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                        <Info className="h-4 w-4 text-primary" />
+                        Vista previa del esquema de pago
+                      </h4>
+                      
+                      {/* Price adjustment */}
+                      {manualSchemeCalculations.diferencia !== 0 && (
+                        <div className="mb-3 pb-3 border-b">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Precio original:</span>
+                            <span>${manualSchemeCalculations.precioOriginal.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className={manualSchemeCalculations.diferencia < 0 ? "text-green-600" : "text-amber-600"}>
+                              {manualSchemeCalculations.diferencia < 0 ? "Descuento:" : "Aumento:"}
+                            </span>
+                            <span className={manualSchemeCalculations.diferencia < 0 ? "text-green-600" : "text-amber-600"}>
+                              {manualSchemeCalculations.diferencia < 0 ? "-" : "+"}${Math.abs(manualSchemeCalculations.diferencia).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm font-semibold mt-1">
+                            <span>Precio ajustado:</span>
+                            <span className="text-primary">${manualSchemeCalculations.precioAjustado.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Payment breakdown */}
+                      <div className="space-y-2 text-sm">
+                        {parseFloat(watchedEnganche || "0") > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Enganche ({watchedEnganche}%):</span>
+                            <span className="font-medium">${manualSchemeCalculations.montoEnganche.toLocaleString()}</span>
+                          </div>
+                        )}
+                        {parseFloat(watchedMensualidades || "0") > 0 && (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Mensualidades ({watchedMensualidades}%):</span>
+                              <span className="font-medium">${manualSchemeCalculations.montoMensualidades.toLocaleString()}</span>
+                            </div>
+                            {manualSchemeCalculations.numMensualidades > 0 && (
+                              <div className="flex justify-between pl-4 text-xs">
+                                <span className="text-muted-foreground">{manualSchemeCalculations.numMensualidades} pagos de:</span>
+                                <span>${manualSchemeCalculations.montoPorMensualidad.toLocaleString()}</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        {parseFloat(watchedEntrega || "0") > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Entrega ({watchedEntrega}%):</span>
+                            <span className="font-medium">${manualSchemeCalculations.montoEntrega.toLocaleString()}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             )}
