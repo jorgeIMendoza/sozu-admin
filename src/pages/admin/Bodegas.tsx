@@ -18,6 +18,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { highlightText } from "@/lib/highlightText";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { NoProjectAccess } from "@/components/admin/NoProjectAccess";
+import { usePagePermissions } from "@/hooks/usePagePermissions";
 
 interface Bodega {
   id: number;
@@ -92,6 +93,9 @@ const Bodegas = () => {
   
   // Project access control
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess, hasNoAccess } = useProjectAccess();
+  
+  // Page permissions
+  const { canCreate, canUpdate, canDelete, canApprove, isSuperAdmin } = usePagePermissions('/admin/bodegas');
 
   // Query para obtener bodegas activas
   const { data: activeData, isLoading: isLoadingActive } = useQuery({
@@ -415,15 +419,17 @@ const Bodegas = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Bodegas</h1>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => setBulkUploadOpen(true)}
-            className="gap-2"
-          >
-            <Upload className="h-4 w-4" />
-            Carga Masiva
-          </Button>
-        </div>
+        {(canCreate || isSuperAdmin) && (
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setBulkUploadOpen(true)}
+              className="gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              Carga Masiva
+            </Button>
+          </div>
+        )}
       </div>
 
       <Card>
@@ -470,7 +476,9 @@ const Bodegas = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="activos">Bodegas Activas ({activosCount})</TabsTrigger>
-          <TabsTrigger value="eliminados">Bodegas Eliminadas ({eliminadosCount})</TabsTrigger>
+          {(canDelete || isSuperAdmin) && (
+            <TabsTrigger value="eliminados">Bodegas Eliminadas ({eliminadosCount})</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="activos" className="space-y-4">
@@ -502,37 +510,41 @@ const Bodegas = () => {
                         <TableCell>{bodega.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => setEditingBodega(bodega)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Eliminar bodega?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Esta acción marcará la bodega como inactiva.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction 
-                                    onClick={() => handleDelete(bodega.id)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  >
-                                    Eliminar
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            {(canUpdate || isSuperAdmin) && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => setEditingBodega(bodega)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {(canDelete || isSuperAdmin) && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Eliminar bodega?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Esta acción marcará la bodega como inactiva.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => handleDelete(bodega.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Eliminar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

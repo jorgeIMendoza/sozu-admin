@@ -416,22 +416,26 @@ export default function AdministradoresPersonas() {
                   <div className="flex items-center justify-center gap-2">
                     {activeTab === 'active' ? (
                       <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(administrador)}
-                          className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(administrador)}
-                          className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {(canUpdate || isSuperAdmin) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(administrador)}
+                            className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {(canDelete || isSuperAdmin) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(administrador)}
+                            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -442,14 +446,16 @@ export default function AdministradoresPersonas() {
                         </Button>
                       </>
                     ) : (
-                      <Button
-                        variant="ghost"  
-                        size="sm"
-                        onClick={() => handleRestore(administrador)}
-                        className="h-8 w-8 p-0 hover:bg-success/10 hover:text-success"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                      </Button>
+                      (canApprove || isSuperAdmin) && (
+                        <Button
+                          variant="ghost"  
+                          size="sm"
+                          onClick={() => handleRestore(administrador)}
+                          className="h-8 w-8 p-0 hover:bg-success/10 hover:text-success"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      )
                     )}
                   </div>
                 </TableCell>
@@ -474,21 +480,25 @@ export default function AdministradoresPersonas() {
                 Gestiona la información de los administradores
               </p>
             </div>
-            <Button 
-              onClick={() => setIsNewDialogOpen(true)}
-              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Nuevo Administrador
-            </Button>
+            {(canCreate || isSuperAdmin) && (
+              <Button 
+                onClick={() => setIsNewDialogOpen(true)}
+                className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Nuevo Administrador
+              </Button>
+            )}
           </div>
         </CardHeader>
         
         <CardContent className="p-6">
           <Tabs defaultValue="active" value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className={`grid w-full mb-6 ${(canDelete || isSuperAdmin) ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <TabsTrigger value="active">Activos ({activeAdministradores.length})</TabsTrigger>
-              <TabsTrigger value="deleted">Eliminados ({deletedAdministradores.length})</TabsTrigger>
+              {(canDelete || isSuperAdmin) && (
+                <TabsTrigger value="deleted">Eliminados ({deletedAdministradores.length})</TabsTrigger>
+              )}
             </TabsList>
             
             <div className="mb-6">
