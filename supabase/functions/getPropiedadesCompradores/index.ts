@@ -192,7 +192,7 @@ serve(async (req) => {
     if (cuentaIds.length > 0) {
       const { data: compradoresData, error: compradoresError } = await supabase
         .from('compradores')
-        .select('id, id_cuenta_cobranza, id_persona, porcentaje_copropiedad')
+        .select('id_cuenta_cobranza, id_persona, porcentaje_copropiedad')
         .in('id_cuenta_cobranza', cuentaIds)
         .eq('activo', true);
 
