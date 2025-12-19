@@ -18,6 +18,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { highlightText } from "@/lib/highlightText";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { NoProjectAccess } from "@/components/admin/NoProjectAccess";
+import { usePagePermissions } from "@/hooks/usePagePermissions";
 
 interface Estacionamiento {
   id: number;
@@ -94,6 +95,9 @@ const Estacionamientos = () => {
   
   // Project access control
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess, hasNoAccess } = useProjectAccess();
+  
+  // Page permissions
+  const { canCreate, canUpdate, canDelete, canApprove, isSuperAdmin } = usePagePermissions('/admin/estacionamientos');
 
   // Query para obtener estacionamientos activos
   const { data: activeData, isLoading: isLoadingActive } = useQuery({

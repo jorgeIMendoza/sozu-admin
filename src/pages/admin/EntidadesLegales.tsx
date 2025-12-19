@@ -740,39 +740,45 @@ export default function EntidadesLegales() {
                   <div className="flex gap-2 justify-end">
                     {activeTab === 'active' ? (
                       <>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleEdit(entidad)}
-                          className="hover:bg-primary/10 hover:border-primary transition-colors"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        {(canUpdate || isSuperAdmin) && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleEdit(entidad)}
+                            className="hover:bg-primary/10 hover:border-primary transition-colors"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
                         <StandardizedBankAccountsButton
                           personId={entidad.id}
                           personName={entidad.nombre_comercial || entidad.nombre_legal}
                           showStpCheckbox={entidad.id_tipo_entidad === 4 || entidad.id_tipo_entidad === 15}
                         />
+                        {(canDelete || isSuperAdmin) && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDelete(entidad)}
+                            disabled={!canDeleteEntity(entidad.entidad_relacionada_id)}
+                            className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={!canDeleteEntity(entidad.entidad_relacionada_id) ? "No se puede eliminar: tiene proyectos relacionados" : "Eliminar entidad legal"}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      (canApprove || isSuperAdmin) && (
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => handleDelete(entidad)}
-                          disabled={!canDeleteEntity(entidad.entidad_relacionada_id)}
-                          className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={!canDeleteEntity(entidad.entidad_relacionada_id) ? "No se puede eliminar: tiene proyectos relacionados" : "Eliminar entidad legal"}
+                          onClick={() => handleRestore(entidad)}
+                          className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <RotateCcw className="w-4 h-4" />
                         </Button>
-                      </>
-                    ) : (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleRestore(entidad)}
-                        className="hover:bg-green-50 hover:border-green-400 hover:text-green-700 transition-colors"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </Button>
+                      )
                     )}
                   </div>
                 </TableCell>
@@ -797,21 +803,25 @@ export default function EntidadesLegales() {
                 Gestiona la información de las entidades legales
               </p>
             </div>
-            <Button 
-              onClick={() => setIsNewDialogOpen(true)}
-              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Nueva Entidad Legal
-            </Button>
+            {(canCreate || isSuperAdmin) && (
+              <Button 
+                onClick={() => setIsNewDialogOpen(true)}
+                className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Nueva Entidad Legal
+              </Button>
+            )}
           </div>
         </CardHeader>
         
         <CardContent className="p-6">
           <Tabs defaultValue="active" value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className={`grid w-full mb-6 ${(canDelete || isSuperAdmin) ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <TabsTrigger value="active">Activos ({activeEntidades.length})</TabsTrigger>
-              <TabsTrigger value="deleted">Eliminados ({deletedEntidades.length})</TabsTrigger>
+              {(canDelete || isSuperAdmin) && (
+                <TabsTrigger value="deleted">Eliminados ({deletedEntidades.length})</TabsTrigger>
+              )}
             </TabsList>
             
             <div className="mb-6">

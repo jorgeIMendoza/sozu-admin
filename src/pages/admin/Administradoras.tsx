@@ -418,37 +418,43 @@ export default function Administradoras() {
                   <div className="flex justify-end space-x-2">
                     {administradora.activo ? (
                       <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(administradora)}
-                          className="hover:bg-blue-50 hover:text-blue-600"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        {(canUpdate || isSuperAdmin) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(administradora)}
+                            className="hover:bg-blue-50 hover:text-blue-600"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
                         <StandardizedBankAccountsButton
                           personId={administradora.id}
                           personName={administradora.nombre_comercial || administradora.nombre_legal}
                           showStpCheckbox={true}
                         />
+                        {(canDelete || isSuperAdmin) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(administradora)}
+                            className="hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      (canApprove || isSuperAdmin) && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(administradora)}
-                          className="hover:bg-red-50 hover:text-red-600"
+                          onClick={() => handleRestore(administradora)}
+                          className="hover:bg-green-50 hover:text-green-600"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <RotateCcw className="h-4 w-4" />
                         </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRestore(administradora)}
-                        className="hover:bg-green-50 hover:text-green-600"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                      </Button>
+                      )
                     )}
                   </div>
                 </TableCell>
@@ -535,21 +541,25 @@ export default function Administradoras() {
                 Gestiona la información de las administradoras
               </p>
             </div>
-            <Button 
-              onClick={() => setIsNewDialogOpen(true)}
-              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Nueva Administradora
-            </Button>
+            {(canCreate || isSuperAdmin) && (
+              <Button 
+                onClick={() => setIsNewDialogOpen(true)}
+                className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Nueva Administradora
+              </Button>
+            )}
           </div>
         </CardHeader>
         
         <CardContent className="p-6">
           <Tabs defaultValue="active" value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className={`grid w-full mb-6 ${(canDelete || isSuperAdmin) ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <TabsTrigger value="active">Activos ({activeAdministradoras.length})</TabsTrigger>
-              <TabsTrigger value="deleted">Eliminados ({deletedAdministradoras.length})</TabsTrigger>
+              {(canDelete || isSuperAdmin) && (
+                <TabsTrigger value="deleted">Eliminados ({deletedAdministradoras.length})</TabsTrigger>
+              )}
             </TabsList>
             
             <div className="mb-6">
