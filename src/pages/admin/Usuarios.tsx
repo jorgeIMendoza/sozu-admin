@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Shield, UserCheck, UserX, Key, Loader2, RotateCcw, Lock } from "lucide-react";
+import { Plus, Search, Shield, UserCheck, UserX, Key, Loader2, RotateCcw, Lock, Check, ChevronsUpDown } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -815,22 +818,54 @@ export default function Usuarios() {
                 Rol *
                 {isFieldsLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
               </Label>
-              <Select
-                value={newUserForm.rol_id}
-                onValueChange={(value) => setNewUserForm(prev => ({ ...prev, rol_id: value }))}
-                disabled={isFieldsLocked}
-              >
-                <SelectTrigger className={isFieldsLocked ? "bg-muted" : ""}>
-                  <SelectValue placeholder="Seleccionar rol..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((role) => (
-                    <SelectItem key={role.id} value={role.id.toString()}>
-                      {role.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    disabled={isFieldsLocked}
+                    className={cn(
+                      "w-full justify-between",
+                      isFieldsLocked && "bg-muted",
+                      !newUserForm.rol_id && "text-muted-foreground"
+                    )}
+                  >
+                    {newUserForm.rol_id
+                      ? roles.find((role) => role.id.toString() === newUserForm.rol_id)?.nombre
+                      : "Seleccionar rol..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Buscar rol..." />
+                    <CommandList>
+                      <CommandEmpty>No se encontró el rol.</CommandEmpty>
+                      <CommandGroup>
+                        {roles.map((role) => (
+                          <CommandItem
+                            key={role.id}
+                            value={role.nombre}
+                            onSelect={() => {
+                              setNewUserForm(prev => ({ ...prev, rol_id: role.id.toString() }));
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                newUserForm.rol_id === role.id.toString()
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            {role.nombre}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
               {isFieldsLocked && (
                 <p className="text-xs text-muted-foreground">
                   El rol se asigna automáticamente según el tipo de persona seleccionada.
