@@ -11,6 +11,7 @@ import { Plus, Trash2, Upload } from "lucide-react";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from "@/lib/config";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { CurrencyInput } from "@/components/ui/currency-input";
 
 interface Comprador {
   id: number;
@@ -26,6 +27,11 @@ interface PagoNuevo {
 }
 
 interface MetodoPago {
+  id: number;
+  nombre: string;
+}
+
+interface TipoCancelacion {
   id: number;
   nombre: string;
 }
@@ -54,30 +60,59 @@ export function CancelCuentaDialog({
   tipoCuenta = 'Propiedad'
 }: CancelCuentaDialogProps) {
   const [tipoCancelacion, setTipoCancelacion] = useState<string>("");
-  const [montoCobro, setMontoCobro] = useState<string>("0");
+  const [montoCancelacion, setMontoCancelacion] = useState<number>(0);
   const [evidenciaFile, setEvidenciaFile] = useState<File | null>(null);
   const [compradores, setCompradores] = useState<Comprador[]>([]);
   const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([]);
+  const [tiposCancelacion, setTiposCancelacion] = useState<TipoCancelacion[]>([]);
   const [nuevoCompradorId, setNuevoCompradorId] = useState<string>("");
   const [pagosNuevos, setPagosNuevos] = useState<PagoNuevo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMontoCobro, setErrorMontoCobro] = useState<string>("");
   const { toast } = useToast();
   const { registrarCancelacion } = useActivityLogger();
 
-  const montoCobrolNumber = parseFloat(montoCobro) || 0;
-  const porcentajePrecioFinal = precioFinal > 0 ? (montoCobrolNumber / precioFinal * 100).toFixed(2) : "0";
-  const totalPagosNuevos = pagosNuevos.reduce((sum, p) => sum + p.monto, 0);
-  const minimoRequerido = totalPagado - montoCobrolNumber;
+  // Cálculos
+  const montoDevolucion = totalPagado - montoCancelacion;
 
   useEffect(() => {
     if (isOpen) {
       fetchMetodosPago();
+      fetchTiposCancelacion();
       if (tipoCancelacion === "1") {
         fetchCompradores();
       }
     }
   }, [isOpen, tipoCancelacion]);
+
+  // Reset on close
+  useEffect(() => {
+    if (!isOpen) {
+      setTipoCancelacion("");
+      setMontoCancelacion(0);
+      setEvidenciaFile(null);
+      setNuevoCompradorId("");
+      setPagosNuevos([]);
+    }
+  }, [isOpen]);
+
+  const fetchTiposCancelacion = async () => {
+    // Para Propiedad: 1 (Cesión), 4, 5, 6
+    // Para Producto/Servicio: 4, 5, 6
+    const idsPermitidos = tipoCuenta === 'Propiedad' 
+      ? [1, 4, 5, 6] 
+      : [4, 5, 6];
+    
+    const { data, error } = await supabase
+      .from('tipos_cancelacion')
+      .select('id, nombre')
+      .eq('activo', true)
+      .in('id', idsPermitidos)
+      .order('id');
+
+    if (!error && data) {
+      setTiposCancelacion(data);
+    }
+  };
 
   const fetchMetodosPago = async () => {
     const { data, error } = await supabase
@@ -95,7 +130,6 @@ export function CancelCuentaDialog({
       return;
     }
 
-    // Filtrar solo Cheque, Efectivo y Transferencia bancaria
     const metodosFiltrados = (data || []).filter(metodo => 
       ['cheque', 'efectivo', 'transferencia bancaria'].includes(metodo.nombre.toLowerCase())
     );
@@ -111,7 +145,6 @@ export function CancelCuentaDialog({
   };
 
   const fetchCompradores = async () => {
-    // Obtener compradores actuales de esta cuenta
     const { data: compradoresActuales } = await supabase
       .from('compradores')
       .select('id_persona')
@@ -120,7 +153,6 @@ export function CancelCuentaDialog({
 
     const idsExcluir = compradoresActuales?.map(c => c.id_persona) || [];
 
-    // Obtener todos los compradores (id_tipo_entidad = 2) excepto los actuales
     const { data, error } = await supabase
       .from('personas')
       .select(`
@@ -185,49 +217,26 @@ export function CancelCuentaDialog({
     setPagosNuevos(nuevos);
   };
 
-  const validarMontoCobro = (valor: string) => {
-    const monto = parseFloat(valor) || 0;
-    
-    if (monto < 0) {
-      setErrorMontoCobro("El monto no puede ser negativo");
-      return;
-    }
-    
-    const maxCincoPerciento = precioFinal * 0.05;
-    if (monto > maxCincoPerciento) {
-      setErrorMontoCobro(`No puede ser mayor al 5% del precio final ($${formatCurrency(maxCincoPerciento)})`);
-      return;
-    }
-    
-    if (monto > totalPagado) {
-      setErrorMontoCobro(`No puede ser mayor al monto ya pagado ($${formatCurrency(totalPagado)})`);
-      return;
-    }
-    
-    setErrorMontoCobro("");
-  };
-
-  const handleMontoCobroChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const valor = e.target.value;
-    setMontoCobro(valor);
-    validarMontoCobro(valor);
-  };
+  const totalPagosNuevos = pagosNuevos.reduce((sum, p) => sum + p.monto, 0);
+  const minimoRequerido = totalPagado - montoCancelacion;
 
   const validarFormulario = (): string | null => {
     if (!tipoCancelacion) return "Debe seleccionar un tipo de cancelación";
-    if (montoCobro === "") return "El cobro por cancelación es obligatorio";
     
-    if (errorMontoCobro) return errorMontoCobro;
-    
-    if (tipoCancelacion === "2" && !evidenciaFile) {
-      return "La evidencia es obligatoria para Rescisión de contrato";
+    // Validar monto de cancelación no exceda lo pagado
+    if (montoCancelacion > totalPagado) {
+      return `El monto por cancelación no puede exceder lo pagado ($${formatCurrency(totalPagado)})`;
+    }
+
+    // Para tipos 4, 5, 6 se requiere evidencia
+    if (['4', '5', '6'].includes(tipoCancelacion) && !evidenciaFile) {
+      return "La evidencia es obligatoria";
     }
 
     if (tipoCancelacion === "1") {
       if (!nuevoCompradorId) return "Debe seleccionar un nuevo comprador";
       if (pagosNuevos.length === 0) return "Debe agregar al menos un pago";
       
-      // Validar que todos los pagos tengan método de pago
       const pagosSinMetodo = pagosNuevos.some(p => !p.id_metodo_pago);
       if (pagosSinMetodo) return "Todos los pagos deben tener un método de pago";
       
@@ -256,6 +265,93 @@ export function CancelCuentaDialog({
     return publicUrl;
   };
 
+  const agregarPagosCancelacionYDevolucion = async () => {
+    // Obtener el último orden de acuerdo_pago que tenga aplicación
+    const { data: ultimoAcuerdo, error: acuerdoError } = await supabase
+      .from('acuerdos_pago')
+      .select(`
+        orden,
+        aplicaciones_pago!inner(id)
+      `)
+      .eq('id_cuenta_cobranza', cuentaId)
+      .eq('activo', true)
+      .order('orden', { ascending: false })
+      .limit(1);
+
+    const ultimoOrden = ultimoAcuerdo?.[0]?.orden || 0;
+    const nuevoOrden = ultimoOrden + 1;
+
+    // Insertar Pago por cancelación (positivo) - concepto 7
+    if (montoCancelacion > 0) {
+      const { error: pagoCanError } = await supabase
+        .from('acuerdos_pago')
+        .insert({
+          id_cuenta_cobranza: cuentaId,
+          id_concepto: 7, // Pago por cancelación
+          monto: montoCancelacion,
+          orden: nuevoOrden,
+          pago_completado: true,
+          activo: true
+        });
+
+      if (pagoCanError) throw pagoCanError;
+    }
+
+    // Insertar Devolución de pago (negativo) - concepto 9
+    if (montoDevolucion > 0) {
+      const { error: devError } = await supabase
+        .from('acuerdos_pago')
+        .insert({
+          id_cuenta_cobranza: cuentaId,
+          id_concepto: 9, // Devolución de pago
+          monto: -montoDevolucion, // Negativo
+          orden: nuevoOrden + 1,
+          pago_completado: true,
+          activo: true
+        });
+
+      if (devError) throw devError;
+    }
+
+    // Marcar como activo=false los acuerdos sin aplicación de pago
+    const { data: acuerdosSinPago } = await supabase
+      .from('acuerdos_pago')
+      .select('id')
+      .eq('id_cuenta_cobranza', cuentaId)
+      .eq('activo', true)
+      .eq('pago_completado', false);
+
+    if (acuerdosSinPago && acuerdosSinPago.length > 0) {
+      const ids = acuerdosSinPago.map(a => a.id);
+      await supabase
+        .from('acuerdos_pago')
+        .update({ activo: false, fecha_actualizacion: new Date().toISOString() })
+        .in('id', ids);
+    }
+  };
+
+  const cancelarCuentasProductoRelacionadas = async () => {
+    // Obtener cuentas de cobranza de productos relacionadas a la misma oferta
+    const { data: cuentasProducto } = await supabase
+      .from('cuentas_cobranza')
+      .select('id')
+      .eq('id_oferta', idOferta)
+      .eq('activo', true)
+      .neq('id', cuentaId);
+
+    if (cuentasProducto && cuentasProducto.length > 0) {
+      const ids = cuentasProducto.map(c => c.id);
+      await supabase
+        .from('cuentas_cobranza')
+        .update({ 
+          activo: false, 
+          id_tipo_cancelacion: parseInt(tipoCancelacion),
+          fecha_actualizacion: new Date().toISOString() 
+        })
+        .in('id', ids);
+    }
+  };
+
   const handleGuardar = async () => {
     const error = validarFormulario();
     if (error) {
@@ -265,70 +361,78 @@ export function CancelCuentaDialog({
 
     setIsLoading(true);
     try {
-      // Subir evidencia si existe
       const urlEvidencia = await subirEvidencia();
 
-      // Actualizar cuenta de cobranza original
-      const { error: updateError } = await supabase
-        .from('cuentas_cobranza')
-        .update({
-          id_tipo_cancelacion: parseInt(tipoCancelacion),
-          url_evidencia_cancelacion: urlEvidencia,
-          monto_cobro_cancelacion: montoCobrolNumber,
-          activo: false
-        })
-        .eq('id', cuentaId);
-
-      if (updateError) throw updateError;
-
-      // Si es Rescisión de contrato
-      if (tipoCancelacion === "2") {
-        // Obtener id_propiedad y id_er_dueno
-        const { data: ofertaData, error: ofertaError } = await supabase
-          .from('ofertas')
-          .select(`
-            id_propiedad,
-            propiedades!ofertas_id_propiedad_fkey(
-              id_entidad_relacionada_dueno
-            )
-          `)
-          .eq('id', idOferta)
-          .single();
-
-        if (ofertaError) throw ofertaError;
-
-        const idPropiedad = ofertaData?.id_propiedad;
-        const idErDueno = ofertaData?.propiedades?.id_entidad_relacionada_dueno;
-        
-        if (!idPropiedad || !idErDueno) {
-          throw new Error('No se pudo obtener la información de la propiedad');
+      // Tipos 4, 5, 6 - Cancelación normal con pagos de cancelación/devolución
+      if (['4', '5', '6'].includes(tipoCancelacion)) {
+        // Agregar pagos de cancelación y devolución si hay monto
+        if (montoCancelacion > 0 || montoDevolucion > 0) {
+          await agregarPagosCancelacionYDevolucion();
         }
 
-        // Generar nueva CLABE usando la función de BD
-        const { data: nuevaClabeData, error: clabeError } = await supabase
-          .rpc('crear_referencia_bancaria', { id_er_dueno: idErDueno });
-
-        if (clabeError) throw clabeError;
-
-        const nuevaClabe = nuevaClabeData;
-        if (!nuevaClabe) {
-          throw new Error('No se pudo generar la nueva CLABE');
-        }
-
-        // Actualizar la propiedad
-        const { error: propiedadError } = await supabase
-          .from('propiedades')
+        // Actualizar cuenta de cobranza
+        const { error: updateError } = await supabase
+          .from('cuentas_cobranza')
           .update({
-            id_estatus_disponibilidad: 2, // Disponible
-            clabe_stp_tmp_apartado: nuevaClabe
+            id_tipo_cancelacion: parseInt(tipoCancelacion),
+            url_evidencia_cancelacion: urlEvidencia,
+            monto_cobro_cancelacion: montoCancelacion,
+            activo: false,
+            fecha_actualizacion: new Date().toISOString()
           })
-          .eq('id', idPropiedad);
+          .eq('id', cuentaId);
 
-        if (propiedadError) throw propiedadError;
+        if (updateError) throw updateError;
+
+        // Si es cuenta de propiedad, cancelar también las cuentas de productos
+        if (tipoCuenta === 'Propiedad') {
+          await cancelarCuentasProductoRelacionadas();
+
+          // Liberar la propiedad
+          const { data: ofertaData } = await supabase
+            .from('ofertas')
+            .select('id_propiedad, propiedades!ofertas_id_propiedad_fkey(id_entidad_relacionada_dueno)')
+            .eq('id', idOferta)
+            .single();
+
+          if (ofertaData?.id_propiedad) {
+            const idErDueno = ofertaData?.propiedades?.id_entidad_relacionada_dueno;
+            
+            // Generar nueva CLABE
+            let nuevaClabe = null;
+            if (idErDueno) {
+              const { data: clabeData } = await supabase
+                .rpc('crear_referencia_bancaria', { id_er_dueno: idErDueno });
+              nuevaClabe = clabeData;
+            }
+
+            await supabase
+              .from('propiedades')
+              .update({
+                id_estatus_disponibilidad: 2, // Disponible
+                clabe_stp_tmp_apartado: nuevaClabe,
+                fecha_actualizacion: new Date().toISOString()
+              })
+              .eq('id', ofertaData.id_propiedad);
+          }
+        }
       }
-      // Si es Cesión de derechos
+      // Tipo 1 - Cesión de derechos (lógica existente)
       else if (tipoCancelacion === "1") {
-        // Obtener id_er_dueno y datos del esquema de pago
+        // Actualizar cuenta de cobranza original
+        const { error: updateError } = await supabase
+          .from('cuentas_cobranza')
+          .update({
+            id_tipo_cancelacion: 1,
+            url_evidencia_cancelacion: urlEvidencia,
+            monto_cobro_cancelacion: montoCancelacion,
+            activo: false
+          })
+          .eq('id', cuentaId);
+
+        if (updateError) throw updateError;
+
+        // Obtener datos para el webhook
         const { data: ofertaData, error: ofertaError } = await supabase
           .from('ofertas')
           .select(`
@@ -355,21 +459,18 @@ export function CancelCuentaDialog({
           throw new Error('No se pudo obtener id_er_dueno');
         }
 
-        // Calcular montos basados en precio final
         const esquema = ofertaData?.esquemas_pago;
         const montoApartado = ofertaData?.propiedades?.monto_apartado || 0;
         const montoEnganche = esquema ? (precioFinal * esquema.porcentaje_enganche / 100) : 0;
         const montoEntrega = esquema ? (precioFinal * esquema.porcentaje_entrega / 100) : 0;
 
-        // Preparar los pagos con sus evidencias (sin guardarlos en la BD)
         const pagosParaWebhook = [];
         for (const pago of pagosNuevos) {
           let urlRecibo = null;
           
-          // Subir evidencia del pago si existe
           if (pago.evidencia) {
             const fileName = `evidencia_pago_${cuentaId}_${Date.now()}_${Math.random()}.${pago.evidencia.name.split('.').pop()}`;
-            const { data: uploadData, error: uploadError } = await supabase.storage
+            const { error: uploadError } = await supabase.storage
               .from('documentos')
               .upload(fileName, pago.evidencia);
 
@@ -390,7 +491,6 @@ export function CancelCuentaDialog({
           });
         }
 
-        // Llamar al webhook con los pagos (usando constante centralizada)
         const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/aplicaPago`;
         const response = await fetch(webhookUrl, {
           method: 'POST',
@@ -424,11 +524,13 @@ export function CancelCuentaDialog({
         }
       }
 
-      // Registrar la cancelación en el log de actividades
+      // Registrar la cancelación en el log
+      const tipoNombre = tiposCancelacion.find(t => t.id === parseInt(tipoCancelacion))?.nombre || tipoCancelacion;
       await registrarCancelacion('cuentas_cobranza', {
         id_cuenta_cobranza: cuentaId,
-        tipo_cancelacion: tipoCancelacion === "1" ? "Cesión de derechos" : "Rescisión de contrato",
-        monto_cobro_cancelacion: montoCobrolNumber,
+        tipo_cancelacion: tipoNombre,
+        monto_cobro_cancelacion: montoCancelacion,
+        monto_devolucion: montoDevolucion,
         url_evidencia: urlEvidencia,
         precio_final: precioFinal,
         total_pagado: totalPagado,
@@ -455,6 +557,8 @@ export function CancelCuentaDialog({
     }
   };
 
+  const isTipoNormal = ['4', '5', '6'].includes(tipoCancelacion);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -467,38 +571,59 @@ export function CancelCuentaDialog({
           <div className="space-y-2">
             <Label>Tipo de Cancelación *</Label>
             <RadioGroup value={tipoCancelacion} onValueChange={setTipoCancelacion}>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="2" id="rescision" />
-                <Label htmlFor="rescision">Rescisión de contrato</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="1" id="cesion" />
-                <Label htmlFor="cesion">Cesión de derechos</Label>
-              </div>
+              {tiposCancelacion.map((tipo) => (
+                <div key={tipo.id} className="flex items-center space-x-2">
+                  <RadioGroupItem value={String(tipo.id)} id={`tipo-${tipo.id}`} />
+                  <Label htmlFor={`tipo-${tipo.id}`}>{tipo.nombre}</Label>
+                </div>
+              ))}
             </RadioGroup>
           </div>
 
-          {/* Cobro por Cancelación */}
-          <div className="space-y-2">
-            <Label>Cobro por Cancelación * ({porcentajePrecioFinal}% del precio final: ${formatCurrency(precioFinal)})</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              value={montoCobro}
-              onChange={handleMontoCobroChange}
-              placeholder="0.00"
-              className={errorMontoCobro ? "border-destructive" : ""}
-            />
-            {errorMontoCobro && (
-              <p className="text-sm text-destructive">{errorMontoCobro}</p>
-            )}
-          </div>
+          {/* Información de pagos y monto de cancelación - Solo para tipos 4, 5, 6 */}
+          {isTipoNormal && (
+            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground">Monto ya pagado</Label>
+                  <p className="text-lg font-semibold">${formatCurrency(totalPagado)}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Devolución al cliente</Label>
+                  <p className="text-lg font-semibold text-green-600">${formatCurrency(montoDevolucion)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Monto por Cancelación (se queda en Sozu) *</Label>
+                <CurrencyInput
+                  value={montoCancelacion}
+                  onChange={(value) => setMontoCancelacion(value / 100)}
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Este monto no se devolverá al cliente
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Cobro por Cancelación - Para Cesión */}
+          {tipoCancelacion === "1" && (
+            <div className="space-y-2">
+              <Label>Cobro por Cancelación *</Label>
+              <CurrencyInput
+                value={montoCancelacion * 100}
+                onChange={(value) => setMontoCancelacion(value / 100)}
+                placeholder="0.00"
+              />
+            </div>
+          )}
 
           {/* Evidencia */}
           <div className="space-y-2">
             <Label>
-              Evidencia (PDF o Imagen) {tipoCancelacion === "2" ? "*" : "(opcional)"}
+              Evidencia (PDF o Imagen) {isTipoNormal ? "*" : "(opcional)"}
             </Label>
             <div className="flex items-center gap-2">
               <Input
@@ -513,6 +638,9 @@ export function CancelCuentaDialog({
                 </Button>
               )}
             </div>
+            {evidenciaFile && (
+              <p className="text-sm text-muted-foreground">{evidenciaFile.name}</p>
+            )}
           </div>
 
           {/* Sección específica para Cesión de Derechos */}
@@ -521,7 +649,6 @@ export function CancelCuentaDialog({
               <div className="border-t pt-4 space-y-4">
                 <h3 className="font-semibold">Cesión de Derechos</h3>
                 
-                {/* Nuevo Comprador */}
                 <div className="space-y-2">
                   <Label>Nuevo Comprador *</Label>
                   <Select value={nuevoCompradorId} onValueChange={setNuevoCompradorId}>
@@ -538,7 +665,6 @@ export function CancelCuentaDialog({
                   </Select>
                 </div>
 
-                {/* Pagos */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <Label>Pagos (mínimo requerido: ${formatCurrency(minimoRequerido)})</Label>
@@ -662,8 +788,8 @@ export function CancelCuentaDialog({
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             Cancelar
           </Button>
-          <Button onClick={handleGuardar} disabled={isLoading}>
-            {isLoading ? "Guardando..." : "Guardar"}
+          <Button onClick={handleGuardar} disabled={isLoading || !tipoCancelacion}>
+            {isLoading ? "Guardando..." : "Confirmar Cancelación"}
           </Button>
         </DialogFooter>
       </DialogContent>
