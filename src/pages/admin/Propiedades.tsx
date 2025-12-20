@@ -476,6 +476,87 @@ const Propiedades = () => {
 
   const visibleCount = visibleColumns.size;
   const totalCount = COLUMNS_CONFIG.length;
+  
+  // Estado para exportación
+  const [isExporting, setIsExporting] = useState(false);
+  
+  // Función para exportar a Excel
+  const handleExportToExcel = async () => {
+    setIsExporting(true);
+    try {
+      // Preparar los datos para exportar basados en los filtros actuales
+      const currentProperties = activeTab === "activos" ? sortedActiveProperties : 
+                                activeTab === "draft" ? sortedDraftProperties : 
+                                sortedInactiveProperties;
+      
+      if (currentProperties.length === 0) {
+        toast({
+          title: "Sin datos",
+          description: "No hay propiedades para exportar con los filtros actuales.",
+          variant: "destructive",
+        });
+        setIsExporting(false);
+        return;
+      }
+
+      // Preparar datos para el edge function
+      const exportData = currentProperties.map(prop => ({
+        Proyecto: prop.proyecto,
+        Edificio: prop.edificio,
+        Modelo: prop.modelo,
+        "No. Propiedad": prop.numero_propiedad,
+        Piso: prop.numero_piso,
+        Vista: prop.vista,
+        "M2 Interiores": prop.m2_interiores,
+        "M2 Exteriores": prop.m2_exteriores,
+        "M2 Reales": prop.m2_reales,
+        "Precio Lista": prop.precio_lista,
+        "Precio Final": prop.precio_final || '',
+        Disponibilidad: prop.disponibilidad,
+        Propietario: prop.propietario,
+        "Cuenta Cobranza": prop.cuenta_cobranza_id ? formatCuentaCobranzaId(prop.cuenta_cobranza_id) : '',
+        CLABE: prop.clabe_stp || prop.clabe_stp_tmp_apartado || '',
+        "Total Pagado": prop.total_pagado || 0,
+        Restante: prop.restante || 0,
+        Estacionamientos: prop.estacionamientos_count,
+        Bodegas: prop.bodegas_count,
+      }));
+
+      const response = await supabase.functions.invoke('exportar-reporte', {
+        body: {
+          data: exportData,
+          filename: `propiedades_${new Date().toISOString().split('T')[0]}`
+        }
+      });
+
+      if (response.error) throw response.error;
+
+      // Descargar el CSV
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `propiedades_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Exportación exitosa",
+        description: `Se exportaron ${exportData.length} propiedades correctamente.`,
+      });
+    } catch (error) {
+      console.error('Error exporting:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo exportar el reporte.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Fetch proyectos para el filtro (filtered by access)
   const { data: proyectos } = useQuery({
@@ -3914,6 +3995,19 @@ const Propiedades = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleExportToExcel}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Exportar Excel
+          </Button>
           {(canCreate || isSuperAdmin) && (
             <>
               <Button
