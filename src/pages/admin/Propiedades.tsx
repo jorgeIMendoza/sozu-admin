@@ -530,7 +530,7 @@ const Propiedades = () => {
             id,
             id_producto,
             activo,
-            cuentas_cobranza!fk_cuentas_cobranza_oferta(clabe_stp, id, precio_final, total_pagado)
+            cuentas_cobranza!fk_cuentas_cobranza_oferta(clabe_stp, id, precio_final)
           )
         `)
         .order('numero_propiedad', { ascending: true });
@@ -678,8 +678,6 @@ const Propiedades = () => {
           Propietario: prop.entidades_relacionadas?.personas?.nombre_legal || '',
           "Cuenta Cobranza": cuentaCobranza?.id ? formatCuentaCobranzaId(cuentaCobranza.id) : '',
           CLABE: cuentaCobranza?.clabe_stp || prop.clabe_stp_tmp_apartado || '',
-          "Total Pagado": cuentaCobranza?.total_pagado || 0,
-          Restante: cuentaCobranza ? (cuentaCobranza.precio_final || 0) - (cuentaCobranza.total_pagado || 0) : 0,
           Estacionamientos: estacionamientosCounts[prop.id] || 0,
           Bodegas: bodegasCounts[prop.id] || 0,
         };
