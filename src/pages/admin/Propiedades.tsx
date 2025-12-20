@@ -495,20 +495,132 @@ const Propiedades = () => {
     precioFilter[0] !== 0 || precioFilter[1] !== 100000000 ||
     searchTerm !== "";
   
-  // Función para exportar a Excel - usa los datos ya filtrados de la vista
+  // Función para exportar a Excel - obtiene TODOS los datos filtrados sin paginación
   const handleExportToExcel = async () => {
     try {
-      // Obtener los datos ya filtrados según el tab activo
-      let dataToExport: any[] = [];
+      // Construir query base (sin paginación)
+      let query = supabase
+        .from('propiedades')
+        .select(`
+          id,
+          numero_propiedad,
+          numero_piso,
+          m2_interiores,
+          m2_exteriores,
+          precio_lista,
+          clabe_stp_tmp_apartado,
+          edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(
+            edificios!edificios_modelos_id_edificio_fkey!inner(
+              nombre,
+              proyectos!edificios_id_proyecto_fkey!inner(id, nombre)
+            ),
+            modelos!edificios_modelos_id_modelo_fkey!inner(
+              id,
+              nombre,
+              numero_recamaras,
+              numero_completo_banos,
+              numero_medio_bano
+            )
+          ),
+          entidades_relacionadas(
+            personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
+          ),
+          vistas(nombre),
+          estatus_disponibilidad!inner(id, nombre),
+          ofertas!ofertas_id_propiedad_fkey(
+            id,
+            id_producto,
+            activo,
+            cuentas_cobranza!fk_cuentas_cobranza_oferta(clabe_stp, id, precio_final)
+          )
+        `)
+        .order('numero_propiedad', { ascending: true });
+
+      // Aplicar filtros según tab activo
       if (activeTab === "activos") {
-        dataToExport = activeProperties;
+        query = query.eq('activo', true).eq('es_aprobado', true);
       } else if (activeTab === "draft") {
-        dataToExport = draftProperties;
+        query = query.eq('activo', true).eq('es_aprobado', false);
       } else {
-        dataToExport = inactiveProperties;
+        query = query.eq('activo', false);
       }
 
-      if (!dataToExport || dataToExport.length === 0) {
+      // Aplicar búsqueda
+      if (searchTerm) {
+        // Find property IDs by project name
+        const { data: matchingProyectos } = await supabase
+          .from('proyectos')
+          .select('id')
+          .ilike('nombre', `%${searchTerm}%`)
+          .eq('activo', true);
+        
+        const proyectoIds = matchingProyectos?.map((p: any) => p.id) || [];
+        
+        // Find property IDs by building name
+        const { data: matchingEdificios } = await supabase
+          .from('edificios')
+          .select('id')
+          .ilike('nombre', `%${searchTerm}%`)
+          .eq('activo', true);
+        
+        const edificioIds = matchingEdificios?.map((e: any) => e.id) || [];
+        
+        // Build OR query
+        let orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
+        
+        if (proyectoIds.length > 0) {
+          orConditions.push(`edificios_modelos.edificios.proyectos.id.in.(${proyectoIds.join(',')})`);
+        }
+        
+        if (edificioIds.length > 0) {
+          orConditions.push(`edificios_modelos.edificios.id.in.(${edificioIds.join(',')})`);
+        }
+        
+        query = query.or(orConditions.join(','));
+      }
+
+      // Aplicar filtros de acceso
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+        query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
+      }
+
+      if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+        query = query.in('id_entidad_relacionada_dueno', ownershipEntityIds);
+      }
+
+      // Aplicar filtros seleccionados
+      if (selectedProyectos.length > 0) {
+        query = query.in('edificios_modelos.edificios.proyectos.id', selectedProyectos);
+      }
+      
+      if (selectedModelos.length > 0) {
+        query = query.in('edificios_modelos.modelos.id', selectedModelos);
+      }
+      
+      if (recamarasFilter) {
+        const recamaras = parseInt(recamarasFilter);
+        if (!isNaN(recamaras)) {
+          query = query.eq('edificios_modelos.modelos.numero_recamaras', recamaras);
+        }
+      }
+      
+      if (banosFilter) {
+        const banos = parseInt(banosFilter);
+        if (!isNaN(banos)) {
+          query = query.eq('edificios_modelos.modelos.numero_completo_banos', banos);
+        }
+      }
+      
+      if (disponibilidadFilter.length > 0) {
+        query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
+      }
+
+      // Ejecutar query - obtener hasta 5000 registros para exportación
+      const { data, error } = await query.range(0, 4999);
+      
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
         toast({
           title: "Sin datos",
           description: "No hay propiedades para exportar con los filtros actuales.",
@@ -517,29 +629,100 @@ const Propiedades = () => {
         return;
       }
 
-      // Mapear datos para exportación - usar los campos ya enriquecidos
-      const exportData = dataToExport.map((prop: any) => {
+      // Obtener IDs de propiedades para buscar estacionamientos y bodegas
+      const propertyIds = data.map(p => p.id);
+      
+      const [estacionamientosRes, bodegasRes] = await Promise.all([
+        supabase.from('estacionamientos').select('id_propiedad').in('id_propiedad', propertyIds).eq('activo', true),
+        supabase.from('bodegas').select('id_propiedad').in('id_propiedad', propertyIds).eq('activo', true)
+      ]);
+
+      const estacionamientosCounts: Record<number, number> = {};
+      (estacionamientosRes.data || []).forEach((e: any) => {
+        estacionamientosCounts[e.id_propiedad] = (estacionamientosCounts[e.id_propiedad] || 0) + 1;
+      });
+
+      const bodegasCounts: Record<number, number> = {};
+      (bodegasRes.data || []).forEach((b: any) => {
+        bodegasCounts[b.id_propiedad] = (bodegasCounts[b.id_propiedad] || 0) + 1;
+      });
+
+      // Aplicar filtros locales si es necesario
+      let filteredData = data;
+      
+      if (bodegasFilter !== "") {
+        filteredData = filteredData.filter(p => {
+          const count = bodegasCounts[p.id] || 0;
+          return bodegasFilter === "con_bodegas" ? count > 0 : count === 0;
+        });
+      }
+      
+      if (estacionamientosFilter !== "") {
+        filteredData = filteredData.filter(p => {
+          const count = estacionamientosCounts[p.id] || 0;
+          return estacionamientosFilter === "con_estacionamientos" ? count > 0 : count === 0;
+        });
+      }
+
+      if (areaFilter[0] !== 0 || areaFilter[1] !== 500) {
+        filteredData = filteredData.filter(p => {
+          const m2 = (p.m2_interiores || 0) + (p.m2_exteriores || 0);
+          return m2 >= areaFilter[0] && m2 <= areaFilter[1];
+        });
+      }
+
+      if (precioFilter[0] !== 0 || precioFilter[1] !== 100000000) {
+        filteredData = filteredData.filter(p => {
+          return p.precio_lista >= precioFilter[0] && p.precio_lista <= precioFilter[1];
+        });
+      }
+
+      if (cuentaCobranzaFilter !== "") {
+        filteredData = filteredData.filter(p => {
+          const ofertas = (p as any).ofertas || [];
+          const tieneCuenta = ofertas.some((o: any) => 
+            o.activo && !o.id_producto && o.cuentas_cobranza && o.cuentas_cobranza.length > 0
+          );
+          return cuentaCobranzaFilter === "si" ? tieneCuenta : !tieneCuenta;
+        });
+      }
+
+      if (filteredData.length === 0) {
+        toast({
+          title: "Sin datos",
+          description: "No hay propiedades para exportar con los filtros actuales.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Mapear datos para exportación
+      const exportData = filteredData.map((prop: any) => {
+        const ofertas = prop.ofertas || [];
+        const ofertaActiva = ofertas.find((o: any) => o.activo && !o.id_producto);
+        const cuentaCobranza = ofertaActiva?.cuentas_cobranza?.[0];
+        
         return {
-          Proyecto: prop.proyecto_nombre || '',
-          Edificio: prop.edificio_nombre || '',
-          Modelo: prop.modelo_nombre || '',
+          Proyecto: prop.edificios_modelos?.edificios?.proyectos?.nombre || '',
+          Edificio: prop.edificios_modelos?.edificios?.nombre || '',
+          Modelo: prop.edificios_modelos?.modelos?.nombre || '',
           "No. Propiedad": prop.numero_propiedad,
           Piso: prop.numero_piso || '',
-          Vista: prop.vista_nombre || '',
+          Vista: prop.vistas?.nombre || '',
           "M2 Interiores": prop.m2_interiores || 0,
           "M2 Exteriores": prop.m2_exteriores || 0,
           "M2 Reales": (prop.m2_interiores || 0) + (prop.m2_exteriores || 0),
           "Precio Lista": prop.precio_lista || 0,
-          "Precio Final": prop.precio_final || '',
-          Disponibilidad: prop.estatus_disponibilidad_nombre || '',
-          Propietario: prop.propietario_nombre || '',
-          "Cuenta Cobranza": prop.cuenta_cobranza_id ? formatCuentaCobranzaId(prop.cuenta_cobranza_id) : '',
-          CLABE: prop.clabe_stp || prop.clabe_stp_tmp_apartado || '',
-          Estacionamientos: prop.num_estacionamientos || 0,
-          Bodegas: prop.num_bodegas || 0,
-          Recámaras: prop.numero_recamaras || 0,
-          "Baños Completos": prop.numero_completo_banos || 0,
-          "Medio Baño": prop.numero_medio_bano || 0,
+          "Precio Final": cuentaCobranza?.precio_final || '',
+          Disponibilidad: prop.estatus_disponibilidad?.nombre || '',
+          Propietario: prop.entidades_relacionadas?.personas?.nombre_legal || '',
+          "Cuenta Cobranza": cuentaCobranza?.id ? formatCuentaCobranzaId(cuentaCobranza.id) : '',
+          CLABE: cuentaCobranza?.clabe_stp || prop.clabe_stp_tmp_apartado || '',
+          Estacionamientos: estacionamientosCounts[prop.id] || 0,
+          Bodegas: bodegasCounts[prop.id] || 0,
+          Recámaras: prop.edificios_modelos?.modelos?.numero_recamaras || 0,
+          "Baños Completos": prop.edificios_modelos?.modelos?.numero_completo_banos || 0,
+          "Medio Baño": prop.edificios_modelos?.modelos?.numero_medio_bano || 0,
         };
       });
 
