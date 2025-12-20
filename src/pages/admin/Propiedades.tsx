@@ -545,7 +545,7 @@ const Propiedades = () => {
         query = query.eq('activo', false);
       }
 
-      // Aplicar búsqueda
+      // Aplicar búsqueda - primero encontrar edificios_modelos que coincidan
       if (searchTerm) {
         // Find property IDs by project name
         const { data: matchingProyectos } = await supabase
@@ -556,27 +556,38 @@ const Propiedades = () => {
         
         const proyectoIds = matchingProyectos?.map((p: any) => p.id) || [];
         
-        // Find property IDs by building name
-        const { data: matchingEdificios } = await supabase
-          .from('edificios')
-          .select('id')
-          .ilike('nombre', `%${searchTerm}%`)
-          .eq('activo', true);
-        
-        const edificioIds = matchingEdificios?.map((e: any) => e.id) || [];
-        
-        // Build OR query
-        let orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
-        
+        // If we found matching projects, get their edificios_modelos
         if (proyectoIds.length > 0) {
-          orConditions.push(`edificios_modelos.edificios.proyectos.id.in.(${proyectoIds.join(',')})`);
+          const { data: matchingEdificios } = await supabase
+            .from('edificios')
+            .select('id')
+            .in('id_proyecto', proyectoIds)
+            .eq('activo', true);
+          
+          if (matchingEdificios && matchingEdificios.length > 0) {
+            const edificioIds = matchingEdificios.map(e => e.id);
+            
+            const { data: matchingEdificiosModelos } = await supabase
+              .from('edificios_modelos')
+              .select('id')
+              .in('id_edificio', edificioIds)
+              .eq('activo', true);
+            
+            if (matchingEdificiosModelos && matchingEdificiosModelos.length > 0) {
+              const edificioModeloIds = matchingEdificiosModelos.map(em => em.id);
+              query = query.in('id_edificio_modelo', edificioModeloIds);
+            } else {
+              // No matching edificios_modelos - but try direct property search
+              query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%`);
+            }
+          } else {
+            // No matching edificios - but try direct property search
+            query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%`);
+          }
+        } else {
+          // No matching projects - search by property number or clabe
+          query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%`);
         }
-        
-        if (edificioIds.length > 0) {
-          orConditions.push(`edificios_modelos.edificios.id.in.(${edificioIds.join(',')})`);
-        }
-        
-        query = query.or(orConditions.join(','));
       }
 
       // Aplicar filtros de acceso
