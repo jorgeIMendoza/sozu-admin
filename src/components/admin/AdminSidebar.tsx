@@ -44,7 +44,11 @@ import {
   ScrollText,
   Bot,
   LogOut,
-  UserPlus
+  UserPlus,
+  BarChart3,
+  ClipboardList,
+  DollarSign,
+  Cog
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -167,11 +171,20 @@ const navigationItems: NavigationItem[] = [
     ]
   },
   {
+    title: "Reportes",
+    icon: BarChart3,
+    children: [
+      { title: "Inventarios", href: "/admin/reportes/inventarios", icon: ClipboardList },
+      { title: "Finanzas", href: "/admin/reportes/finanzas", icon: DollarSign },
+    ]
+  },
+  {
     title: "Sistema",
     icon: Settings,
     children: [
       { title: "Usuarios", href: "/admin/usuarios", icon: UserPlus },
       { title: "Roles y Permisos", href: "/admin/roles-permisos", icon: Shield },
+      { title: "Configuración Reportes", href: "/admin/configuracion-reportes", icon: Cog },
     ]
   },
 ];
