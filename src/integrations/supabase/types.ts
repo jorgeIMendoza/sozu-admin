@@ -5063,6 +5063,53 @@ export type Database = {
         }
         Relationships: []
       }
+      reportes: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          filtros_configuracion: Json | null
+          id: number
+          id_submenu: number | null
+          nombre: string
+          nombre_archivo: string
+          query_sql: string
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          filtros_configuracion?: Json | null
+          id?: number
+          id_submenu?: number | null
+          nombre: string
+          nombre_archivo: string
+          query_sql: string
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          filtros_configuracion?: Json | null
+          id?: number
+          id_submenu?: number | null
+          nombre?: string
+          nombre_archivo?: string
+          query_sql?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reportes_id_submenu_fkey"
+            columns: ["id_submenu"]
+            isOneToOne: false
+            referencedRelation: "submenus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reservas: {
         Row: {
           activo: boolean
