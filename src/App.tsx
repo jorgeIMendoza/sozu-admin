@@ -63,6 +63,9 @@ const AccessDenied = lazy(() => import("./pages/admin/AccessDenied"));
 const LogsActividad = lazy(() => import("./pages/admin/LogsActividad"));
 const RastreoClabeSTP = lazy(() => import("./pages/admin/RastreoClabeSTP"));
 const RastreoPagosSTP = lazy(() => import("./pages/admin/RastreoPagosSTP"));
+const ConfiguracionReportes = lazy(() => import("./pages/admin/ConfiguracionReportes"));
+const ReportesInventarios = lazy(() => import("./pages/admin/reportes/Inventarios"));
+const ReportesFinanzas = lazy(() => import("./pages/admin/reportes/Finanzas"));
 
 const queryClient = new QueryClient();
 
@@ -146,6 +149,9 @@ const App = () => (
                   <Route path="logs-actividad" element={<LogsActividad />} />
                   <Route path="rastreo-clabes-stp" element={<RastreoClabeSTP />} />
                   <Route path="rastreo-pagos-stp" element={<RastreoPagosSTP />} />
+                  <Route path="configuracion-reportes" element={<ConfiguracionReportes />} />
+                  <Route path="reportes/inventarios" element={<ReportesInventarios />} />
+                  <Route path="reportes/finanzas" element={<ReportesFinanzas />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
