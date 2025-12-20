@@ -8,24 +8,37 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { CurrencyInput } from "@/components/ui/currency-input";
 
 interface JuicioTerminadoDialogProps {
   isOpen: boolean;
   onClose: () => void;
   cuentaCobranzaId: number;
   propiedadId?: number;
+  totalPagado?: number;
 }
 
 type AccionJuicio = 'liberar' | 'vendido';
 
-export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propiedadId }: JuicioTerminadoDialogProps) {
+export function JuicioTerminadoDialog({ 
+  isOpen, 
+  onClose, 
+  cuentaCobranzaId, 
+  propiedadId,
+  totalPagado = 0
+}: JuicioTerminadoDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [descripcion, setDescripcion] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; url: string }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [accionSeleccionada, setAccionSeleccionada] = useState<AccionJuicio>('liberar');
+  const [tipoCancelacion, setTipoCancelacion] = useState<string>("2"); // 2=demanda, 3=negociación
+  const [montoCancelacion, setMontoCancelacion] = useState<number>(0);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Cálculos
+  const montoDevolucion = totalPagado - montoCancelacion;
 
   // Get the document type ID for "Documentos de Juicio"
   const { data: tipoDocumentoJuicio } = useQuery({
@@ -42,6 +55,13 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
       return data;
     }
   });
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('es-MX', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -87,6 +107,131 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
     }
   };
 
+  const agregarPagosCancelacionYDevolucion = async () => {
+    // Obtener el último orden de acuerdo_pago que tenga aplicación
+    const { data: acuerdosConAplicacion } = await supabase
+      .from('acuerdos_pago')
+      .select(`
+        id,
+        orden,
+        aplicaciones_pago(id)
+      `)
+      .eq('id_cuenta_cobranza', cuentaCobranzaId)
+      .eq('activo', true)
+      .order('orden', { ascending: false });
+
+    // Filtrar los que tienen aplicaciones
+    const acuerdosConPago = acuerdosConAplicacion?.filter(a => 
+      a.aplicaciones_pago && a.aplicaciones_pago.length > 0
+    ) || [];
+    
+    const ultimoOrden = acuerdosConPago.length > 0 ? acuerdosConPago[0].orden : 0;
+    const nuevoOrden = ultimoOrden + 1;
+
+    // Insertar Pago por cancelación (positivo) - concepto 7
+    if (montoCancelacion > 0) {
+      const { error: pagoCanError } = await supabase
+        .from('acuerdos_pago')
+        .insert({
+          id_cuenta_cobranza: cuentaCobranzaId,
+          id_concepto: 7, // Pago por cancelación
+          monto: montoCancelacion,
+          orden: nuevoOrden,
+          pago_completado: true,
+          activo: true
+        });
+
+      if (pagoCanError) throw pagoCanError;
+    }
+
+    // Insertar Devolución de pago (negativo) - concepto 9
+    if (montoDevolucion > 0) {
+      const { error: devError } = await supabase
+        .from('acuerdos_pago')
+        .insert({
+          id_cuenta_cobranza: cuentaCobranzaId,
+          id_concepto: 9, // Devolución de pago
+          monto: -montoDevolucion, // Negativo
+          orden: nuevoOrden + 1,
+          pago_completado: true,
+          activo: true
+        });
+
+      if (devError) throw devError;
+    }
+
+    // Marcar como activo=false los acuerdos sin aplicación de pago
+    const acuerdosSinPago = acuerdosConAplicacion?.filter(a => 
+      !a.aplicaciones_pago || a.aplicaciones_pago.length === 0
+    ) || [];
+
+    if (acuerdosSinPago.length > 0) {
+      const ids = acuerdosSinPago.map(a => a.id);
+      await supabase
+        .from('acuerdos_pago')
+        .update({ activo: false, fecha_actualizacion: new Date().toISOString() })
+        .in('id', ids);
+    }
+  };
+
+  const agregarPagoPenalizacion = async () => {
+    // Obtener acuerdos con sus aplicaciones
+    const { data: acuerdosConAplicacion } = await supabase
+      .from('acuerdos_pago')
+      .select(`
+        id,
+        orden,
+        aplicaciones_pago(id)
+      `)
+      .eq('id_cuenta_cobranza', cuentaCobranzaId)
+      .eq('activo', true)
+      .order('orden', { ascending: false });
+
+    // Filtrar los que tienen aplicaciones
+    const acuerdosConPago = acuerdosConAplicacion?.filter(a => 
+      a.aplicaciones_pago && a.aplicaciones_pago.length > 0
+    ) || [];
+    
+    const ultimoOrden = acuerdosConPago.length > 0 ? acuerdosConPago[0].orden : 0;
+    const nuevoOrden = ultimoOrden + 1;
+
+    // Insertar Pago de penalización - concepto 8
+    const { error: penError } = await supabase
+      .from('acuerdos_pago')
+      .insert({
+        id_cuenta_cobranza: cuentaCobranzaId,
+        id_concepto: 8, // Pago de penalización
+        monto: montoCancelacion,
+        orden: nuevoOrden,
+        pago_completado: false,
+        activo: true
+      });
+
+    if (penError) throw penError;
+
+    // Obtener todos los acuerdos futuros (después del nuevo) y reordenarlos
+    const { data: acuerdosFuturos } = await supabase
+      .from('acuerdos_pago')
+      .select('id, orden')
+      .eq('id_cuenta_cobranza', cuentaCobranzaId)
+      .eq('activo', true)
+      .gt('orden', ultimoOrden)
+      .neq('id_concepto', 8) // Excluir el recién insertado
+      .order('orden', { ascending: true });
+
+    // Reordenar los futuros
+    if (acuerdosFuturos && acuerdosFuturos.length > 0) {
+      let ordenActual = nuevoOrden + 1;
+      for (const acuerdo of acuerdosFuturos) {
+        await supabase
+          .from('acuerdos_pago')
+          .update({ orden: ordenActual, fecha_actualizacion: new Date().toISOString() })
+          .eq('id', acuerdo.id);
+        ordenActual++;
+      }
+    }
+  };
+
   const handleConfirm = async () => {
     if (!propiedadId) {
       toast({
@@ -124,6 +269,16 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
       return;
     }
 
+    // Validar monto
+    if (montoCancelacion > totalPagado) {
+      toast({
+        title: "Error",
+        description: `El monto no puede exceder lo pagado ($${formatCurrency(totalPagado)})`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       // 1. Create document records for each uploaded file
@@ -143,21 +298,19 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
       }
 
       if (accionSeleccionada === 'liberar') {
-        // OPCIÓN 1: Liberar propiedad (comportamiento original)
-        const { error: propError } = await supabase
-          .from('propiedades')
-          .update({ 
-            id_estatus_disponibilidad: 2,
-            fecha_actualizacion: new Date().toISOString()
-          })
-          .eq('id', propiedadId);
+        // OPCIÓN 1: Liberar propiedad
+        // Agregar pagos de cancelación y devolución
+        if (montoCancelacion > 0 || montoDevolucion > 0) {
+          await agregarPagosCancelacionYDevolucion();
+        }
 
-        if (propError) throw propError;
-
+        // Actualizar cuenta de cobranza
         const { error: cuentaError } = await supabase
           .from('cuentas_cobranza')
           .update({ 
             activo: false,
+            id_tipo_cancelacion: parseInt(tipoCancelacion), // 2 o 3
+            monto_cobro_cancelacion: montoCancelacion,
             url_evidencia_cancelacion: descripcion,
             fecha_actualizacion: new Date().toISOString()
           })
@@ -165,16 +318,53 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
 
         if (cuentaError) throw cuentaError;
 
-        toast({
-          title: "Juicio terminado",
-          description: "La cuenta ha sido cancelada y la propiedad liberada exitosamente",
-        });
-      } else {
-        // OPCIÓN 2: Solo cambiar a Vendido
+        // Cancelar cuentas de productos relacionadas
+        const { data: ofertaData } = await supabase
+          .from('ofertas')
+          .select('id')
+          .eq('id_propiedad', propiedadId)
+          .single();
+
+        if (ofertaData?.id) {
+          const { data: cuentasProducto } = await supabase
+            .from('cuentas_cobranza')
+            .select('id')
+            .eq('id_oferta', ofertaData.id)
+            .eq('activo', true)
+            .neq('id', cuentaCobranzaId);
+
+          if (cuentasProducto && cuentasProducto.length > 0) {
+            const ids = cuentasProducto.map(c => c.id);
+            await supabase
+              .from('cuentas_cobranza')
+              .update({ 
+                activo: false, 
+                id_tipo_cancelacion: parseInt(tipoCancelacion),
+                fecha_actualizacion: new Date().toISOString() 
+              })
+              .in('id', ids);
+          }
+        }
+
+        // Generar nueva CLABE y actualizar propiedad
+        const { data: propData } = await supabase
+          .from('propiedades')
+          .select('id_entidad_relacionada_dueno')
+          .eq('id', propiedadId)
+          .single();
+
+        let nuevaClabe = null;
+        if (propData?.id_entidad_relacionada_dueno) {
+          const { data: clabeData } = await supabase
+            .rpc('crear_referencia_bancaria', { id_er_dueno: propData.id_entidad_relacionada_dueno });
+          nuevaClabe = clabeData;
+        }
+
         const { error: propError } = await supabase
           .from('propiedades')
           .update({ 
-            id_estatus_disponibilidad: 5,
+            id_estatus_disponibilidad: 2, // Disponible
+            clabe_stp_tmp_apartado: nuevaClabe,
             fecha_actualizacion: new Date().toISOString()
           })
           .eq('id', propiedadId);
@@ -183,18 +373,43 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
 
         toast({
           title: "Juicio terminado",
-          description: "La propiedad ha sido marcada como vendida exitosamente",
+          description: "La cuenta ha sido cancelada y la propiedad liberada exitosamente",
+        });
+      } else {
+        // OPCIÓN 2: Cambiar a Vendido (Mantener compra)
+        // Agregar pago de penalización si hay monto
+        if (montoCancelacion > 0) {
+          await agregarPagoPenalizacion();
+        }
+
+        // Solo cambiar el estatus de la propiedad a Vendido
+        const { error: propError } = await supabase
+          .from('propiedades')
+          .update({ 
+            id_estatus_disponibilidad: 5, // Vendido
+            fecha_actualizacion: new Date().toISOString()
+          })
+          .eq('id', propiedadId);
+
+        if (propError) throw propError;
+
+        toast({
+          title: "Juicio terminado",
+          description: "La propiedad ha sido marcada como vendida y se agregó el pago de penalización",
         });
       }
 
       queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
       queryClient.invalidateQueries({ queryKey: ["propiedades"] });
       queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago"] });
       
       // Reset state
       setDescripcion("");
       setUploadedFiles([]);
       setAccionSeleccionada('liberar');
+      setTipoCancelacion("2");
+      setMontoCancelacion(0);
       onClose();
     } catch (error) {
       console.error('Error finishing lawsuit:', error);
@@ -216,7 +431,7 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-green-600">
             <FileCheck className="h-5 w-5" />
@@ -259,6 +474,63 @@ export function JuicioTerminadoDialog({ isOpen, onClose, cuentaCobranzaId, propi
                 </div>
               </div>
             </RadioGroup>
+          </div>
+
+          {/* Tipo de cancelación - Solo para Liberar */}
+          {accionSeleccionada === 'liberar' && (
+            <div className="space-y-2">
+              <Label>Tipo de Rescisión *</Label>
+              <RadioGroup 
+                value={tipoCancelacion} 
+                onValueChange={setTipoCancelacion}
+                className="space-y-1"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="2" id="tipo-2" />
+                  <Label htmlFor="tipo-2">Rescisión de contrato por demanda</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="3" id="tipo-3" />
+                  <Label htmlFor="tipo-3">Rescisión de contrato por negociación</Label>
+                </div>
+              </RadioGroup>
+            </div>
+          )}
+
+          {/* Información de pagos */}
+          <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-muted-foreground">Monto ya pagado</Label>
+                <p className="text-lg font-semibold">${formatCurrency(totalPagado)}</p>
+              </div>
+              {accionSeleccionada === 'liberar' && (
+                <div>
+                  <Label className="text-muted-foreground">Devolución al cliente</Label>
+                  <p className="text-lg font-semibold text-green-600">${formatCurrency(montoDevolucion)}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>
+                {accionSeleccionada === 'liberar' 
+                  ? "Monto por Cancelación (se queda en Sozu)" 
+                  : "Monto de Penalización"
+                } *
+              </Label>
+              <CurrencyInput
+                value={montoCancelacion * 100}
+                onChange={(value) => setMontoCancelacion(value / 100)}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                {accionSeleccionada === 'liberar'
+                  ? "Este monto no se devolverá al cliente"
+                  : "Se agregará como nuevo concepto a pagar"
+                }
+              </p>
+            </div>
           </div>
 
           {/* File Upload */}
