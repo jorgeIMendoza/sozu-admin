@@ -1125,7 +1125,7 @@ const Propiedades = () => {
 
         // Apply filters on server-side
         if (searchTerm) {
-          // First, find property IDs that have cuentas_cobranza with matching clabe_stp
+          // Find property IDs that have cuentas_cobranza with matching clabe_stp
           const { data: matchingCuentas } = await supabase
             .from('cuentas_cobranza')
             .select('id_oferta, ofertas!fk_cuentas_cobranza_oferta!inner(id_propiedad)')
@@ -1134,12 +1134,56 @@ const Propiedades = () => {
           
           const propertyIdsFromCuentas = matchingCuentas?.map((c: any) => c.ofertas?.id_propiedad).filter(Boolean) || [];
           
-          // Build OR query including property number, clabe_stp_tmp_apartado, and property IDs from cuentas
-          if (propertyIdsFromCuentas.length > 0) {
-            query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%,id.in.(${propertyIdsFromCuentas.join(',')})`);
-          } else {
-            query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%`);
+          // Find property IDs by project name
+          const { data: matchingProyectos } = await supabase
+            .from('proyectos')
+            .select('id')
+            .ilike('nombre', `%${searchTerm}%`)
+            .eq('activo', true);
+          
+          const proyectoIds = matchingProyectos?.map((p: any) => p.id) || [];
+          
+          // Find property IDs by building name
+          const { data: matchingEdificios } = await supabase
+            .from('edificios')
+            .select('id')
+            .ilike('nombre', `%${searchTerm}%`)
+            .eq('activo', true);
+          
+          const edificioIds = matchingEdificios?.map((e: any) => e.id) || [];
+          
+          // Find property IDs by owner name (propietario)
+          const { data: matchingPropietarios } = await supabase
+            .from('entidades_relacionadas')
+            .select('id, personas!entidades_relacionadas_id_persona_fkey!inner(nombre_legal)')
+            .ilike('personas.nombre_legal', `%${searchTerm}%`)
+            .eq('activo', true);
+          
+          const propietarioEntityIds = matchingPropietarios?.map((p: any) => p.id) || [];
+          
+          // Combine all IDs from different searches
+          const allMatchingIds = [...new Set([...propertyIdsFromCuentas])];
+          
+          // Build OR query including all search criteria
+          let orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
+          
+          if (allMatchingIds.length > 0) {
+            orConditions.push(`id.in.(${allMatchingIds.join(',')})`);
           }
+          
+          if (proyectoIds.length > 0) {
+            orConditions.push(`edificios_modelos.edificios.proyectos.id.in.(${proyectoIds.join(',')})`);
+          }
+          
+          if (edificioIds.length > 0) {
+            orConditions.push(`edificios_modelos.edificios.id.in.(${edificioIds.join(',')})`);
+          }
+          
+          if (propietarioEntityIds.length > 0) {
+            orConditions.push(`id_entidad_relacionada_dueno.in.(${propietarioEntityIds.join(',')})`);
+          }
+          
+          query = query.or(orConditions.join(','));
         }
         
         // CRITICAL: Filter by accessible projects for users without unrestricted access
@@ -1420,7 +1464,7 @@ const Propiedades = () => {
 
         // Apply filters on server-side
         if (searchTerm) {
-          // First, find property IDs that have cuentas_cobranza with matching clabe_stp
+          // Find property IDs that have cuentas_cobranza with matching clabe_stp
           const { data: matchingCuentas } = await supabase
             .from('cuentas_cobranza')
             .select('id_oferta, ofertas!fk_cuentas_cobranza_oferta!inner(id_propiedad)')
@@ -1429,12 +1473,56 @@ const Propiedades = () => {
           
           const propertyIdsFromCuentas = matchingCuentas?.map((c: any) => c.ofertas?.id_propiedad).filter(Boolean) || [];
           
-          // Build OR query including property number, clabe_stp_tmp_apartado, and property IDs from cuentas
-          if (propertyIdsFromCuentas.length > 0) {
-            query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%,id.in.(${propertyIdsFromCuentas.join(',')})`);
-          } else {
-            query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%`);
+          // Find property IDs by project name
+          const { data: matchingProyectos } = await supabase
+            .from('proyectos')
+            .select('id')
+            .ilike('nombre', `%${searchTerm}%`)
+            .eq('activo', true);
+          
+          const proyectoIds = matchingProyectos?.map((p: any) => p.id) || [];
+          
+          // Find property IDs by building name
+          const { data: matchingEdificios } = await supabase
+            .from('edificios')
+            .select('id')
+            .ilike('nombre', `%${searchTerm}%`)
+            .eq('activo', true);
+          
+          const edificioIds = matchingEdificios?.map((e: any) => e.id) || [];
+          
+          // Find property IDs by owner name (propietario)
+          const { data: matchingPropietarios } = await supabase
+            .from('entidades_relacionadas')
+            .select('id, personas!entidades_relacionadas_id_persona_fkey!inner(nombre_legal)')
+            .ilike('personas.nombre_legal', `%${searchTerm}%`)
+            .eq('activo', true);
+          
+          const propietarioEntityIds = matchingPropietarios?.map((p: any) => p.id) || [];
+          
+          // Combine all IDs from different searches
+          const allMatchingIds = [...new Set([...propertyIdsFromCuentas])];
+          
+          // Build OR query including all search criteria
+          let orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
+          
+          if (allMatchingIds.length > 0) {
+            orConditions.push(`id.in.(${allMatchingIds.join(',')})`);
           }
+          
+          if (proyectoIds.length > 0) {
+            orConditions.push(`edificios_modelos.edificios.proyectos.id.in.(${proyectoIds.join(',')})`);
+          }
+          
+          if (edificioIds.length > 0) {
+            orConditions.push(`edificios_modelos.edificios.id.in.(${edificioIds.join(',')})`);
+          }
+          
+          if (propietarioEntityIds.length > 0) {
+            orConditions.push(`id_entidad_relacionada_dueno.in.(${propietarioEntityIds.join(',')})`);
+          }
+          
+          query = query.or(orConditions.join(','));
         }
         
         // CRITICAL: Filter by accessible projects for users without unrestricted access
@@ -1708,7 +1796,7 @@ const Propiedades = () => {
 
         // Apply filters on server-side
         if (searchTerm) {
-          // First, find property IDs that have cuentas_cobranza with matching clabe_stp
+          // Find property IDs that have cuentas_cobranza with matching clabe_stp
           const { data: matchingCuentas } = await supabase
             .from('cuentas_cobranza')
             .select('id_oferta, ofertas!fk_cuentas_cobranza_oferta!inner(id_propiedad)')
@@ -1717,12 +1805,56 @@ const Propiedades = () => {
           
           const propertyIdsFromCuentas = matchingCuentas?.map((c: any) => c.ofertas?.id_propiedad).filter(Boolean) || [];
           
-          // Build OR query including property number, clabe_stp_tmp_apartado, and property IDs from cuentas
-          if (propertyIdsFromCuentas.length > 0) {
-            query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%,id.in.(${propertyIdsFromCuentas.join(',')})`);
-          } else {
-            query = query.or(`numero_propiedad.ilike.%${searchTerm}%,clabe_stp_tmp_apartado.ilike.%${searchTerm}%`);
+          // Find property IDs by project name
+          const { data: matchingProyectos } = await supabase
+            .from('proyectos')
+            .select('id')
+            .ilike('nombre', `%${searchTerm}%`)
+            .eq('activo', true);
+          
+          const proyectoIds = matchingProyectos?.map((p: any) => p.id) || [];
+          
+          // Find property IDs by building name
+          const { data: matchingEdificios } = await supabase
+            .from('edificios')
+            .select('id')
+            .ilike('nombre', `%${searchTerm}%`)
+            .eq('activo', true);
+          
+          const edificioIds = matchingEdificios?.map((e: any) => e.id) || [];
+          
+          // Find property IDs by owner name (propietario)
+          const { data: matchingPropietarios } = await supabase
+            .from('entidades_relacionadas')
+            .select('id, personas!entidades_relacionadas_id_persona_fkey!inner(nombre_legal)')
+            .ilike('personas.nombre_legal', `%${searchTerm}%`)
+            .eq('activo', true);
+          
+          const propietarioEntityIds = matchingPropietarios?.map((p: any) => p.id) || [];
+          
+          // Combine all IDs from different searches
+          const allMatchingIds = [...new Set([...propertyIdsFromCuentas])];
+          
+          // Build OR query including all search criteria
+          let orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
+          
+          if (allMatchingIds.length > 0) {
+            orConditions.push(`id.in.(${allMatchingIds.join(',')})`);
           }
+          
+          if (proyectoIds.length > 0) {
+            orConditions.push(`edificios_modelos.edificios.proyectos.id.in.(${proyectoIds.join(',')})`);
+          }
+          
+          if (edificioIds.length > 0) {
+            orConditions.push(`edificios_modelos.edificios.id.in.(${edificioIds.join(',')})`);
+          }
+          
+          if (propietarioEntityIds.length > 0) {
+            orConditions.push(`id_entidad_relacionada_dueno.in.(${propietarioEntityIds.join(',')})`);
+          }
+          
+          query = query.or(orConditions.join(','));
         }
         
         // CRITICAL: Filter by accessible projects for users without unrestricted access
