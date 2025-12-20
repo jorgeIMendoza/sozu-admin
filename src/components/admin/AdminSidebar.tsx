@@ -162,15 +162,6 @@ const navigationItems: NavigationItem[] = [
     ]
   },
   {
-    title: "Rastreo de Actividades",
-    icon: Activity,
-    children: [
-      { title: "Logs de Actividad", href: "/admin/logs-actividad", icon: Activity },
-      { title: "Rastreo CLABEs STP", href: "/admin/rastreo-clabes-stp", icon: CreditCard },
-      { title: "Rastreo Pagos STP", href: "/admin/rastreo-pagos-stp", icon: CreditCard },
-    ]
-  },
-  {
     title: "Reportes",
     icon: BarChart3,
     children: [
@@ -179,12 +170,21 @@ const navigationItems: NavigationItem[] = [
     ]
   },
   {
+    title: "Configuraciones/Logs",
+    icon: Activity,
+    children: [
+      { title: "Logs de Actividad", href: "/admin/logs-actividad", icon: Activity },
+      { title: "Rastreo CLABEs STP", href: "/admin/rastreo-clabes-stp", icon: CreditCard },
+      { title: "Rastreo Pagos STP", href: "/admin/rastreo-pagos-stp", icon: CreditCard },
+      { title: "Configuración Reportes", href: "/admin/configuracion-reportes", icon: Cog },
+    ]
+  },
+  {
     title: "Sistema",
     icon: Settings,
     children: [
       { title: "Usuarios", href: "/admin/usuarios", icon: UserPlus },
       { title: "Roles y Permisos", href: "/admin/roles-permisos", icon: Shield },
-      { title: "Configuración Reportes", href: "/admin/configuracion-reportes", icon: Cog },
     ]
   },
 ];
