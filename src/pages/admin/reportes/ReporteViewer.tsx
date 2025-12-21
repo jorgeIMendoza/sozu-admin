@@ -489,10 +489,15 @@ export default function ReporteViewer() {
     });
 
     // Convert to array and calculate percentages
-    const result = Array.from(projectMap.values()).map(p => ({
-      ...p,
-      porcentaje_pagado: p.precio_final > 0 ? (p.pagado_total / p.precio_final) * 100 : 0,
-    }));
+    const result = Array.from(projectMap.values()).map(p => {
+      const porcentaje_pagado = p.precio_final > 0 ? (p.pagado_total / p.precio_final) * 100 : 0;
+      return {
+        ...p,
+        porcentaje_pagado,
+        // Label combining total + percentage for charts
+        label_total_pct: `${formatCurrencyCompact(p.precio_final)} (${porcentaje_pagado.toFixed(0)}%)`,
+      };
+    });
 
     // Sort by percentage paid (descending) - most paid first
     return result.sort((a, b) => b.porcentaje_pagado - a.porcentaje_pagado);
@@ -979,15 +984,20 @@ export default function ReporteViewer() {
                           <div className="space-y-4 p-4 bg-background rounded-lg border">
                             <h4 className="font-semibold text-sm border-b pb-2 text-green-600">Pagado</h4>
                             {/* Total */}
-                            <div>
-                              <p className="text-xl font-bold text-green-600">
-                                {formatCurrencyCompact(
-                                  (summaryData.totals['pagado_durante_obra'] || 0) + 
-                                  (summaryData.totals['pagado_a_la_entrega'] || 0)
-                                )}
-                              </p>
-                              <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
-                            </div>
+                            {(() => {
+                              const precioFinal = summaryData.totals['precio_final'] || 0;
+                              const pagadoTotal = (summaryData.totals['pagado_durante_obra'] || 0) + (summaryData.totals['pagado_a_la_entrega'] || 0);
+                              const porcentajePagado = precioFinal > 0 ? (pagadoTotal / precioFinal * 100) : 0;
+                              return (
+                                <div>
+                                  <p className="text-xl font-bold text-green-600">
+                                    {formatCurrencyCompact(pagadoTotal)}
+                                    <span className="text-sm font-normal text-muted-foreground ml-2">({porcentajePagado.toFixed(1)}%)</span>
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
+                                </div>
+                              );
+                            })()}
                             {/* Breakdown */}
                             <div className="space-y-2 pt-2 border-t">
                               {summaryData.numericColumns.includes('pagado_durante_obra') && (() => {
@@ -1017,15 +1027,20 @@ export default function ReporteViewer() {
                           <div className="space-y-4 p-4 bg-background rounded-lg border">
                             <h4 className="font-semibold text-sm border-b pb-2 text-orange-500">Restante por Cobrar</h4>
                             {/* Total */}
-                            <div>
-                              <p className="text-xl font-bold text-orange-500">
-                                {formatCurrencyCompact(
-                                  (summaryData.totals['restante_durante_obra'] || 0) + 
-                                  (summaryData.totals['restante_a_la_entrega'] || 0)
-                                )}
-                              </p>
-                              <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
-                            </div>
+                            {(() => {
+                              const precioFinal = summaryData.totals['precio_final'] || 0;
+                              const restanteTotal = (summaryData.totals['restante_durante_obra'] || 0) + (summaryData.totals['restante_a_la_entrega'] || 0);
+                              const porcentajeRestante = precioFinal > 0 ? (restanteTotal / precioFinal * 100) : 0;
+                              return (
+                                <div>
+                                  <p className="text-xl font-bold text-orange-500">
+                                    {formatCurrencyCompact(restanteTotal)}
+                                    <span className="text-sm font-normal text-muted-foreground ml-2">({porcentajeRestante.toFixed(1)}%)</span>
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
+                                </div>
+                              );
+                            })()}
                             {/* Breakdown */}
                             <div className="space-y-2 pt-2 border-t">
                               {summaryData.numericColumns.includes('restante_durante_obra') && (() => {
@@ -1180,7 +1195,7 @@ export default function ReporteViewer() {
                         <RechartsTooltip 
                           formatter={(value: number, name: string, props: { payload?: { percentage?: number } }) => {
                             const pct = props.payload?.percentage;
-                            return [`${formatCurrencyCompact(value)} (${pct?.toFixed(1)}%)`, name];
+                            return [`${formatCurrencyCompact(value)} (${pct?.toFixed(1)}%)`];
                           }}
                           contentStyle={{ 
                             backgroundColor: 'hsl(var(--background))', 
@@ -1279,10 +1294,9 @@ export default function ReporteViewer() {
                                 <Bar dataKey="restante_durante_obra" stackId="a" fill={progressColors.restante_durante_obra} name="Restante Durante Obra" />
                                 <Bar dataKey="restante_a_la_entrega" stackId="a" fill={progressColors.restante_a_la_entrega} name="Restante A la Entrega" radius={[0, 4, 4, 0]}>
                                   <LabelList 
-                                    dataKey="porcentaje_pagado" 
+                                    dataKey="label_total_pct" 
                                     position="right" 
-                                    formatter={(value: number) => `${value.toFixed(1)}%`}
-                                    style={{ fontSize: 10, fill: 'hsl(var(--foreground))' }}
+                                    style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }}
                                   />
                                 </Bar>
                               </>
@@ -1291,10 +1305,9 @@ export default function ReporteViewer() {
                                 <Bar dataKey="pagado_total" stackId="a" fill={progressColors.pagado_total} name="Pagado" />
                                 <Bar dataKey="restante_total" stackId="a" fill={progressColors.restante_total} name="Restante" radius={[0, 4, 4, 0]}>
                                   <LabelList 
-                                    dataKey="porcentaje_pagado" 
+                                    dataKey="label_total_pct" 
                                     position="right" 
-                                    formatter={(value: number) => `${value.toFixed(1)}%`}
-                                    style={{ fontSize: 10, fill: 'hsl(var(--foreground))' }}
+                                    style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }}
                                   />
                                 </Bar>
                               </>
@@ -1345,10 +1358,9 @@ export default function ReporteViewer() {
                                   <Bar dataKey="restante_durante_obra" stackId="a" fill={progressColors.restante_durante_obra} name="Restante Durante Obra" />
                                   <Bar dataKey="restante_a_la_entrega" stackId="a" fill={progressColors.restante_a_la_entrega} name="Restante A la Entrega" radius={[4, 4, 0, 0]}>
                                     <LabelList 
-                                      dataKey="porcentaje_pagado" 
+                                      dataKey="label_total_pct" 
                                       position="top" 
-                                      formatter={(value: number) => `${value.toFixed(1)}%`}
-                                      style={{ fontSize: 10, fill: 'hsl(var(--foreground))' }}
+                                      style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }}
                                     />
                                   </Bar>
                                 </>
@@ -1357,10 +1369,9 @@ export default function ReporteViewer() {
                                   <Bar dataKey="pagado_total" stackId="a" fill={progressColors.pagado_total} name="Pagado" />
                                   <Bar dataKey="restante_total" stackId="a" fill={progressColors.restante_total} name="Restante" radius={[4, 4, 0, 0]}>
                                     <LabelList 
-                                      dataKey="porcentaje_pagado" 
+                                      dataKey="label_total_pct" 
                                       position="top" 
-                                      formatter={(value: number) => `${value.toFixed(1)}%`}
-                                      style={{ fontSize: 10, fill: 'hsl(var(--foreground))' }}
+                                      style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }}
                                     />
                                   </Bar>
                                 </>
@@ -1409,9 +1420,8 @@ export default function ReporteViewer() {
                                   <Area type="monotone" dataKey="restante_durante_obra" stackId="1" stroke={progressColors.restante_durante_obra} fill={progressColors.restante_durante_obra} fillOpacity={0.6} name="Restante Durante Obra" />
                                   <Area type="monotone" dataKey="restante_a_la_entrega" stackId="1" stroke={progressColors.restante_a_la_entrega} fill={progressColors.restante_a_la_entrega} fillOpacity={0.6} name="Restante A la Entrega">
                                     <LabelList 
-                                      dataKey="porcentaje_pagado" 
+                                      dataKey="label_total_pct" 
                                       position="top" 
-                                      formatter={(value: number) => `${value.toFixed(1)}%`}
                                       style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }}
                                     />
                                   </Area>
@@ -1421,9 +1431,8 @@ export default function ReporteViewer() {
                                   <Area type="monotone" dataKey="pagado_total" stackId="1" stroke={progressColors.pagado_total} fill={progressColors.pagado_total} fillOpacity={0.8} name="Pagado" />
                                   <Area type="monotone" dataKey="restante_total" stackId="1" stroke={progressColors.restante_total} fill={progressColors.restante_total} fillOpacity={0.6} name="Restante">
                                     <LabelList 
-                                      dataKey="porcentaje_pagado" 
+                                      dataKey="label_total_pct" 
                                       position="top" 
-                                      formatter={(value: number) => `${value.toFixed(1)}%`}
                                       style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }}
                                     />
                                   </Area>
