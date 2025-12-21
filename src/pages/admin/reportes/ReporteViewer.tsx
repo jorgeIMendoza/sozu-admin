@@ -1276,12 +1276,12 @@ export default function ReporteViewer() {
 
                     {/* Stacked Horizontal Bar Chart */}
                     {progressChartType === 'stacked-bar' && (
-                      <div style={{ height: Math.max(300, progressChartData.length * 50) }}>
+                      <div style={{ height: Math.max(300, progressChartData.length * 70) }}>
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart 
                             data={progressChartData} 
                             layout="vertical"
-                            margin={{ top: 20, right: 80, left: 120, bottom: 20 }}
+                            margin={{ top: 20, right: 220, left: 120, bottom: 20 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={true} vertical={false} />
                             <XAxis 
@@ -1334,7 +1334,51 @@ export default function ReporteViewer() {
                                 </Bar>
                                 <Bar dataKey="restante_a_la_entrega" stackId="a" fill={progressColors.restante_a_la_entrega} name="Restante A la Entrega" radius={[0, 4, 4, 0]}>
                                   <LabelList dataKey="pct_restante_a_la_entrega" position="center" formatter={(v: number) => v > 5 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 8, fill: '#fff', fontWeight: 'bold' }} />
-                                  <LabelList dataKey="label_total" position="right" style={{ fontSize: 9, fill: 'hsl(var(--foreground))' }} />
+                                  <LabelList 
+                                    position="right"
+                                    content={(props) => {
+                                      const { x, y, width, height, index } = props;
+                                      if (x === undefined || y === undefined || width === undefined || height === undefined || index === undefined) return null;
+                                      const numX = Number(x);
+                                      const numY = Number(y);
+                                      const numW = Number(width);
+                                      const numH = Number(height);
+                                      const numIndex = Number(index);
+                                      if (isNaN(numX) || isNaN(numY) || isNaN(numW) || isNaN(numH) || isNaN(numIndex)) return null;
+                                      const data = progressChartData[numIndex];
+                                      if (!data) return null;
+                                      const startX = numX + numW + 5;
+                                      const centerY = numY + numH / 2;
+                                      // Calculate totals for durante obra and a la entrega
+                                      const duranteObra = data.pagado_durante_obra + data.restante_durante_obra;
+                                      const entrega = data.pagado_a_la_entrega + data.restante_a_la_entrega;
+                                      const pctDurante = data.precio_final > 0 ? (duranteObra / data.precio_final * 100) : 0;
+                                      const pctEntrega = data.precio_final > 0 ? (entrega / data.precio_final * 100) : 0;
+                                      return (
+                                        <g>
+                                          {/* Total amount */}
+                                          <text x={startX} y={centerY} fontSize={10} fill="hsl(var(--foreground))" fontWeight="bold" dominantBaseline="middle">
+                                            {formatCurrencyCompact(data.precio_final)}
+                                          </text>
+                                          {/* Brace */}
+                                          <path 
+                                            d={`M${startX + 55} ${centerY - 12} Q${startX + 62} ${centerY - 12} ${startX + 62} ${centerY} Q${startX + 62} ${centerY + 12} ${startX + 55} ${centerY + 12}`}
+                                            stroke="hsl(var(--muted-foreground))"
+                                            strokeWidth={1}
+                                            fill="none"
+                                          />
+                                          {/* Durante Obra line */}
+                                          <text x={startX + 68} y={centerY - 8} fontSize={8} fill="hsl(var(--muted-foreground))" dominantBaseline="middle">
+                                            D.Obra: {formatCurrencyCompact(duranteObra)} ({pctDurante.toFixed(0)}%)
+                                          </text>
+                                          {/* A la Entrega line */}
+                                          <text x={startX + 68} y={centerY + 8} fontSize={8} fill="hsl(var(--muted-foreground))" dominantBaseline="middle">
+                                            Entrega: {formatCurrencyCompact(entrega)} ({pctEntrega.toFixed(0)}%)
+                                          </text>
+                                        </g>
+                                      );
+                                    }}
+                                  />
                                 </Bar>
                               </>
                             ) : (
