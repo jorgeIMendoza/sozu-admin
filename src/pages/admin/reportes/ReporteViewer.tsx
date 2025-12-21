@@ -295,11 +295,13 @@ export default function ReporteViewer() {
 
   // Define preferred column order for known reports
   const preferredColumnOrder = useMemo(() => [
+    // Properties report columns - exact order requested
+    'proyecto', 'dueno', 'numero_departamento', 'compradores', 'precio_final',
+    'monto_durante_obra', 'monto_a_la_entrega',
+    'pagado_durante_obra', 'pagado_a_la_entrega', 
+    'restante_durante_obra', 'restante_a_la_entrega',
     // Products report columns
-    'proyecto', 'categoria', 'producto', 'compradores', 'precio_final', 'pagado', 'restante',
-    // Properties report columns  
-    'numero_departamento', 'monto_durante_obra', 'monto_a_la_entrega',
-    'pagado_durante_obra', 'pagado_a_la_entrega', 'restante_durante_obra', 'restante_a_la_entrega'
+    'categoria', 'producto', 'pagado', 'restante',
   ], []);
 
   // Get columns from preview data with preferred ordering
@@ -1254,54 +1256,103 @@ export default function ReporteViewer() {
                     {/* Stacked Area Chart */}
                     {progressChartType === 'area' && (
                       <div className="h-[350px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart 
-                            data={progressChartData} 
-                            margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                            <XAxis 
-                              dataKey="proyecto"
-                              angle={-30}
-                              textAnchor="end"
-                              height={80}
-                              interval={0}
-                              tick={{ fontSize: 10 }}
-                              className="fill-muted-foreground"
-                            />
-                            <YAxis 
-                              tickFormatter={(value) => formatCurrencyCompact(value)}
-                              className="fill-muted-foreground"
-                              width={100}
-                            />
-                            <RechartsTooltip 
-                              formatter={(value: number, name: string) => [formatCurrencyCompact(value), name]}
-                              contentStyle={{ 
-                                backgroundColor: 'hsl(var(--background))', 
-                                border: '1px solid hsl(var(--border))',
-                                borderRadius: '8px'
-                              }}
-                              labelFormatter={(label) => {
-                                const project = progressChartData.find(p => p.proyecto === label);
-                                return project ? `${label} (${project.porcentaje_pagado.toFixed(1)}% pagado)` : label;
-                              }}
-                            />
-                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                            {columns.includes('pagado_durante_obra') ? (
-                              <>
-                                <Area type="monotone" dataKey="pagado_durante_obra" stackId="1" stroke={progressColors.pagado_durante_obra} fill={progressColors.pagado_durante_obra} fillOpacity={0.8} name="Pagado Durante Obra" />
-                                <Area type="monotone" dataKey="pagado_a_la_entrega" stackId="1" stroke={progressColors.pagado_a_la_entrega} fill={progressColors.pagado_a_la_entrega} fillOpacity={0.8} name="Pagado A la Entrega" />
-                                <Area type="monotone" dataKey="restante_durante_obra" stackId="1" stroke={progressColors.restante_durante_obra} fill={progressColors.restante_durante_obra} fillOpacity={0.6} name="Restante Durante Obra" />
-                                <Area type="monotone" dataKey="restante_a_la_entrega" stackId="1" stroke={progressColors.restante_a_la_entrega} fill={progressColors.restante_a_la_entrega} fillOpacity={0.6} name="Restante A la Entrega" />
-                              </>
-                            ) : (
-                              <>
-                                <Area type="monotone" dataKey="pagado_total" stackId="1" stroke={progressColors.pagado_total} fill={progressColors.pagado_total} fillOpacity={0.8} name="Pagado" />
-                                <Area type="monotone" dataKey="restante_total" stackId="1" stroke={progressColors.restante_total} fill={progressColors.restante_total} fillOpacity={0.6} name="Restante" />
-                              </>
-                            )}
-                          </AreaChart>
-                        </ResponsiveContainer>
+                        {progressChartData.length === 1 ? (
+                          // Single project: Show as stacked bar since area needs 2+ points
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart 
+                              data={progressChartData} 
+                              margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis 
+                                dataKey="proyecto"
+                                tick={{ fontSize: 12 }}
+                                className="fill-muted-foreground"
+                              />
+                              <YAxis 
+                                tickFormatter={(value) => formatCurrencyCompact(value)}
+                                className="fill-muted-foreground"
+                                width={100}
+                              />
+                              <RechartsTooltip 
+                                formatter={(value: number, name: string) => [formatCurrencyCompact(value), name]}
+                                contentStyle={{ 
+                                  backgroundColor: 'hsl(var(--background))', 
+                                  border: '1px solid hsl(var(--border))',
+                                  borderRadius: '8px'
+                                }}
+                                labelFormatter={(label) => {
+                                  const project = progressChartData.find(p => p.proyecto === label);
+                                  return project ? `${label} (${project.porcentaje_pagado.toFixed(1)}% pagado)` : label;
+                                }}
+                              />
+                              <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                              {columns.includes('pagado_durante_obra') ? (
+                                <>
+                                  <Bar dataKey="pagado_durante_obra" stackId="a" fill={progressColors.pagado_durante_obra} name="Pagado Durante Obra" />
+                                  <Bar dataKey="pagado_a_la_entrega" stackId="a" fill={progressColors.pagado_a_la_entrega} name="Pagado A la Entrega" />
+                                  <Bar dataKey="restante_durante_obra" stackId="a" fill={progressColors.restante_durante_obra} name="Restante Durante Obra" />
+                                  <Bar dataKey="restante_a_la_entrega" stackId="a" fill={progressColors.restante_a_la_entrega} name="Restante A la Entrega" radius={[4, 4, 0, 0]} />
+                                </>
+                              ) : (
+                                <>
+                                  <Bar dataKey="pagado_total" stackId="a" fill={progressColors.pagado_total} name="Pagado" />
+                                  <Bar dataKey="restante_total" stackId="a" fill={progressColors.restante_total} name="Restante" radius={[4, 4, 0, 0]} />
+                                </>
+                              )}
+                            </BarChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          // Multiple projects: Show area chart
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart 
+                              data={progressChartData} 
+                              margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis 
+                                dataKey="proyecto"
+                                angle={-30}
+                                textAnchor="end"
+                                height={80}
+                                interval={0}
+                                tick={{ fontSize: 10 }}
+                                className="fill-muted-foreground"
+                              />
+                              <YAxis 
+                                tickFormatter={(value) => formatCurrencyCompact(value)}
+                                className="fill-muted-foreground"
+                                width={100}
+                              />
+                              <RechartsTooltip 
+                                formatter={(value: number, name: string) => [formatCurrencyCompact(value), name]}
+                                contentStyle={{ 
+                                  backgroundColor: 'hsl(var(--background))', 
+                                  border: '1px solid hsl(var(--border))',
+                                  borderRadius: '8px'
+                                }}
+                                labelFormatter={(label) => {
+                                  const project = progressChartData.find(p => p.proyecto === label);
+                                  return project ? `${label} (${project.porcentaje_pagado.toFixed(1)}% pagado)` : label;
+                                }}
+                              />
+                              <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                              {columns.includes('pagado_durante_obra') ? (
+                                <>
+                                  <Area type="monotone" dataKey="pagado_durante_obra" stackId="1" stroke={progressColors.pagado_durante_obra} fill={progressColors.pagado_durante_obra} fillOpacity={0.8} name="Pagado Durante Obra" />
+                                  <Area type="monotone" dataKey="pagado_a_la_entrega" stackId="1" stroke={progressColors.pagado_a_la_entrega} fill={progressColors.pagado_a_la_entrega} fillOpacity={0.8} name="Pagado A la Entrega" />
+                                  <Area type="monotone" dataKey="restante_durante_obra" stackId="1" stroke={progressColors.restante_durante_obra} fill={progressColors.restante_durante_obra} fillOpacity={0.6} name="Restante Durante Obra" />
+                                  <Area type="monotone" dataKey="restante_a_la_entrega" stackId="1" stroke={progressColors.restante_a_la_entrega} fill={progressColors.restante_a_la_entrega} fillOpacity={0.6} name="Restante A la Entrega" />
+                                </>
+                              ) : (
+                                <>
+                                  <Area type="monotone" dataKey="pagado_total" stackId="1" stroke={progressColors.pagado_total} fill={progressColors.pagado_total} fillOpacity={0.8} name="Pagado" />
+                                  <Area type="monotone" dataKey="restante_total" stackId="1" stroke={progressColors.restante_total} fill={progressColors.restante_total} fillOpacity={0.6} name="Restante" />
+                                </>
+                              )}
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        )}
                       </div>
                     )}
 
