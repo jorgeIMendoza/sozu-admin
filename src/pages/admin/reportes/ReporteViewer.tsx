@@ -143,6 +143,7 @@ export default function ReporteViewer() {
   const [filtros, setFiltros] = useState<Record<string, string>>({});
   const [isExporting, setIsExporting] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
+  const [chartRecordLimit, setChartRecordLimit] = useState<number | 'all'>(50);
   const [summaryOpen, setSummaryOpen] = useState(true);
 
   // Fetch Real Estate projects IDs
@@ -882,10 +883,33 @@ export default function ReporteViewer() {
               <div className="space-y-8 p-4">
                 {/* Line Chart - Trends per property */}
                 <div className="h-[400px]">
-                  <h4 className="text-sm font-medium mb-2 text-muted-foreground">Tendencia por Desglose de Pagos</h4>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-muted-foreground">Tendencia por Desglose de Pagos</h4>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Mostrar:</span>
+                      <Select 
+                        value={String(chartRecordLimit)} 
+                        onValueChange={(val) => setChartRecordLimit(val === 'all' ? 'all' : Number(val))}
+                      >
+                        <SelectTrigger className="w-[100px] h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                          <SelectItem value="all">Todos ({chartData.length})</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                      <LineChart 
+                        data={chartRecordLimit === 'all' ? chartData : chartData.slice(0, chartRecordLimit)} 
+                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                      >
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis 
                           dataKey="name" 
