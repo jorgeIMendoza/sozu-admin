@@ -1270,62 +1270,115 @@ export default function ReporteViewer() {
                       // Zoom level determines how many items fit in the visible viewport
                       const zoomLevel = chartRecordLimit === 'all' ? chartData.length : chartRecordLimit;
                       const totalDataPoints = chartData.length;
-                      const viewportWidth = 800; // approximate visible width in pixels
+                      const viewportWidth = 700; // visible chart area width (excluding Y-axis)
                       const widthPerItem = viewportWidth / zoomLevel;
                       const totalChartWidth = totalDataPoints * widthPerItem;
                       const needsScroll = totalChartWidth > viewportWidth;
+                      const activeColumns = orderedChartColumns.filter(col => columns.includes(col));
                       
                       return (
-                        <div className="overflow-x-auto" style={{ height: 'calc(100% - 30px)' }}>
-                          <div style={{ width: needsScroll ? `${totalChartWidth}px` : '100%', height: '100%', minHeight: '320px' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart 
-                                data={chartData} 
-                                margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis 
-                                  dataKey="name" 
-                                  tick={false}
-                                  axisLine={true}
-                                  tickLine={false}
-                                  height={20}
-                                />
-                                <YAxis 
-                                  tickFormatter={(value) => formatCurrencyCompact(value)}
-                                  className="fill-muted-foreground"
-                                  width={100}
-                                  domain={[0, 'auto']}
-                                />
-                                <RechartsTooltip 
-                                  formatter={(value: number) => formatCurrencyCompact(value)}
-                                  labelFormatter={(label, payload) => {
-                                    if (payload && payload.length > 0 && payload[0].payload) {
-                                      return payload[0].payload.fullName || label;
-                                    }
-                                    return label;
-                                  }}
-                                  contentStyle={{ 
-                                    backgroundColor: 'hsl(var(--background))', 
-                                    border: '1px solid hsl(var(--border))',
-                                    borderRadius: '8px'
-                                  }}
-                                />
-                                <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                                {orderedChartColumns.filter(col => columns.includes(col)).map((col) => (
-                                  <Line 
-                                    key={col} 
-                                    type="monotone"
-                                    dataKey={col} 
-                                    stroke={chartColorMap[col] || '#888'} 
-                                    strokeWidth={chartStrokeWidth[col] || 2}
-                                    strokeDasharray={chartStrokeDash[col] || '0'}
-                                    dot={false}
-                                    name={col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        <div className="flex flex-col" style={{ height: 'calc(100% - 30px)' }}>
+                          {/* Chart area with fixed Y-axis */}
+                          <div className="flex flex-1" style={{ minHeight: '280px' }}>
+                            {/* Fixed Y-Axis */}
+                            <div className="flex-shrink-0" style={{ width: '100px', height: '100%' }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart 
+                                  data={chartData} 
+                                  margin={{ top: 20, right: 0, left: 20, bottom: 20 }}
+                                >
+                                  <YAxis 
+                                    tickFormatter={(value) => formatCurrencyCompact(value)}
+                                    className="fill-muted-foreground"
+                                    width={80}
+                                    domain={[0, 'auto']}
+                                    axisLine={false}
                                   />
-                                ))}
-                              </LineChart>
-                            </ResponsiveContainer>
+                                  {activeColumns.map((col) => (
+                                    <Line 
+                                      key={col} 
+                                      type="monotone"
+                                      dataKey={col} 
+                                      stroke="transparent"
+                                      dot={false}
+                                    />
+                                  ))}
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                            
+                            {/* Scrollable Chart Content */}
+                            <div className="flex-1 overflow-x-auto">
+                              <div style={{ width: needsScroll ? `${totalChartWidth}px` : '100%', height: '100%' }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <LineChart 
+                                    data={chartData} 
+                                    margin={{ top: 20, right: 30, left: 0, bottom: 20 }}
+                                  >
+                                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                    <XAxis 
+                                      dataKey="name" 
+                                      tick={false}
+                                      axisLine={true}
+                                      tickLine={false}
+                                      height={20}
+                                    />
+                                    <YAxis 
+                                      tickFormatter={(value) => formatCurrencyCompact(value)}
+                                      domain={[0, 'auto']}
+                                      hide={true}
+                                    />
+                                    <RechartsTooltip 
+                                      formatter={(value: number) => formatCurrencyCompact(value)}
+                                      labelFormatter={(label, payload) => {
+                                        if (payload && payload.length > 0 && payload[0].payload) {
+                                          return payload[0].payload.fullName || label;
+                                        }
+                                        return label;
+                                      }}
+                                      contentStyle={{ 
+                                        backgroundColor: 'hsl(var(--background))', 
+                                        border: '1px solid hsl(var(--border))',
+                                        borderRadius: '8px'
+                                      }}
+                                    />
+                                    {activeColumns.map((col) => (
+                                      <Line 
+                                        key={col} 
+                                        type="monotone"
+                                        dataKey={col} 
+                                        stroke={chartColorMap[col] || '#888'} 
+                                        strokeWidth={chartStrokeWidth[col] || 2}
+                                        strokeDasharray={chartStrokeDash[col] || '0'}
+                                        dot={false}
+                                        name={col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                      />
+                                    ))}
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Fixed Legend */}
+                          <div className="flex flex-wrap justify-center gap-4 pt-2 border-t mt-2">
+                            {activeColumns.map((col) => (
+                              <div key={col} className="flex items-center gap-2">
+                                <div 
+                                  className="w-6 h-0.5" 
+                                  style={{ 
+                                    backgroundColor: chartColorMap[col] || '#888',
+                                    borderStyle: chartStrokeDash[col] === '8 4' ? 'dashed' : chartStrokeDash[col] === '2 2' ? 'dotted' : 'solid',
+                                    borderWidth: chartStrokeDash[col] !== '0' ? '2px' : '0',
+                                    borderColor: chartColorMap[col] || '#888',
+                                    height: chartStrokeDash[col] !== '0' ? '0' : `${chartStrokeWidth[col] || 2}px`
+                                  }}
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                  {col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       );
