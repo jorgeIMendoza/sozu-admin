@@ -212,17 +212,13 @@ export default function ReporteViewer() {
 
   // Handle refresh - invalidate and refetch all report-related queries
   const handleRefresh = useCallback(async () => {
-    // Invalidate all queries related to this report (using partial match)
-    await queryClient.invalidateQueries({ 
-      predicate: (query) => {
-        const key = query.queryKey;
-        if (!Array.isArray(key)) return false;
-        return key[0] === 'reporte' || 
-               key[0] === 'reporte-full-data' || 
-               key[0] === 'filter-options-viewer';
-      }
-    });
-  }, [queryClient]);
+    // Invalidate all queries related to this report
+    await queryClient.invalidateQueries({ queryKey: ['reporte', id] });
+    await queryClient.invalidateQueries({ queryKey: ['reporte-full-data'] });
+    await queryClient.invalidateQueries({ queryKey: ['filter-options-viewer'] });
+    // Force refetch
+    await refetchPreview();
+  }, [queryClient, id, refetchPreview]);
 
   // Fetch options for select filters
   const { data: filterOptions = {} } = useQuery({
@@ -343,6 +339,8 @@ export default function ReporteViewer() {
   // Ordered columns for charts (matching report column order)
   const orderedChartColumns = [
     'precio_final',
+    'pagado',           // Simple products report
+    'restante',         // Simple products report
     'monto_durante_obra',
     'monto_a_la_entrega',
     'pagado_durante_obra',
@@ -404,6 +402,8 @@ export default function ReporteViewer() {
     // Color scheme: blues for "durante obra", greens for "a la entrega"
     const barColorMap: Record<string, string> = {
       'precio_final': '#6366f1', // indigo
+      'pagado': '#16a34a',        // green - simple products
+      'restante': '#f97316',      // orange - simple products
       'monto_durante_obra': '#3b82f6', // blue
       'monto_a_la_entrega': '#22c55e', // green
       'pagado_durante_obra': '#60a5fa', // lighter blue
@@ -423,10 +423,12 @@ export default function ReporteViewer() {
   // Colors for chart lines - matching column order
   const chartColorMap: Record<string, string> = {
     'precio_final': 'hsl(var(--primary))',
-    'monto_durante_obra': '#16a34a', // green
-    'monto_a_la_entrega': '#2563eb', // blue
-    'pagado_durante_obra': '#f97316', // orange
-    'pagado_a_la_entrega': '#dc2626', // red
+    'pagado': '#16a34a',            // green - simple products
+    'restante': '#f97316',          // orange - simple products
+    'monto_durante_obra': '#3b82f6', // blue
+    'monto_a_la_entrega': '#22c55e', // green
+    'pagado_durante_obra': '#60a5fa', // lighter blue
+    'pagado_a_la_entrega': '#4ade80', // lighter green
     'restante_durante_obra': '#8b5cf6', // purple
     'restante_a_la_entrega': '#06b6d4'  // cyan
   };
