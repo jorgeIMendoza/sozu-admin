@@ -1298,7 +1298,7 @@ export default function ReporteViewer() {
                 </div>
 
                 {/* Bar Chart - Totals */}
-                <div className="h-[350px]">
+                <div className="h-[350px] mt-8">
                   <h4 className="text-sm font-medium mb-2 text-muted-foreground">Totales por Desglose de Pagos</h4>
                   {barChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
