@@ -1,13 +1,16 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileSpreadsheet, Download, Loader2, Info, DollarSign, Search, BarChart3, Table, Check } from "lucide-react";
+import { FileSpreadsheet, Download, Loader2, Info, DollarSign, Search, BarChart3, Table, Check, CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
@@ -17,7 +20,7 @@ import { cn } from "@/lib/utils";
 interface FiltroConfig {
   nombre: string;
   label: string;
-  tipo: 'select' | 'multiselect' | 'date' | 'text';
+  tipo: 'select' | 'multiselect' | 'date' | 'daterange' | 'text';
   tabla?: string;
   campo_valor?: string;
   campo_label?: string;
@@ -25,6 +28,7 @@ interface FiltroConfig {
   requerido?: boolean;
   depende_de?: string;
   query_opciones?: string;
+  placeholder?: string;
 }
 
 interface Reporte {
@@ -94,6 +98,9 @@ export default function ReportesFinanzas() {
       const options: Record<string, { value: string; label: string }[]> = {};
 
       for (const filtro of selectedReporte.filtros_configuracion) {
+        // Skip daterange and non-select types
+        if (filtro.tipo === 'daterange' || filtro.tipo === 'date' || filtro.tipo === 'text') continue;
+
         // Skip dependent filters if parent is not selected
         if (filtro.depende_de && !filtros[filtro.depende_de]) {
           options[filtro.nombre] = [];
@@ -195,6 +202,140 @@ export default function ReportesFinanzas() {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const renderFilterInput = (filtro: FiltroConfig) => {
+    const isDisabled = filtro.depende_de && !filtros[filtro.depende_de];
+
+    if (filtro.tipo === 'select') {
+      return (
+        <Select
+          value={filtros[filtro.nombre] || ""}
+          onValueChange={(value) => handleFilterChange(filtro.nombre, value)}
+          disabled={isDisabled}
+        >
+          <SelectTrigger className={cn(isDisabled && "opacity-50")}>
+            <SelectValue placeholder={isDisabled ? `Selecciona ${selectedReporte?.filtros_configuracion.find(f => f.nombre === filtro.depende_de)?.label || 'el filtro anterior'} primero` : `Seleccionar ${filtro.label.toLowerCase()}...`} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">Todos</SelectItem>
+            {(filterOptions[filtro.nombre] || []).map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    if (filtro.tipo === 'date') {
+      const selectedDate = filtros[filtro.nombre] ? new Date(filtros[filtro.nombre]) : undefined;
+      return (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-full justify-start text-left font-normal",
+                !filtros[filtro.nombre] && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {filtros[filtro.nombre] 
+                ? format(new Date(filtros[filtro.nombre]), "PPP", { locale: es })
+                : "Seleccionar fecha..."}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(date) => handleFilterChange(filtro.nombre, date ? format(date, 'yyyy-MM-dd') : '')}
+              initialFocus
+              className="p-3 pointer-events-auto"
+            />
+          </PopoverContent>
+        </Popover>
+      );
+    }
+
+    if (filtro.tipo === 'daterange') {
+      const desdeKey = `${filtro.nombre}_desde`;
+      const hastaKey = `${filtro.nombre}_hasta`;
+      const selectedDesde = filtros[desdeKey] ? new Date(filtros[desdeKey]) : undefined;
+      const selectedHasta = filtros[hastaKey] ? new Date(filtros[hastaKey]) : undefined;
+
+      return (
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !filtros[desdeKey] && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {filtros[desdeKey] 
+                    ? format(new Date(filtros[desdeKey]), "dd/MM/yy", { locale: es })
+                    : "Desde"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={selectedDesde}
+                  onSelect={(date) => handleFilterChange(desdeKey, date ? format(date, 'yyyy-MM-dd') : '')}
+                  initialFocus
+                  className="p-3 pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div className="flex-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !filtros[hastaKey] && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {filtros[hastaKey] 
+                    ? format(new Date(filtros[hastaKey]), "dd/MM/yy", { locale: es })
+                    : "Hasta"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={selectedHasta}
+                  onSelect={(date) => handleFilterChange(hastaKey, date ? format(date, 'yyyy-MM-dd') : '')}
+                  initialFocus
+                  className="p-3 pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+      );
+    }
+
+    // text type
+    return (
+      <Input
+        type="text"
+        id={filtro.nombre}
+        value={filtros[filtro.nombre] || ""}
+        onChange={(e) => handleFilterChange(filtro.nombre, e.target.value)}
+        placeholder={filtro.placeholder || `Ingresa ${filtro.label.toLowerCase()}...`}
+      />
+    );
   };
 
   if (permissionsLoading || isLoading) {
@@ -367,41 +508,7 @@ export default function ReportesFinanzas() {
                             </TooltipProvider>
                           )}
                         </Label>
-                        
-                        {filtro.tipo === 'select' ? (
-                          <Select
-                            value={filtros[filtro.nombre] || ""}
-                            onValueChange={(value) => handleFilterChange(filtro.nombre, value)}
-                            disabled={isDisabled}
-                          >
-                            <SelectTrigger className={cn(isDisabled && "opacity-50")}>
-                              <SelectValue placeholder={isDisabled ? `Selecciona ${selectedReporte.filtros_configuracion.find(f => f.nombre === filtro.depende_de)?.label || 'el filtro anterior'} primero` : `Seleccionar ${filtro.label.toLowerCase()}...`} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">Todos</SelectItem>
-                              {(filterOptions[filtro.nombre] || []).map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : filtro.tipo === 'date' ? (
-                          <Input
-                            type="date"
-                            id={filtro.nombre}
-                            value={filtros[filtro.nombre] || ""}
-                            onChange={(e) => handleFilterChange(filtro.nombre, e.target.value)}
-                          />
-                        ) : (
-                          <Input
-                            type="text"
-                            id={filtro.nombre}
-                            value={filtros[filtro.nombre] || ""}
-                            onChange={(e) => handleFilterChange(filtro.nombre, e.target.value)}
-                            placeholder={`Ingresa ${filtro.label.toLowerCase()}...`}
-                          />
-                        )}
+                        {renderFilterInput(filtro)}
                       </div>
                     );
                   })}

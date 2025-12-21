@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Plus, Edit, Trash2, FileText, Check, X, PlayCircle, Loader2, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { Search, Plus, Edit, Trash2, FileText, Check, X, PlayCircle, Loader2, CheckCircle2, XCircle, HelpCircle, RotateCcw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
@@ -41,7 +42,7 @@ interface Submenu {
 interface FiltroConfig {
   nombre: string;
   label: string;
-  tipo: 'select' | 'multiselect' | 'date' | 'text';
+  tipo: 'select' | 'multiselect' | 'date' | 'daterange' | 'text';
   tabla?: string;
   campo_valor?: string;
   campo_label?: string;
@@ -56,6 +57,7 @@ export default function ConfiguracionReportes() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingReporte, setEditingReporte] = useState<Reporte | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("activos");
   
   // Query validation state
   const [isValidatingQuery, setIsValidatingQuery] = useState(false);
@@ -72,7 +74,7 @@ export default function ConfiguracionReportes() {
     activo: true,
   });
 
-  // Fetch reports
+  // Fetch reports (including inactive for the deleted tab)
   const { data: reportes = [], isLoading } = useQuery({
     queryKey: ['reportes-config'],
     queryFn: async () => {
@@ -102,10 +104,18 @@ export default function ConfiguracionReportes() {
     },
   });
 
-  const filteredReportes = reportes.filter(reporte =>
-    reporte.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    reporte.descripcion?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Separate active and inactive reports
+  const reportesActivos = useMemo(() => 
+    reportes.filter(r => r.activo && (
+      r.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.descripcion?.toLowerCase().includes(searchTerm.toLowerCase())
+    )), [reportes, searchTerm]);
+
+  const reportesEliminados = useMemo(() => 
+    reportes.filter(r => !r.activo && (
+      r.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.descripcion?.toLowerCase().includes(searchTerm.toLowerCase())
+    )), [reportes, searchTerm]);
 
   const resetForm = () => {
     setFormData({
@@ -148,6 +158,33 @@ export default function ConfiguracionReportes() {
       return;
     }
 
+    // Validar que inicie con SELECT
+    const cleanQueryStart = formData.query_sql.trim().toUpperCase();
+    if (!cleanQueryStart.startsWith('SELECT')) {
+      setQueryValidation({ 
+        valid: false, 
+        message: "Solo se permiten consultas SELECT. El query debe iniciar con SELECT."
+      });
+      return;
+    }
+
+    // Validar palabras prohibidas
+    const forbiddenKeywords = ['DROP', 'DELETE', 'UPDATE', 'INSERT', 'ALTER', 'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE'];
+    const upperQuery = formData.query_sql.toUpperCase();
+    const foundForbidden = forbiddenKeywords.find(kw => {
+      // Buscar la palabra como token completo (no como parte de otra palabra)
+      const regex = new RegExp(`\\b${kw}\\b`);
+      return regex.test(upperQuery);
+    });
+    
+    if (foundForbidden) {
+      setQueryValidation({ 
+        valid: false, 
+        message: `Palabra prohibida encontrada: "${foundForbidden}". Solo se permiten consultas SELECT de lectura.`
+      });
+      return;
+    }
+
     setIsValidatingQuery(true);
     setQueryValidation(null);
 
@@ -167,14 +204,42 @@ export default function ConfiguracionReportes() {
       });
 
       if (error) {
+        // Parsear mensaje de error para hacerlo más legible
+        let errorMessage = error.message || "Error al ejecutar el query";
+        
+        if (errorMessage.includes('column') || errorMessage.includes('columna')) {
+          const match = errorMessage.match(/column "([^"]+)"/i) || errorMessage.match(/columna "([^"]+)"/i);
+          if (match) {
+            errorMessage = `Error de columna: No existe la columna "${match[1]}". Verifica el nombre de la columna en la tabla.`;
+          } else {
+            errorMessage = `Error de columna: ${errorMessage}`;
+          }
+        } else if (errorMessage.includes('relation') || errorMessage.includes('tabla')) {
+          const match = errorMessage.match(/relation "([^"]+)"/i);
+          if (match) {
+            errorMessage = `Error de tabla: No existe la tabla "${match[1]}". Verifica el nombre de la tabla.`;
+          } else {
+            errorMessage = `Error de tabla: ${errorMessage}`;
+          }
+        } else if (errorMessage.includes('syntax') || errorMessage.includes('sintaxis')) {
+          errorMessage = `Error de sintaxis SQL: ${errorMessage}. Revisa la estructura del query.`;
+        } else if (errorMessage.includes('permission') || errorMessage.includes('permiso')) {
+          errorMessage = `Error de permisos: No tienes acceso a esta tabla o columna.`;
+        } else if (errorMessage.includes('ambiguous')) {
+          const match = errorMessage.match(/column reference "([^"]+)" is ambiguous/i);
+          if (match) {
+            errorMessage = `Columna ambigua: "${match[1]}" existe en múltiples tablas. Usa el formato tabla.columna para especificar.`;
+          }
+        }
+        
         setQueryValidation({ 
           valid: false, 
-          message: error.message || "Error al ejecutar el query"
+          message: errorMessage
         });
       } else {
         setQueryValidation({ 
           valid: true, 
-          message: "Query válido",
+          message: "Query válido ✓",
           rowCount: Array.isArray(data) ? data.length : 0
         });
       }
@@ -283,6 +348,32 @@ export default function ConfiguracionReportes() {
     }
   };
 
+  const handleReactivar = async (reporte: Reporte) => {
+    try {
+      const { error } = await supabase
+        .from('reportes')
+        .update({ activo: true })
+        .eq('id', reporte.id);
+
+      if (error) throw error;
+
+      await registrarActualizacion('reportes', null, { 
+        id_reporte: reporte.id, 
+        nombre: reporte.nombre 
+      }, 'reactivar_reporte');
+
+      toast({ title: "Éxito", description: "Reporte reactivado correctamente" });
+      queryClient.invalidateQueries({ queryKey: ['reportes-config'] });
+    } catch (error) {
+      console.error('Error reactivating report:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo reactivar el reporte",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (permissionsLoading || isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -302,6 +393,135 @@ export default function ConfiguracionReportes() {
       </div>
     );
   }
+
+  const renderReportesTable = (reportesList: Reporte[], isDeletedTab: boolean = false) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Nombre</TableHead>
+          <TableHead>Descripción</TableHead>
+          <TableHead>Archivo</TableHead>
+          <TableHead>Submenú</TableHead>
+          {!isDeletedTab && <TableHead>Activo</TableHead>}
+          <TableHead className="text-right">Acciones</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {reportesList.map((reporte) => (
+          <TableRow key={reporte.id}>
+            <TableCell className="font-medium">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                {reporte.nombre}
+              </div>
+            </TableCell>
+            <TableCell className="max-w-xs truncate">
+              {reporte.descripcion || "-"}
+            </TableCell>
+            <TableCell>
+              <code className="text-xs bg-muted px-2 py-1 rounded">
+                {reporte.nombre_archivo}.csv
+              </code>
+            </TableCell>
+            <TableCell>
+              {submenus.find(s => s.id === reporte.id_submenu)?.nombre || "-"}
+            </TableCell>
+            {!isDeletedTab && (
+              <TableCell>
+                {reporte.activo ? (
+                  <Badge variant="default" className="bg-green-600">
+                    <Check className="h-3 w-3 mr-1" /> Activo
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">
+                    <X className="h-3 w-3 mr-1" /> Inactivo
+                  </Badge>
+                )}
+              </TableCell>
+            )}
+            <TableCell className="text-right">
+              <div className="flex justify-end gap-2">
+                {isDeletedTab ? (
+                  // Botón de reactivar para reportes eliminados
+                  (canUpdate || isSuperAdmin) && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleReactivar(reporte)}
+                            className="text-green-600 hover:text-green-700"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Reactivar</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )
+                ) : (
+                  // Botones normales para reportes activos
+                  <>
+                    {(canUpdate || isSuperAdmin) && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDialog(reporte)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Editar</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    {(canDelete || isSuperAdmin) && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Eliminar reporte?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              ¿Estás seguro de que deseas eliminar el reporte "{reporte.nombre}"? 
+                              El reporte se moverá a la pestaña de eliminados y podrás reactivarlo después.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDelete(reporte)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Eliminar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </>
+                )}
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+        {reportesList.length === 0 && (
+          <TableRow>
+            <TableCell colSpan={isDeletedTab ? 5 : 6} className="text-center py-8 text-muted-foreground">
+              {isDeletedTab ? "No hay reportes eliminados" : "No hay reportes configurados"}
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
+  );
 
   return (
     <div className="p-6 space-y-6">
@@ -329,111 +549,28 @@ export default function ConfiguracionReportes() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Archivo</TableHead>
-                <TableHead>Submenú</TableHead>
-                <TableHead>Activo</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredReportes.map((reporte) => (
-                <TableRow key={reporte.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      {reporte.nombre}
-                    </div>
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate">
-                    {reporte.descripcion || "-"}
-                  </TableCell>
-                  <TableCell>
-                    <code className="text-xs bg-muted px-2 py-1 rounded">
-                      {reporte.nombre_archivo}.csv
-                    </code>
-                  </TableCell>
-                  <TableCell>
-                    {submenus.find(s => s.id === reporte.id_submenu)?.nombre || "-"}
-                  </TableCell>
-                  <TableCell>
-                    {reporte.activo ? (
-                      <Badge variant="default" className="bg-green-600">
-                        <Check className="h-3 w-3 mr-1" /> Activo
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">
-                        <X className="h-3 w-3 mr-1" /> Inactivo
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      {(canUpdate || isSuperAdmin) && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openDialog(reporte)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Editar</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      {(canDelete || isSuperAdmin) && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="text-destructive">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Eliminar reporte?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                ¿Estás seguro de que deseas eliminar el reporte "{reporte.nombre}"?
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDelete(reporte)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Eliminar
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredReportes.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    No hay reportes configurados
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="activos">
+                Activos ({reportesActivos.length})
+              </TabsTrigger>
+              <TabsTrigger value="eliminados">
+                Eliminados ({reportesEliminados.length})
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="activos">
+              {renderReportesTable(reportesActivos, false)}
+            </TabsContent>
+            <TabsContent value="eliminados">
+              {renderReportesTable(reportesEliminados, true)}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
       {/* Dialog for Create/Edit */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingReporte ? "Editar Reporte" : "Nuevo Reporte"}
@@ -514,11 +651,11 @@ export default function ConfiguracionReportes() {
                   ) : (
                     <XCircle className="h-4 w-4" />
                   )}
-                  {queryValidation.message}
+                  <span className="break-words">{queryValidation.message}</span>
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Usa {"{{AND condicion = :nombre_filtro}}"} para filtros dinámicos
+                Usa {"{{AND condicion = :nombre_filtro}}"} para filtros dinámicos. Solo se permiten consultas SELECT.
               </p>
             </div>
 
@@ -541,35 +678,141 @@ export default function ConfiguracionReportes() {
               <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="ayuda" className="border rounded-lg">
                   <AccordionTrigger className="px-4 text-sm text-muted-foreground hover:no-underline">
-                    ¿Cómo configurar los filtros?
+                    📚 Documentación: Tipos de Filtros y Ejemplos
                   </AccordionTrigger>
                   <AccordionContent className="px-4 pb-4">
-                    <div className="space-y-3 text-sm">
+                    <div className="space-y-4 text-sm">
                       <p>Los filtros se definen como un arreglo JSON. Cada filtro tiene estas propiedades:</p>
-                      <div className="bg-muted p-3 rounded-md font-mono text-xs space-y-2">
-                        <p><strong>nombre:</strong> Nombre del parámetro (debe coincidir con el placeholder en el query)</p>
-                        <p><strong>label:</strong> Etiqueta que se mostrará al usuario</p>
-                        <p><strong>tipo:</strong> "select", "multiselect", "date" o "text"</p>
-                        <p><strong>tabla:</strong> (Solo para select) Tabla de donde obtener opciones</p>
-                        <p><strong>campo_valor:</strong> (Opcional) Campo para el valor (default: id)</p>
-                        <p><strong>campo_label:</strong> (Opcional) Campo para mostrar (default: nombre)</p>
+                      
+                      {/* Propiedades comunes */}
+                      <div className="bg-muted p-3 rounded-md space-y-1">
+                        <p className="font-semibold mb-2">Propiedades comunes:</p>
+                        <p><code className="bg-background px-1 rounded">nombre</code>: Nombre del parámetro (debe coincidir con el placeholder en el query)</p>
+                        <p><code className="bg-background px-1 rounded">label</code>: Etiqueta que se mostrará al usuario</p>
+                        <p><code className="bg-background px-1 rounded">tipo</code>: "select", "multiselect", "date", "daterange" o "text"</p>
+                        <p><code className="bg-background px-1 rounded">requerido</code>: (Opcional) true si el filtro es obligatorio</p>
                       </div>
-                      <p className="font-medium">Ejemplo:</p>
-                      <pre className="bg-muted p-3 rounded-md font-mono text-xs overflow-x-auto">
+
+                      {/* SELECT */}
+                      <div className="border rounded-lg p-3 space-y-2">
+                        <h4 className="font-semibold text-primary">🔽 Tipo: select</h4>
+                        <p className="text-muted-foreground">Dropdown de selección única con opciones de una tabla.</p>
+                        <pre className="bg-muted p-2 rounded-md font-mono text-xs overflow-x-auto">
+{`{
+  "nombre": "id_proyecto",
+  "label": "Proyecto",
+  "tipo": "select",
+  "tabla": "proyectos",
+  "campo_valor": "id",
+  "campo_label": "nombre"
+}`}
+                        </pre>
+                      </div>
+
+                      {/* SELECT CON DEPENDENCIA */}
+                      <div className="border rounded-lg p-3 space-y-2">
+                        <h4 className="font-semibold text-primary">🔗 Tipo: select con dependencia</h4>
+                        <p className="text-muted-foreground">Dropdown que depende de otro filtro. Se habilita cuando el padre tiene valor.</p>
+                        <pre className="bg-muted p-2 rounded-md font-mono text-xs overflow-x-auto">
+{`{
+  "nombre": "id_dueno",
+  "label": "Dueño Vendedor",
+  "tipo": "select",
+  "depende_de": "id_proyecto",
+  "query_opciones": "SELECT DISTINCT p.id, p.nombre_legal as nombre FROM personas p JOIN entidades_relacionadas er ON er.id_persona = p.id JOIN propiedades prop ON prop.id_entidad_relacionada_dueno = er.id JOIN edificios_modelos em ON prop.id_edificio_modelo = em.id JOIN edificios e ON em.id_edificio = e.id WHERE e.id_proyecto = :id_proyecto AND p.activo = true"
+}`}
+                        </pre>
+                      </div>
+
+                      {/* DATE */}
+                      <div className="border rounded-lg p-3 space-y-2">
+                        <h4 className="font-semibold text-primary">📅 Tipo: date</h4>
+                        <p className="text-muted-foreground">Selector de fecha única.</p>
+                        <pre className="bg-muted p-2 rounded-md font-mono text-xs overflow-x-auto">
+{`{
+  "nombre": "fecha_corte",
+  "label": "Fecha de Corte",
+  "tipo": "date",
+  "requerido": true
+}`}
+                        </pre>
+                        <p className="text-xs text-muted-foreground">En el query: <code>{"{{AND fecha <= :fecha_corte}}"}</code></p>
+                      </div>
+
+                      {/* DATERANGE */}
+                      <div className="border rounded-lg p-3 space-y-2">
+                        <h4 className="font-semibold text-primary">📆 Tipo: daterange</h4>
+                        <p className="text-muted-foreground">Selector de rango de fechas (desde - hasta). Genera dos campos automáticamente.</p>
+                        <pre className="bg-muted p-2 rounded-md font-mono text-xs overflow-x-auto">
+{`{
+  "nombre": "periodo",
+  "label": "Período",
+  "tipo": "daterange"
+}`}
+                        </pre>
+                        <p className="text-xs text-muted-foreground">
+                          Genera dos parámetros: <code>periodo_desde</code> y <code>periodo_hasta</code><br/>
+                          En el query: <code>{"{{AND fecha >= :periodo_desde}} {{AND fecha <= :periodo_hasta}}"}</code>
+                        </p>
+                      </div>
+
+                      {/* TEXT */}
+                      <div className="border rounded-lg p-3 space-y-2">
+                        <h4 className="font-semibold text-primary">✏️ Tipo: text</h4>
+                        <p className="text-muted-foreground">Campo de texto libre para búsqueda.</p>
+                        <pre className="bg-muted p-2 rounded-md font-mono text-xs overflow-x-auto">
+{`{
+  "nombre": "busqueda",
+  "label": "Buscar",
+  "tipo": "text",
+  "placeholder": "Número de propiedad..."
+}`}
+                        </pre>
+                        <p className="text-xs text-muted-foreground">En el query: <code>{"{{AND numero_propiedad ILIKE '%' || :busqueda || '%'}}"}</code></p>
+                      </div>
+
+                      {/* MULTISELECT */}
+                      <div className="border rounded-lg p-3 space-y-2">
+                        <h4 className="font-semibold text-primary">☑️ Tipo: multiselect</h4>
+                        <p className="text-muted-foreground">Permite seleccionar múltiples opciones.</p>
+                        <pre className="bg-muted p-2 rounded-md font-mono text-xs overflow-x-auto">
+{`{
+  "nombre": "estatus",
+  "label": "Estatus",
+  "tipo": "multiselect",
+  "tabla": "estatus_disponibilidad",
+  "campo_valor": "id",
+  "campo_label": "nombre"
+}`}
+                        </pre>
+                        <p className="text-xs text-muted-foreground">En el query: <code>{"{{AND id_estatus IN (:estatus)}}"}</code></p>
+                      </div>
+
+                      {/* Ejemplo completo */}
+                      <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+                        <h4 className="font-semibold mb-2">Ejemplo completo de configuración:</h4>
+                        <pre className="bg-muted p-2 rounded-md font-mono text-xs overflow-x-auto">
 {`[
   {
     "nombre": "id_proyecto",
     "label": "Proyecto",
     "tipo": "select",
-    "tabla": "proyectos"
+    "tabla": "proyectos",
+    "requerido": true
   },
   {
-    "nombre": "fecha_desde",
-    "label": "Fecha desde",
-    "tipo": "date"
+    "nombre": "periodo",
+    "label": "Período",
+    "tipo": "daterange"
+  },
+  {
+    "nombre": "busqueda",
+    "label": "Buscar departamento",
+    "tipo": "text"
   }
 ]`}
-                      </pre>
+                        </pre>
+                      </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
