@@ -765,98 +765,139 @@ export default function ReporteViewer() {
                       </div>
                     )}
 
-                    {/* Three columns: Monto, Pagado, Restante */}
-                    <div className="grid md:grid-cols-3 gap-6">
-                      {/* Monto Column */}
-                      <div className="space-y-4 p-4 bg-background rounded-lg border">
-                        <h4 className="font-semibold text-sm border-b pb-2 text-blue-600">Monto por Cobrar</h4>
-                        {/* Total */}
-                        <div>
-                          <p className="text-xl font-bold text-blue-600">
-                            {formatCurrencyCompact(
-                              (summaryData.totals['monto_durante_obra'] || 0) + 
-                              (summaryData.totals['monto_a_la_entrega'] || 0)
+                    {/* Check if this is a simple report (products) or detailed (properties) */}
+                    {(() => {
+                      const hasDetailedBreakdown = summaryData.numericColumns.includes('monto_durante_obra') || 
+                                                   summaryData.numericColumns.includes('monto_a_la_entrega');
+                      const hasSimplePagado = summaryData.numericColumns.includes('pagado');
+                      const hasSimpleRestante = summaryData.numericColumns.includes('restante');
+                      
+                      // Simple view for products report (only pagado/restante without breakdown)
+                      if (!hasDetailedBreakdown && (hasSimplePagado || hasSimpleRestante)) {
+                        return (
+                          <div className="grid md:grid-cols-2 gap-6">
+                            {/* Pagado Column */}
+                            {hasSimplePagado && (
+                              <div className="space-y-4 p-4 bg-background rounded-lg border">
+                                <h4 className="font-semibold text-sm border-b pb-2 text-green-600">Total Pagado</h4>
+                                <div>
+                                  <p className="text-xl font-bold text-green-600">
+                                    {formatCurrencyCompact(summaryData.totals['pagado'] || 0)}
+                                  </p>
+                                </div>
+                              </div>
                             )}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
-                        </div>
-                        {/* Breakdown */}
-                        <div className="space-y-2 pt-2 border-t">
-                          {summaryData.numericColumns.includes('monto_durante_obra') && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Durante Obra</span>
-                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['monto_durante_obra'])}</span>
-                            </div>
-                          )}
-                          {summaryData.numericColumns.includes('monto_a_la_entrega') && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">A la Entrega</span>
-                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['monto_a_la_entrega'])}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
 
-                      {/* Pagado Column */}
-                      <div className="space-y-4 p-4 bg-background rounded-lg border">
-                        <h4 className="font-semibold text-sm border-b pb-2 text-green-600">Pagado</h4>
-                        {/* Total */}
-                        <div>
-                          <p className="text-xl font-bold text-green-600">
-                            {formatCurrencyCompact(
-                              (summaryData.totals['pagado_durante_obra'] || 0) + 
-                              (summaryData.totals['pagado_a_la_entrega'] || 0)
+                            {/* Restante Column */}
+                            {hasSimpleRestante && (
+                              <div className="space-y-4 p-4 bg-background rounded-lg border">
+                                <h4 className="font-semibold text-sm border-b pb-2 text-orange-500">Restante por Cobrar</h4>
+                                <div>
+                                  <p className="text-xl font-bold text-orange-500">
+                                    {formatCurrencyCompact(summaryData.totals['restante'] || 0)}
+                                  </p>
+                                </div>
+                              </div>
                             )}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
-                        </div>
-                        {/* Breakdown */}
-                        <div className="space-y-2 pt-2 border-t">
-                          {summaryData.numericColumns.includes('pagado_durante_obra') && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Durante Obra</span>
-                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['pagado_durante_obra'])}</span>
+                          </div>
+                        );
+                      }
+                      
+                      // Detailed view for properties report (with durante_obra/a_la_entrega breakdown)
+                      return (
+                        <div className="grid md:grid-cols-3 gap-6">
+                          {/* Monto Column */}
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <h4 className="font-semibold text-sm border-b pb-2 text-blue-600">Monto por Cobrar</h4>
+                            {/* Total */}
+                            <div>
+                              <p className="text-xl font-bold text-blue-600">
+                                {formatCurrencyCompact(
+                                  (summaryData.totals['monto_durante_obra'] || 0) + 
+                                  (summaryData.totals['monto_a_la_entrega'] || 0)
+                                )}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
                             </div>
-                          )}
-                          {summaryData.numericColumns.includes('pagado_a_la_entrega') && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">A la Entrega</span>
-                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['pagado_a_la_entrega'])}</span>
+                            {/* Breakdown */}
+                            <div className="space-y-2 pt-2 border-t">
+                              {summaryData.numericColumns.includes('monto_durante_obra') && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-muted-foreground">Durante Obra</span>
+                                  <span className="font-medium">{formatCurrencyCompact(summaryData.totals['monto_durante_obra'])}</span>
+                                </div>
+                              )}
+                              {summaryData.numericColumns.includes('monto_a_la_entrega') && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-muted-foreground">A la Entrega</span>
+                                  <span className="font-medium">{formatCurrencyCompact(summaryData.totals['monto_a_la_entrega'])}</span>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </div>
+                          </div>
 
-                      {/* Restante Column */}
-                      <div className="space-y-4 p-4 bg-background rounded-lg border">
-                        <h4 className="font-semibold text-sm border-b pb-2 text-orange-500">Restante por Cobrar</h4>
-                        {/* Total */}
-                        <div>
-                          <p className="text-xl font-bold text-orange-500">
-                            {formatCurrencyCompact(
-                              (summaryData.totals['restante_durante_obra'] || 0) + 
-                              (summaryData.totals['restante_a_la_entrega'] || 0)
-                            )}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
-                        </div>
-                        {/* Breakdown */}
-                        <div className="space-y-2 pt-2 border-t">
-                          {summaryData.numericColumns.includes('restante_durante_obra') && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Durante Obra</span>
-                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['restante_durante_obra'])}</span>
+                          {/* Pagado Column */}
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <h4 className="font-semibold text-sm border-b pb-2 text-green-600">Pagado</h4>
+                            {/* Total */}
+                            <div>
+                              <p className="text-xl font-bold text-green-600">
+                                {formatCurrencyCompact(
+                                  (summaryData.totals['pagado_durante_obra'] || 0) + 
+                                  (summaryData.totals['pagado_a_la_entrega'] || 0)
+                                )}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
                             </div>
-                          )}
-                          {summaryData.numericColumns.includes('restante_a_la_entrega') && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">A la Entrega</span>
-                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['restante_a_la_entrega'])}</span>
+                            {/* Breakdown */}
+                            <div className="space-y-2 pt-2 border-t">
+                              {summaryData.numericColumns.includes('pagado_durante_obra') && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-muted-foreground">Durante Obra</span>
+                                  <span className="font-medium">{formatCurrencyCompact(summaryData.totals['pagado_durante_obra'])}</span>
+                                </div>
+                              )}
+                              {summaryData.numericColumns.includes('pagado_a_la_entrega') && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-muted-foreground">A la Entrega</span>
+                                  <span className="font-medium">{formatCurrencyCompact(summaryData.totals['pagado_a_la_entrega'])}</span>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
+
+                          {/* Restante Column */}
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <h4 className="font-semibold text-sm border-b pb-2 text-orange-500">Restante por Cobrar</h4>
+                            {/* Total */}
+                            <div>
+                              <p className="text-xl font-bold text-orange-500">
+                                {formatCurrencyCompact(
+                                  (summaryData.totals['restante_durante_obra'] || 0) + 
+                                  (summaryData.totals['restante_a_la_entrega'] || 0)
+                                )}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
+                            </div>
+                            {/* Breakdown */}
+                            <div className="space-y-2 pt-2 border-t">
+                              {summaryData.numericColumns.includes('restante_durante_obra') && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-muted-foreground">Durante Obra</span>
+                                  <span className="font-medium">{formatCurrencyCompact(summaryData.totals['restante_durante_obra'])}</span>
+                                </div>
+                              )}
+                              {summaryData.numericColumns.includes('restante_a_la_entrega') && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-muted-foreground">A la Entrega</span>
+                                  <span className="font-medium">{formatCurrencyCompact(summaryData.totals['restante_a_la_entrega'])}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
                 </CollapsibleContent>
               </div>
