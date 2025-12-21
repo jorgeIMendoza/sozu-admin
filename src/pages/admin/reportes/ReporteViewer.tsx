@@ -1364,16 +1364,17 @@ export default function ReporteViewer() {
                           <div className="flex flex-wrap justify-center gap-4 pt-2 border-t mt-2">
                             {activeColumns.map((col) => (
                               <div key={col} className="flex items-center gap-2">
-                                <div 
-                                  className="w-6 h-0.5" 
-                                  style={{ 
-                                    backgroundColor: chartColorMap[col] || '#888',
-                                    borderStyle: chartStrokeDash[col] === '8 4' ? 'dashed' : chartStrokeDash[col] === '2 2' ? 'dotted' : 'solid',
-                                    borderWidth: chartStrokeDash[col] !== '0' ? '2px' : '0',
-                                    borderColor: chartColorMap[col] || '#888',
-                                    height: chartStrokeDash[col] !== '0' ? '0' : `${chartStrokeWidth[col] || 2}px`
-                                  }}
-                                />
+                                <svg width="30" height="12" className="flex-shrink-0">
+                                  <line 
+                                    x1="0" 
+                                    y1="6" 
+                                    x2="30" 
+                                    y2="6" 
+                                    stroke={chartColorMap[col] || '#888'}
+                                    strokeWidth={chartStrokeWidth[col] || 2}
+                                    strokeDasharray={chartStrokeDash[col] || '0'}
+                                  />
+                                </svg>
                                 <span className="text-xs text-muted-foreground">
                                   {col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                 </span>
