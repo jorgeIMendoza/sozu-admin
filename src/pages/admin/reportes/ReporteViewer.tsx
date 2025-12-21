@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Download, Loader2, FileSpreadsheet, CalendarIcon, Table as TableIcon, BarChart3, RefreshCw, AlertCircle, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { ArrowLeft, Download, Loader2, FileSpreadsheet, CalendarIcon, Table as TableIcon, BarChart3, RefreshCw, AlertCircle, ChevronDown, ChevronUp, Info, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { cn } from "@/lib/utils";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, AreaChart, Area } from 'recharts';
 
 interface FiltroConfig {
   nombre: string;
@@ -147,6 +147,7 @@ export default function ReporteViewer() {
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
   const [chartRecordLimit, setChartRecordLimit] = useState<number | 'all'>(50);
   const [summaryOpen, setSummaryOpen] = useState(true);
+  const [progressChartType, setProgressChartType] = useState<'stacked-bar' | 'area' | 'bullet'>('stacked-bar');
 
   // Fetch Real Estate projects IDs
   const { data: realEstateProjectIds = [] } = useQuery({
@@ -423,6 +424,83 @@ export default function ReporteViewer() {
       fill: barColorMap[col] || '#888'
     }));
   }, [summaryData]);
+
+  // Prepare progress chart data - aggregated by project
+  const progressChartData = useMemo(() => {
+    if (!fullData || fullData.length === 0) return [];
+
+    const projectColumn = columns.find(col => col.toLowerCase().includes('proyecto'));
+    if (!projectColumn) return [];
+
+    // Check if we have the required columns for progress chart
+    const hasDetailedBreakdown = columns.includes('pagado_durante_obra') || columns.includes('pagado_a_la_entrega');
+    const hasSimplePagado = columns.includes('pagado');
+    
+    if (!hasDetailedBreakdown && !hasSimplePagado) return [];
+
+    // Group data by project
+    const projectMap = new Map<string, {
+      proyecto: string;
+      precio_final: number;
+      pagado_durante_obra: number;
+      pagado_a_la_entrega: number;
+      restante_durante_obra: number;
+      restante_a_la_entrega: number;
+      pagado_total: number;
+      restante_total: number;
+    }>();
+
+    fullData.forEach(row => {
+      const proyecto = String(row[projectColumn] || 'Sin Proyecto');
+      
+      if (!projectMap.has(proyecto)) {
+        projectMap.set(proyecto, {
+          proyecto,
+          precio_final: 0,
+          pagado_durante_obra: 0,
+          pagado_a_la_entrega: 0,
+          restante_durante_obra: 0,
+          restante_a_la_entrega: 0,
+          pagado_total: 0,
+          restante_total: 0,
+        });
+      }
+
+      const current = projectMap.get(proyecto)!;
+      current.precio_final += Number(row['precio_final']) || 0;
+      
+      if (hasDetailedBreakdown) {
+        current.pagado_durante_obra += Number(row['pagado_durante_obra']) || 0;
+        current.pagado_a_la_entrega += Number(row['pagado_a_la_entrega']) || 0;
+        current.restante_durante_obra += Number(row['restante_durante_obra']) || 0;
+        current.restante_a_la_entrega += Number(row['restante_a_la_entrega']) || 0;
+        current.pagado_total = current.pagado_durante_obra + current.pagado_a_la_entrega;
+        current.restante_total = current.restante_durante_obra + current.restante_a_la_entrega;
+      } else {
+        current.pagado_total += Number(row['pagado']) || 0;
+        current.restante_total += Number(row['restante']) || 0;
+      }
+    });
+
+    // Convert to array and calculate percentages
+    const result = Array.from(projectMap.values()).map(p => ({
+      ...p,
+      porcentaje_pagado: p.precio_final > 0 ? (p.pagado_total / p.precio_final) * 100 : 0,
+    }));
+
+    // Sort by percentage paid (descending) - most paid first
+    return result.sort((a, b) => b.porcentaje_pagado - a.porcentaje_pagado);
+  }, [fullData, columns]);
+
+  // Colors for progress chart
+  const progressColors = {
+    pagado_durante_obra: '#22c55e',     // green
+    pagado_a_la_entrega: '#3b82f6',     // blue
+    restante_durante_obra: '#f97316',   // orange
+    restante_a_la_entrega: '#ef4444',   // red
+    pagado_total: '#22c55e',            // green (for simple view)
+    restante_total: '#f97316',          // orange (for simple view)
+  };
 
   // Colors for chart lines - matching column order
   const chartColorMap: Record<string, string> = {
@@ -1093,6 +1171,217 @@ export default function ReporteViewer() {
                     </div>
                   )}
                 </div>
+
+                {/* Progress Chart - By Project */}
+                {progressChartData.length > 0 && (
+                  <div className="h-auto min-h-[400px]">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        <h4 className="text-sm font-medium text-muted-foreground">Progreso de Cobranza por Proyecto</h4>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Tipo de gráfica:</span>
+                        <Select 
+                          value={progressChartType} 
+                          onValueChange={(val) => setProgressChartType(val as 'stacked-bar' | 'area' | 'bullet')}
+                        >
+                          <SelectTrigger className="w-[160px] h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="stacked-bar">📊 Barras Apiladas</SelectItem>
+                            <SelectItem value="area">📈 Área Apilada</SelectItem>
+                            <SelectItem value="bullet">🎯 Progreso Simple</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Stacked Horizontal Bar Chart */}
+                    {progressChartType === 'stacked-bar' && (
+                      <div style={{ height: Math.max(300, progressChartData.length * 50) }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart 
+                            data={progressChartData} 
+                            layout="vertical"
+                            margin={{ top: 20, right: 80, left: 120, bottom: 20 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={true} vertical={false} />
+                            <XAxis 
+                              type="number"
+                              tickFormatter={(value) => formatCurrencyCompact(value)}
+                              className="fill-muted-foreground"
+                            />
+                            <YAxis 
+                              type="category"
+                              dataKey="proyecto"
+                              tick={{ fontSize: 11 }}
+                              width={110}
+                              className="fill-muted-foreground"
+                            />
+                            <RechartsTooltip 
+                              formatter={(value: number, name: string) => [formatCurrencyCompact(value), name]}
+                              contentStyle={{ 
+                                backgroundColor: 'hsl(var(--background))', 
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px'
+                              }}
+                              labelFormatter={(label) => {
+                                const project = progressChartData.find(p => p.proyecto === label);
+                                return project ? `${label} (${project.porcentaje_pagado.toFixed(1)}% pagado)` : label;
+                              }}
+                            />
+                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                            {columns.includes('pagado_durante_obra') ? (
+                              <>
+                                <Bar dataKey="pagado_durante_obra" stackId="a" fill={progressColors.pagado_durante_obra} name="Pagado Durante Obra" />
+                                <Bar dataKey="pagado_a_la_entrega" stackId="a" fill={progressColors.pagado_a_la_entrega} name="Pagado A la Entrega" />
+                                <Bar dataKey="restante_durante_obra" stackId="a" fill={progressColors.restante_durante_obra} name="Restante Durante Obra" />
+                                <Bar dataKey="restante_a_la_entrega" stackId="a" fill={progressColors.restante_a_la_entrega} name="Restante A la Entrega" radius={[0, 4, 4, 0]} />
+                              </>
+                            ) : (
+                              <>
+                                <Bar dataKey="pagado_total" stackId="a" fill={progressColors.pagado_total} name="Pagado" />
+                                <Bar dataKey="restante_total" stackId="a" fill={progressColors.restante_total} name="Restante" radius={[0, 4, 4, 0]} />
+                              </>
+                            )}
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {/* Stacked Area Chart */}
+                    {progressChartType === 'area' && (
+                      <div className="h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart 
+                            data={progressChartData} 
+                            margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis 
+                              dataKey="proyecto"
+                              angle={-30}
+                              textAnchor="end"
+                              height={80}
+                              interval={0}
+                              tick={{ fontSize: 10 }}
+                              className="fill-muted-foreground"
+                            />
+                            <YAxis 
+                              tickFormatter={(value) => formatCurrencyCompact(value)}
+                              className="fill-muted-foreground"
+                              width={100}
+                            />
+                            <RechartsTooltip 
+                              formatter={(value: number, name: string) => [formatCurrencyCompact(value), name]}
+                              contentStyle={{ 
+                                backgroundColor: 'hsl(var(--background))', 
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px'
+                              }}
+                              labelFormatter={(label) => {
+                                const project = progressChartData.find(p => p.proyecto === label);
+                                return project ? `${label} (${project.porcentaje_pagado.toFixed(1)}% pagado)` : label;
+                              }}
+                            />
+                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                            {columns.includes('pagado_durante_obra') ? (
+                              <>
+                                <Area type="monotone" dataKey="pagado_durante_obra" stackId="1" stroke={progressColors.pagado_durante_obra} fill={progressColors.pagado_durante_obra} fillOpacity={0.8} name="Pagado Durante Obra" />
+                                <Area type="monotone" dataKey="pagado_a_la_entrega" stackId="1" stroke={progressColors.pagado_a_la_entrega} fill={progressColors.pagado_a_la_entrega} fillOpacity={0.8} name="Pagado A la Entrega" />
+                                <Area type="monotone" dataKey="restante_durante_obra" stackId="1" stroke={progressColors.restante_durante_obra} fill={progressColors.restante_durante_obra} fillOpacity={0.6} name="Restante Durante Obra" />
+                                <Area type="monotone" dataKey="restante_a_la_entrega" stackId="1" stroke={progressColors.restante_a_la_entrega} fill={progressColors.restante_a_la_entrega} fillOpacity={0.6} name="Restante A la Entrega" />
+                              </>
+                            ) : (
+                              <>
+                                <Area type="monotone" dataKey="pagado_total" stackId="1" stroke={progressColors.pagado_total} fill={progressColors.pagado_total} fillOpacity={0.8} name="Pagado" />
+                                <Area type="monotone" dataKey="restante_total" stackId="1" stroke={progressColors.restante_total} fill={progressColors.restante_total} fillOpacity={0.6} name="Restante" />
+                              </>
+                            )}
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {/* Bullet/Progress Chart */}
+                    {progressChartType === 'bullet' && (
+                      <div className="space-y-4 p-4 bg-muted/20 rounded-lg">
+                        {progressChartData.map((project, index) => (
+                          <div key={project.proyecto} className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium truncate max-w-[200px]" title={project.proyecto}>
+                                {project.proyecto}
+                              </span>
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span>Pagado: {formatCurrencyCompact(project.pagado_total)}</span>
+                                <span>Total: {formatCurrencyCompact(project.precio_final)}</span>
+                                <span className={cn(
+                                  "font-bold min-w-[60px] text-right",
+                                  project.porcentaje_pagado >= 90 ? "text-green-600" :
+                                  project.porcentaje_pagado >= 50 ? "text-blue-600" :
+                                  project.porcentaje_pagado >= 25 ? "text-orange-500" : "text-red-500"
+                                )}>
+                                  {project.porcentaje_pagado.toFixed(1)}%
+                                </span>
+                              </div>
+                            </div>
+                            <div className="relative h-6 bg-muted rounded-full overflow-hidden">
+                              {/* Background track */}
+                              <div className="absolute inset-0 bg-gradient-to-r from-muted to-muted/50" />
+                              
+                              {/* Progress bar */}
+                              <div 
+                                className={cn(
+                                  "absolute h-full rounded-full transition-all duration-500 ease-out",
+                                  project.porcentaje_pagado >= 90 ? "bg-gradient-to-r from-green-500 to-green-400" :
+                                  project.porcentaje_pagado >= 50 ? "bg-gradient-to-r from-blue-500 to-blue-400" :
+                                  project.porcentaje_pagado >= 25 ? "bg-gradient-to-r from-orange-500 to-orange-400" : 
+                                  "bg-gradient-to-r from-red-500 to-red-400"
+                                )}
+                                style={{ width: `${Math.min(project.porcentaje_pagado, 100)}%` }}
+                              />
+                              
+                              {/* 100% marker */}
+                              <div className="absolute right-0 top-0 h-full w-0.5 bg-foreground/20" />
+                              
+                              {/* Percentage label inside bar */}
+                              {project.porcentaje_pagado > 15 && (
+                                <div 
+                                  className="absolute h-full flex items-center px-2 text-xs font-bold text-white"
+                                  style={{ width: `${Math.min(project.porcentaje_pagado, 100)}%`, justifyContent: 'flex-end' }}
+                                >
+                                  {project.porcentaje_pagado.toFixed(0)}%
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        
+                        {/* Legend for bullet chart */}
+                        <div className="flex items-center justify-center gap-6 pt-4 border-t mt-4 text-xs">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-gradient-to-r from-green-500 to-green-400" />
+                            <span>≥90% Pagado</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-400" />
+                            <span>50-89%</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-gradient-to-r from-orange-500 to-orange-400" />
+                            <span>25-49%</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-gradient-to-r from-red-500 to-red-400" />
+                            <span>&lt;25%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : previewData && previewData.length > 0 ? (
               <ScrollArea className="h-[500px]">
