@@ -320,20 +320,31 @@ export default function ReporteViewer() {
       col.toLowerCase().includes('numero departamento') ||
       col.toLowerCase().includes('departamento')
     );
+    const productColumn = columns.find(col => col.toLowerCase() === 'producto');
 
     // Filter to available numeric columns in preferred order
     const availableOrderedColumns = orderedChartColumns.filter(col => columns.includes(col));
 
-    return previewData.slice(0, 20).map(row => {
+    // Use fullData to show ALL records in the trend chart
+    return fullData.map(row => {
       const proyecto = projectColumn ? String(row[projectColumn]) : '';
       const depto = deptColumn ? String(row[deptColumn]) : '';
-      const fullLabel = depto ? `${proyecto} - Depto ${depto}` : proyecto;
+      const producto = productColumn ? String(row[productColumn]) : '';
+      
+      // For properties: "Proyecto - Depto XXX", for products: "Proyecto - Producto YYY"
+      let fullLabel = proyecto;
+      if (depto) {
+        fullLabel = `${proyecto} - Depto ${depto}`;
+      } else if (producto) {
+        fullLabel = `${proyecto} - ${producto}`;
+      }
       
       const item: Record<string, unknown> = { 
         name: proyecto.substring(0, 15),
         fullName: fullLabel,
         proyecto: proyecto,
-        departamento: depto
+        departamento: depto,
+        producto: producto
       };
       availableOrderedColumns.forEach(col => {
         item[col] = Number(row[col]) || 0;
@@ -733,13 +744,23 @@ export default function ReporteViewer() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="px-4 pb-4">
-                    {/* Main summary: Precio Final */}
+                    {/* Main summary: Precio Final + Promedio */}
                     {summaryData.numericColumns.includes('precio_final') && (
                       <div className="mb-6 p-4 bg-background rounded-lg border">
-                        <p className="text-sm text-muted-foreground mb-1">Suma Total de Precio Final</p>
-                        <p className="text-2xl font-bold text-primary">
-                          {formatCurrencyCompact(summaryData.totals['precio_final'])}
-                        </p>
+                        <div className="grid grid-cols-2 gap-6">
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Suma Total de Precio Final</p>
+                            <p className="text-2xl font-bold text-primary">
+                              {formatCurrencyCompact(summaryData.totals['precio_final'])}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Precio Promedio</p>
+                            <p className="text-2xl font-bold text-primary">
+                              {formatCurrencyCompact(summaryData.totals['precio_final'] / summaryData.totalRows)}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
 
