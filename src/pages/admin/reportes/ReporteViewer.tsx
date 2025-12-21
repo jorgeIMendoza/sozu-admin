@@ -689,110 +689,107 @@ export default function ReporteViewer() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="px-4 pb-4">
-                    {/* Top summary cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-                      {summaryData.numericColumns.slice(0, 5).map((col, idx) => {
-                        const colors = ['text-primary', 'text-blue-600', 'text-green-600', 'text-orange-500', 'text-red-500'];
-                        return (
-                          <div key={col} className="text-center">
-                            <p className="text-xs text-muted-foreground mb-1">
-                              {col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                            </p>
-                            <p className={cn("text-lg font-bold", colors[idx % colors.length])}>
-                              {formatCurrencyCompact(summaryData.totals[col])}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {/* Main summary: Precio Final */}
+                    {summaryData.numericColumns.includes('precio_final') && (
+                      <div className="mb-6 p-4 bg-background rounded-lg border">
+                        <p className="text-sm text-muted-foreground mb-1">Precio Final Total</p>
+                        <p className="text-2xl font-bold text-primary">
+                          {formatCurrencyCompact(summaryData.totals['precio_final'])}
+                        </p>
+                      </div>
+                    )}
 
-                    {/* Breakdown sections */}
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {/* Durante Obra section */}
-                      {summaryData.numericColumns.some(col => col.toLowerCase().includes('durante_obra')) && (
-                        <div className="space-y-3">
-                          <h4 className="font-semibold text-sm border-b pb-1">Desglose por Etapa - Durante la Obra</h4>
-                          <p className="text-xs text-muted-foreground">(Apartado + Enganche + Pagos Especiales + Parcialidades + Cesión de derechos)</p>
-                          <div className="grid grid-cols-2 gap-4">
-                            {/* Monto */}
-                            {summaryData.numericColumns
-                              .filter(col => col.toLowerCase().includes('monto_durante_obra'))
-                              .map(col => (
-                                <div key={col}>
-                                  <p className="text-xs text-muted-foreground">Monto</p>
-                                  <p className="text-lg font-bold text-primary">
-                                    {formatCurrencyCompact(summaryData.totals[col])}
-                                  </p>
-                                </div>
-                              ))}
-                            {/* Pagado */}
-                            {summaryData.numericColumns
-                              .filter(col => col.toLowerCase().includes('pagado_durante_obra'))
-                              .map(col => (
-                                <div key={col}>
-                                  <p className="text-xs text-muted-foreground">Pagado</p>
-                                  <p className="text-lg font-bold text-green-600">
-                                    {formatCurrencyCompact(summaryData.totals[col])}
-                                  </p>
-                                </div>
-                              ))}
-                          </div>
-                          {/* Restante */}
-                          {summaryData.numericColumns
-                            .filter(col => col.toLowerCase().includes('restante_durante_obra'))
-                            .map(col => (
-                              <div key={col}>
-                                <p className="text-xs text-muted-foreground">Restante</p>
-                                <p className="text-lg font-bold text-orange-500">
-                                  {formatCurrencyCompact(summaryData.totals[col])}
-                                </p>
-                              </div>
-                            ))}
+                    {/* Three columns: Monto, Pagado, Restante */}
+                    <div className="grid md:grid-cols-3 gap-6">
+                      {/* Monto Column */}
+                      <div className="space-y-4 p-4 bg-background rounded-lg border">
+                        <h4 className="font-semibold text-sm border-b pb-2 text-blue-600">Monto por Cobrar</h4>
+                        {/* Total */}
+                        <div>
+                          <p className="text-xl font-bold text-blue-600">
+                            {formatCurrencyCompact(
+                              (summaryData.totals['monto_durante_obra'] || 0) + 
+                              (summaryData.totals['monto_a_la_entrega'] || 0)
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
                         </div>
-                      )}
+                        {/* Breakdown */}
+                        <div className="space-y-2 pt-2 border-t">
+                          {summaryData.numericColumns.includes('monto_durante_obra') && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Durante Obra</span>
+                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['monto_durante_obra'])}</span>
+                            </div>
+                          )}
+                          {summaryData.numericColumns.includes('monto_a_la_entrega') && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">A la Entrega</span>
+                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['monto_a_la_entrega'])}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
-                      {/* A la Entrega section */}
-                      {summaryData.numericColumns.some(col => col.toLowerCase().includes('entrega') && !col.toLowerCase().includes('durante')) && (
-                        <div className="space-y-3">
-                          <h4 className="font-semibold text-sm border-b pb-1">Desglose por Etapa - A la Entrega</h4>
-                          <p className="text-xs text-muted-foreground">(Pago a Contra Entrega)</p>
-                          <div className="grid grid-cols-2 gap-4">
-                            {/* Monto */}
-                            {summaryData.numericColumns
-                              .filter(col => col.toLowerCase().includes('monto_a_la_entrega'))
-                              .map(col => (
-                                <div key={col}>
-                                  <p className="text-xs text-muted-foreground">Monto</p>
-                                  <p className="text-lg font-bold text-primary">
-                                    {formatCurrencyCompact(summaryData.totals[col])}
-                                  </p>
-                                </div>
-                              ))}
-                            {/* Pagado */}
-                            {summaryData.numericColumns
-                              .filter(col => col.toLowerCase().includes('pagado_a_la_entrega'))
-                              .map(col => (
-                                <div key={col}>
-                                  <p className="text-xs text-muted-foreground">Pagado</p>
-                                  <p className="text-lg font-bold text-green-600">
-                                    {formatCurrencyCompact(summaryData.totals[col])}
-                                  </p>
-                                </div>
-                              ))}
-                          </div>
-                          {/* Restante */}
-                          {summaryData.numericColumns
-                            .filter(col => col.toLowerCase().includes('restante_a_la_entrega'))
-                            .map(col => (
-                              <div key={col}>
-                                <p className="text-xs text-muted-foreground">Restante</p>
-                                <p className="text-lg font-bold text-red-500">
-                                  {formatCurrencyCompact(summaryData.totals[col])}
-                                </p>
-                              </div>
-                            ))}
+                      {/* Pagado Column */}
+                      <div className="space-y-4 p-4 bg-background rounded-lg border">
+                        <h4 className="font-semibold text-sm border-b pb-2 text-green-600">Pagado</h4>
+                        {/* Total */}
+                        <div>
+                          <p className="text-xl font-bold text-green-600">
+                            {formatCurrencyCompact(
+                              (summaryData.totals['pagado_durante_obra'] || 0) + 
+                              (summaryData.totals['pagado_a_la_entrega'] || 0)
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
                         </div>
-                      )}
+                        {/* Breakdown */}
+                        <div className="space-y-2 pt-2 border-t">
+                          {summaryData.numericColumns.includes('pagado_durante_obra') && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Durante Obra</span>
+                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['pagado_durante_obra'])}</span>
+                            </div>
+                          )}
+                          {summaryData.numericColumns.includes('pagado_a_la_entrega') && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">A la Entrega</span>
+                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['pagado_a_la_entrega'])}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Restante Column */}
+                      <div className="space-y-4 p-4 bg-background rounded-lg border">
+                        <h4 className="font-semibold text-sm border-b pb-2 text-orange-500">Restante por Cobrar</h4>
+                        {/* Total */}
+                        <div>
+                          <p className="text-xl font-bold text-orange-500">
+                            {formatCurrencyCompact(
+                              (summaryData.totals['restante_durante_obra'] || 0) + 
+                              (summaryData.totals['restante_a_la_entrega'] || 0)
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Total (Durante Obra + Entrega)</p>
+                        </div>
+                        {/* Breakdown */}
+                        <div className="space-y-2 pt-2 border-t">
+                          {summaryData.numericColumns.includes('restante_durante_obra') && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Durante Obra</span>
+                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['restante_durante_obra'])}</span>
+                            </div>
+                          )}
+                          {summaryData.numericColumns.includes('restante_a_la_entrega') && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">A la Entrega</span>
+                              <span className="font-medium">{formatCurrencyCompact(summaryData.totals['restante_a_la_entrega'])}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </CollapsibleContent>
