@@ -1402,125 +1402,141 @@ export default function ReporteViewer() {
 
                     {/* Stacked Horizontal Bar Chart */}
                     {progressChartType === 'stacked-bar' && (
-                      <div style={{ height: aggregateProjects ? 180 : Math.max(400, displayProgressData.length * 120) }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart 
-                            data={displayProgressData} 
-                            layout="vertical"
-                            margin={{ top: 30, right: 280, left: 140, bottom: 30 }}
-                            barSize={aggregateProjects ? 80 : 55}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={true} vertical={false} />
-                            <XAxis 
-                              type="number"
-                              tickFormatter={(value) => formatCurrencyCompact(value)}
-                              className="fill-muted-foreground"
-                            />
-                            <YAxis 
-                              type="category"
-                              dataKey="proyecto"
-                              tick={{ fontSize: 12 }}
-                              width={120}
-                              className="fill-muted-foreground"
-                            />
-                            <RechartsTooltip 
-                              formatter={(value: number, name: string, props: { payload?: Record<string, number> }) => {
-                                const payload = props.payload;
-                                if (!payload) return [formatCurrencyCompact(value), name];
-                                // Get the percentage for this segment
-                                let pct = 0;
-                                if (name === 'Pagado Durante Obra') pct = payload.pct_pagado_durante_obra || 0;
-                                else if (name === 'Pagado A la Entrega') pct = payload.pct_pagado_a_la_entrega || 0;
-                                else if (name === 'Restante Durante Obra') pct = payload.pct_restante_durante_obra || 0;
-                                else if (name === 'Restante A la Entrega') pct = payload.pct_restante_a_la_entrega || 0;
-                                else if (name === 'Pagado') pct = payload.pct_pagado_total || 0;
-                                else if (name === 'Restante') pct = payload.pct_restante_total || 0;
-                                return [`${formatCurrencyCompact(value)} (${pct.toFixed(1)}%)`, name];
-                              }}
-                              contentStyle={{ 
-                                backgroundColor: 'hsl(var(--background))', 
-                                border: '1px solid hsl(var(--border))',
-                                borderRadius: '8px'
-                              }}
-                              labelFormatter={(label) => {
-                                const project = displayProgressData.find(p => p.proyecto === label);
-                                return project ? `${label} (${project.porcentaje_pagado.toFixed(1)}% pagado)` : label;
-                              }}
-                            />
-                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                            {columns.includes('pagado_durante_obra') ? (
-                              <>
-                                <Bar dataKey="pagado_durante_obra" stackId="a" fill={progressColors.pagado_durante_obra} name="Pagado Durante Obra">
-                                  <LabelList dataKey="pct_pagado_durante_obra" position="center" formatter={(v: number) => v > 5 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 11, fill: '#fff', fontWeight: 'bold' }} />
-                                </Bar>
-                                <Bar dataKey="pagado_a_la_entrega" stackId="a" fill={progressColors.pagado_a_la_entrega} name="Pagado A la Entrega">
-                                  <LabelList dataKey="pct_pagado_a_la_entrega" position="center" formatter={(v: number) => v > 5 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 11, fill: '#fff', fontWeight: 'bold' }} />
-                                </Bar>
-                                <Bar dataKey="restante_durante_obra" stackId="a" fill={progressColors.restante_durante_obra} name="Restante Durante Obra">
-                                  <LabelList dataKey="pct_restante_durante_obra" position="center" formatter={(v: number) => v > 5 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 11, fill: '#fff', fontWeight: 'bold' }} />
-                                </Bar>
-                                <Bar dataKey="restante_a_la_entrega" stackId="a" fill={progressColors.restante_a_la_entrega} name="Restante A la Entrega" radius={[0, 4, 4, 0]}>
-                                  <LabelList dataKey="pct_restante_a_la_entrega" position="center" formatter={(v: number) => v > 5 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 11, fill: '#fff', fontWeight: 'bold' }} />
-                                  <LabelList 
-                                    position="right"
-                                    content={(props) => {
-                                      const { x, y, width, height, index } = props;
-                                      if (x === undefined || y === undefined || width === undefined || height === undefined || index === undefined) return null;
-                                      const numX = Number(x);
-                                      const numY = Number(y);
-                                      const numW = Number(width);
-                                      const numH = Number(height);
-                                      const numIndex = Number(index);
-                                      if (isNaN(numX) || isNaN(numY) || isNaN(numW) || isNaN(numH) || isNaN(numIndex)) return null;
-                                      const data = displayProgressData[numIndex];
-                                      if (!data) return null;
-                                      const startX = numX + numW + 12;
-                                      const centerY = numY + numH / 2;
-                                      // Calculate totals for durante obra and a la entrega
-                                      const duranteObra = data.pagado_durante_obra + data.restante_durante_obra;
-                                      const entrega = data.pagado_a_la_entrega + data.restante_a_la_entrega;
-                                      const pctDurante = data.precio_final > 0 ? (duranteObra / data.precio_final * 100) : 0;
-                                      const pctEntrega = data.precio_final > 0 ? (entrega / data.precio_final * 100) : 0;
-                                      return (
-                                        <g>
-                                          {/* Total amount */}
-                                          <text x={startX} y={centerY} fontSize={13} fill="hsl(var(--foreground))" fontWeight="bold" dominantBaseline="middle">
-                                            {formatCurrencyCompact(data.precio_final)}
-                                          </text>
-                                          {/* Brace */}
-                                          <path 
-                                            d={`M${startX + 75} ${centerY - 18} Q${startX + 86} ${centerY - 18} ${startX + 86} ${centerY} Q${startX + 86} ${centerY + 18} ${startX + 75} ${centerY + 18}`}
-                                            stroke="hsl(var(--muted-foreground))"
-                                            strokeWidth={1.5}
-                                            fill="none"
-                                          />
-                                          {/* Durante Obra line */}
-                                          <text x={startX + 95} y={centerY - 10} fontSize={11} fill="hsl(var(--muted-foreground))" dominantBaseline="middle">
-                                            D.Obra: {formatCurrencyCompact(duranteObra)} ({pctDurante.toFixed(0)}%)
-                                          </text>
-                                          {/* A la Entrega line */}
-                                          <text x={startX + 95} y={centerY + 10} fontSize={11} fill="hsl(var(--muted-foreground))" dominantBaseline="middle">
-                                            Entrega: {formatCurrencyCompact(entrega)} ({pctEntrega.toFixed(0)}%)
-                                          </text>
-                                        </g>
-                                      );
-                                    }}
-                                  />
-                                </Bar>
-                              </>
-                            ) : (
-                              <>
-                                <Bar dataKey="pagado_total" stackId="a" fill={progressColors.pagado_total} name="Pagado">
-                                  <LabelList dataKey="pct_pagado_total" position="center" formatter={(v: number) => v > 5 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 11, fill: '#fff', fontWeight: 'bold' }} />
-                                </Bar>
-                                <Bar dataKey="restante_total" stackId="a" fill={progressColors.restante_total} name="Restante" radius={[0, 4, 4, 0]}>
-                                  <LabelList dataKey="pct_restante_total" position="center" formatter={(v: number) => v > 5 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 11, fill: '#fff', fontWeight: 'bold' }} />
-                                  <LabelList dataKey="label_total" position="right" style={{ fontSize: 11, fill: 'hsl(var(--foreground))' }} />
-                                </Bar>
-                              </>
-                            )}
-                          </BarChart>
-                        </ResponsiveContainer>
+                      <div className="space-y-4">
+                        {/* Custom Legend - Horizontal compact */}
+                        <div className="flex items-center justify-center gap-6 text-xs flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: progressColors.pagado_durante_obra }} />
+                            <span>Pagado D.Obra</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: progressColors.pagado_a_la_entrega }} />
+                            <span>Pagado Entrega</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: progressColors.restante_durante_obra }} />
+                            <span>Restante D.Obra</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: progressColors.restante_a_la_entrega }} />
+                            <span>Restante Entrega</span>
+                          </div>
+                        </div>
+
+                        <div style={{ height: aggregateProjects ? 140 : Math.max(300, displayProgressData.length * 100) }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart 
+                              data={displayProgressData} 
+                              layout="vertical"
+                              margin={{ top: 10, right: 280, left: 100, bottom: 10 }}
+                              barSize={aggregateProjects ? 60 : 45}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={true} vertical={false} />
+                              <XAxis 
+                                type="number"
+                                tickFormatter={(value) => formatCurrencyCompact(value)}
+                                className="fill-muted-foreground"
+                                tick={{ fontSize: 11 }}
+                              />
+                              <YAxis 
+                                type="category"
+                                dataKey="proyecto"
+                                tick={{ fontSize: 12 }}
+                                width={90}
+                                className="fill-muted-foreground"
+                              />
+                              <RechartsTooltip 
+                                formatter={(value: number, name: string, props: { payload?: Record<string, number> }) => {
+                                  const payload = props.payload;
+                                  if (!payload) return [formatCurrencyCompact(value), name];
+                                  let pct = 0;
+                                  if (name === 'Pagado Durante Obra') pct = payload.pct_pagado_durante_obra || 0;
+                                  else if (name === 'Pagado A la Entrega') pct = payload.pct_pagado_a_la_entrega || 0;
+                                  else if (name === 'Restante Durante Obra') pct = payload.pct_restante_durante_obra || 0;
+                                  else if (name === 'Restante A la Entrega') pct = payload.pct_restante_a_la_entrega || 0;
+                                  else if (name === 'Pagado') pct = payload.pct_pagado_total || 0;
+                                  else if (name === 'Restante') pct = payload.pct_restante_total || 0;
+                                  return [`${formatCurrencyCompact(value)} (${pct.toFixed(1)}%)`, name];
+                                }}
+                                contentStyle={{ 
+                                  backgroundColor: 'hsl(var(--background))', 
+                                  border: '1px solid hsl(var(--border))',
+                                  borderRadius: '8px'
+                                }}
+                                labelFormatter={(label) => {
+                                  const project = displayProgressData.find(p => p.proyecto === label);
+                                  return project ? `${label} (${project.porcentaje_pagado.toFixed(1)}% pagado)` : label;
+                                }}
+                              />
+                              {columns.includes('pagado_durante_obra') ? (
+                                <>
+                                  <Bar dataKey="pagado_durante_obra" stackId="a" fill={progressColors.pagado_durante_obra} name="Pagado Durante Obra">
+                                    <LabelList dataKey="pct_pagado_durante_obra" position="center" formatter={(v: number) => v > 8 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 10, fill: '#fff', fontWeight: 'bold' }} />
+                                  </Bar>
+                                  <Bar dataKey="pagado_a_la_entrega" stackId="a" fill={progressColors.pagado_a_la_entrega} name="Pagado A la Entrega">
+                                    <LabelList dataKey="pct_pagado_a_la_entrega" position="center" formatter={(v: number) => v > 8 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 10, fill: '#fff', fontWeight: 'bold' }} />
+                                  </Bar>
+                                  <Bar dataKey="restante_durante_obra" stackId="a" fill={progressColors.restante_durante_obra} name="Restante Durante Obra">
+                                    <LabelList dataKey="pct_restante_durante_obra" position="center" formatter={(v: number) => v > 8 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 10, fill: '#fff', fontWeight: 'bold' }} />
+                                  </Bar>
+                                  <Bar dataKey="restante_a_la_entrega" stackId="a" fill={progressColors.restante_a_la_entrega} name="Restante A la Entrega" radius={[0, 4, 4, 0]}>
+                                    <LabelList dataKey="pct_restante_a_la_entrega" position="center" formatter={(v: number) => v > 8 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 10, fill: '#fff', fontWeight: 'bold' }} />
+                                    <LabelList 
+                                      position="right"
+                                      content={(props) => {
+                                        const { x, y, width, height, index } = props;
+                                        if (x === undefined || y === undefined || width === undefined || height === undefined || index === undefined) return null;
+                                        const numX = Number(x);
+                                        const numY = Number(y);
+                                        const numW = Number(width);
+                                        const numH = Number(height);
+                                        const numIndex = Number(index);
+                                        if (isNaN(numX) || isNaN(numY) || isNaN(numW) || isNaN(numH) || isNaN(numIndex)) return null;
+                                        const data = displayProgressData[numIndex];
+                                        if (!data) return null;
+                                        const startX = numX + numW + 10;
+                                        const centerY = numY + numH / 2;
+                                        const duranteObra = data.pagado_durante_obra + data.restante_durante_obra;
+                                        const entrega = data.pagado_a_la_entrega + data.restante_a_la_entrega;
+                                        const pctDurante = data.precio_final > 0 ? (duranteObra / data.precio_final * 100) : 0;
+                                        const pctEntrega = data.precio_final > 0 ? (entrega / data.precio_final * 100) : 0;
+                                        return (
+                                          <g>
+                                            <text x={startX} y={centerY} fontSize={12} fill="hsl(var(--foreground))" fontWeight="bold" dominantBaseline="middle">
+                                              {formatCurrencyCompact(data.precio_final)}
+                                            </text>
+                                            <path 
+                                              d={`M${startX + 70} ${centerY - 14} Q${startX + 80} ${centerY - 14} ${startX + 80} ${centerY} Q${startX + 80} ${centerY + 14} ${startX + 70} ${centerY + 14}`}
+                                              stroke="hsl(var(--muted-foreground))"
+                                              strokeWidth={1.5}
+                                              fill="none"
+                                            />
+                                            <text x={startX + 88} y={centerY - 8} fontSize={10} fill="hsl(var(--muted-foreground))" dominantBaseline="middle">
+                                              D.Obra: {formatCurrencyCompact(duranteObra)} ({pctDurante.toFixed(0)}%)
+                                            </text>
+                                            <text x={startX + 88} y={centerY + 8} fontSize={10} fill="hsl(var(--muted-foreground))" dominantBaseline="middle">
+                                              Entrega: {formatCurrencyCompact(entrega)} ({pctEntrega.toFixed(0)}%)
+                                            </text>
+                                          </g>
+                                        );
+                                      }}
+                                    />
+                                  </Bar>
+                                </>
+                              ) : (
+                                <>
+                                  <Bar dataKey="pagado_total" stackId="a" fill={progressColors.pagado_total} name="Pagado">
+                                    <LabelList dataKey="pct_pagado_total" position="center" formatter={(v: number) => v > 8 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 10, fill: '#fff', fontWeight: 'bold' }} />
+                                  </Bar>
+                                  <Bar dataKey="restante_total" stackId="a" fill={progressColors.restante_total} name="Restante" radius={[0, 4, 4, 0]}>
+                                    <LabelList dataKey="pct_restante_total" position="center" formatter={(v: number) => v > 8 ? `${v.toFixed(0)}%` : ''} style={{ fontSize: 10, fill: '#fff', fontWeight: 'bold' }} />
+                                    <LabelList dataKey="label_total" position="right" style={{ fontSize: 11, fill: 'hsl(var(--foreground))' }} />
+                                  </Bar>
+                                </>
+                              )}
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
                     )}
 
