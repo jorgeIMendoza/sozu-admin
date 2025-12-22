@@ -28,6 +28,9 @@ const PERSONA_FIELDS = [
   'uso_cfdi'
 ];
 
+// ID de la categoría "Paquete de muebles"
+const CATEGORIA_MUEBLES_ID = 3;
+
 // Función helper para extraer solo los campos especificados
 function extractPersonaFields(persona: any, porcentaje: number, tipo: 'comprador' | 'propietario') {
   if (!persona) return null;
@@ -171,7 +174,7 @@ serve(async (req) => {
       throw entidadesError;
     }
 
-    // 7. Fetch ofertas for the properties
+    // 7. Fetch ofertas for the properties (propiedades)
     const { data: ofertas, error: ofertasError } = await supabase
       .from('ofertas')
       .select('id, id_propiedad')
@@ -211,6 +214,51 @@ serve(async (req) => {
       throw compradoresError;
     }
 
+    // 10. Fetch ofertas de productos (muebles) asociadas a las propiedades
+    // Primero obtenemos las ofertas de productos que tienen categoria muebles
+    const { data: ofertasProductoMuebles, error: ofertasProductoError } = await supabase
+      .from('ofertas')
+      .select(`
+        id,
+        id_propiedad,
+        id_producto,
+        productos_servicios!inner (
+          id,
+          id_categoria
+        )
+      `)
+      .in('id_propiedad', propiedadIds)
+      .not('id_producto', 'is', null)
+      .eq('activo', true)
+      .eq('productos_servicios.id_categoria', CATEGORIA_MUEBLES_ID);
+
+    if (ofertasProductoError) {
+      console.error('Error fetching ofertas productos muebles:', ofertasProductoError);
+      // No throw, just log - continue without this data
+    }
+
+    // Create a Set of property IDs that have furniture
+    const propiedadesConMuebles = new Set<number>();
+    if (ofertasProductoMuebles) {
+      for (const oferta of ofertasProductoMuebles) {
+        if (oferta.id_propiedad) {
+          // Verificar que tiene cuenta de cobranza activa
+          const { data: cuentaProducto, error: cuentaProductoError } = await supabase
+            .from('cuentas_cobranza')
+            .select('id')
+            .eq('id_oferta', oferta.id)
+            .eq('activo', true)
+            .limit(1);
+          
+          if (!cuentaProductoError && cuentaProducto && cuentaProducto.length > 0) {
+            propiedadesConMuebles.add(oferta.id_propiedad);
+          }
+        }
+      }
+    }
+
+    console.log(`[getPropiedadesPropietario] Properties with furniture: ${propiedadesConMuebles.size}`);
+
     // Collect all persona IDs (from compradores AND from entidades_relacionadas for owners)
     const personaIdsFromCompradores = compradores?.map(c => c.id_persona).filter(Boolean) || [];
     const personaIdsFromOwners = entidadesRelacionadas?.map(er => er.id_persona).filter(Boolean) || [];
@@ -218,7 +266,7 @@ serve(async (req) => {
 
     console.log(`[getPropiedadesPropietario] Fetching ${allPersonaIds.length} personas (compradores + owners)`);
 
-    // 10. Fetch personas with specific fields
+    // 11. Fetch personas with specific fields
     let personas: any[] = [];
     if (allPersonaIds.length > 0) {
       const { data: personasData, error: personasError } = await supabase
@@ -308,6 +356,7 @@ serve(async (req) => {
         m2_exteriores: prop.m2_exteriores,
         id_modelo: modelo?.id || null,
         modelo: modelo?.nombre || null,
+        compro_muebles: propiedadesConMuebles.has(prop.id),
         compradores_propietarios: finalCompradoresPropietarios
       };
     }) || [];
