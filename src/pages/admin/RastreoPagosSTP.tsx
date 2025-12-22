@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Search, X, RefreshCw, Eye } from "lucide-react";
+import { Search, X, RefreshCw, Eye, Copy, Check } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -37,6 +38,8 @@ const TIPOS_PAGO: Record<number, string> = {
 };
 
 export default function RastreoPagosSTP() {
+  const { toast } = useToast();
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     claveRastreo: "",
     clabeStp: "",
@@ -115,6 +118,24 @@ export default function RastreoPagosSTP() {
       return format(new Date(dateString), includeTime ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy", { locale: es });
     } catch {
       return dateString;
+    }
+  };
+
+  const handleCopy = async (text: string, fieldId: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldId);
+      toast({
+        title: "Copiado",
+        description: "El valor se copió al portapapeles",
+      });
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch {
+      toast({
+        title: "Error",
+        description: "No se pudo copiar al portapapeles",
+        variant: "destructive",
+      });
     }
   };
 
@@ -291,15 +312,43 @@ export default function RastreoPagosSTP() {
                 ) : (
                   pagos?.map((pago) => (
                     <TableRow key={pago.id}>
-                      <TableCell className="font-mono text-xs max-w-[150px] truncate" title={pago.claverastreo}>
-                        {pago.claverastreo}
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono text-xs">{pago.claverastreo}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0"
+                            onClick={() => handleCopy(pago.claverastreo, `clave-${pago.id}`)}
+                          >
+                            {copiedField === `clave-${pago.id}` ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <Copy className="h-3 w-3 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </div>
                       </TableCell>
                       <TableCell>{formatDate(pago.fecha_operacion, false)}</TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(pago.monto)}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {pago.cuenta_beneficiario}
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono text-xs">{pago.cuenta_beneficiario}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0"
+                            onClick={() => handleCopy(pago.cuenta_beneficiario, `clabe-${pago.id}`)}
+                          >
+                            {copiedField === `clabe-${pago.id}` ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <Copy className="h-3 w-3 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </div>
                       </TableCell>
                       <TableCell className="max-w-[150px] truncate" title={pago.nombre_ordenante || "-"}>
                         {pago.nombre_ordenante || "-"}
