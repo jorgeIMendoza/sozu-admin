@@ -6,6 +6,38 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Campos específicos de persona a retornar
+const PERSONA_FIELDS = [
+  'nombre_legal',
+  'email',
+  'telefono',
+  'tipo_persona',
+  'sexo',
+  'fecha_nacimiento',
+  'curp',
+  'rfc',
+  'nombre_comercial',
+  'regimen',
+  'uso_cfdi',
+  'direccion_fiscal_calle',
+  'direccion_fiscal_colonia',
+  'direccion_fiscal_codigo_postal',
+  'direccion_fiscal_id_pais',
+  'direccion_fiscal_num_int',
+  'direccion_fiscal_num_ext'
+];
+
+// Función para extraer solo los campos necesarios de persona
+function extractPersonaFields(persona: any, porcentaje: number) {
+  if (!persona) return null;
+  
+  const result: any = { porcentaje_copropiedad: porcentaje };
+  for (const field of PERSONA_FIELDS) {
+    result[field] = persona[field] ?? null;
+  }
+  return result;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -93,7 +125,7 @@ serve(async (req) => {
 
     const modelosMap = new Map((modelos || []).map(m => [m.id, m]));
 
-    // Step 4: Get propiedades for these edificios_modelos
+    // Step 4: Get propiedades for these edificios_modelos (including id_entidad_relacionada_dueno for fallback)
     const { data: propiedades, error: propError } = await supabase
       .from('propiedades')
       .select(`
@@ -103,7 +135,8 @@ serve(async (req) => {
         m2_interiores,
         m2_exteriores,
         id_edificio_modelo,
-        id_estatus_disponibilidad
+        id_estatus_disponibilidad,
+        id_entidad_relacionada_dueno
       `)
       .in('id_edificio_modelo', emIds)
       .eq('activo', true);
@@ -122,6 +155,7 @@ serve(async (req) => {
 
     const propiedadIds = propiedades.map(p => p.id);
     const estatusIds = [...new Set(propiedades.map(p => p.id_estatus_disponibilidad).filter(id => id != null))];
+    const entidadDuenoIds = [...new Set(propiedades.map(p => p.id_entidad_relacionada_dueno).filter(id => id != null))];
 
     // Step 5: Get estatus_disponibilidad
     const { data: estatuses, error: estatusError } = await supabase
@@ -135,7 +169,23 @@ serve(async (req) => {
 
     const estatusMap = new Map((estatuses || []).map(e => [e.id, e.nombre]));
 
-    // Step 6: Get ofertas for these properties (where id_producto is null)
+    // Step 6: Get entidades_relacionadas for owner fallback
+    let entidadesMap = new Map<number, any>();
+    if (entidadDuenoIds.length > 0) {
+      const { data: entidades, error: entidadesError } = await supabase
+        .from('entidades_relacionadas')
+        .select('id, id_persona')
+        .in('id', entidadDuenoIds)
+        .eq('activo', true);
+
+      if (entidadesError) {
+        console.error('[getPropiedadesCompradores] Error fetching entidades:', entidadesError);
+      } else {
+        entidadesMap = new Map((entidades || []).map(e => [e.id, e]));
+      }
+    }
+
+    // Step 7: Get ofertas for these properties (where id_producto is null)
     const { data: ofertas, error: ofertasError } = await supabase
       .from('ofertas')
       .select('id, id_propiedad')
@@ -148,46 +198,27 @@ serve(async (req) => {
       throw ofertasError;
     }
 
-    if (!ofertas || ofertas.length === 0) {
-      console.log('[getPropiedadesCompradores] No ofertas found');
-      // Return propiedades with empty compradores
-      const result = propiedades.map(prop => {
-        const em = edificiosModelos.find(e => e.id === prop.id_edificio_modelo);
-        const modelo = em ? modelosMap.get(em.id_modelo) : null;
-        return {
-          id_propiedad: prop.id,
-          nivel: prop.numero_piso,
-          numero_propiedad: prop.numero_propiedad,
-          estatus_propiedad: estatusMap.get(prop.id_estatus_disponibilidad) || null,
-          m2_interiores: prop.m2_interiores,
-          m2_exteriores: prop.m2_exteriores,
-          id_modelo: modelo?.id || null,
-          modelo: modelo?.nombre || null,
-          compradores: []
-        };
-      });
-      return new Response(JSON.stringify({ data: result }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const ofertaIds = (ofertas || []).map(o => o.id);
+
+    // Step 8: Get cuentas_cobranza for these ofertas
+    let cuentas: any[] = [];
+    if (ofertaIds.length > 0) {
+      const { data: cuentasData, error: cuentasError } = await supabase
+        .from('cuentas_cobranza')
+        .select('id, id_oferta')
+        .in('id_oferta', ofertaIds)
+        .eq('activo', true);
+
+      if (cuentasError) {
+        console.error('[getPropiedadesCompradores] Error fetching cuentas:', cuentasError);
+        throw cuentasError;
+      }
+      cuentas = cuentasData || [];
     }
 
-    const ofertaIds = ofertas.map(o => o.id);
+    const cuentaIds = cuentas.map(c => c.id);
 
-    // Step 7: Get cuentas_cobranza for these ofertas
-    const { data: cuentas, error: cuentasError } = await supabase
-      .from('cuentas_cobranza')
-      .select('id, id_oferta')
-      .in('id_oferta', ofertaIds)
-      .eq('activo', true);
-
-    if (cuentasError) {
-      console.error('[getPropiedadesCompradores] Error fetching cuentas:', cuentasError);
-      throw cuentasError;
-    }
-
-    const cuentaIds = (cuentas || []).map(c => c.id);
-
-    // Step 8: Get compradores for these cuentas
+    // Step 9: Get compradores for these cuentas
     let compradores: any[] = [];
     if (cuentaIds.length > 0) {
       const { data: compradoresData, error: compradoresError } = await supabase
@@ -203,23 +234,25 @@ serve(async (req) => {
       compradores = compradoresData || [];
     }
 
-    // Step 9: Get personas for these compradores
-    const personaIds = [...new Set(compradores.map(c => c.id_persona).filter(id => id != null))];
-    let personas: any[] = [];
-    if (personaIds.length > 0) {
+    // Step 10: Collect all persona IDs (from compradores + from owner fallback)
+    const compradorPersonaIds = compradores.map(c => c.id_persona).filter(id => id != null);
+    const ownerPersonaIds = Array.from(entidadesMap.values()).map(e => e.id_persona).filter(id => id != null);
+    const allPersonaIds = [...new Set([...compradorPersonaIds, ...ownerPersonaIds])];
+
+    // Step 11: Get personas (only specific fields)
+    let personasMap = new Map<number, any>();
+    if (allPersonaIds.length > 0) {
       const { data: personasData, error: personasError } = await supabase
         .from('personas')
-        .select('*')
-        .in('id', personaIds);
+        .select(PERSONA_FIELDS.join(', ') + ', id')
+        .in('id', allPersonaIds);
 
       if (personasError) {
         console.error('[getPropiedadesCompradores] Error fetching personas:', personasError);
         throw personasError;
       }
-      personas = personasData || [];
+      personasMap = new Map((personasData || []).map(p => [p.id, p]));
     }
-
-    const personasMap = new Map(personas.map(p => [p.id, p]));
 
     // Build the response structure
     const result = propiedades.map(prop => {
@@ -227,12 +260,12 @@ serve(async (req) => {
       const modelo = em ? modelosMap.get(em.id_modelo) : null;
 
       // Find ofertas for this property
-      const propOfertaIds = ofertas
+      const propOfertaIds = (ofertas || [])
         .filter(o => o.id_propiedad === prop.id)
         .map(o => o.id);
 
       // Find cuentas for these ofertas
-      const propCuentaIds = (cuentas || [])
+      const propCuentaIds = cuentas
         .filter(c => propOfertaIds.includes(c.id_oferta))
         .map(c => c.id);
 
@@ -241,11 +274,22 @@ serve(async (req) => {
         .filter(c => propCuentaIds.includes(c.id_cuenta_cobranza))
         .map(c => {
           const persona = personasMap.get(c.id_persona);
-          return {
-            porcentaje_copropiedad: c.porcentaje_copropiedad,
-            ...persona
-          };
-        });
+          return extractPersonaFields(persona, c.porcentaje_copropiedad);
+        })
+        .filter(c => c !== null);
+
+      // FALLBACK: If no compradores, get owner from id_entidad_relacionada_dueno
+      let finalCompradores = propCompradores;
+      if (propCompradores.length === 0 && prop.id_entidad_relacionada_dueno) {
+        const entidad = entidadesMap.get(prop.id_entidad_relacionada_dueno);
+        if (entidad && entidad.id_persona) {
+          const ownerPersona = personasMap.get(entidad.id_persona);
+          if (ownerPersona) {
+            finalCompradores = [extractPersonaFields(ownerPersona, 100)];
+            console.log(`[getPropiedadesCompradores] Using owner fallback for propiedad ${prop.id}`);
+          }
+        }
+      }
 
       return {
         id_propiedad: prop.id,
@@ -256,7 +300,7 @@ serve(async (req) => {
         m2_exteriores: prop.m2_exteriores,
         id_modelo: modelo?.id || null,
         modelo: modelo?.nombre || null,
-        compradores: propCompradores
+        compradores: finalCompradores
       };
     });
 
