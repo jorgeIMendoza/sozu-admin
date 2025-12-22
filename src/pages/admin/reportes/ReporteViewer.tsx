@@ -313,13 +313,14 @@ export default function ReporteViewer() {
 
   // Define preferred column order for known reports
   const preferredColumnOrder = useMemo(() => [
-    // Properties report columns - exact order requested
-    'proyecto', 'dueno', 'numero_departamento', 'compradores', 'precio_final',
-    'monto_durante_obra', 'monto_a_la_entrega',
+    // Unified report columns - exact order requested
+    'proyecto', 'dueno', 'compradores', 
+    'numero_departamento', 'id_cuenta_cobranza', 'tipo', 'categoria', 'producto',
+    'precio_final', 'monto_durante_obra', 'monto_a_la_entrega',
     'pagado_durante_obra', 'pagado_a_la_entrega', 
     'restante_durante_obra', 'restante_a_la_entrega',
-    // Products report columns
-    'categoria', 'producto', 'pagado', 'restante',
+    // Simple products report columns
+    'pagado', 'restante',
   ], []);
 
   // Get columns from preview data with preferred ordering
