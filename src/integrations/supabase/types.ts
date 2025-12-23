@@ -5278,6 +5278,48 @@ export type Database = {
           },
         ]
       }
+      roles_reportes: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          reporte_id: number
+          rol_id: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          reporte_id: number
+          rol_id: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          reporte_id?: number
+          rol_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roles_reportes_reporte_id_fkey"
+            columns: ["reporte_id"]
+            isOneToOne: false
+            referencedRelation: "reportes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roles_reportes_rol_id_fkey"
+            columns: ["rol_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       submenus: {
         Row: {
           activo: boolean | null
@@ -5959,6 +6001,7 @@ export type Database = {
         Args: { max_rows?: number; query_text: string }
         Returns: Json
       }
+      get_accessible_report_ids: { Args: never; Returns: number[] }
       get_current_user_persona_id: { Args: never; Returns: number }
       get_current_user_profile: {
         Args: never
@@ -6064,6 +6107,10 @@ export type Database = {
           cuentas_procesadas: number
           mensaje: string
         }[]
+      }
+      user_can_access_report: {
+        Args: { _reporte_id: number }
+        Returns: boolean
       }
       user_has_permission: {
         Args: { _permission_name: string; _submenu_path: string }
