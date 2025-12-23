@@ -984,31 +984,36 @@ const Propiedades = () => {
       estatusResult,
       ofertasResult
     ] = await Promise.all([
-      // Parking counts
-      supabase.from('estacionamientos').select('id_propiedad').in('id_propiedad', propertyIds).eq('activo', true),
+      // Parking counts - add limit to avoid 1000 default
+      supabase.from('estacionamientos').select('id_propiedad').in('id_propiedad', propertyIds).eq('activo', true).limit(10000),
       // Storage counts
-      supabase.from('bodegas').select('id_propiedad').in('id_propiedad', propertyIds).eq('activo', true),
-      // Edificios, modelos, proyectos - use LEFT JOIN (no !inner) to include all records
+      supabase.from('bodegas').select('id_propiedad').in('id_propiedad', propertyIds).eq('activo', true).limit(10000),
+      // Edificios, modelos, proyectos - CRITICAL: must set limit > 1000 to get all records
       supabase.from('edificios_modelos')
         .select('id, id_modelo, modelos(nombre, numero_recamaras, numero_completo_banos, numero_medio_bano), edificios(nombre, id_proyecto, proyectos(id, nombre))')
-        .in('id', [...new Set(data.map(p => p.id_edificio_modelo).filter(Boolean))]),
-      // Owner entities - use LEFT JOIN to include entities without personas
+        .in('id', [...new Set(data.map(p => p.id_edificio_modelo).filter(Boolean))])
+        .limit(10000),
+      // Owner entities - add limit
       supabase.from('entidades_relacionadas')
         .select('id, personas(nombre_legal)')
-        .in('id', [...new Set(data.map(p => p.id_entidad_relacionada_dueno).filter(Boolean))]),
+        .in('id', [...new Set(data.map(p => p.id_entidad_relacionada_dueno).filter(Boolean))])
+        .limit(1000),
       // Views
       supabase.from('vistas')
         .select('id, nombre')
-        .in('id', [...new Set(data.map(p => p.id_vista).filter(Boolean))]),
+        .in('id', [...new Set(data.map(p => p.id_vista).filter(Boolean))])
+        .limit(1000),
       // Availability status
       supabase.from('estatus_disponibilidad')
         .select('id, nombre')
-        .in('id', [...new Set(data.map(p => p.id_estatus_disponibilidad).filter(Boolean))]),
+        .in('id', [...new Set(data.map(p => p.id_estatus_disponibilidad).filter(Boolean))])
+        .limit(100),
       // Offers with cuentas
       supabase.from('ofertas')
         .select('id, id_propiedad, id_producto, activo, cuentas_cobranza!fk_cuentas_cobranza_oferta(clabe_stp, id)')
         .in('id_propiedad', propertyIds)
         .eq('activo', true)
+        .limit(10000)
     ]);
 
     // Create maps for quick lookup
