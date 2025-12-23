@@ -461,6 +461,29 @@ export default function Prospectos() {
     mutationFn: async (personData: any) => {
       const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId, tempBankAccounts, tempBeneficiaries, pendingDocuments, id_proyecto, id_persona_duena_lead, ...cleanPersonData } = personData;
       
+      // Lista blanca de campos válidos para la tabla personas
+      const validPersonaFields = [
+        'tipo_persona', 'email', 'telefono', 'nombre_legal', 'nombre_comercial',
+        'id_entidad_relacionada_rep_leg', 'id_entidad_relacionada_rep_com', 'sexo', 'fecha_nacimiento',
+        'numero_escritura', 'numero_libro', 'fecha_escritura', 'id_notario', 'folio_mercantil',
+        'fecha_registro', 'direccion_calle', 'direccion_colonia', 'direccion_codigo_postal',
+        'direccion_id_pais', 'direccion_id_estado', 'direccion_id_municipio', 'direccion_num_ext',
+        'direccion_num_int', 'direccion_fiscal_calle', 'direccion_fiscal_colonia',
+        'direccion_fiscal_codigo_postal', 'direccion_fiscal_id_pais', 'direccion_fiscal_id_estado',
+        'direccion_fiscal_id_municipio', 'direccion_fiscal_num_ext', 'direccion_fiscal_num_int',
+        'curp', 'rfc', 'regimen', 'uso_cfdi', 'id_pais_nacimiento', 'id_estado_nacimiento',
+        'id_municipio_nacimiento', 'id_estado_civil', 'ocupacion', 'id_tipo_identificacion',
+        'activo', 'clave_pais_telefono', 'url_logo', 'id_conyuge'
+      ];
+      
+      // Filtrar solo campos válidos para la tabla personas
+      const safePersonData: Record<string, unknown> = {};
+      for (const key of Object.keys(cleanPersonData)) {
+        if (validPersonaFields.includes(key)) {
+          safePersonData[key] = cleanPersonData[key];
+        }
+      }
+      
       // Obtener id_persona del usuario actual si no es admin
       let finalIdPersonaDuenaLead = id_persona_duena_lead ? parseInt(id_persona_duena_lead) : null;
       
@@ -482,7 +505,7 @@ export default function Prospectos() {
       
       const { data: personResult, error: personError } = await supabase
         .from('personas')
-        .insert([cleanPersonData])
+        .insert([safePersonData as any])
         .select()
         .single();
       
@@ -573,22 +596,56 @@ export default function Prospectos() {
     mutationFn: async (personData: any) => {
       const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId, tempBankAccounts, tempBeneficiaries, pendingDocuments, id_proyecto, id_persona_duena_lead, id, ...cleanPersonData } = personData;
       
+      // Lista blanca de campos válidos para la tabla personas
+      const validPersonaFields = [
+        'tipo_persona', 'email', 'telefono', 'nombre_legal', 'nombre_comercial',
+        'id_entidad_relacionada_rep_leg', 'id_entidad_relacionada_rep_com', 'sexo', 'fecha_nacimiento',
+        'numero_escritura', 'numero_libro', 'fecha_escritura', 'id_notario', 'folio_mercantil',
+        'fecha_registro', 'direccion_calle', 'direccion_colonia', 'direccion_codigo_postal',
+        'direccion_id_pais', 'direccion_id_estado', 'direccion_id_municipio', 'direccion_num_ext',
+        'direccion_num_int', 'direccion_fiscal_calle', 'direccion_fiscal_colonia',
+        'direccion_fiscal_codigo_postal', 'direccion_fiscal_id_pais', 'direccion_fiscal_id_estado',
+        'direccion_fiscal_id_municipio', 'direccion_fiscal_num_ext', 'direccion_fiscal_num_int',
+        'curp', 'rfc', 'regimen', 'uso_cfdi', 'id_pais_nacimiento', 'id_estado_nacimiento',
+        'id_municipio_nacimiento', 'id_estado_civil', 'ocupacion', 'id_tipo_identificacion',
+        'activo', 'clave_pais_telefono', 'url_logo', 'id_conyuge'
+      ];
+      
+      // Filtrar solo campos válidos para la tabla personas
+      const safePersonData: Record<string, unknown> = {};
+      for (const key of Object.keys(cleanPersonData)) {
+        if (validPersonaFields.includes(key)) {
+          safePersonData[key] = cleanPersonData[key];
+        }
+      }
+      
       // Solo actualizar la tabla personas cuando se edita desde el diálogo
       if (editingProspecto) {
         const { error: updateError } = await supabase
           .from('personas')
-          .update(cleanPersonData)
+          .update(safePersonData as any)
           .eq('id', editingProspecto.id);
         
         if (updateError) throw updateError;
         
-        if (representativeId !== undefined && cleanPersonData.tipo_persona === 'pm') {
+        // Actualizar representante legal si aplica
+        if (representativeId !== undefined && safePersonData.tipo_persona === 'pm') {
           const { error: repError } = await supabase
             .from('personas')
             .update({ id_entidad_relacionada_rep_leg: representativeId || null })
             .eq('id', editingProspecto.id);
             
           if (repError) throw repError;
+        }
+        
+        // Actualizar representante comercial si aplica
+        if (commercialRepresentativeId !== undefined) {
+          const { error: repComError } = await supabase
+            .from('personas')
+            .update({ id_entidad_relacionada_rep_com: commercialRepresentativeId || null })
+            .eq('id', editingProspecto.id);
+            
+          if (repComError) throw repComError;
         }
       }
 
