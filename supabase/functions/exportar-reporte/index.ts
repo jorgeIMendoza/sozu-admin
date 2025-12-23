@@ -199,6 +199,24 @@ serve(async (req) => {
         }));
         console.log('[exportar-reporte] Transformed Report 4 columns');
       }
+
+      // Special transformation for Cartera Vencida report
+      if (reporte.nombre_archivo === 'cartera_vencida') {
+        queryResult = queryResult.map((row: Record<string, unknown>) => ({
+          'Proyecto': row.proyecto,
+          'Dueño': row.dueno,
+          'Compradores': row.compradores,
+          'Número de Departamento': row.numero_departamento,
+          'Número de Cuenta': row.numero_cuenta,
+          'Tipo': row.tipo,
+          'Categoría': row.categoria,
+          'Nombre de Producto': row.nombre_producto,
+          'Monto a Pagar': row.monto_a_pagar,
+          'Monto Pagado': row.monto_pagado,
+          'Monto Restante': row.monto_restante,
+        }));
+        console.log('[exportar-reporte] Transformed Cartera Vencida columns');
+      }
     } else {
       return new Response(
         JSON.stringify({ error: 'Se requiere id_reporte o data_directa' }),

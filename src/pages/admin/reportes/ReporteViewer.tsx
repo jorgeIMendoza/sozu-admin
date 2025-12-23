@@ -23,7 +23,7 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { cn } from "@/lib/utils";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, AreaChart, Area, LabelList } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, AreaChart, Area, LabelList, PieChart, Pie } from 'recharts';
 
 interface FiltroConfig {
   nombre: string;
@@ -442,11 +442,14 @@ export default function ReporteViewer() {
   // Check if this is the "Pagos actuales y futuros" pivot report
   const isPagosFuturosReport = reporte?.id === 4;
 
+  // Check if this is the "Cartera Vencida" report
+  const isCarteraVencidaReport = reporte?.nombre_archivo === 'cartera_vencida';
+
   // Define preferred column order for known reports
   const preferredColumnOrder = useMemo(() => [
     // Unified report columns - exact order requested
     'proyecto', 'dueno', 'compradores', 
-    'numero_departamento', 'id_cuenta_cobranza', 'tipo', 'categoria', 'producto',
+    'numero_departamento', 'id_cuenta_cobranza', 'numero_cuenta', 'tipo', 'categoria', 'producto', 'nombre_producto',
     'precio_final', 'monto_durante_obra', 'monto_a_la_entrega',
     'pagado_durante_obra', 'pagado_a_la_entrega', 
     'restante_durante_obra', 'restante_a_la_entrega',
@@ -454,7 +457,33 @@ export default function ReporteViewer() {
     'pagado', 'restante',
     // Pagos actuales y futuros report columns
     'mes', 'monto_por_cobrar', 'monto_cobrado', 'monto_faltante',
+    // Cartera Vencida report columns
+    'monto_a_pagar', 'monto_pagado', 'monto_restante',
   ], []);
+
+  // Calculate Cartera Vencida chart data
+  const carteraVencidaChartData = useMemo(() => {
+    if (!isCarteraVencidaReport || !fullData || fullData.length === 0) return [];
+    
+    const totalPagado = fullData.reduce((sum, row) => sum + (Number(row.monto_pagado) || 0), 0);
+    const totalRestante = fullData.reduce((sum, row) => sum + (Number(row.monto_restante) || 0), 0);
+    const total = totalPagado + totalRestante;
+    
+    return [
+      { 
+        name: 'Pagado', 
+        value: totalPagado, 
+        percentage: total > 0 ? ((totalPagado / total) * 100).toFixed(1) : '0',
+        fill: '#22c55e' // green
+      },
+      { 
+        name: 'Restante', 
+        value: totalRestante, 
+        percentage: total > 0 ? ((totalRestante / total) * 100).toFixed(1) : '0',
+        fill: '#ef4444' // red
+      }
+    ];
+  }, [isCarteraVencidaReport, fullData]);
 
   // Get columns from preview data with preferred ordering
   const columns = useMemo(() => {
@@ -2066,6 +2095,175 @@ export default function ReporteViewer() {
                       </div>
                     )}
                   </div>
+                )}
+              </div>
+            ) : isCarteraVencidaReport && previewData && previewData.length > 0 ? (
+              // Special view for Cartera Vencida report
+              <div className="space-y-6">
+                {/* Summary Section */}
+                <Collapsible open={summaryOpen} onOpenChange={setSummaryOpen}>
+                  <div className="border rounded-lg overflow-hidden">
+                    <CollapsibleTrigger className="w-full px-4 py-3 bg-muted/50 hover:bg-muted/70 flex items-center justify-between transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Resumen de Cartera Vencida</span>
+                        <span className="text-sm text-muted-foreground">({fullData?.length || 0} cuentas)</span>
+                      </div>
+                      {summaryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="p-4 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Monto a Pagar */}
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <h4 className="font-semibold text-sm border-b pb-2 text-blue-600">Monto a Pagar</h4>
+                            <div>
+                              <p className="text-xl font-bold text-blue-600">
+                                {formatCurrencyCompact((fullData || []).reduce((sum, row) => sum + (Number(row.monto_a_pagar) || 0), 0))}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Total vencido a la fecha</p>
+                            </div>
+                          </div>
+
+                          {/* Monto Pagado */}
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <h4 className="font-semibold text-sm border-b pb-2 text-green-600">Monto Pagado</h4>
+                            {(() => {
+                              const totalAPagar = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_a_pagar) || 0), 0);
+                              const totalPagado = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_pagado) || 0), 0);
+                              const porcentaje = totalAPagar > 0 ? (totalPagado / totalAPagar * 100) : 0;
+                              return (
+                                <div>
+                                  <p className="text-xl font-bold text-green-600">
+                                    {formatCurrencyCompact(totalPagado)}
+                                    <span className="text-sm font-normal text-muted-foreground ml-2">({porcentaje.toFixed(1)}%)</span>
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">Total cobrado</p>
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* Monto Restante */}
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <h4 className="font-semibold text-sm border-b pb-2 text-red-500">Monto Restante</h4>
+                            {(() => {
+                              const totalAPagar = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_a_pagar) || 0), 0);
+                              const totalRestante = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_restante) || 0), 0);
+                              const porcentaje = totalAPagar > 0 ? (totalRestante / totalAPagar * 100) : 0;
+                              return (
+                                <div>
+                                  <p className="text-xl font-bold text-red-500">
+                                    {formatCurrencyCompact(totalRestante)}
+                                    <span className="text-sm font-normal text-muted-foreground ml-2">({porcentaje.toFixed(1)}%)</span>
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">Total pendiente de cobro</p>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+
+                {/* Conditional: Show Table OR Chart based on viewMode */}
+                {viewMode === 'table' ? (
+                  /* Table view for Cartera Vencida */
+                  <ScrollArea className="h-[500px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="font-semibold min-w-[150px]">Proyecto</TableHead>
+                          <TableHead className="font-semibold min-w-[150px]">Dueño</TableHead>
+                          <TableHead className="font-semibold min-w-[200px]">Compradores</TableHead>
+                          <TableHead className="font-semibold min-w-[100px]">Num. Depto</TableHead>
+                          <TableHead className="font-semibold min-w-[120px]">Num. Cuenta</TableHead>
+                          <TableHead className="font-semibold min-w-[100px]">Tipo</TableHead>
+                          <TableHead className="font-semibold min-w-[120px]">Categoría</TableHead>
+                          <TableHead className="font-semibold min-w-[150px]">Producto</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[140px] text-blue-600">Monto a Pagar</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[140px] text-green-600">Monto Pagado</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[140px] text-red-500">Monto Restante</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {previewData.map((row, idx) => (
+                          <TableRow key={idx} className="hover:bg-muted/30">
+                            <TableCell className="font-medium">{String(row.proyecto || '-')}</TableCell>
+                            <TableCell>{String(row.dueno || '-')}</TableCell>
+                            <TableCell className="max-w-[200px] truncate" title={String(row.compradores || '')}>{String(row.compradores || '-')}</TableCell>
+                            <TableCell>{String(row.numero_departamento || '-')}</TableCell>
+                            <TableCell className="font-mono text-sm">{String(row.numero_cuenta || '-')}</TableCell>
+                            <TableCell>{String(row.tipo || '-')}</TableCell>
+                            <TableCell>{String(row.categoria || '-')}</TableCell>
+                            <TableCell>{String(row.nombre_producto || '-')}</TableCell>
+                            <TableCell className="text-right font-mono">{formatCellValue(row.monto_a_pagar)}</TableCell>
+                            <TableCell className="text-right font-mono text-green-600">{formatCellValue(row.monto_pagado)}</TableCell>
+                            <TableCell className="text-right font-mono text-red-500">{formatCellValue(row.monto_restante)}</TableCell>
+                          </TableRow>
+                        ))}
+                        {/* Total Row */}
+                        <TableRow className="bg-muted/50 font-bold">
+                          <TableCell colSpan={8} className="font-bold">Total</TableCell>
+                          <TableCell className="text-right font-mono font-bold">
+                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_a_pagar) || 0), 0))}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-bold text-green-600">
+                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_pagado) || 0), 0))}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-bold text-red-500">
+                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_restante) || 0), 0))}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
+                ) : (
+                  /* Pie Chart for Cartera Vencida */
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Distribución de Cartera Vencida</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="h-[400px] flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={carteraVencidaChartData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={80}
+                              outerRadius={140}
+                              paddingAngle={2}
+                              dataKey="value"
+                              label={({ name, percentage, value }) => `${name}: ${formatCurrencyCompact(value)} (${percentage}%)`}
+                              labelLine={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1 }}
+                            >
+                              {carteraVencidaChartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                              ))}
+                            </Pie>
+                            <RechartsTooltip 
+                              formatter={(value: number, name: string) => [formatCurrencyCompact(value), name]}
+                              contentStyle={{ 
+                                backgroundColor: 'hsl(var(--background))', 
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px'
+                              }}
+                            />
+                            <Legend 
+                              formatter={(value, entry) => {
+                                const item = carteraVencidaChartData.find(d => d.name === value);
+                                return `${value}: ${formatCurrencyCompact(item?.value || 0)} (${item?.percentage}%)`;
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
               </div>
             ) : isPagosFuturosReport && previewData && previewData.length > 0 ? (
