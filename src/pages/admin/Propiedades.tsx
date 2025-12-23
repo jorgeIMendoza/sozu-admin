@@ -1364,13 +1364,71 @@ const Propiedades = () => {
     enabled: !!profile?.rol_id,
   });
 
+  // Pre-fetch property IDs that belong to accessible projects (for non-super-admin users)
+  const { data: accessiblePropertyIds } = useQuery({
+    queryKey: ['accessible-property-ids', accessibleProjectIds, hasUnrestrictedAccess, ownershipEntityIds, isRepresentanteEmpresaDuena],
+    queryFn: async () => {
+      // Super admin or unrestricted access - no need to pre-filter
+      if (hasUnrestrictedAccess) return null;
+      
+      // No accessible projects - return empty array
+      if (accessibleProjectIds.length === 0) return [];
+      
+      // Get edificios that belong to accessible projects
+      const { data: edificiosData } = await supabase
+        .from('edificios')
+        .select('id')
+        .in('id_proyecto', accessibleProjectIds)
+        .eq('activo', true);
+      
+      if (!edificiosData || edificiosData.length === 0) return [];
+      
+      const edificioIds = edificiosData.map(e => e.id);
+      
+      // Get edificios_modelos for these edificios
+      const { data: edificiosModelosData } = await supabase
+        .from('edificios_modelos')
+        .select('id')
+        .in('id_edificio', edificioIds)
+        .eq('activo', true);
+      
+      if (!edificiosModelosData || edificiosModelosData.length === 0) return [];
+      
+      const edificioModeloIds = edificiosModelosData.map(em => em.id);
+      
+      // Get property IDs with these edificio_modelo IDs
+      let propQuery = supabase
+        .from('propiedades')
+        .select('id')
+        .in('id_edificio_modelo', edificioModeloIds)
+        .eq('activo', true)
+        .eq('es_aprobado', true);
+      
+      // Also apply ownership filter if rep empresa dueña
+      if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+        propQuery = propQuery.in('id_entidad_relacionada_dueno', ownershipEntityIds);
+      }
+      
+      const { data: propsData } = await propQuery;
+      
+      return propsData?.map(p => p.id) || [];
+    },
+    enabled: !hasUnrestrictedAccess && accessibleProjectIds.length > 0,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
   // Separate queries for each tab with server-side pagination
   const { data: propiedadesActivasData, isLoading: loadingActivos, refetch: refetchActivos } = useQuery({
-    queryKey: ['properties-activos', currentPageActive, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusNames, isRepresentanteEmpresaDuena, ownershipEntityIds],
+    queryKey: ['properties-activos', currentPageActive, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusNames, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
     queryFn: async () => {
       try {
         const from = (currentPageActive - 1) * itemsPerPage;
         const to = from + itemsPerPage - 1;
+
+        // Early return if no accessible properties for restricted users
+        if (!hasUnrestrictedAccess && accessiblePropertyIds !== null && accessiblePropertyIds.length === 0) {
+          return { items: [], count: 0, totalPages: 0 };
+        }
 
         let query = supabase
           .from('propiedades')
@@ -1387,10 +1445,10 @@ const Propiedades = () => {
             id_entidad_relacionada_dueno,
             activo,
             es_aprobado,
-            edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(
-              edificios!edificios_modelos_id_edificio_fkey!inner(
+            edificios_modelos!propiedades_id_edificio_modelo_fkey(
+              edificios!edificios_modelos_id_edificio_fkey(
                 nombre,
-                proyectos!edificios_id_proyecto_fkey!inner(
+                proyectos!edificios_id_proyecto_fkey(
                   id, 
                   nombre,
                   entidades_relacionadas!entidades_relacionadas_id_proyecto_fkey(
@@ -1399,7 +1457,7 @@ const Propiedades = () => {
                   )
                 )
               ),
-              modelos!edificios_modelos_id_modelo_fkey!inner(
+              modelos!edificios_modelos_id_modelo_fkey(
                 nombre,
                 numero_recamaras,
                 numero_completo_banos,
@@ -1410,7 +1468,7 @@ const Propiedades = () => {
               personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
             ),
             vistas(nombre),
-            estatus_disponibilidad!inner(id, nombre),
+            estatus_disponibilidad(id, nombre),
             ofertas!ofertas_id_propiedad_fkey(
               id,
               id_producto,
@@ -1421,17 +1479,13 @@ const Propiedades = () => {
           .eq('activo', true)
           .eq('es_aprobado', true);
 
-        // EARLY FILTER: Apply ownership filter first to reduce dataset size
-        if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+        // Apply pre-computed property ID filter for restricted users
+        if (!hasUnrestrictedAccess && accessiblePropertyIds && accessiblePropertyIds.length > 0) {
+          query = query.in('id', accessiblePropertyIds);
+        } else if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+          // For rep empresa dueña with unrestricted access, still filter by ownership
           query = query.in('id_entidad_relacionada_dueno', ownershipEntityIds);
         } else if (isRepresentanteEmpresaDuena && ownershipEntityIds.length === 0) {
-          return { items: [], count: 0, totalPages: 0 };
-        }
-
-        // EARLY FILTER: Apply project access filter
-        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
-          query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
-        } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
           return { items: [], count: 0, totalPages: 0 };
         }
 
@@ -1699,15 +1753,64 @@ const Propiedades = () => {
         return { properties: [], count: 0 };
       }
     },
-    enabled: !isLoadingAccess,
+    enabled: !isLoadingAccess && (hasUnrestrictedAccess || accessiblePropertyIds !== undefined),
   });
 
   const { data: propiedadesDraftData, isLoading: loadingDraft, refetch: refetchDraft } = useQuery({
-    queryKey: ['properties-draft', currentPageDraft, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusNames, isRepresentanteEmpresaDuena, ownershipEntityIds],
+    queryKey: ['properties-draft', currentPageDraft, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusNames, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
     queryFn: async () => {
       try {
         const from = (currentPageDraft - 1) * itemsPerPage;
         const to = from + itemsPerPage - 1;
+
+        // For draft we need to get property IDs separately since es_aprobado = false
+        let draftPropertyIds: number[] | null = null;
+        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+          // Get edificios that belong to accessible projects
+          const { data: edificiosData } = await supabase
+            .from('edificios')
+            .select('id')
+            .in('id_proyecto', accessibleProjectIds)
+            .eq('activo', true);
+          
+          if (!edificiosData || edificiosData.length === 0) {
+            return { items: [], count: 0, totalPages: 0 };
+          }
+          
+          const edificioIds = edificiosData.map(e => e.id);
+          
+          // Get edificios_modelos for these edificios
+          const { data: edificiosModelosData } = await supabase
+            .from('edificios_modelos')
+            .select('id')
+            .in('id_edificio', edificioIds)
+            .eq('activo', true);
+          
+          if (!edificiosModelosData || edificiosModelosData.length === 0) {
+            return { items: [], count: 0, totalPages: 0 };
+          }
+          
+          const edificioModeloIds = edificiosModelosData.map(em => em.id);
+          
+          // Get draft property IDs
+          let propQuery = supabase
+            .from('propiedades')
+            .select('id')
+            .in('id_edificio_modelo', edificioModeloIds)
+            .eq('activo', true)
+            .eq('es_aprobado', false);
+          
+          if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+            propQuery = propQuery.in('id_entidad_relacionada_dueno', ownershipEntityIds);
+          }
+          
+          const { data: propsData } = await propQuery;
+          draftPropertyIds = propsData?.map(p => p.id) || [];
+          
+          if (draftPropertyIds.length === 0) {
+            return { items: [], count: 0, totalPages: 0 };
+          }
+        }
 
         let query = supabase
           .from('propiedades')
@@ -1724,10 +1827,10 @@ const Propiedades = () => {
             id_entidad_relacionada_dueno,
             activo,
             es_aprobado,
-            edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(
-              edificios!edificios_modelos_id_edificio_fkey!inner(
+            edificios_modelos!propiedades_id_edificio_modelo_fkey(
+              edificios!edificios_modelos_id_edificio_fkey(
                 nombre,
-                proyectos!edificios_id_proyecto_fkey!inner(
+                proyectos!edificios_id_proyecto_fkey(
                   id, 
                   nombre,
                   entidades_relacionadas!entidades_relacionadas_id_proyecto_fkey(
@@ -1736,7 +1839,7 @@ const Propiedades = () => {
                   )
                 )
               ),
-              modelos!edificios_modelos_id_modelo_fkey!inner(
+              modelos!edificios_modelos_id_modelo_fkey(
                 nombre,
                 numero_recamaras,
                 numero_completo_banos,
@@ -1747,7 +1850,7 @@ const Propiedades = () => {
               personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
             ),
             vistas(nombre),
-            estatus_disponibilidad!inner(id, nombre),
+            estatus_disponibilidad(id, nombre),
             ofertas!ofertas_id_propiedad_fkey(
               id,
               id_producto,
@@ -1758,17 +1861,12 @@ const Propiedades = () => {
           .eq('activo', true)
           .eq('es_aprobado', false);
 
-        // EARLY FILTER: Apply ownership filter first to reduce dataset size
-        if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+        // Apply pre-computed property ID filter for restricted users
+        if (draftPropertyIds && draftPropertyIds.length > 0) {
+          query = query.in('id', draftPropertyIds);
+        } else if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
           query = query.in('id_entidad_relacionada_dueno', ownershipEntityIds);
         } else if (isRepresentanteEmpresaDuena && ownershipEntityIds.length === 0) {
-          return { items: [], count: 0, totalPages: 0 };
-        }
-
-        // EARLY FILTER: Apply project access filter
-        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
-          query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
-        } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
           return { items: [], count: 0, totalPages: 0 };
         }
 
@@ -2036,11 +2134,60 @@ const Propiedades = () => {
   });
 
   const { data: propiedadesEliminadasData, isLoading: loadingEliminados, refetch: refetchEliminados } = useQuery({
-    queryKey: ['properties-eliminados', currentPageDeleted, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusNames, isRepresentanteEmpresaDuena, ownershipEntityIds],
+    queryKey: ['properties-eliminados', currentPageDeleted, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusNames, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
     queryFn: async () => {
       try {
         const from = (currentPageDeleted - 1) * itemsPerPage;
         const to = from + itemsPerPage - 1;
+
+        // For eliminados we need to get property IDs separately since activo = false
+        let deletedPropertyIds: number[] | null = null;
+        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+          // Get edificios that belong to accessible projects
+          const { data: edificiosData } = await supabase
+            .from('edificios')
+            .select('id')
+            .in('id_proyecto', accessibleProjectIds)
+            .eq('activo', true);
+          
+          if (!edificiosData || edificiosData.length === 0) {
+            return { items: [], count: 0, totalPages: 0 };
+          }
+          
+          const edificioIds = edificiosData.map(e => e.id);
+          
+          // Get edificios_modelos for these edificios
+          const { data: edificiosModelosData } = await supabase
+            .from('edificios_modelos')
+            .select('id')
+            .in('id_edificio', edificioIds)
+            .eq('activo', true);
+          
+          if (!edificiosModelosData || edificiosModelosData.length === 0) {
+            return { items: [], count: 0, totalPages: 0 };
+          }
+          
+          const edificioModeloIds = edificiosModelosData.map(em => em.id);
+          
+          // Get deleted property IDs
+          let propQuery = supabase
+            .from('propiedades')
+            .select('id')
+            .in('id_edificio_modelo', edificioModeloIds)
+            .eq('activo', false)
+            .eq('es_aprobado', false);
+          
+          if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+            propQuery = propQuery.in('id_entidad_relacionada_dueno', ownershipEntityIds);
+          }
+          
+          const { data: propsData } = await propQuery;
+          deletedPropertyIds = propsData?.map(p => p.id) || [];
+          
+          if (deletedPropertyIds.length === 0) {
+            return { items: [], count: 0, totalPages: 0 };
+          }
+        }
 
         let query = supabase
           .from('propiedades')
@@ -2057,10 +2204,10 @@ const Propiedades = () => {
             id_entidad_relacionada_dueno,
             activo,
             es_aprobado,
-            edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(
-              edificios!edificios_modelos_id_edificio_fkey!inner(
+            edificios_modelos!propiedades_id_edificio_modelo_fkey(
+              edificios!edificios_modelos_id_edificio_fkey(
                 nombre,
-                proyectos!edificios_id_proyecto_fkey!inner(
+                proyectos!edificios_id_proyecto_fkey(
                   id, 
                   nombre,
                   entidades_relacionadas!entidades_relacionadas_id_proyecto_fkey(
@@ -2069,7 +2216,7 @@ const Propiedades = () => {
                   )
                 )
               ),
-              modelos!edificios_modelos_id_modelo_fkey!inner(
+              modelos!edificios_modelos_id_modelo_fkey(
                 nombre,
                 numero_recamaras,
                 numero_completo_banos,
@@ -2080,7 +2227,7 @@ const Propiedades = () => {
               personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
             ),
             vistas(nombre),
-            estatus_disponibilidad!inner(id, nombre),
+            estatus_disponibilidad(id, nombre),
             ofertas!ofertas_id_propiedad_fkey(
               id,
               id_producto,
@@ -2091,17 +2238,12 @@ const Propiedades = () => {
           .eq('activo', false)
           .eq('es_aprobado', false);
 
-        // EARLY FILTER: Apply ownership filter first to reduce dataset size
-        if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
+        // Apply pre-computed property ID filter for restricted users
+        if (deletedPropertyIds && deletedPropertyIds.length > 0) {
+          query = query.in('id', deletedPropertyIds);
+        } else if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
           query = query.in('id_entidad_relacionada_dueno', ownershipEntityIds);
         } else if (isRepresentanteEmpresaDuena && ownershipEntityIds.length === 0) {
-          return { items: [], count: 0, totalPages: 0 };
-        }
-
-        // EARLY FILTER: Apply project access filter
-        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
-          query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
-        } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
           return { items: [], count: 0, totalPages: 0 };
         }
 
