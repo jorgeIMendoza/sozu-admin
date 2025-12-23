@@ -1437,7 +1437,7 @@ export default function ReporteViewer() {
                   </AlertDescription>
                 </Alert>
               </div>
-            ) : viewMode === 'chart' ? (
+            ) : viewMode === 'chart' && !isPagosFuturosReport ? (
               // Chart View - Two charts: Line Chart + Bar Chart for totals
               <div className="space-y-8 p-4">
                 {/* Line Chart - Trends per property */}
