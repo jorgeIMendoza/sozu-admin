@@ -354,9 +354,55 @@ export default function ReporteViewer() {
     }
   }, [queryClient, id, filtros, refetchPreview]);
 
+  // Fetch distinct projects from the report data (for filtering project dropdown to only show relevant projects)
+  const { data: reportProjectIds = [] } = useQuery({
+    queryKey: ['report-project-ids', id, reporte?.query_sql],
+    queryFn: async () => {
+      if (!reporte?.query_sql) return [];
+      
+      // Execute the query without project filter to get all projects in the report
+      const baseQuery = applyFiltersToQuery(reporte.query_sql, {});
+      
+      try {
+        const { data, error } = await supabase.rpc('execute_safe_query', {
+          query_text: baseQuery,
+          max_rows: 50000
+        });
+        
+        if (error) throw error;
+        
+        // Extract unique project names from results
+        const projectNames = new Set<string>();
+        ((data as Record<string, unknown>[]) || []).forEach(row => {
+          if (row.proyecto && typeof row.proyecto === 'string') {
+            projectNames.add(row.proyecto);
+          }
+        });
+        
+        // Get project IDs for these names
+        if (projectNames.size > 0) {
+          const { data: projectsData } = await supabase
+            .from('proyectos')
+            .select('id, nombre')
+            .in('nombre', Array.from(projectNames))
+            .eq('activo', true);
+          
+          return projectsData?.map(p => p.id) || [];
+        }
+        
+        return [];
+      } catch (e) {
+        console.error('[ReporteViewer] Error fetching report project IDs:', e);
+        return [];
+      }
+    },
+    enabled: !!reporte?.query_sql,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
   // Fetch options for select filters
   const { data: filterOptions = {} } = useQuery({
-    queryKey: ['filter-options-viewer', id, filtros, realEstateProjectIds, accessibleProjectIds, isRepresentanteEmpresaDuena],
+    queryKey: ['filter-options-viewer', id, filtros, realEstateProjectIds, accessibleProjectIds, isRepresentanteEmpresaDuena, reportProjectIds],
     queryFn: async () => {
       if (!reporte) return {};
 
@@ -412,18 +458,31 @@ export default function ReporteViewer() {
           
           options[filtro.nombre] = fetchedOptions;
         } else if (filtro.tipo === 'select' && filtro.tabla) {
-          if (filtro.tabla === 'proyectos' && realEstateProjectIds.length > 0) {
-            const { data } = await supabase
-              .from('proyectos')
-              .select('*')
-              .eq('activo', true)
-              .in('id', realEstateProjectIds);
+          if (filtro.tabla === 'proyectos') {
+            // For project filter, use projects from report data if available
+            let projectIdsToUse = reportProjectIds.length > 0 ? reportProjectIds : realEstateProjectIds;
+            
+            // For Representante de empresa dueña, intersect with accessible projects
+            if (isRepresentanteEmpresaDuena && accessibleProjectIds.length > 0) {
+              projectIdsToUse = projectIdsToUse.filter(id => accessibleProjectIds.includes(id));
+            }
+            
+            if (projectIdsToUse.length > 0) {
+              const { data } = await supabase
+                .from('proyectos')
+                .select('*')
+                .eq('activo', true)
+                .in('id', projectIdsToUse)
+                .order('nombre');
 
-            options[filtro.nombre] = ((data as unknown as Record<string, unknown>[]) || []).map((item) => ({
-              value: String(item[filtro.campo_valor || 'id']),
-              label: String(item[filtro.campo_label || 'nombre']),
-            }));
-          } else if (filtro.tabla !== 'proyectos') {
+              options[filtro.nombre] = ((data as unknown as Record<string, unknown>[]) || []).map((item) => ({
+                value: String(item[filtro.campo_valor || 'id']),
+                label: String(item[filtro.campo_label || 'nombre']),
+              }));
+            } else {
+              options[filtro.nombre] = [];
+            }
+          } else {
             const { data } = await supabase
               .from(filtro.tabla as 'proyectos' | 'estatus_disponibilidad')
               .select('*')
@@ -433,8 +492,6 @@ export default function ReporteViewer() {
               value: String(item[filtro.campo_valor || 'id']),
               label: String(item[filtro.campo_label || 'nombre']),
             }));
-          } else {
-            options[filtro.nombre] = [];
           }
         } else if (filtro.tipo === 'select' && filtro.opciones_estaticas) {
           // Handle static options defined in filtros_configuracion
