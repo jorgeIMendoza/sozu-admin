@@ -200,6 +200,24 @@ serve(async (req) => {
         console.log('[exportar-reporte] Transformed Report 4 columns');
       }
 
+      // Special transformation for Report ID 6 (Solo resta pagos a contraentrega)
+      // Ensures column order matches frontend display
+      if (id_reporte === 6) {
+        queryResult = queryResult.map((row: Record<string, unknown>) => ({
+          'proyecto': row.proyecto,
+          'dueno': row.dueno,
+          'compradores': row.compradores,
+          'numero_departamento': row.numero_departamento,
+          'numero_cuenta': row.numero_cuenta,
+          'fecha_compra': row.fecha_compra,
+          'fecha_pago_contraentrega': row.fecha_pago_contraentrega,
+          'monto_contraentrega': row.monto_contraentrega,
+          'monto_pagado_contraentrega': row.monto_pagado_contraentrega,
+          'restante_contraentrega': row.restante_contraentrega,
+        }));
+        console.log('[exportar-reporte] Transformed Report 6 columns (Solo resta pagos a contraentrega)');
+      }
+
       // Special transformation for Cartera Vencida report
       if (reporte.nombre_archivo === 'cartera_vencida') {
         queryResult = queryResult.map((row: Record<string, unknown>) => ({
