@@ -1204,8 +1204,8 @@ export default function ReporteViewer() {
             </div>
           )}
 
-          {/* Summary Section - Collapsible */}
-          {previewData && previewData.length > 0 && summaryData && (
+          {/* Summary Section - Collapsible - NOT for Pagos Futuros report (ID 4) which has its own summary */}
+          {previewData && previewData.length > 0 && summaryData && !isPagosFuturosReport && (
             <Collapsible open={summaryOpen} onOpenChange={setSummaryOpen}>
               <div className="border rounded-lg bg-muted/30">
                 <CollapsibleTrigger asChild>
@@ -2061,7 +2061,7 @@ export default function ReporteViewer() {
             ) : isPagosFuturosReport && previewData && previewData.length > 0 ? (
               // Special pivot view for "Pagos actuales y futuros" report
               <div className="space-y-6">
-                {/* Resumen de Cobranza */}
+                {/* Resumen de Cobranza - Always visible */}
                 <Collapsible open={summaryOpen} onOpenChange={setSummaryOpen}>
                   <div className="border rounded-lg overflow-hidden">
                     <CollapsibleTrigger className="w-full px-4 py-3 bg-muted/50 hover:bg-muted/70 flex items-center justify-between transition-colors">
@@ -2081,7 +2081,7 @@ export default function ReporteViewer() {
                               <p className="text-xl font-bold text-blue-600">
                                 {formatCurrencyCompact(previewData.reduce((sum, row) => sum + (Number(row.monto_por_cobrar) || 0), 0))}
                               </p>
-                              <p className="text-xs text-muted-foreground">Total (5 meses)</p>
+                              <p className="text-xs text-muted-foreground">Total ({previewData.length} meses)</p>
                             </div>
                           </div>
 
@@ -2128,92 +2128,95 @@ export default function ReporteViewer() {
                   </div>
                 </Collapsible>
 
-                {/* Pivot Table - Months as columns */}
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="font-semibold min-w-[200px]">Mes</TableHead>
-                        <TableHead className="text-center font-semibold min-w-[160px] text-blue-600">Monto Por Cobrar</TableHead>
-                        <TableHead className="text-center font-semibold min-w-[160px] text-green-600">Monto Cobrado</TableHead>
-                        <TableHead className="text-center font-semibold min-w-[160px] text-orange-500">Restante Por Cobrar</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {previewData.map((row, idx) => {
-                        const esMesActual = row.es_mes_actual === true;
-                        return (
-                          <TableRow key={idx} className={cn("hover:bg-muted/30", esMesActual && "bg-emerald-500/20 border-l-4 border-l-emerald-500")}>
-                            <TableCell className={cn("font-medium", esMesActual && "text-emerald-600 dark:text-emerald-400 font-bold")}>
-                              {esMesActual ? "Mes actual" : String(row.mes)}
-                            </TableCell>
-                            <TableCell className={cn("text-center font-mono", esMesActual && "font-semibold")}>
-                              {formatCellValue(row.monto_por_cobrar)}
-                            </TableCell>
-                            <TableCell className={cn("text-center font-mono text-green-600", esMesActual && "font-semibold")}>
-                              {formatCellValue(row.monto_cobrado)}
-                            </TableCell>
-                            <TableCell className={cn("text-center font-mono text-orange-500", esMesActual && "font-semibold")}>
-                              {formatCellValue(row.monto_faltante)}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                      {/* Total Row */}
-                      <TableRow className="bg-muted/50 font-bold">
-                        <TableCell className="font-bold">Total</TableCell>
-                        <TableCell className="text-center font-mono font-bold">
-                          {formatCellValue(previewData.reduce((sum, row) => sum + (Number(row.monto_por_cobrar) || 0), 0))}
-                        </TableCell>
-                        <TableCell className="text-center font-mono font-bold text-green-600">
-                          {formatCellValue(previewData.reduce((sum, row) => sum + (Number(row.monto_cobrado) || 0), 0))}
-                        </TableCell>
-                        <TableCell className="text-center font-mono font-bold text-orange-500">
-                          {formatCellValue(previewData.reduce((sum, row) => sum + (Number(row.monto_faltante) || 0), 0))}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Bar Chart for visualization */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Proyección de Cobros por Mes</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-[300px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart 
-                          data={previewData.map(row => ({
-                            ...row,
-                            mes: row.es_mes_actual === true ? "Mes actual" : row.mes,
-                            monto_por_cobrar: Number(row.monto_por_cobrar) || 0,
-                            monto_cobrado: Number(row.monto_cobrado) || 0,
-                            monto_faltante: Number(row.monto_faltante) || 0
-                          }))} 
-                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                          <XAxis dataKey="mes" tick={{ fontSize: 12 }} className="fill-muted-foreground" />
-                          <YAxis tickFormatter={(value) => formatCurrencyCompact(value)} tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-                          <RechartsTooltip 
-                            formatter={(value: number, name: string) => [formatCurrencyCompact(value), name]}
-                            contentStyle={{ 
-                              backgroundColor: 'hsl(var(--background))', 
-                              border: '1px solid hsl(var(--border))',
-                              borderRadius: '8px'
-                            }}
-                          />
-                          <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                          <Bar dataKey="monto_por_cobrar" fill="#3b82f6" name="Por Cobrar" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="monto_cobrado" fill="#22c55e" name="Cobrado" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="monto_faltante" fill="#f97316" name="Restante" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
+                {/* Conditional: Show Table OR Chart based on viewMode */}
+                {viewMode === 'table' ? (
+                  /* Pivot Table - Months as columns */
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="font-semibold min-w-[200px]">Mes</TableHead>
+                          <TableHead className="text-center font-semibold min-w-[160px] text-blue-600">Monto Por Cobrar</TableHead>
+                          <TableHead className="text-center font-semibold min-w-[160px] text-green-600">Monto Cobrado</TableHead>
+                          <TableHead className="text-center font-semibold min-w-[160px] text-orange-500">Restante Por Cobrar</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {previewData.map((row, idx) => {
+                          const esMesActual = row.es_mes_actual === true;
+                          return (
+                            <TableRow key={idx} className={cn("hover:bg-muted/30", esMesActual && "bg-emerald-500/20 border-l-4 border-l-emerald-500")}>
+                              <TableCell className={cn("font-medium", esMesActual && "text-emerald-600 dark:text-emerald-400 font-bold")}>
+                                {esMesActual ? "Mes actual" : String(row.mes)}
+                              </TableCell>
+                              <TableCell className={cn("text-center font-mono", esMesActual && "font-semibold")}>
+                                {formatCellValue(row.monto_por_cobrar)}
+                              </TableCell>
+                              <TableCell className={cn("text-center font-mono text-green-600", esMesActual && "font-semibold")}>
+                                {formatCellValue(row.monto_cobrado)}
+                              </TableCell>
+                              <TableCell className={cn("text-center font-mono text-orange-500", esMesActual && "font-semibold")}>
+                                {formatCellValue(row.monto_faltante)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        {/* Total Row */}
+                        <TableRow className="bg-muted/50 font-bold">
+                          <TableCell className="font-bold">Total</TableCell>
+                          <TableCell className="text-center font-mono font-bold">
+                            {formatCellValue(previewData.reduce((sum, row) => sum + (Number(row.monto_por_cobrar) || 0), 0))}
+                          </TableCell>
+                          <TableCell className="text-center font-mono font-bold text-green-600">
+                            {formatCellValue(previewData.reduce((sum, row) => sum + (Number(row.monto_cobrado) || 0), 0))}
+                          </TableCell>
+                          <TableCell className="text-center font-mono font-bold text-orange-500">
+                            {formatCellValue(previewData.reduce((sum, row) => sum + (Number(row.monto_faltante) || 0), 0))}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  /* Bar Chart for visualization */
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Proyección de Cobros por Mes</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[400px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart 
+                            data={previewData.map(row => ({
+                              ...row,
+                              mes: row.es_mes_actual === true ? "Mes actual" : row.mes,
+                              monto_por_cobrar: Number(row.monto_por_cobrar) || 0,
+                              monto_cobrado: Number(row.monto_cobrado) || 0,
+                              monto_faltante: Number(row.monto_faltante) || 0
+                            }))} 
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="mes" tick={{ fontSize: 12 }} className="fill-muted-foreground" />
+                            <YAxis tickFormatter={(value) => formatCurrencyCompact(value)} tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                            <RechartsTooltip 
+                              formatter={(value: number, name: string) => [formatCurrencyCompact(value), name]}
+                              contentStyle={{ 
+                                backgroundColor: 'hsl(var(--background))', 
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px'
+                              }}
+                            />
+                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                            <Bar dataKey="monto_por_cobrar" fill="#3b82f6" name="Por Cobrar" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="monto_cobrado" fill="#22c55e" name="Cobrado" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="monto_faltante" fill="#f97316" name="Restante" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             ) : previewData && previewData.length > 0 ? (
               <ScrollArea className="h-[500px]">
