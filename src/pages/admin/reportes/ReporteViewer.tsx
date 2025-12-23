@@ -478,13 +478,13 @@ export default function ReporteViewer() {
     
     return [
       { 
-        name: 'Monto Pagado', 
+        name: 'Monto Pagado a la Fecha', 
         value: totalPagado, 
         percentage: total > 0 ? ((totalPagado / total) * 100).toFixed(1) : '0',
         fill: 'hsl(142, 76%, 36%)' // green using HSL
       },
       { 
-        name: 'Monto Restante', 
+        name: 'Monto Pendiente a la Fecha', 
         value: totalRestante, 
         percentage: total > 0 ? ((totalRestante / total) * 100).toFixed(1) : '0',
         fill: 'hsl(0, 84%, 60%)' // red using HSL
@@ -1093,13 +1093,21 @@ export default function ReporteViewer() {
     if (value === null || value === undefined) return '-';
     if (typeof value === 'number') {
       // Check if the column name suggests it's a monetary value
-      const monetaryColumns = ['monto', 'precio', 'pagado', 'restante', 'cobrar', 'pagar', 'total'];
+      const monetaryColumns = ['monto', 'precio', 'pagado', 'restante', 'cobrar', 'pagar', 'total', 'pendiente'];
       const isMonetary = columnName ? 
         monetaryColumns.some(col => columnName.toLowerCase().includes(col)) : 
         false;
       
-      // Format as currency if it's a monetary column OR if value is >= 1000
-      if (isMonetary || value >= 1000 || (value > 0 && value < 1000 && columnName?.toLowerCase().includes('monto'))) {
+      // Format as currency if it's a monetary column - ALWAYS include $ symbol for monetary values
+      if (isMonetary) {
+        return new Intl.NumberFormat('es-MX', { 
+          style: 'currency', 
+          currency: 'MXN',
+          minimumFractionDigits: 2 
+        }).format(value);
+      }
+      // For non-monetary numbers >= 1000, still format with currency
+      if (value >= 1000) {
         return new Intl.NumberFormat('es-MX', { 
           style: 'currency', 
           currency: 'MXN',
@@ -2126,20 +2134,20 @@ export default function ReporteViewer() {
                     <CollapsibleContent>
                       <div className="p-4 space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {/* Monto a Pagar */}
+                          {/* Monto a Pagar a la Fecha */}
                           <div className="space-y-4 p-4 bg-background rounded-lg border">
-                            <h4 className="font-semibold text-sm border-b pb-2 text-blue-600">Monto a Pagar</h4>
+                            <h4 className="font-semibold text-sm border-b pb-2 text-blue-600">Monto a Pagar a la Fecha</h4>
                             <div>
                               <p className="text-xl font-bold text-blue-600">
                                 {formatCurrencyCompact((fullData || []).reduce((sum, row) => sum + (Number(row.monto_a_pagar) || 0), 0))}
                               </p>
-                              <p className="text-xs text-muted-foreground">Total vencido a la fecha</p>
+                              <p className="text-xs text-muted-foreground">Total a pagar a la fecha</p>
                             </div>
                           </div>
 
-                          {/* Monto Pagado */}
+                          {/* Monto Pagado a la Fecha */}
                           <div className="space-y-4 p-4 bg-background rounded-lg border">
-                            <h4 className="font-semibold text-sm border-b pb-2 text-green-600">Monto Pagado</h4>
+                            <h4 className="font-semibold text-sm border-b pb-2 text-green-600">Monto Pagado a la Fecha</h4>
                             {(() => {
                               const totalAPagar = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_a_pagar) || 0), 0);
                               const totalPagado = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_pagado) || 0), 0);
@@ -2150,15 +2158,15 @@ export default function ReporteViewer() {
                                     {formatCurrencyCompact(totalPagado)}
                                     <span className="text-sm font-normal text-muted-foreground ml-2">({porcentaje.toFixed(1)}%)</span>
                                   </p>
-                                  <p className="text-xs text-muted-foreground">Total cobrado</p>
+                                  <p className="text-xs text-muted-foreground">Total cobrado a la fecha</p>
                                 </div>
                               );
                             })()}
                           </div>
 
-                          {/* Monto Restante */}
+                          {/* Monto Pendiente a la Fecha */}
                           <div className="space-y-4 p-4 bg-background rounded-lg border">
-                            <h4 className="font-semibold text-sm border-b pb-2 text-red-500">Monto Restante</h4>
+                            <h4 className="font-semibold text-sm border-b pb-2 text-red-500">Monto Pendiente a la Fecha</h4>
                             {(() => {
                               const totalAPagar = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_a_pagar) || 0), 0);
                               const totalRestante = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_restante) || 0), 0);
@@ -2169,7 +2177,7 @@ export default function ReporteViewer() {
                                     {formatCurrencyCompact(totalRestante)}
                                     <span className="text-sm font-normal text-muted-foreground ml-2">({porcentaje.toFixed(1)}%)</span>
                                   </p>
-                                  <p className="text-xs text-muted-foreground">Total pendiente de cobro</p>
+                                  <p className="text-xs text-muted-foreground">Total pendiente a la fecha</p>
                                 </div>
                               );
                             })()}
@@ -2195,9 +2203,9 @@ export default function ReporteViewer() {
                           <TableHead className="font-semibold min-w-[100px]">Tipo</TableHead>
                           <TableHead className="font-semibold min-w-[120px]">Categoría</TableHead>
                           <TableHead className="font-semibold min-w-[150px]">Producto</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[140px] text-blue-600">Monto a Pagar</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[140px] text-green-600">Monto Pagado</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[140px] text-red-500">Monto Restante</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[160px] text-blue-600">Monto a Pagar a la Fecha</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[160px] text-green-600">Monto Pagado a la Fecha</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[170px] text-red-500">Monto Pendiente a la Fecha</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -2211,22 +2219,22 @@ export default function ReporteViewer() {
                             <TableCell>{String(row.tipo || '-')}</TableCell>
                             <TableCell>{String(row.categoria || '-')}</TableCell>
                             <TableCell>{String(row.nombre_producto || '-')}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCellValue(row.monto_a_pagar)}</TableCell>
-                            <TableCell className="text-right font-mono text-green-600">{formatCellValue(row.monto_pagado)}</TableCell>
-                            <TableCell className="text-right font-mono text-red-500">{formatCellValue(row.monto_restante)}</TableCell>
+                            <TableCell className="text-right font-mono">{formatCellValue(row.monto_a_pagar, 'monto_a_pagar')}</TableCell>
+                            <TableCell className="text-right font-mono text-green-600">{formatCellValue(row.monto_pagado, 'monto_pagado')}</TableCell>
+                            <TableCell className="text-right font-mono text-red-500">{formatCellValue(row.monto_restante, 'monto_restante')}</TableCell>
                           </TableRow>
                         ))}
                         {/* Total Row */}
                         <TableRow className="bg-muted/50 font-bold">
                           <TableCell colSpan={8} className="font-bold">Total</TableCell>
                           <TableCell className="text-right font-mono font-bold">
-                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_a_pagar) || 0), 0))}
+                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_a_pagar) || 0), 0), 'monto_a_pagar')}
                           </TableCell>
                           <TableCell className="text-right font-mono font-bold text-green-600">
-                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_pagado) || 0), 0))}
+                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_pagado) || 0), 0), 'monto_pagado')}
                           </TableCell>
                           <TableCell className="text-right font-mono font-bold text-red-500">
-                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_restante) || 0), 0))}
+                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_restante) || 0), 0), 'monto_restante')}
                           </TableCell>
                         </TableRow>
                       </TableBody>
