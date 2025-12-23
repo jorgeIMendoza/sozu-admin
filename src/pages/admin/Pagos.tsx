@@ -167,7 +167,7 @@ export default function Pagos() {
   } = useProjectAccess();
 
   // Page permissions
-  const { canCreate, isSuperAdmin } = usePagePermissions('/admin/cuentas-cobranza');
+  const { canCreate, canUpdate, canDelete, isSuperAdmin } = usePagePermissions('/admin/cuentas-cobranza');
   const { data: estatusDisponibilidad } = useQuery({
     queryKey: ["estatus_disponibilidad"],
     queryFn: async () => {
@@ -1784,19 +1784,19 @@ export default function Pagos() {
                   </div>
                 </div>
                 
-                {/* Restante por colocar */}
+                {/* Restante por colocar - solo propiedades ya que valorTotalProyectos solo incluye propiedades */}
                 <div className="space-y-1">
                   <div className="text-xs text-muted-foreground">Restante por colocar</div>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="text-xl font-bold text-purple-600 cursor-help">
-                          {formatCurrencyCompact(valorTotalProyectos - totalMonto)}
+                        <div className={`text-xl font-bold cursor-help ${Math.max(0, valorTotalProyectos - totalMontoPropiedades) === 0 ? 'text-green-600' : 'text-purple-600'}`}>
+                          {formatCurrencyCompact(Math.max(0, valorTotalProyectos - totalMontoPropiedades))}
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>{formatCurrency(valorTotalProyectos - totalMonto)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Valor proyecto - Colocado</p>
+                        <p>{formatCurrency(Math.max(0, valorTotalProyectos - totalMontoPropiedades))}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Valor proyecto (propiedades) - Propiedades colocadas</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -2539,7 +2539,8 @@ export default function Pagos() {
                                       <p>Descargar Estado de Cuenta</p>
                                     </TooltipContent>
                                   </Tooltip>
-                                 <Tooltip>
+                                 {(canUpdate || isSuperAdmin) && (
+                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                      <Button variant="outline" size="icon" onClick={() => handleEditCuenta(cuenta)}>
                                        <Edit className="h-4 w-4" />
@@ -2549,6 +2550,8 @@ export default function Pagos() {
                                      <p>Editar Cuenta</p>
                                    </TooltipContent>
                                  </Tooltip>
+                                 )}
+                                 {(canUpdate || isSuperAdmin) && (
                                   <Tooltip>
                                    <TooltipTrigger asChild>
                                      <Button variant="outline" size="icon" onClick={() => handleAddManualPayment(cuenta)} disabled={cuenta.pagado >= cuenta.precio_final}>
@@ -2559,6 +2562,7 @@ export default function Pagos() {
                                      <p>{cuenta.pagado >= cuenta.precio_final ? 'Cuenta totalmente pagada' : 'Agregar Pago Manual'}</p>
                                    </TooltipContent>
                                  </Tooltip>
+                                 )}
                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                      <Button variant="outline" size="icon" onClick={() => handleDownloadOffer(cuenta)} disabled={loadingDownload === cuenta.id}>
@@ -2569,6 +2573,7 @@ export default function Pagos() {
                                      <p>Descargar Oferta</p>
                                    </TooltipContent>
                                  </Tooltip>
+                                 {(canDelete || isSuperAdmin) && (
                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                       <Button variant="destructive" size="icon" onClick={() => handleCancelCuenta(cuenta)}>
@@ -2579,6 +2584,7 @@ export default function Pagos() {
                                      <p>Cancelar Cuenta</p>
                                    </TooltipContent>
                                  </Tooltip>
+                                 )}
                                </div>
                              </TooltipProvider>
                           </TableCell>
