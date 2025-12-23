@@ -1345,21 +1345,21 @@ const Propiedades = () => {
     return transformedData;
   };
 
-  // Query to fetch allowed availability statuses for current user's role
-  const { data: allowedEstatusNames } = useQuery({
-    queryKey: ['allowed-estatus-names', profile?.rol_id, isSuperAdmin],
+  // Query to fetch allowed availability status IDs for current user's role
+  const { data: allowedEstatusIds } = useQuery({
+    queryKey: ['allowed-estatus-ids', profile?.rol_id, isSuperAdmin],
     queryFn: async () => {
       if (isSuperAdmin) return null; // Super Admin sees all
       if (!profile?.rol_id) return [];
       
       const { data, error } = await supabase
         .from('roles_estatus_disponibilidad')
-        .select('id_estatus_disponibilidad, estatus_disponibilidad!inner(nombre)')
+        .select('id_estatus_disponibilidad')
         .eq('id_rol', profile.rol_id)
         .eq('activo', true);
       
       if (error) throw error;
-      return data?.map((r: any) => r.estatus_disponibilidad.nombre) || [];
+      return data?.map((r: any) => r.id_estatus_disponibilidad) || [];
     },
     enabled: !!profile?.rol_id,
   });
@@ -1419,7 +1419,7 @@ const Propiedades = () => {
 
   // Separate queries for each tab with server-side pagination
   const { data: propiedadesActivasData, isLoading: loadingActivos, refetch: refetchActivos } = useQuery({
-    queryKey: ['properties-activos', currentPageActive, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusNames, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
+    queryKey: ['properties-activos', currentPageActive, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusIds, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
     queryFn: async () => {
       try {
         const from = (currentPageActive - 1) * itemsPerPage;
@@ -1577,12 +1577,16 @@ const Propiedades = () => {
         }
         
         if (disponibilidadFilter.length > 0) {
-          query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
-        } else if (!isSuperAdmin && allowedEstatusNames && allowedEstatusNames.length > 0) {
-          // Apply role-based status filter if no specific filter selected
-          query = query.in('estatus_disponibilidad.nombre', allowedEstatusNames);
+          // Convert filter names to IDs for direct filtering
+          const selectedIds = availabilityOptions?.filter(opt => disponibilidadFilter.includes(opt.nombre)).map(opt => opt.id) || [];
+          if (selectedIds.length > 0) {
+            query = query.in('id_estatus_disponibilidad', selectedIds);
+          }
+        } else if (!isSuperAdmin && allowedEstatusIds && allowedEstatusIds.length > 0) {
+          // Apply role-based status filter using IDs directly
+          query = query.in('id_estatus_disponibilidad', allowedEstatusIds);
         }
-        // Note: If allowedEstatusNames is empty or null, no status filter is applied (show all)
+        // Note: If allowedEstatusIds is empty or null, no status filter is applied (show all)
 
         // PRE-FILTER: If cuentaCobranzaFilter is set, get property IDs with/without cuentas first
         let propertyIdsWithCuentas: number[] = [];
@@ -1757,7 +1761,7 @@ const Propiedades = () => {
   });
 
   const { data: propiedadesDraftData, isLoading: loadingDraft, refetch: refetchDraft } = useQuery({
-    queryKey: ['properties-draft', currentPageDraft, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusNames, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
+    queryKey: ['properties-draft', currentPageDraft, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusIds, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
     queryFn: async () => {
       try {
         const from = (currentPageDraft - 1) * itemsPerPage;
@@ -1958,11 +1962,15 @@ const Propiedades = () => {
         }
         
         if (disponibilidadFilter.length > 0) {
-          query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
-        } else if (!isSuperAdmin && allowedEstatusNames && allowedEstatusNames.length > 0) {
-          query = query.in('estatus_disponibilidad.nombre', allowedEstatusNames);
+          // Convert filter names to IDs for direct filtering
+          const selectedIds = availabilityOptions?.filter(opt => disponibilidadFilter.includes(opt.nombre)).map(opt => opt.id) || [];
+          if (selectedIds.length > 0) {
+            query = query.in('id_estatus_disponibilidad', selectedIds);
+          }
+        } else if (!isSuperAdmin && allowedEstatusIds && allowedEstatusIds.length > 0) {
+          query = query.in('id_estatus_disponibilidad', allowedEstatusIds);
         }
-        // Note: If allowedEstatusNames is empty or null, no status filter is applied (show all)
+        // Note: If allowedEstatusIds is empty or null, no status filter is applied (show all)
 
         // PRE-FILTER: If cuentaCobranzaFilter is set, get property IDs with/without cuentas first
         let propertyIdsWithCuentas: number[] = [];
@@ -2134,7 +2142,7 @@ const Propiedades = () => {
   });
 
   const { data: propiedadesEliminadasData, isLoading: loadingEliminados, refetch: refetchEliminados } = useQuery({
-    queryKey: ['properties-eliminados', currentPageDeleted, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusNames, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
+    queryKey: ['properties-eliminados', currentPageDeleted, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusIds, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
     queryFn: async () => {
       try {
         const from = (currentPageDeleted - 1) * itemsPerPage;
@@ -2335,11 +2343,15 @@ const Propiedades = () => {
         }
         
         if (disponibilidadFilter.length > 0) {
-          query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
-        } else if (!isSuperAdmin && allowedEstatusNames && allowedEstatusNames.length > 0) {
-          query = query.in('estatus_disponibilidad.nombre', allowedEstatusNames);
+          // Convert filter names to IDs for direct filtering
+          const selectedIds = availabilityOptions?.filter(opt => disponibilidadFilter.includes(opt.nombre)).map(opt => opt.id) || [];
+          if (selectedIds.length > 0) {
+            query = query.in('id_estatus_disponibilidad', selectedIds);
+          }
+        } else if (!isSuperAdmin && allowedEstatusIds && allowedEstatusIds.length > 0) {
+          query = query.in('id_estatus_disponibilidad', allowedEstatusIds);
         }
-        // Note: If allowedEstatusNames is empty or null, no status filter is applied (show all)
+        // Note: If allowedEstatusIds is empty or null, no status filter is applied (show all)
 
         // PRE-FILTER: If cuentaCobranzaFilter is set, get property IDs with/without cuentas first
         let propertyIdsWithCuentas: number[] = [];
@@ -2563,8 +2575,8 @@ const Propiedades = () => {
 
   // Filter availability options based on role permissions
   const filteredAvailabilityOptions = availabilityOptions?.filter(option => {
-    if (isSuperAdmin || allowedEstatusNames === null) return true;
-    return allowedEstatusNames?.includes(option.nombre);
+    if (isSuperAdmin || allowedEstatusIds === null) return true;
+    return allowedEstatusIds?.includes(option.id);
   }) || [];
 
   // Función para obtener ofertas de una propiedad específica
