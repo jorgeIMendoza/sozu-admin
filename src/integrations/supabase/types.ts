@@ -6104,7 +6104,9 @@ export type Database = {
         Returns: Json
       }
       is_admin_user: { Args: never; Returns: boolean }
-      is_super_admin: { Args: { user_id: string }; Returns: boolean }
+      is_super_admin:
+        | { Args: never; Returns: boolean }
+        | { Args: { user_id: string }; Returns: boolean }
       mark_password_changed: { Args: never; Returns: undefined }
       sync_conyuge_compradores: {
         Args: { p_id_persona: number }
