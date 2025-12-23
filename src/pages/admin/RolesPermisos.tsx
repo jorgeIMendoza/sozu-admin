@@ -168,6 +168,7 @@ const ReportesSelector = ({ rolId, isSuperAdmin }: { rolId: number; isSuperAdmin
   const isLoading = toggleReporteMutation.isPending || selectAllMutation.isPending || deselectAllMutation.isPending;
 
   const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const selectedLabels = reportes
     .filter(r => rolReportes.includes(r.id))
@@ -179,6 +180,11 @@ const ReportesSelector = ({ rolId, isSuperAdmin }: { rolId: number; isSuperAdmin
     ? "Todos los reportes"
     : `${selectedLabels.length} reportes seleccionados`;
 
+  const filteredReportes = reportes.filter(r =>
+    r.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (r.descripcion && r.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
   return (
     <div className="mt-4 pt-4 border-t">
       <div className="flex items-center justify-between mb-2">
@@ -189,7 +195,7 @@ const ReportesSelector = ({ rolId, isSuperAdmin }: { rolId: number; isSuperAdmin
           </p>
         </div>
       </div>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearchTerm(''); }}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -204,6 +210,15 @@ const ReportesSelector = ({ rolId, isSuperAdmin }: { rolId: number; isSuperAdmin
         </PopoverTrigger>
         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
           <div className="flex flex-col">
+            {/* Search input */}
+            <div className="p-2 border-b">
+              <Input
+                placeholder="Buscar reporte..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-8"
+              />
+            </div>
             {/* Quick actions */}
             <div className="flex border-b px-2 py-2 gap-2">
               <Button 
@@ -226,34 +241,40 @@ const ReportesSelector = ({ rolId, isSuperAdmin }: { rolId: number; isSuperAdmin
               </Button>
             </div>
             {/* Options list */}
-            <ScrollArea className="max-h-[320px]">
+            <ScrollArea className="h-[300px]">
               <div className="p-1">
-                {reportes.map((reporte) => (
-                  <div
-                    key={reporte.id}
-                    onClick={() => toggleReporteMutation.mutate({ 
-                      reporteId: reporte.id, 
-                      isActive: hasReporte(reporte.id)
-                    })}
-                    className={cn(
-                      "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
-                      hasReporte(reporte.id) && "bg-accent/50"
-                    )}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4 shrink-0",
-                        hasReporte(reporte.id) ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    <div className="flex flex-col">
-                      <span>{reporte.nombre}</span>
-                      {reporte.descripcion && (
-                        <span className="text-xs text-muted-foreground">{reporte.descripcion}</span>
-                      )}
-                    </div>
+                {filteredReportes.length === 0 ? (
+                  <div className="text-center py-4 text-sm text-muted-foreground">
+                    No se encontraron reportes
                   </div>
-                ))}
+                ) : (
+                  filteredReportes.map((reporte) => (
+                    <div
+                      key={reporte.id}
+                      onClick={() => toggleReporteMutation.mutate({ 
+                        reporteId: reporte.id, 
+                        isActive: hasReporte(reporte.id)
+                      })}
+                      className={cn(
+                        "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                        hasReporte(reporte.id) && "bg-accent/50"
+                      )}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4 shrink-0",
+                          hasReporte(reporte.id) ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      <div className="flex flex-col">
+                        <span>{reporte.nombre}</span>
+                        {reporte.descripcion && (
+                          <span className="text-xs text-muted-foreground">{reporte.descripcion}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </ScrollArea>
           </div>
