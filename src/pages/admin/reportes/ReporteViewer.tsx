@@ -540,7 +540,7 @@ export default function ReporteViewer() {
         fill: 'hsl(25, 95%, 53%)' // orange using HSL
       }
     ];
-  }, [isCarteraVencidaReport, fullData, previewData]);
+  }, [isContraentregaReport, fullData, previewData]);
 
   // Get columns from preview data with preferred ordering
   const columns = useMemo(() => {
@@ -2675,7 +2675,7 @@ export default function ReporteViewer() {
                           <TableHead className="font-semibold min-w-[100px]">Num. Depto</TableHead>
                           <TableHead className="font-semibold min-w-[120px]">Num. Cuenta</TableHead>
                           <TableHead className="font-semibold min-w-[120px]">Fecha Compra</TableHead>
-                          <TableHead className="font-semibold min-w-[150px]">Fecha Pago Contraentrega</TableHead>
+                          <TableHead className="font-semibold min-w-[150px]">Fecha Contraentrega</TableHead>
                           <TableHead className="text-right font-semibold min-w-[150px] text-blue-600">Monto Pagado Total</TableHead>
                           <TableHead className="text-right font-semibold min-w-[150px] text-orange-500">Monto Contraentrega</TableHead>
                           <TableHead className="text-right font-semibold min-w-[170px] text-green-600">Pagado Contraentrega</TableHead>
