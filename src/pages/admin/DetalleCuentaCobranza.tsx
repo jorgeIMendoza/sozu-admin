@@ -2328,7 +2328,8 @@ export default function DetalleCuentaCobranza() {
           </div>
         ) : (
           <div className="flex flex-col items-start gap-3">
-            {/* Grupo de acciones de pago */}
+            {/* Grupo de acciones de pago - solo visible con permiso de actualización */}
+            {(canUpdate || isSuperAdmin) && (
             <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
               <Button 
                 onClick={() => setTransferDialog({ isOpen: true })}
@@ -2353,8 +2354,10 @@ export default function DetalleCuentaCobranza() {
                 Agregar Pago
               </Button>
             </div>
+            )}
 
-            {/* Grupo de acciones de cuenta */}
+            {/* Grupo de acciones de cuenta - solo visible con permiso de actualización */}
+            {(canUpdate || isSuperAdmin) && (
             <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
               <Button 
                 onClick={() => setEditCuentaDialog(true)}
@@ -2400,6 +2403,7 @@ export default function DetalleCuentaCobranza() {
                 </>
               )}
             </div>
+            )}
           </div>
         )}
       </div>

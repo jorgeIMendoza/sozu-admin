@@ -74,6 +74,7 @@ export function useProjectAccess() {
   const { data: userEntityData, isLoading: isLoadingUserEntity } = useQuery({
     queryKey: ['user-entity-data', userPersonaId, hasEntityBasedAccess, permissionVersion],
     queryFn: async () => {
+      console.log('[useProjectAccess] Fetching user entity data for persona:', userPersonaId);
       if (!userPersonaId) return null;
       
       // For "Representante de empresa dueña" role, we need to find:
@@ -141,6 +142,7 @@ export function useProjectAccess() {
         
         if (ownerError) throw ownerError;
         
+        console.log('[useProjectAccess] Rep Comercial - ownerEntities found:', ownerEntities);
         return {
           entityId: legalEntityIds[0], // Primary entity
           entityRelations: ownerEntities || [],
@@ -180,11 +182,16 @@ export function useProjectAccess() {
 
   // Get ownership entity IDs (for Representante de empresa dueña)
   // These are the entidades_relacionadas IDs where the entity is Dueño Vendedor, Aportante, or Dueño
-  const ownershipEntityIds = isRepresentanteEmpresaDuena && userEntityData?.entityRelations
-    ? userEntityData.entityRelations
-        .filter(er => [TIPO_DUENO_VENDEDOR, TIPO_APORTANTE, TIPO_DUENO].includes(er.id_tipo_entidad))
-        .map(er => er.id)
-    : [];
+  const ownershipEntityIds = useMemo(() => {
+    if (!isRepresentanteEmpresaDuena || !userEntityData?.entityRelations) {
+      return [];
+    }
+    const ids = userEntityData.entityRelations
+      .filter(er => [TIPO_DUENO_VENDEDOR, TIPO_APORTANTE, TIPO_DUENO].includes(er.id_tipo_entidad))
+      .map(er => er.id);
+    console.log('[useProjectAccess] ownershipEntityIds:', ids, 'from entityRelations:', userEntityData.entityRelations);
+    return ids;
+  }, [isRepresentanteEmpresaDuena, userEntityData?.entityRelations]);
 
   // Get developer projects (for Desarrollador role)
   // These are project IDs where the entity is a Desarrollador
