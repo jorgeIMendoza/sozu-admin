@@ -510,9 +510,10 @@ export default function ReporteViewer() {
     if (!previewData || previewData.length === 0) return [];
     
     const dataKeys = Object.keys(previewData[0]);
+    console.log('[ReporteViewer] Available columns from data:', dataKeys);
     
     // Sort columns based on preferred order, keeping unknown columns at the end
-    return dataKeys.sort((a, b) => {
+    const sortedColumns = dataKeys.sort((a, b) => {
       const aIndex = preferredColumnOrder.indexOf(a);
       const bIndex = preferredColumnOrder.indexOf(b);
       
@@ -525,6 +526,9 @@ export default function ReporteViewer() {
       // Neither in preferred order - keep original order
       return 0;
     });
+    
+    console.log('[ReporteViewer] Sorted columns:', sortedColumns);
+    return sortedColumns;
   }, [previewData, preferredColumnOrder]);
 
   // Calculate summary data from FULL data (not just preview)
