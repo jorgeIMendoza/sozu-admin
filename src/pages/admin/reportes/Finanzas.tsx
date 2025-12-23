@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -35,13 +36,38 @@ interface Reporte {
 
 export default function ReportesFinanzas() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const { canRead, isSuperAdmin, isLoading: permissionsLoading } = usePagePermissions('/admin/reportes/finanzas');
 
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Fetch accessible report IDs for the current user's role
+  const { data: accessibleReportIds = [], isLoading: isLoadingAccessible } = useQuery({
+    queryKey: ['accessible-report-ids', profile?.rol_id, isSuperAdmin],
+    queryFn: async () => {
+      // Super Admin can access all reports
+      if (isSuperAdmin) {
+        const { data } = await supabase
+          .from('reportes')
+          .select('id')
+          .eq('activo', true);
+        return data?.map(r => r.id) || [];
+      }
+      
+      // For other roles, call the RPC function
+      const { data, error } = await supabase.rpc('get_accessible_report_ids');
+      if (error) {
+        console.error('Error fetching accessible reports:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: !!profile?.rol_id || isSuperAdmin,
+  });
+
   // Fetch available reports for this submenu
   const { data: reportes = [], isLoading } = useQuery({
-    queryKey: ['reportes-finanzas'],
+    queryKey: ['reportes-finanzas', accessibleReportIds],
     queryFn: async () => {
       const { data: submenu } = await supabase
         .from('submenus')
@@ -51,12 +77,22 @@ export default function ReportesFinanzas() {
 
       if (!submenu) return [];
 
-      const { data, error } = await supabase
+      // Only fetch reports that the user has access to
+      let query = supabase
         .from('reportes')
         .select('id, nombre, descripcion, filtros_configuracion, nombre_archivo, activo, prendido')
         .eq('id_submenu', submenu.id)
-        .eq('activo', true) // Only show non-deleted reports
-        .order('nombre');
+        .eq('activo', true);
+      
+      // Filter by accessible report IDs (unless Super Admin who has access to all)
+      if (!isSuperAdmin && accessibleReportIds.length > 0) {
+        query = query.in('id', accessibleReportIds);
+      } else if (!isSuperAdmin && accessibleReportIds.length === 0) {
+        // User has no access to any reports
+        return [];
+      }
+      
+      const { data, error } = await query.order('nombre');
 
       if (error) throw error;
       return (data || []).map(r => ({
@@ -64,6 +100,7 @@ export default function ReportesFinanzas() {
         filtros_configuracion: (r.filtros_configuracion || []) as unknown as FiltroConfig[]
       })) as Reporte[];
     },
+    enabled: accessibleReportIds.length > 0 || isSuperAdmin,
   });
 
   // Filter reports based on search term
@@ -81,7 +118,7 @@ export default function ReportesFinanzas() {
     navigate(`/admin/reportes/ver/${reporte.id}?return=/admin/reportes/finanzas`);
   };
 
-  if (permissionsLoading || isLoading) {
+  if (permissionsLoading || isLoading || isLoadingAccessible) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

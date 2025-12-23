@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Download, Loader2, FileSpreadsheet, CalendarIcon, Table as TableIcon, BarChart3, RefreshCw, AlertCircle, ChevronDown, ChevronUp, Info, TrendingUp } from "lucide-react";
+import { ArrowLeft, Download, Loader2, FileSpreadsheet, CalendarIcon, Table as TableIcon, BarChart3, RefreshCw, AlertCircle, ChevronDown, ChevronUp, Info, TrendingUp, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAuth } from "@/contexts/AuthContext";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, AreaChart, Area, LabelList } from 'recharts';
 
@@ -152,6 +154,13 @@ export default function ReporteViewer() {
   const queryClient = useQueryClient();
   const { canExport, isSuperAdmin, isLoading: permissionsLoading } = usePagePermissions(returnPath);
   const { registrarExportacion } = useActivityLogger();
+  const { profile } = useAuth();
+  const { 
+    accessibleProjectIds, 
+    ownershipEntityIds, 
+    isRepresentanteEmpresaDuena,
+    isLoading: isLoadingProjectAccess 
+  } = useProjectAccess();
 
   const [filtros, setFiltros] = useState<Record<string, string>>({});
   const [isExporting, setIsExporting] = useState(false);
@@ -161,6 +170,82 @@ export default function ReporteViewer() {
   const [summaryOpen, setSummaryOpen] = useState(true);
   const [progressChartType, setProgressChartType] = useState<'stacked-bar' | 'area' | 'bullet'>('stacked-bar');
   const [aggregateProjects, setAggregateProjects] = useState(true); // true = show as single bar, false = separate by project
+  const [hasReportAccess, setHasReportAccess] = useState<boolean | null>(null);
+  const [isCheckingAccess, setIsCheckingAccess] = useState(true);
+
+  // Check if user has access to this specific report
+  useEffect(() => {
+    const checkReportAccess = async () => {
+      if (!id || !profile?.rol_id) return;
+      
+      // Super Admin has access to everything
+      if (isSuperAdmin) {
+        setHasReportAccess(true);
+        setIsCheckingAccess(false);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase.rpc('user_can_access_report', {
+          _reporte_id: parseInt(id)
+        });
+        
+        if (error) {
+          console.error('Error checking report access:', error);
+          setHasReportAccess(false);
+        } else {
+          setHasReportAccess(data === true);
+        }
+      } catch (err) {
+        console.error('Error checking report access:', err);
+        setHasReportAccess(false);
+      } finally {
+        setIsCheckingAccess(false);
+      }
+    };
+    
+    checkReportAccess();
+  }, [id, profile?.rol_id, isSuperAdmin]);
+
+  // Fetch owner entity info for locked filter display
+  const { data: ownerEntityInfo } = useQuery({
+    queryKey: ['owner-entity-info', ownershipEntityIds],
+    queryFn: async () => {
+      if (ownershipEntityIds.length === 0) return null;
+      
+      const { data, error } = await supabase
+        .from('entidades_relacionadas')
+        .select('id, id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_legal)')
+        .in('id', ownershipEntityIds)
+        .eq('activo', true);
+      
+      if (error) throw error;
+      return data?.[0] || null;
+    },
+    enabled: ownershipEntityIds.length > 0 && isRepresentanteEmpresaDuena,
+  });
+
+  // Auto-set locked filters for Representante de empresa dueña
+  useEffect(() => {
+    if (isRepresentanteEmpresaDuena && !isLoadingProjectAccess) {
+      const updates: Record<string, string> = {};
+      
+      // Lock project filter to accessible projects
+      if (accessibleProjectIds.length > 0) {
+        updates['id_proyecto'] = accessibleProjectIds.join(',');
+      }
+      
+      // Lock owner filter to ownership entities
+      if (ownershipEntityIds.length > 0) {
+        updates['id_entidad_relacionada_dueno'] = ownershipEntityIds.join(',');
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        setFiltros(prev => ({ ...prev, ...updates }));
+      }
+    }
+  }, [isRepresentanteEmpresaDuena, isLoadingProjectAccess, accessibleProjectIds, ownershipEntityIds]);
+
   // Fetch Real Estate projects IDs
   const { data: realEstateProjectIds = [] } = useQuery({
     queryKey: ['real-estate-projects'],
@@ -650,11 +735,24 @@ export default function ReporteViewer() {
 
     setIsExporting(true);
     try {
-      // Export ALL data without filters (different from properties page)
+      // For Representante de empresa dueña, always apply locked filters on export
+      const exportFilters: Record<string, string> = {};
+      
+      if (isRepresentanteEmpresaDuena) {
+        // Lock project filter
+        if (accessibleProjectIds.length > 0) {
+          exportFilters['id_proyecto'] = accessibleProjectIds.join(',');
+        }
+        // Lock owner filter
+        if (ownershipEntityIds.length > 0) {
+          exportFilters['id_entidad_relacionada_dueno'] = ownershipEntityIds.join(',');
+        }
+      }
+      
       const response = await supabase.functions.invoke('exportar-reporte', {
         body: {
           id_reporte: reporte.id,
-          filtros: {}, // Always export all data, no filters
+          filtros: exportFilters, // Apply locked filters for Representante
         },
       });
 
@@ -693,11 +791,36 @@ export default function ReporteViewer() {
 
   const renderFilterInput = (filtro: FiltroConfig) => {
     const isDisabled = filtro.depende_de && !filtros[filtro.depende_de];
+    
+    // Check if this filter is locked for Representante de empresa dueña
+    const isLockedProyecto = isRepresentanteEmpresaDuena && filtro.nombre === 'id_proyecto';
+    const isLockedDueno = isRepresentanteEmpresaDuena && (
+      filtro.nombre === 'id_entidad_relacionada_dueno' || 
+      filtro.nombre === 'id_dueno' ||
+      filtro.nombre.includes('dueno')
+    );
+    const isLocked = isLockedDueno; // Only dueño is locked, proyecto can be filtered
 
-    // Multiselect for proyecto filter
+    // Locked filter display for dueño
+    if (isLocked) {
+      const displayName = ownerEntityInfo?.personas?.nombre_legal || 'Cargando...';
+      return (
+        <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/50">
+          <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-medium truncate">{displayName}</span>
+        </div>
+      );
+    }
+
+    // Multiselect for proyecto filter - for Representante, limit options to accessible projects
     if (filtro.tipo === 'select' && filtro.nombre === 'id_proyecto') {
       const selectedValues = filtros[filtro.nombre] ? filtros[filtro.nombre].split(',') : [];
-      const options = filterOptions[filtro.nombre] || [];
+      let options = filterOptions[filtro.nombre] || [];
+      
+      // For Representante, filter options to only accessible projects
+      if (isRepresentanteEmpresaDuena && accessibleProjectIds.length > 0) {
+        options = options.filter(opt => accessibleProjectIds.includes(parseInt(opt.value)));
+      }
       
       return (
         <Popover>
@@ -895,7 +1018,7 @@ export default function ReporteViewer() {
   };
 
   // Show loading state only for the content area, not the whole page
-  const isInitialLoading = permissionsLoading || isLoading;
+  const isInitialLoading = permissionsLoading || isLoading || isCheckingAccess || isLoadingProjectAccess;
 
   return (
     <div className="h-full min-h-[calc(100vh-120px)] flex flex-col p-6">
@@ -903,6 +1026,22 @@ export default function ReporteViewer() {
         <div className="flex items-center justify-center flex-1">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
+      ) : hasReportAccess === false ? (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+              <p className="text-lg font-medium mb-2">Acceso Denegado</p>
+              <p className="text-muted-foreground mb-4">No tienes permisos para ver este reporte.</p>
+            </div>
+            <div className="flex justify-center mt-4">
+              <Button variant="outline" onClick={() => navigate(returnPath)}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Volver
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : !reporte ? (
         <Card>
           <CardContent className="pt-6">
