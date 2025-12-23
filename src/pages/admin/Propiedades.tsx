@@ -84,14 +84,15 @@ const FacturaCell = ({ propertyId }: { propertyId: number }) => {
   );
 };
 
-// Component to show payment schemes for a project
+// Component to show payment schemes for a project - Shows SI/NO with clickable popover
 const EsquemasPagoCell = ({ projectId }: { projectId: number }) => {
+  const [open, setOpen] = useState(false);
   const { data: schemes = [], isLoading } = useQuery({
     queryKey: ['esquemas-pago-proyecto', projectId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('esquemas_pago')
-        .select('id, nombre')
+        .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades, porcentaje_descuento_aumento')
         .eq('id_proyecto', projectId)
         .is('id_producto', null)
         .eq('es_manual', false)
@@ -105,16 +106,60 @@ const EsquemasPagoCell = ({ projectId }: { projectId: number }) => {
   });
 
   if (isLoading) return <span className="text-muted-foreground text-xs">...</span>;
-  if (schemes.length === 0) return <span className="text-muted-foreground text-xs">Sin esquemas</span>;
+  
+  if (schemes.length === 0) {
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        NO
+      </Badge>
+    );
+  }
 
   return (
-    <div className="flex flex-wrap gap-1 max-w-[200px]">
-      {schemes.map((scheme) => (
-        <Badge key={scheme.id} variant="outline" className="text-xs">
-          {scheme.nombre}
-        </Badge>
-      ))}
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-auto p-0">
+          <Badge variant="default" className="cursor-pointer hover:bg-primary/80">
+            SÍ ({schemes.length})
+          </Badge>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="start">
+        <div className="p-3 border-b">
+          <h4 className="font-semibold text-sm">Esquemas de Pago Disponibles</h4>
+          <p className="text-xs text-muted-foreground">{schemes.length} esquema(s) configurado(s)</p>
+        </div>
+        <div className="max-h-60 overflow-auto">
+          {schemes.map((scheme) => (
+            <div key={scheme.id} className="p-3 border-b last:border-b-0 hover:bg-muted/50">
+              <div className="font-medium text-sm">{scheme.nombre}</div>
+              <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                <div className="flex justify-between">
+                  <span>Enganche:</span>
+                  <span>{scheme.porcentaje_enganche}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Mensualidades:</span>
+                  <span>{scheme.porcentaje_mensualidades}% ({scheme.numero_mensualidades} meses)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Entrega:</span>
+                  <span>{scheme.porcentaje_entrega}%</span>
+                </div>
+                {scheme.porcentaje_descuento_aumento !== 0 && (
+                  <div className="flex justify-between">
+                    <span>{scheme.porcentaje_descuento_aumento < 0 ? 'Descuento:' : 'Aumento:'}</span>
+                    <span className={scheme.porcentaje_descuento_aumento < 0 ? 'text-green-600' : 'text-red-600'}>
+                      {Math.abs(scheme.porcentaje_descuento_aumento)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 };
 
