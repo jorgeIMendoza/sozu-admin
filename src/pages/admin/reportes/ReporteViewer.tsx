@@ -158,6 +158,7 @@ export default function ReporteViewer() {
   const { 
     accessibleProjectIds, 
     ownershipEntityIds, 
+    ownershipPersonaIds,
     isRepresentanteEmpresaDuena,
     isLoading: isLoadingProjectAccess 
   } = useProjectAccess();
@@ -210,20 +211,21 @@ export default function ReporteViewer() {
 
   // Fetch owner entity info for locked filter display
   const { data: ownerEntityInfo } = useQuery({
-    queryKey: ['owner-entity-info', ownershipEntityIds],
+    queryKey: ['owner-entity-info', ownershipPersonaIds],
     queryFn: async () => {
-      if (ownershipEntityIds.length === 0) return null;
+      if (ownershipPersonaIds.length === 0) return null;
       
+      // Fetch persona info directly by id_persona
       const { data, error } = await supabase
-        .from('entidades_relacionadas')
-        .select('id, id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_legal)')
-        .in('id', ownershipEntityIds)
+        .from('personas')
+        .select('id, nombre_legal')
+        .in('id', ownershipPersonaIds)
         .eq('activo', true);
       
       if (error) throw error;
       return data?.[0] || null;
     },
-    enabled: ownershipEntityIds.length > 0 && isRepresentanteEmpresaDuena,
+    enabled: ownershipPersonaIds.length > 0 && isRepresentanteEmpresaDuena,
   });
 
   // Auto-set locked filters for Representante de empresa dueña
@@ -236,7 +238,13 @@ export default function ReporteViewer() {
         updates['id_proyecto'] = accessibleProjectIds.join(',');
       }
       
-      // Lock owner filter to ownership entities
+      // Lock owner filter to ownership personas (id_persona, not entidad_relacionada id)
+      // This is used for filters like id_dueno that filter by er.id_persona
+      if (ownershipPersonaIds.length > 0) {
+        updates['id_dueno'] = ownershipPersonaIds.join(',');
+      }
+      
+      // Also keep id_entidad_relacionada_dueno for backwards compatibility
       if (ownershipEntityIds.length > 0) {
         updates['id_entidad_relacionada_dueno'] = ownershipEntityIds.join(',');
       }
@@ -245,7 +253,7 @@ export default function ReporteViewer() {
         setFiltros(prev => ({ ...prev, ...updates }));
       }
     }
-  }, [isRepresentanteEmpresaDuena, isLoadingProjectAccess, accessibleProjectIds, ownershipEntityIds]);
+  }, [isRepresentanteEmpresaDuena, isLoadingProjectAccess, accessibleProjectIds, ownershipEntityIds, ownershipPersonaIds]);
 
   // Fetch Real Estate projects IDs
   const { data: realEstateProjectIds = [] } = useQuery({
@@ -804,7 +812,7 @@ export default function ReporteViewer() {
 
     // Locked filter display for dueño
     if (isLocked) {
-      const displayName = ownerEntityInfo?.personas?.nombre_legal || 'Cargando...';
+      const displayName = ownerEntityInfo?.nombre_legal || 'Cargando...';
       return (
         <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/50">
           <Lock className="h-4 w-4 text-muted-foreground shrink-0" />

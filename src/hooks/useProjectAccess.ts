@@ -193,6 +193,20 @@ export function useProjectAccess() {
     return ids;
   }, [isRepresentanteEmpresaDuena, userEntityData?.entityRelations]);
 
+  // Get ownership persona IDs (the id_persona from owner entities - needed for report filters)
+  const ownershipPersonaIds = useMemo(() => {
+    if (!isRepresentanteEmpresaDuena || !userEntityData?.entityRelations) {
+      return [];
+    }
+    const personaIds = userEntityData.entityRelations
+      .filter(er => [TIPO_DUENO_VENDEDOR, TIPO_APORTANTE, TIPO_DUENO].includes(er.id_tipo_entidad) && er.id_persona)
+      .map(er => er.id_persona);
+    // Remove duplicates
+    const uniqueIds = [...new Set(personaIds)];
+    console.log('[useProjectAccess] ownershipPersonaIds:', uniqueIds);
+    return uniqueIds;
+  }, [isRepresentanteEmpresaDuena, userEntityData?.entityRelations]);
+
   // Get developer projects (for Desarrollador role)
   // These are project IDs where the entity is a Desarrollador
   const developerProjectIds = isDesarrollador && userEntityData?.entityRelations
@@ -353,6 +367,7 @@ export function useProjectAccess() {
     isRepresentanteEmpresaDuena,
     isDesarrollador,
     ownershipEntityIds,
+    ownershipPersonaIds,
     userEntityId: userEntityData?.entityId || null,
   };
 }
