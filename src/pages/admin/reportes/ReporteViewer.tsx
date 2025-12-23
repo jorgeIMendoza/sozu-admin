@@ -1819,7 +1819,7 @@ export default function ReporteViewer() {
                   </AlertDescription>
                 </Alert>
               </div>
-            ) : viewMode === 'chart' && !isPagosFuturosReport && !isCarteraVencidaReport && !isContraentregaReport && !isLiquidadosReport ? (
+            ) : viewMode === 'chart' && !isPagosFuturosReport && !isCarteraVencidaReport && !isContraentregaReport && !isLiquidadosReport && !isPagosMensualesReport ? (
               // Chart View - Two charts: Line Chart + Bar Chart for totals (only for generic reports)
               <div className="space-y-8 p-4">
                 {/* Line Chart - Trends per property */}
