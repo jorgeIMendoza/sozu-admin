@@ -333,7 +333,7 @@ export default function ReporteViewer() {
 
   // Fetch options for select filters
   const { data: filterOptions = {} } = useQuery({
-    queryKey: ['filter-options-viewer', id, filtros, realEstateProjectIds],
+    queryKey: ['filter-options-viewer', id, filtros, realEstateProjectIds, accessibleProjectIds, isRepresentanteEmpresaDuena],
     queryFn: async () => {
       if (!reporte) return {};
 
@@ -360,10 +360,34 @@ export default function ReporteViewer() {
           }
           
           const { data } = await supabase.rpc('execute_safe_query', { query_text: query });
-          options[filtro.nombre] = ((data as unknown as Record<string, unknown>[]) || []).map((item) => ({
+          let fetchedOptions = ((data as unknown as Record<string, unknown>[]) || []).map((item) => ({
             value: String(item.id),
             label: String(item.nombre_legal || item.nombre),
           }));
+          
+          // For Representante de empresa dueña, handle project filter specially
+          if (filtro.nombre === 'id_proyecto' && isRepresentanteEmpresaDuena && accessibleProjectIds.length > 0) {
+            // Filter to only accessible projects
+            fetchedOptions = fetchedOptions.filter(opt => accessibleProjectIds.includes(parseInt(opt.value)));
+            
+            // If no projects found in query but user has accessible projects, fetch them directly
+            if (fetchedOptions.length === 0) {
+              const { data: projectsData } = await supabase
+                .from('proyectos')
+                .select('id, nombre')
+                .in('id', accessibleProjectIds)
+                .eq('activo', true);
+              
+              if (projectsData && projectsData.length > 0) {
+                fetchedOptions = projectsData.map(p => ({
+                  value: String(p.id),
+                  label: p.nombre,
+                }));
+              }
+            }
+          }
+          
+          options[filtro.nombre] = fetchedOptions;
         } else if (filtro.tipo === 'select' && filtro.tabla) {
           if (filtro.tabla === 'proyectos' && realEstateProjectIds.length > 0) {
             const { data } = await supabase
