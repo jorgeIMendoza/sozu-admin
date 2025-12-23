@@ -461,6 +461,9 @@ export default function ReporteViewer() {
   // Check if this is the "Solo resta pagos a contraentrega" report
   const isContraentregaReport = reporte?.id === 6 || reporte?.nombre_archivo === 'solo_falta_pagos_contraentrega';
 
+  // Check if this is the "Completamente liquidados" report
+  const isLiquidadosReport = reporte?.id === 7 || reporte?.nombre_archivo === 'completamente_liquidados';
+
   // Define preferred column order for known reports
   const preferredColumnOrder = useMemo(() => [
     // Unified report columns - exact order requested
@@ -477,6 +480,8 @@ export default function ReporteViewer() {
     'ultima_fecha_pago', 'monto_a_pagar', 'monto_pagado', 'monto_restante',
     // Solo resta pagos a contraentrega columns
     'fecha_compra', 'fecha_pago_contraentrega', 'monto_pagado_total', 'monto_contraentrega', 'monto_pagado_contraentrega',
+    // Completamente liquidados columns
+    'monto_total_a_pagar', 'monto_total_pagado',
   ], []);
 
   // Calculate Cartera Vencida chart data
@@ -541,6 +546,36 @@ export default function ReporteViewer() {
       }
     ];
   }, [isContraentregaReport, fullData, previewData]);
+
+  // Calculate Liquidados chart data (pie chart showing total pagado vs total a pagar)
+  const liquidadosChartData = useMemo(() => {
+    if (!isLiquidadosReport) return [];
+    
+    // Use fullData if available, otherwise fall back to previewData
+    const dataSource = fullData && fullData.length > 0 ? fullData : previewData;
+    if (!dataSource || dataSource.length === 0) return [];
+    
+    const totalAPagar = dataSource.reduce((sum, row) => sum + (Number(row.monto_total_a_pagar) || 0), 0);
+    const totalPagado = dataSource.reduce((sum, row) => sum + (Number(row.monto_total_pagado) || 0), 0);
+    
+    // Debug log
+    console.log('[Liquidados Chart]', { totalAPagar, totalPagado, rowCount: dataSource.length });
+    
+    return [
+      { 
+        name: 'Monto Total Pagado', 
+        value: totalPagado, 
+        percentage: totalAPagar > 0 ? ((totalPagado / totalAPagar) * 100).toFixed(1) : '0',
+        fill: 'hsl(142, 76%, 36%)' // green using HSL
+      },
+      { 
+        name: 'Monto Total a Pagar', 
+        value: totalAPagar, 
+        percentage: '100',
+        fill: 'hsl(217, 91%, 60%)' // blue using HSL
+      }
+    ];
+  }, [isLiquidadosReport, fullData, previewData]);
 
   // Get columns from preview data with preferred ordering
   const columns = useMemo(() => {
@@ -2756,6 +2791,158 @@ export default function ReporteViewer() {
                               <Legend 
                                 formatter={(value, entry) => {
                                   const item = contraentregaChartData.find(d => d.name === value);
+                                  return `${value}: ${formatCurrencyCompact(item?.value || 0)} (${item?.percentage}%)`;
+                                }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <div className="h-[400px] flex items-center justify-center text-muted-foreground">
+                          {isLoadingFullData ? (
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                              <span>Cargando datos de la gráfica...</span>
+                            </div>
+                          ) : (
+                            <span>No hay datos disponibles para mostrar la gráfica. Intente aplicar filtros.</span>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            ) : isLiquidadosReport && previewData && previewData.length > 0 ? (
+              // Special view for "Completamente liquidados" report
+              <div className="space-y-6">
+                {/* Summary Section */}
+                <Collapsible open={summaryOpen} onOpenChange={setSummaryOpen}>
+                  <div className="border rounded-lg overflow-hidden">
+                    <CollapsibleTrigger className="w-full px-4 py-3 bg-muted/50 hover:bg-muted/70 flex items-center justify-between transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Resumen de Propiedades Liquidadas</span>
+                        <span className="text-sm text-muted-foreground">({fullData?.length || 0} cuentas)</span>
+                      </div>
+                      {summaryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="p-4 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Monto Total a Pagar */}
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <h4 className="font-semibold text-sm border-b pb-2 text-blue-600">Monto Total a Pagar</h4>
+                            <div>
+                              <p className="text-xl font-bold text-blue-600">
+                                {formatCurrencyCompact((fullData || []).reduce((sum, row) => sum + (Number(row.monto_total_a_pagar) || 0), 0))}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Suma del precio final de todas las cuentas</p>
+                            </div>
+                          </div>
+
+                          {/* Monto Total Pagado */}
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <h4 className="font-semibold text-sm border-b pb-2 text-green-600">Monto Total Pagado</h4>
+                            {(() => {
+                              const totalAPagar = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_total_a_pagar) || 0), 0);
+                              const totalPagado = (fullData || []).reduce((sum, row) => sum + (Number(row.monto_total_pagado) || 0), 0);
+                              const porcentaje = totalAPagar > 0 ? (totalPagado / totalAPagar * 100) : 0;
+                              return (
+                                <div>
+                                  <p className="text-xl font-bold text-green-600">
+                                    {formatCurrencyCompact(totalPagado)}
+                                    <span className="text-sm font-normal text-muted-foreground ml-2">({porcentaje.toFixed(1)}%)</span>
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">Total de pagos aplicados</p>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+
+                {/* Conditional: Show Table OR Chart based on viewMode */}
+                {viewMode === 'table' ? (
+                  /* Table view for Liquidados */
+                  <ScrollArea className="h-[500px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="font-semibold min-w-[150px]">Proyecto</TableHead>
+                          <TableHead className="font-semibold min-w-[150px]">Dueño</TableHead>
+                          <TableHead className="font-semibold min-w-[200px]">Compradores</TableHead>
+                          <TableHead className="font-semibold min-w-[100px]">Num. Depto</TableHead>
+                          <TableHead className="font-semibold min-w-[120px]">Num. Cuenta</TableHead>
+                          <TableHead className="font-semibold min-w-[120px]">Fecha Compra</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[150px] text-blue-600">Monto Total a Pagar</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[150px] text-green-600">Monto Total Pagado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {previewData.map((row, idx) => (
+                          <TableRow key={idx} className="hover:bg-muted/30">
+                            <TableCell className="font-medium">{String(row.proyecto || '-')}</TableCell>
+                            <TableCell>{String(row.dueno || '-')}</TableCell>
+                            <TableCell className="max-w-[200px] truncate" title={String(row.compradores || '')}>{String(row.compradores || '-')}</TableCell>
+                            <TableCell>{String(row.numero_departamento || '-')}</TableCell>
+                            <TableCell className="font-mono text-sm">{renderCuentaCell(row.numero_cuenta, 'numero_cuenta')}</TableCell>
+                            <TableCell>{formatCellValue(row.fecha_compra, 'fecha_compra')}</TableCell>
+                            <TableCell className="text-right font-mono text-blue-600">{formatCellValue(row.monto_total_a_pagar, 'monto_total_a_pagar')}</TableCell>
+                            <TableCell className="text-right font-mono text-green-600">{formatCellValue(row.monto_total_pagado, 'monto_total_pagado')}</TableCell>
+                          </TableRow>
+                        ))}
+                        {/* Total Row */}
+                        <TableRow className="bg-muted/50 font-bold">
+                          <TableCell colSpan={6} className="font-bold">Total</TableCell>
+                          <TableCell className="text-right font-mono font-bold text-blue-600">
+                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_total_a_pagar) || 0), 0), 'monto_total_a_pagar')}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-bold text-green-600">
+                            {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_total_pagado) || 0), 0), 'monto_total_pagado')}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
+                ) : (
+                  /* Chart View - Pie chart */
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Distribución de Montos Liquidados</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      {liquidadosChartData.length > 0 && liquidadosChartData.some(d => d.value > 0) ? (
+                        <div className="h-[400px] flex items-center justify-center">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={liquidadosChartData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={80}
+                                outerRadius={140}
+                                paddingAngle={2}
+                                dataKey="value"
+                              >
+                                {liquidadosChartData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                              </Pie>
+                              <RechartsTooltip 
+                                formatter={(value: number, name: string) => [formatCurrencyCompact(value), name]}
+                                contentStyle={{ 
+                                  backgroundColor: 'hsl(var(--background))', 
+                                  border: '1px solid hsl(var(--border))',
+                                  borderRadius: '8px'
+                                }}
+                              />
+                              <Legend 
+                                formatter={(value, entry) => {
+                                  const item = liquidadosChartData.find(d => d.name === value);
                                   return `${value}: ${formatCurrencyCompact(item?.value || 0)} (${item?.percentage}%)`;
                                 }}
                               />

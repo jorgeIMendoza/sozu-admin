@@ -219,6 +219,21 @@ serve(async (req) => {
         console.log('[exportar-reporte] Transformed Report 6 columns (Solo resta pagos a contraentrega)');
       }
 
+      // Special transformation for Report ID 7 (Completamente liquidados)
+      if (id_reporte === 7) {
+        queryResult = queryResult.map((row: Record<string, unknown>) => ({
+          'proyecto': row.proyecto,
+          'dueno': row.dueno,
+          'compradores': row.compradores,
+          'numero_departamento': row.numero_departamento,
+          'numero_cuenta': row.numero_cuenta,
+          'fecha_compra': row.fecha_compra,
+          'monto_total_a_pagar': row.monto_total_a_pagar,
+          'monto_total_pagado': row.monto_total_pagado,
+        }));
+        console.log('[exportar-reporte] Transformed Report 7 columns (Completamente liquidados)');
+      }
+
       // Special transformation for Cartera Vencida report
       if (reporte.nombre_archivo === 'cartera_vencida') {
         queryResult = queryResult.map((row: Record<string, unknown>) => ({
