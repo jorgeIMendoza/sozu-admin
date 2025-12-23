@@ -1387,8 +1387,8 @@ export default function ReporteViewer() {
             </div>
           )}
 
-          {/* Summary Section - Collapsible - NOT for Pagos Futuros report (ID 4) or Cartera Vencida (has its own summary) */}
-          {previewData && previewData.length > 0 && summaryData && !isPagosFuturosReport && !isCarteraVencidaReport && (
+          {/* Summary Section - Collapsible - NOT for Pagos Futuros report (ID 4), Cartera Vencida, or Contraentrega (they have their own summary) */}
+          {previewData && previewData.length > 0 && summaryData && !isPagosFuturosReport && !isCarteraVencidaReport && !isContraentregaReport && (
             <Collapsible open={summaryOpen} onOpenChange={setSummaryOpen}>
               <div className="border rounded-lg bg-muted/30">
                 <CollapsibleTrigger asChild>
@@ -1610,7 +1610,7 @@ export default function ReporteViewer() {
                   </AlertDescription>
                 </Alert>
               </div>
-            ) : viewMode === 'chart' && !isPagosFuturosReport && !isCarteraVencidaReport ? (
+            ) : viewMode === 'chart' && !isPagosFuturosReport && !isCarteraVencidaReport && !isContraentregaReport ? (
               // Chart View - Two charts: Line Chart + Bar Chart for totals (only for generic reports)
               <div className="space-y-8 p-4">
                 {/* Line Chart - Trends per property */}
@@ -2679,23 +2679,28 @@ export default function ReporteViewer() {
                           <TableHead className="text-right font-semibold min-w-[150px] text-blue-600">Monto Pagado Total</TableHead>
                           <TableHead className="text-right font-semibold min-w-[150px] text-orange-500">Monto Contraentrega</TableHead>
                           <TableHead className="text-right font-semibold min-w-[170px] text-green-600">Pagado Contraentrega</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[170px] text-red-500">Restante Contraentrega</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {previewData.map((row, idx) => (
-                          <TableRow key={idx} className="hover:bg-muted/30">
-                            <TableCell className="font-medium">{String(row.proyecto || '-')}</TableCell>
-                            <TableCell>{String(row.dueno || '-')}</TableCell>
-                            <TableCell className="max-w-[200px] truncate" title={String(row.compradores || '')}>{String(row.compradores || '-')}</TableCell>
-                            <TableCell>{String(row.numero_departamento || '-')}</TableCell>
-                            <TableCell className="font-mono text-sm">{renderCuentaCell(row.numero_cuenta, 'numero_cuenta')}</TableCell>
-                            <TableCell>{formatCellValue(row.fecha_compra, 'fecha_compra')}</TableCell>
-                            <TableCell>{formatCellValue(row.fecha_pago_contraentrega, 'fecha_pago_contraentrega')}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCellValue(row.monto_pagado_total, 'monto_pagado_total')}</TableCell>
-                            <TableCell className="text-right font-mono text-orange-500">{formatCellValue(row.monto_contraentrega, 'monto_contraentrega')}</TableCell>
-                            <TableCell className="text-right font-mono text-green-600">{formatCellValue(row.monto_pagado_contraentrega, 'monto_pagado_contraentrega')}</TableCell>
-                          </TableRow>
-                        ))}
+                        {previewData.map((row, idx) => {
+                          const restanteContraentrega = (Number(row.monto_contraentrega) || 0) - (Number(row.monto_pagado_contraentrega) || 0);
+                          return (
+                            <TableRow key={idx} className="hover:bg-muted/30">
+                              <TableCell className="font-medium">{String(row.proyecto || '-')}</TableCell>
+                              <TableCell>{String(row.dueno || '-')}</TableCell>
+                              <TableCell className="max-w-[200px] truncate" title={String(row.compradores || '')}>{String(row.compradores || '-')}</TableCell>
+                              <TableCell>{String(row.numero_departamento || '-')}</TableCell>
+                              <TableCell className="font-mono text-sm">{renderCuentaCell(row.numero_cuenta, 'numero_cuenta')}</TableCell>
+                              <TableCell>{formatCellValue(row.fecha_compra, 'fecha_compra')}</TableCell>
+                              <TableCell>{formatCellValue(row.fecha_pago_contraentrega, 'fecha_pago_contraentrega')}</TableCell>
+                              <TableCell className="text-right font-mono">{formatCellValue(row.monto_pagado_total, 'monto_pagado_total')}</TableCell>
+                              <TableCell className="text-right font-mono text-orange-500">{formatCellValue(row.monto_contraentrega, 'monto_contraentrega')}</TableCell>
+                              <TableCell className="text-right font-mono text-green-600">{formatCellValue(row.monto_pagado_contraentrega, 'monto_pagado_contraentrega')}</TableCell>
+                              <TableCell className="text-right font-mono text-red-500">{formatCellValue(restanteContraentrega, 'restante_contraentrega')}</TableCell>
+                            </TableRow>
+                          );
+                        })}
                         {/* Total Row */}
                         <TableRow className="bg-muted/50 font-bold">
                           <TableCell colSpan={7} className="font-bold">Total</TableCell>
@@ -2707,6 +2712,9 @@ export default function ReporteViewer() {
                           </TableCell>
                           <TableCell className="text-right font-mono font-bold text-green-600">
                             {formatCellValue((fullData || []).reduce((sum, row) => sum + (Number(row.monto_pagado_contraentrega) || 0), 0), 'monto_pagado_contraentrega')}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-bold text-red-500">
+                            {formatCellValue((fullData || []).reduce((sum, row) => sum + ((Number(row.monto_contraentrega) || 0) - (Number(row.monto_pagado_contraentrega) || 0)), 0), 'restante_contraentrega')}
                           </TableCell>
                         </TableRow>
                       </TableBody>
