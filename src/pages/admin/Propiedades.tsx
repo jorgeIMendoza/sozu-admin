@@ -988,13 +988,13 @@ const Propiedades = () => {
       supabase.from('estacionamientos').select('id_propiedad').in('id_propiedad', propertyIds).eq('activo', true),
       // Storage counts
       supabase.from('bodegas').select('id_propiedad').in('id_propiedad', propertyIds).eq('activo', true),
-      // Edificios, modelos, proyectos
+      // Edificios, modelos, proyectos - use LEFT JOIN (no !inner) to include all records
       supabase.from('edificios_modelos')
-        .select('id, id_modelo, modelos!inner(nombre, numero_recamaras, numero_completo_banos, numero_medio_bano), edificios!inner(nombre, id_proyecto, proyectos!inner(id, nombre))')
+        .select('id, id_modelo, modelos(nombre, numero_recamaras, numero_completo_banos, numero_medio_bano), edificios(nombre, id_proyecto, proyectos(id, nombre))')
         .in('id', [...new Set(data.map(p => p.id_edificio_modelo).filter(Boolean))]),
-      // Owner entities
+      // Owner entities - use LEFT JOIN to include entities without personas
       supabase.from('entidades_relacionadas')
-        .select('id, personas!inner(nombre_legal)')
+        .select('id, personas(nombre_legal)')
         .in('id', [...new Set(data.map(p => p.id_entidad_relacionada_dueno).filter(Boolean))]),
       // Views
       supabase.from('vistas')
