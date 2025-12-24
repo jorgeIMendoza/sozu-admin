@@ -1553,7 +1553,9 @@ const [metodoPagoFilter, setMetodoPagoFilter] = useState<string>('');
             <div className="space-y-4">
               <Label className="text-base font-semibold">Filtros</Label>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {reporte.filtros_configuracion.map((filtro) => {
+                {reporte.filtros_configuracion
+                  .filter((filtro) => !(isPagosMensualesReport && filtro.nombre === 'mes_pago'))
+                  .map((filtro) => {
                   const isDisabled = filtro.depende_de && !filtros[filtro.depende_de];
                   
                   return (
