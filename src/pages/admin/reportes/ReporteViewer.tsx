@@ -184,7 +184,8 @@ export default function ReporteViewer() {
   const [aggregateProjects, setAggregateProjects] = useState(true); // true = show as single bar, false = separate by project
   const [hasReportAccess, setHasReportAccess] = useState<boolean | null>(null);
   const [isCheckingAccess, setIsCheckingAccess] = useState(true);
-  const [metodoPagoFilter, setMetodoPagoFilter] = useState<string>('');
+const [metodoPagoFilter, setMetodoPagoFilter] = useState<string>('');
+  const [mesPagoFilter, setMesPagoFilter] = useState<Date | null>(new Date());
   
   // State for cuenta de cobranza dialog
   const [selectedCuentaId, setSelectedCuentaId] = useState<number | null>(null);
@@ -312,14 +313,21 @@ export default function ReporteViewer() {
 
   // Fetch ALL data for summary (no limit)
   const { data: fullData, isLoading: isLoadingFullData, error: fullDataError, refetch: refetchPreview } = useQuery({
-    queryKey: ['reporte-full-data', id, filtros],
+    queryKey: ['reporte-full-data', id, filtros, mesPagoFilter?.toISOString()],
     queryFn: async () => {
       if (!reporte?.query_sql) return [];
 
-      const processedQuery = applyFiltersToQuery(reporte.query_sql, filtros);
+      // Build effective filters including month filter for Pagos Mensuales
+      const effectiveFiltros = { ...filtros };
+      const isReporteMensual = reporte?.id === 8 || reporte?.nombre_archivo === 'reporte_mensual_pagos';
+      if (isReporteMensual && mesPagoFilter) {
+        effectiveFiltros['mes_pago'] = format(mesPagoFilter, 'yyyy-MM-01');
+      }
+
+      const processedQuery = applyFiltersToQuery(reporte.query_sql, effectiveFiltros);
       
       // Debug log to verify filters are being applied correctly
-      console.log('[ReporteViewer] Executing query with filters:', JSON.stringify(filtros));
+      console.log('[ReporteViewer] Executing query with filters:', JSON.stringify(effectiveFiltros));
       console.log('[ReporteViewer] Processed query (first 500 chars):', processedQuery.substring(0, 500));
 
       const { data, error } = await supabase.rpc('execute_safe_query', {
@@ -544,7 +552,7 @@ export default function ReporteViewer() {
     // Completamente liquidados columns
     'monto_total_a_pagar', 'monto_total_pagado',
     // Reporte Mensual de Pagos columns
-    'numero_departamento', 'tipo', 'nombre_producto', 'numero_cuenta', 'fecha_pago',
+    'nombre_dueno', 'numero_departamento', 'tipo', 'nombre_producto', 'numero_cuenta', 'fecha_pago',
     'metodo_pago', 'clave_rastreo', 'cuenta_clabe', 'concepto_pago', 'monto_pago', 'compradores',
   ], []);
 
@@ -1055,7 +1063,7 @@ export default function ReporteViewer() {
     setIsExporting(true);
     try {
       // For Representante de empresa dueña, always apply locked filters on export
-      const exportFilters: Record<string, string> = {};
+      const exportFilters: Record<string, string> = { ...filtros };
       
       if (isRepresentanteEmpresaDuena) {
         // Lock project filter
@@ -1072,10 +1080,15 @@ export default function ReporteViewer() {
         }
       }
       
+      // Add month filter for Pagos Mensuales report
+      if (isPagosMensualesReport && mesPagoFilter) {
+        exportFilters['mes_pago'] = format(mesPagoFilter, 'yyyy-MM-01');
+      }
+      
       const response = await supabase.functions.invoke('exportar-reporte', {
         body: {
           id_reporte: reporte.id,
-          filtros: exportFilters, // Apply locked filters for Representante
+          filtros: exportFilters,
         },
       });
 
@@ -1568,30 +1581,85 @@ export default function ReporteViewer() {
             </div>
           )}
 
-          {/* Dynamic Filter for Pagos Mensuales - Payment Method */}
-          {isPagosMensualesReport && availableMetodosPago.length > 0 && (
+          {/* Dynamic Filter for Pagos Mensuales - Payment Method and Month Filter */}
+          {isPagosMensualesReport && (
             <div className="space-y-4">
               <Label className="text-base font-semibold">Filtros</Label>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {/* Month Filter */}
                 <div className="space-y-2">
-                  <Label htmlFor="metodo_pago">Método de Pago</Label>
-                  <Select
-                    value={metodoPagoFilter}
-                    onValueChange={setMetodoPagoFilter}
-                  >
-                    <SelectTrigger id="metodo_pago">
-                      <SelectValue placeholder="Todos los métodos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos los métodos</SelectItem>
-                      {availableMetodosPago.map((metodo) => (
-                        <SelectItem key={metodo} value={metodo}>
-                          {metodo}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="mes_pago">Mes de Pago</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !mesPagoFilter && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {mesPagoFilter ? (
+                          format(mesPagoFilter, "MMMM yyyy", { locale: es })
+                        ) : (
+                          <span>Todos los meses</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <div className="p-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Seleccionar mes</span>
+                          {mesPagoFilter && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setMesPagoFilter(null)}
+                              className="h-8 text-xs"
+                            >
+                              Limpiar
+                            </Button>
+                          )}
+                        </div>
+                        <Calendar
+                          mode="single"
+                          selected={mesPagoFilter || undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              // Set to first day of the selected month
+                              setMesPagoFilter(new Date(date.getFullYear(), date.getMonth(), 1));
+                            }
+                          }}
+                          locale={es}
+                          initialFocus
+                        />
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
+
+                {/* Payment Method Filter */}
+                {availableMetodosPago.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="metodo_pago">Método de Pago</Label>
+                    <Select
+                      value={metodoPagoFilter}
+                      onValueChange={setMetodoPagoFilter}
+                    >
+                      <SelectTrigger id="metodo_pago">
+                        <SelectValue placeholder="Todos los métodos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los métodos</SelectItem>
+                        {availableMetodosPago.map((metodo) => (
+                          <SelectItem key={metodo} value={metodo}>
+                            {metodo}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -3190,6 +3258,7 @@ export default function ReporteViewer() {
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="font-semibold min-w-[150px]">Proyecto</TableHead>
+                          <TableHead className="font-semibold min-w-[150px]">Dueño</TableHead>
                           <TableHead className="font-semibold min-w-[100px]">Num. Depto</TableHead>
                           <TableHead className="font-semibold min-w-[100px]">Tipo</TableHead>
                           <TableHead className="font-semibold min-w-[150px]">Nombre Producto</TableHead>
@@ -3207,6 +3276,7 @@ export default function ReporteViewer() {
                         {filteredPagosMensualesData.slice(0, 100).map((row, idx) => (
                           <TableRow key={idx} className="hover:bg-muted/30">
                             <TableCell>{String(row.proyecto || '-')}</TableCell>
+                            <TableCell>{String(row.nombre_dueno || '-')}</TableCell>
                             <TableCell>{String(row.numero_departamento || '-')}</TableCell>
                             <TableCell>
                               <span className={cn(
