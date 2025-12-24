@@ -51,7 +51,7 @@ const STRING_FILTERS = ['tipo', 'mes_pago'];
 function applyFiltersToQuery(querySql: string, filtros: Record<string, unknown>): string {
   let processedQuery = querySql;
 
-  // Find all placeholders in format {{AND condition}}
+  // Find all placeholders in format {{AND condition}} or {{WHERE condition}}
   const placeholderRegex = /\{\{([^}]+)\}\}/g;
   let match;
   const matches: { fullMatch: string; condition: string }[] = [];
@@ -59,6 +59,9 @@ function applyFiltersToQuery(querySql: string, filtros: Record<string, unknown>)
   while ((match = placeholderRegex.exec(querySql)) !== null) {
     matches.push({ fullMatch: match[0], condition: match[1] });
   }
+
+  // Track if we've added a WHERE clause (for converting AND to WHERE when needed)
+  let hasWhereClause = false;
 
   for (const { fullMatch, condition } of matches) {
     // Extract the filter name from the condition (e.g., :id_proyecto)
@@ -73,20 +76,35 @@ function applyFiltersToQuery(querySql: string, filtros: Record<string, unknown>)
         const valueStr = String(filterValue);
         
         // Check if this is a multi-value (comma-separated) for IN clause
+        let replacedCondition: string;
         if (valueStr.includes(',')) {
           const inValues = valueStr.split(',').map(v => {
             const trimmed = v.trim();
             return needsQuotes ? `'${trimmed}'` : trimmed;
           }).join(',');
-          let replacedCondition = condition.replace(`= :${filterName}`, `IN (${inValues})`);
+          replacedCondition = condition.replace(`= :${filterName}`, `IN (${inValues})`);
           replacedCondition = replacedCondition.replace(`=:${filterName}`, `IN (${inValues})`);
-          processedQuery = processedQuery.replace(fullMatch, replacedCondition);
         } else {
           // Single value - wrap in quotes if needed
           const quotedValue = needsQuotes ? `'${valueStr}'` : valueStr;
-          const replacedCondition = condition.replace(`:${filterName}`, quotedValue);
-          processedQuery = processedQuery.replace(fullMatch, replacedCondition);
+          replacedCondition = condition.replace(`:${filterName}`, quotedValue);
         }
+        
+        // If condition starts with AND but we haven't added WHERE yet, convert to WHERE
+        if (replacedCondition.trim().toUpperCase().startsWith('AND ') && !hasWhereClause) {
+          // Check if the original query already has a WHERE clause before this placeholder
+          const beforePlaceholder = processedQuery.substring(0, processedQuery.indexOf(fullMatch));
+          if (!beforePlaceholder.toUpperCase().includes(' WHERE ')) {
+            replacedCondition = 'WHERE ' + replacedCondition.trim().substring(4);
+          }
+        }
+        
+        // Track that we've added a WHERE or the query already had one
+        if (replacedCondition.trim().toUpperCase().startsWith('WHERE ')) {
+          hasWhereClause = true;
+        }
+        
+        processedQuery = processedQuery.replace(fullMatch, replacedCondition);
       } else {
         // Remove the placeholder entirely if no filter value
         processedQuery = processedQuery.replace(fullMatch, '');
