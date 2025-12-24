@@ -257,6 +257,7 @@ serve(async (req) => {
       if (reporte.nombre_archivo === 'reporte_mensual_pagos') {
         queryResult = queryResult.map((row: Record<string, unknown>) => ({
           'Proyecto': row.proyecto,
+          'Dueño': row.nombre_dueno,
           'Número de Departamento': row.numero_departamento,
           'Tipo': row.tipo,
           'Nombre de Producto': row.nombre_producto,
