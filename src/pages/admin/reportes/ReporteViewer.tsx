@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -1621,17 +1622,9 @@ const [metodoPagoFilter, setMetodoPagoFilter] = useState<string>('');
                             </Button>
                           )}
                         </div>
-                        <Calendar
-                          mode="single"
-                          selected={mesPagoFilter || undefined}
-                          onSelect={(date) => {
-                            if (date) {
-                              // Set to first day of the selected month
-                              setMesPagoFilter(new Date(date.getFullYear(), date.getMonth(), 1));
-                            }
-                          }}
-                          locale={es}
-                          initialFocus
+                        <MonthPicker
+                          value={mesPagoFilter}
+                          onChange={(date) => setMesPagoFilter(date)}
                         />
                       </div>
                     </PopoverContent>
