@@ -45,7 +45,7 @@ function removeComments(query: string): string {
 }
 
 // List of filters that require string quoting (non-numeric values)
-const STRING_FILTERS = ['tipo'];
+const STRING_FILTERS = ['tipo', 'mes_pago'];
 
 // Apply filters to query by replacing placeholders
 function applyFiltersToQuery(querySql: string, filtros: Record<string, unknown>): string {
