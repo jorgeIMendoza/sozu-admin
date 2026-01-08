@@ -143,12 +143,27 @@ export class EstadoCuentaService {
     container.innerHTML = templateHtml;
     document.body.appendChild(container);
 
-    // Format money
-    const formatMoney = (amount: number) =>
-      new Intl.NumberFormat("es-MX", {
+    // Format money - handle negative zero
+    const formatMoney = (amount: number) => {
+      // Fix -0 issue: if value is -0 or very close to 0, treat as 0
+      const normalizedAmount = Math.abs(amount) < 0.01 ? 0 : amount;
+      // Ensure no negative values for pending amounts (shouldn't happen but as safety)
+      const safeAmount = normalizedAmount < 0 ? 0 : normalizedAmount;
+      return new Intl.NumberFormat("es-MX", {
         style: "currency",
         currency: "MXN",
-      }).format(amount);
+      }).format(safeAmount);
+    };
+
+    // Format money allowing negative (for cases where it makes sense)
+    const formatMoneyAllowNegative = (amount: number) => {
+      // Fix -0 issue
+      const normalizedAmount = Math.abs(amount) < 0.01 ? 0 : amount;
+      return new Intl.NumberFormat("es-MX", {
+        style: "currency",
+        currency: "MXN",
+      }).format(normalizedAmount);
+    };
 
     // Format date
     const formatDate = (date: string) =>
@@ -205,17 +220,17 @@ export class EstadoCuentaService {
 
     // Populate summary
     const precioFinal = container.querySelector("#precioFinal");
-    if (precioFinal) precioFinal.textContent = formatMoney(data.precioFinal);
+    if (precioFinal) precioFinal.textContent = formatMoneyAllowNegative(data.precioFinal);
 
     const totalPagado = container.querySelector("#totalPagado");
-    if (totalPagado) totalPagado.textContent = formatMoney(data.totalPagado);
+    if (totalPagado) totalPagado.textContent = formatMoneyAllowNegative(data.totalPagado);
 
     const totalMultas = container.querySelector("#totalMultas");
-    if (totalMultas) totalMultas.textContent = formatMoney(data.totalMultas);
+    if (totalMultas) totalMultas.textContent = formatMoneyAllowNegative(data.totalMultas);
 
     const saldoPendiente = container.querySelector("#saldoPendiente");
     if (saldoPendiente)
-      saldoPendiente.textContent = formatMoney(data.saldoPendiente);
+      saldoPendiente.textContent = formatMoneyAllowNegative(data.saldoPendiente);
 
     // Populate acuerdos table
     const acuerdosTable = container.querySelector("#acuerdosTable");
@@ -236,7 +251,15 @@ export class EstadoCuentaService {
             );
           }, 0);
 
-          const pendiente = acuerdo.monto - pagadoAcuerdo;
+          // Calculate pending - ensure no negative zero
+          let pendiente = acuerdo.monto - pagadoAcuerdo;
+          // Normalize -0 to 0 and small negative values due to floating point
+          if (Math.abs(pendiente) < 0.01) {
+            pendiente = 0;
+          } else if (pendiente < 0) {
+            pendiente = 0; // If overpaid, show 0 pending
+          }
+          
           const estado = acuerdo.pago_completado ? "Pagado" : "Pendiente";
 
           return `
@@ -244,8 +267,8 @@ export class EstadoCuentaService {
             <td>${acuerdo.orden}</td>
             <td>${acuerdo.conceptos_pago?.nombre || "N/A"}</td>
             <td>${acuerdo.fecha_pago ? formatDate(acuerdo.fecha_pago) : "N/A"}</td>
-            <td class="right">${formatMoney(acuerdo.monto)}</td>
-            <td class="right">${formatMoney(pagadoAcuerdo)}</td>
+            <td class="right">${formatMoneyAllowNegative(acuerdo.monto)}</td>
+            <td class="right">${formatMoneyAllowNegative(pagadoAcuerdo)}</td>
             <td class="right">${formatMoney(pendiente)}</td>
             <td>${estado}</td>
           </tr>
@@ -254,30 +277,33 @@ export class EstadoCuentaService {
         .join("");
     }
 
-    // Populate pagos table
+    // Populate pagos table - use the full payment amount (monto field)
     const pagosTable = container.querySelector("#pagosTable");
     if (pagosTable) {
       pagosTable.innerHTML = data.pagos
         .map((pago: any) => {
-          const montoPago = pago.aplicaciones_pago
-            .filter((ap: any) => !ap.es_multa)
-            .reduce((s: number, ap: any) => s + (ap.monto || 0), 0);
+          // Use the pago.monto directly instead of summing aplicaciones
+          // This shows the actual payment amount received
+          const montoPago = pago.monto || 0;
 
           return `
           <tr>
             <td>${formatDate(pago.fecha_pago)}</td>
             <td>${pago.metodos_pago?.nombre || "N/A"}</td>
             <td>${pago.clave_rastreo || "N/A"}</td>
-            <td class="right">${formatMoney(montoPago)}</td>
+            <td class="right">${formatMoneyAllowNegative(montoPago)}</td>
           </tr>
         `;
         })
         .join("");
     }
 
+    // Calculate total pagos from pago.monto
+    const totalPagosReal = data.pagos.reduce((sum: number, pago: any) => sum + (pago.monto || 0), 0);
+    
     const totalPagosFooter = container.querySelector("#totalPagosFooter");
     if (totalPagosFooter)
-      totalPagosFooter.textContent = formatMoney(data.totalPagado);
+      totalPagosFooter.textContent = formatMoneyAllowNegative(totalPagosReal);
 
     // Populate notes
     const notes = container.querySelector("#notes");
@@ -285,7 +311,7 @@ export class EstadoCuentaService {
       notes.textContent =
         "Este estado de cuenta muestra el detalle de acuerdos de pago y pagos realizados.";
 
-    // Generate PDF
+    // Generate PDF with multiple pages support
     await this.generatePDF(container, data.id_cuenta, data.oferta);
 
     // Cleanup
@@ -296,10 +322,14 @@ export class EstadoCuentaService {
     const card = container.querySelector(".card") as HTMLElement;
     if (!card) return;
 
+    // Set a fixed width for consistent rendering
+    card.style.width = "850px";
+
     const canvas = await html2canvas(card, {
       scale: 2,
       useCORS: true,
       logging: false,
+      windowWidth: 900,
     });
 
     const imgData = canvas.toDataURL("image/png");
@@ -310,9 +340,33 @@ export class EstadoCuentaService {
     });
 
     const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    
+    // Calculate the image dimensions to fit the PDF width
+    const imgWidth = pdfWidth;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+    
+    // If content fits in one page
+    if (imgHeight <= pdfHeight) {
+      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+    } else {
+      // Multi-page handling
+      let heightLeft = imgHeight;
+      let position = 0;
+      const pageHeight = pdfHeight;
+      
+      // Add first page
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      // Add subsequent pages
+      while (heightLeft > 0) {
+        position -= pageHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+    }
     
     // Format date as yyyy_mm_dd
     const formatDateForFilename = (date: Date): string => {
