@@ -413,9 +413,12 @@ const [metodoPagoFilter, setMetodoPagoFilter] = useState<string>('');
 
   // Fetch options for select filters
   const { data: filterOptions = {} } = useQuery({
-    queryKey: ['filter-options-viewer', id, filtros, realEstateProjectIds, accessibleProjectIds, isRepresentanteEmpresaDuena, reportProjectIds],
+    queryKey: ['filter-options-viewer', id, JSON.stringify(filtros), realEstateProjectIds, accessibleProjectIds, isRepresentanteEmpresaDuena, reportProjectIds, reporte?.filtros_configuracion],
     queryFn: async () => {
       if (!reporte) return {};
+      
+      console.log('[FilterOptions] Loading options with filters:', filtros);
+      console.log('[FilterOptions] Report config depende_de check:', reporte.filtros_configuracion.find(f => f.nombre === 'id_dueno'));
 
       const options: Record<string, { value: string; label: string }[]> = {};
 
