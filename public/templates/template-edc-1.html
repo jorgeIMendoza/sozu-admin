@@ -6,113 +6,272 @@
   <title>Estado de Cuenta</title>
   <style>
     /* Reset */
-    *{box-sizing:border-box}
-    body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; padding:24px; color:#222; background:#f6f7f9}
-    .card{background:#fff; border-radius:8px; padding:28px; max-width:900px; margin:0 auto; box-shadow:0 6px 18px rgba(18,22,34,0.06)}
-
-    header{display:flex; gap:20px; align-items:center; margin-bottom:18px}
-    .brand{width:260px}
-    .brand svg{width:100%; height:auto; display:block}
-
-    .company-info{flex:1}
-    .company-info h1{font-size:20px; margin:0}
-    .company-info p{margin:4px 0; color:#555}
-
-    .meta{display:flex; gap:16px; margin-top:12px}
-    .meta .box{background:#f3f4f6; padding:10px 12px; border-radius:6px}
-    .meta .box b{display:block}
-
-    .summary{display:flex; justify-content:space-between; gap:12px; margin:20px 0}
-    .summary .item{flex:1; background:linear-gradient(180deg,#fff,#fbfbfd); border:1px solid #eef0f3; padding:14px; border-radius:8px}
-    .summary .item h3{margin:0 0 6px 0; font-size:13px; color:#666}
-    .summary .amount{font-size:18px; font-weight:700}
-
-    table{width:100%; border-collapse:collapse; margin-top:14px}
-    thead th{background:#f9fafb; text-align:left; padding:10px 12px; font-size:13px; color:#444; border-bottom:1px solid #eceef2}
-    tbody td{padding:10px 12px; border-bottom:1px dashed #e9ecef; font-size:13px; color:#333}
-    tbody tr:last-child td{border-bottom:none}
-
-    tfoot td{padding:12px; font-weight:700}
-
-    .right{text-align:right}
-
-    @media print{
-      body{background:transparent}
-      .card{box-shadow:none; margin:0}
+    *{box-sizing:border-box; margin:0; padding:0}
+    body{
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      margin:0;
+      padding:32px;
+      color:#1a1a2e;
+      background:#fff;
+      font-size:13px;
+      line-height:1.5;
+    }
+    .card{
+      background:#fff;
+      max-width:800px;
+      margin:0 auto;
+      padding-bottom:40px;
     }
 
-    .muted{color:#6b7280}
-    .small{font-size:12px}
+    /* Header */
+    header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      padding-bottom:20px;
+      border-bottom:2px solid #1a1a2e;
+      margin-bottom:24px;
+    }
+    .company-info h1{
+      font-size:22px;
+      font-weight:700;
+      color:#1a1a2e;
+      margin-bottom:4px;
+    }
+    .company-info p{
+      color:#666;
+      font-size:12px;
+    }
+
+    .account-box{
+      text-align:right;
+    }
+    .account-box .label{
+      font-size:11px;
+      color:#888;
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+    .account-box .account-number{
+      font-size:20px;
+      font-weight:700;
+      color:#1a1a2e;
+      margin:2px 0 8px;
+    }
+    .account-box .client-name{
+      font-weight:600;
+      color:#333;
+    }
+    .account-box .client-id{
+      font-size:11px;
+      color:#888;
+    }
+
+    /* Meta info row */
+    .meta-row{
+      display:flex;
+      gap:16px;
+      margin-bottom:20px;
+    }
+    .meta-item{
+      background:#f8f9fa;
+      padding:10px 14px;
+      border-radius:6px;
+      border-left:3px solid #1a1a2e;
+    }
+    .meta-item .label{
+      font-size:10px;
+      color:#888;
+      text-transform:uppercase;
+      letter-spacing:0.3px;
+    }
+    .meta-item .value{
+      font-weight:600;
+      color:#1a1a2e;
+      font-size:13px;
+    }
+
+    /* Summary cards */
+    .summary{
+      display:flex;
+      gap:12px;
+      margin-bottom:28px;
+    }
+    .summary-item{
+      flex:1;
+      background:#fff;
+      border:1px solid #e5e7eb;
+      padding:16px;
+      border-radius:8px;
+      text-align:center;
+    }
+    .summary-item.highlight{
+      background:#1a1a2e;
+      border-color:#1a1a2e;
+    }
+    .summary-item.highlight h3,
+    .summary-item.highlight .amount{
+      color:#fff;
+    }
+    .summary-item h3{
+      font-size:11px;
+      font-weight:500;
+      color:#666;
+      text-transform:uppercase;
+      letter-spacing:0.3px;
+      margin-bottom:6px;
+    }
+    .summary-item .amount{
+      font-size:18px;
+      font-weight:700;
+      color:#1a1a2e;
+    }
+
+    /* Section titles */
+    .section-title{
+      font-size:14px;
+      font-weight:700;
+      color:#1a1a2e;
+      margin-bottom:12px;
+      padding-bottom:6px;
+      border-bottom:1px solid #e5e7eb;
+    }
+
+    /* Tables */
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-bottom:24px;
+    }
+    thead th{
+      background:#f8f9fa;
+      text-align:left;
+      padding:10px 8px;
+      font-size:11px;
+      font-weight:600;
+      color:#555;
+      text-transform:uppercase;
+      letter-spacing:0.3px;
+      border-bottom:2px solid #e5e7eb;
+    }
+    tbody td{
+      padding:8px;
+      border-bottom:1px solid #f0f0f0;
+      font-size:12px;
+      color:#333;
+    }
+    tbody tr:nth-child(even){
+      background:#fafafa;
+    }
+    tbody tr:last-child td{
+      border-bottom:none;
+    }
+
+    tfoot td{
+      padding:12px 8px;
+      font-weight:700;
+      background:#f8f9fa;
+      border-top:2px solid #e5e7eb;
+    }
+
+    .right{text-align:right}
+    .center{text-align:center}
+
+    .status-paid{
+      display:inline-block;
+      background:#dcfce7;
+      color:#166534;
+      padding:2px 8px;
+      border-radius:4px;
+      font-size:11px;
+      font-weight:500;
+    }
+    .status-pending{
+      display:inline-block;
+      background:#fef3c7;
+      color:#92400e;
+      padding:2px 8px;
+      border-radius:4px;
+      font-size:11px;
+      font-weight:500;
+    }
+
+    /* Footer */
+    footer{
+      margin-top:24px;
+      padding-top:16px;
+      border-top:1px solid #e5e7eb;
+      font-size:11px;
+      color:#888;
+    }
+    footer .notes-label{
+      font-weight:600;
+      color:#666;
+      margin-bottom:4px;
+    }
   </style>
 </head>
 <body>
   <div class="card">
     <header>
-      <div class="brand" id="brandSVG">
-        <!-- Logo will be injected here -->
-      </div>
-
       <div class="company-info">
         <h1 id="companyName"></h1>
-        <p class="muted" id="companyAddress"></p>
-        <p class="muted" id="companyDetails"></p>
-
-        <div class="meta">
-          <div class="box">
-            <span class="small muted">Estado</span>
-            <b id="accountStatus"></b>
-          </div>
-          <div class="box">
-            <span class="small muted">Periodo</span>
-            <b id="period"></b>
-          </div>
-          <div class="box">
-            <span class="small muted">Fecha emisión</span>
-            <b id="issueDate"></b>
-          </div>
-        </div>
+        <p id="companyAddress"></p>
       </div>
-
-      <div style="min-width:180px; text-align:right">
-        <div class="muted small">Cuenta</div>
-        <div style="font-weight:700; font-size:18px" id="accountNumber"></div>
-        <div class="muted small" style="margin-top:8px">Cliente</div>
-        <div style="font-weight:600" id="clientName"></div>
-        <div class="muted small" id="clientIdentifier"></div>
+      <div class="account-box">
+        <div class="label">Cuenta</div>
+        <div class="account-number" id="accountNumber"></div>
+        <div class="client-name" id="clientName"></div>
+        <div class="client-id" id="clientIdentifier"></div>
       </div>
     </header>
 
-    <section class="summary">
-      <div class="item">
+    <div class="meta-row">
+      <div class="meta-item">
+        <div class="label">Estado</div>
+        <div class="value" id="accountStatus"></div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Periodo</div>
+        <div class="value" id="period"></div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Fecha de Emisión</div>
+        <div class="value" id="issueDate"></div>
+      </div>
+    </div>
+
+    <div class="summary">
+      <div class="summary-item">
         <h3>Precio Final</h3>
         <div class="amount" id="precioFinal"></div>
       </div>
-      <div class="item">
+      <div class="summary-item">
         <h3>Total Pagado</h3>
         <div class="amount" id="totalPagado"></div>
       </div>
-      <div class="item">
+      <div class="summary-item">
         <h3>Multas</h3>
         <div class="amount" id="totalMultas"></div>
       </div>
-      <div class="item">
+      <div class="summary-item highlight">
         <h3>Saldo Pendiente</h3>
         <div class="amount" id="saldoPendiente"></div>
       </div>
-    </section>
+    </div>
 
     <section>
-      <h2 style="margin:0 0 8px 0; font-size:16px">Acuerdos de Pago</h2>
+      <h2 class="section-title">Acuerdos de Pago</h2>
       <table>
         <thead>
           <tr>
-            <th>Orden</th>
+            <th class="center" style="width:50px">#</th>
             <th>Concepto</th>
             <th>Fecha Programada</th>
             <th class="right">Monto</th>
             <th class="right">Pagado</th>
             <th class="right">Pendiente</th>
-            <th>Estado</th>
+            <th class="center">Estado</th>
           </tr>
         </thead>
         <tbody id="acuerdosTable">
@@ -120,8 +279,8 @@
       </table>
     </section>
 
-    <section style="margin-top:20px">
-      <h2 style="margin:0 0 8px 0; font-size:16px">Pagos Realizados</h2>
+    <section>
+      <h2 class="section-title">Pagos Realizados</h2>
       <table>
         <thead>
           <tr>
@@ -142,9 +301,9 @@
       </table>
     </section>
 
-    <footer style="margin-top:18px; font-size:13px; color:#555">
-      <div class="muted small">Notas:</div>
-      <div class="small" id="notes"></div>
+    <footer>
+      <div class="notes-label">Notas:</div>
+      <div id="notes"></div>
     </footer>
   </div>
 </body>
