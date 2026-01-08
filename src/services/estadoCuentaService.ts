@@ -1,6 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
-import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
 interface EstadoCuentaData {
@@ -111,8 +110,8 @@ export class EstadoCuentaService {
 
       const saldoPendiente = precioFinal - totalPagado;
 
-      // Generate HTML
-      await this.renderTemplate({
+      // Generate PDF with native text
+      await this.generateNativePDF({
         cuenta: cuentaData,
         oferta: ofertaData,
         compradores: compradores || [],
@@ -131,23 +130,23 @@ export class EstadoCuentaService {
     }
   }
 
-  private async renderTemplate(data: any): Promise<void> {
-    // Load template
-    const response = await fetch("/templates/template-edc-1.html");
-    const templateHtml = await response.text();
+  private async generateNativePDF(data: any): Promise<void> {
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true,
+    });
 
-    // Create a temporary container
-    const container = document.createElement("div");
-    container.style.position = "absolute";
-    container.style.left = "-9999px";
-    container.innerHTML = templateHtml;
-    document.body.appendChild(container);
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    const contentWidth = pageWidth - (margin * 2);
+    let y = margin;
 
-    // Format money - handle negative zero
+    // Helper functions
     const formatMoney = (amount: number) => {
-      // Fix -0 issue: if value is -0 or very close to 0, treat as 0
       const normalizedAmount = Math.abs(amount) < 0.01 ? 0 : amount;
-      // Ensure no negative values for pending amounts
       const safeAmount = normalizedAmount < 0 ? 0 : normalizedAmount;
       return new Intl.NumberFormat("es-MX", {
         style: "currency",
@@ -155,7 +154,6 @@ export class EstadoCuentaService {
       }).format(safeAmount);
     };
 
-    // Format money allowing negative
     const formatMoneyAllowNegative = (amount: number) => {
       const normalizedAmount = Math.abs(amount) < 0.01 ? 0 : amount;
       return new Intl.NumberFormat("es-MX", {
@@ -164,215 +162,363 @@ export class EstadoCuentaService {
       }).format(normalizedAmount);
     };
 
-    // Format date
     const formatDate = (date: string) =>
       new Date(date).toLocaleDateString("es-MX");
 
-    // Populate company info
-    const companyName = container.querySelector("#companyName");
-    if (companyName) companyName.textContent = data.proyecto?.nombre || "N/A";
+    const checkNewPage = (neededHeight: number) => {
+      if (y + neededHeight > pageHeight - margin) {
+        pdf.addPage();
+        y = margin;
+        return true;
+      }
+      return false;
+    };
 
-    const companyAddress = container.querySelector("#companyAddress");
-    if (companyAddress)
-      companyAddress.textContent = data.proyecto?.direccion || "N/A";
+    const drawLine = (y1: number, color: string = "#e5e7eb") => {
+      pdf.setDrawColor(color);
+      pdf.setLineWidth(0.3);
+      pdf.line(margin, y1, pageWidth - margin, y1);
+    };
 
-    // Populate account info
-    const accountNumber = container.querySelector("#accountNumber");
-    if (accountNumber)
-      accountNumber.textContent = formatCuentaCobranzaId(
-        data.cuenta.id,
-        data.oferta.id_producto ? "Producto" : "Propiedad"
-      );
+    // Colors
+    const primaryColor = "#1a1a2e";
+    const grayColor = "#666666";
+    const lightGray = "#888888";
 
-    const clientName = container.querySelector("#clientName");
-    if (clientName && data.compradores.length > 0) {
-      clientName.textContent = data.compradores
+    // === HEADER ===
+    pdf.setFontSize(18);
+    pdf.setTextColor(primaryColor);
+    pdf.setFont("helvetica", "bold");
+    pdf.text(data.proyecto?.nombre || "Estado de Cuenta", margin, y + 6);
+
+    pdf.setFontSize(9);
+    pdf.setTextColor(grayColor);
+    pdf.setFont("helvetica", "normal");
+    pdf.text(data.proyecto?.direccion || "", margin, y + 12);
+
+    // Account number (right side)
+    const cuentaId = formatCuentaCobranzaId(
+      data.cuenta.id,
+      data.oferta.id_producto ? "Producto" : "Propiedad"
+    );
+    pdf.setFontSize(8);
+    pdf.setTextColor(lightGray);
+    pdf.text("CUENTA", pageWidth - margin, y + 2, { align: "right" });
+    
+    pdf.setFontSize(14);
+    pdf.setTextColor(primaryColor);
+    pdf.setFont("helvetica", "bold");
+    pdf.text(cuentaId, pageWidth - margin, y + 8, { align: "right" });
+
+    // Client name
+    if (data.compradores.length > 0) {
+      const clientName = data.compradores
         .map((c: any) => c.personas.nombre_legal)
         .join(", ");
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(clientName, pageWidth - margin, y + 14, { align: "right" });
+
+      const clientId = data.compradores[0].personas.rfc || data.compradores[0].personas.curp || "";
+      pdf.setFontSize(8);
+      pdf.setTextColor(lightGray);
+      pdf.text(clientId, pageWidth - margin, y + 19, { align: "right" });
     }
 
-    const clientIdentifier = container.querySelector("#clientIdentifier");
-    if (clientIdentifier && data.compradores.length > 0) {
-      clientIdentifier.textContent =
-        data.compradores[0].personas.rfc ||
-        data.compradores[0].personas.curp ||
-        "";
+    y += 25;
+    drawLine(y, primaryColor);
+    y += 8;
+
+    // === META INFO ===
+    const metaBoxWidth = contentWidth / 3 - 4;
+    const metaItems = [
+      { label: "Estado", value: data.cuenta.es_aprobado ? "Aprobado" : "Pendiente" },
+      { 
+        label: "Periodo", 
+        value: data.acuerdos.length > 0 
+          ? `${formatDate(data.acuerdos[0].fecha_pago)} — ${formatDate(data.acuerdos[data.acuerdos.length - 1].fecha_pago)}`
+          : "N/A"
+      },
+      { label: "Fecha de Emisión", value: formatDate(new Date().toISOString()) },
+    ];
+
+    metaItems.forEach((item, i) => {
+      const x = margin + (i * (metaBoxWidth + 6));
+      
+      // Box background
+      pdf.setFillColor("#f8f9fa");
+      pdf.roundedRect(x, y, metaBoxWidth, 14, 2, 2, "F");
+      
+      // Left border
+      pdf.setFillColor(primaryColor);
+      pdf.rect(x, y, 1, 14, "F");
+
+      pdf.setFontSize(7);
+      pdf.setTextColor(lightGray);
+      pdf.text(item.label.toUpperCase(), x + 4, y + 5);
+
+      pdf.setFontSize(9);
+      pdf.setTextColor(primaryColor);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(item.value, x + 4, y + 11);
+    });
+
+    y += 20;
+
+    // === SUMMARY CARDS ===
+    const cardWidth = contentWidth / 4 - 3;
+    const summaryItems = [
+      { label: "Precio Final", value: formatMoneyAllowNegative(data.precioFinal), highlight: false },
+      { label: "Total Pagado", value: formatMoneyAllowNegative(data.totalPagado), highlight: false },
+      { label: "Multas", value: formatMoneyAllowNegative(data.totalMultas), highlight: false },
+      { label: "Saldo Pendiente", value: formatMoneyAllowNegative(data.saldoPendiente), highlight: true },
+    ];
+
+    summaryItems.forEach((item, i) => {
+      const x = margin + (i * (cardWidth + 4));
+      
+      if (item.highlight) {
+        pdf.setFillColor(primaryColor);
+        pdf.roundedRect(x, y, cardWidth, 22, 2, 2, "F");
+        pdf.setTextColor("#ffffff");
+      } else {
+        pdf.setDrawColor("#e5e7eb");
+        pdf.setFillColor("#ffffff");
+        pdf.roundedRect(x, y, cardWidth, 22, 2, 2, "FD");
+        pdf.setTextColor(grayColor);
+      }
+
+      pdf.setFontSize(7);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(item.label.toUpperCase(), x + cardWidth / 2, y + 7, { align: "center" });
+
+      pdf.setFontSize(11);
+      pdf.setFont("helvetica", "bold");
+      if (!item.highlight) pdf.setTextColor(primaryColor);
+      pdf.text(item.value, x + cardWidth / 2, y + 16, { align: "center" });
+    });
+
+    y += 30;
+
+    // === ACUERDOS DE PAGO TABLE ===
+    pdf.setFontSize(12);
+    pdf.setTextColor(primaryColor);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Acuerdos de Pago", margin, y);
+    y += 3;
+    drawLine(y);
+    y += 5;
+
+    // Table header
+    const acuerdosCols = [
+      { title: "#", width: 8, align: "center" as const },
+      { title: "Concepto", width: 35, align: "left" as const },
+      { title: "Fecha Programada", width: 30, align: "left" as const },
+      { title: "Monto", width: 28, align: "right" as const },
+      { title: "Pagado", width: 28, align: "right" as const },
+      { title: "Pendiente", width: 28, align: "right" as const },
+      { title: "Estado", width: 20, align: "center" as const },
+    ];
+
+    let colX = margin;
+    pdf.setFillColor("#f8f9fa");
+    pdf.rect(margin, y - 1, contentWidth, 7, "F");
+    
+    pdf.setFontSize(7);
+    pdf.setTextColor("#555555");
+    pdf.setFont("helvetica", "bold");
+    
+    acuerdosCols.forEach((col) => {
+      if (col.align === "right") {
+        pdf.text(col.title.toUpperCase(), colX + col.width - 1, y + 4, { align: "right" });
+      } else if (col.align === "center") {
+        pdf.text(col.title.toUpperCase(), colX + col.width / 2, y + 4, { align: "center" });
+      } else {
+        pdf.text(col.title.toUpperCase(), colX + 1, y + 4);
+      }
+      colX += col.width;
+    });
+
+    y += 8;
+    drawLine(y - 1);
+
+    // Table rows
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+
+    for (const acuerdo of data.acuerdos) {
+      checkNewPage(8);
+
+      const pagadoAcuerdo = data.pagos.reduce((sum: number, pago: any) => {
+        const aplicacionesAcuerdo = pago.aplicaciones_pago.filter(
+          (ap: any) => ap.id_acuerdo_pago === acuerdo.id && !ap.es_multa
+        );
+        return sum + aplicacionesAcuerdo.reduce((s: number, ap: any) => s + (ap.monto || 0), 0);
+      }, 0);
+
+      let pendiente = acuerdo.monto - pagadoAcuerdo;
+      if (Math.abs(pendiente) < 0.01 || pendiente < 0) pendiente = 0;
+
+      const isPaid = acuerdo.pago_completado;
+
+      // Alternating row background
+      if (acuerdo.orden % 2 === 0) {
+        pdf.setFillColor("#fafafa");
+        pdf.rect(margin, y - 3, contentWidth, 6, "F");
+      }
+
+      colX = margin;
+      pdf.setTextColor("#333333");
+
+      // Order
+      pdf.text(String(acuerdo.orden), colX + acuerdosCols[0].width / 2, y, { align: "center" });
+      colX += acuerdosCols[0].width;
+
+      // Concepto
+      pdf.text((acuerdo.conceptos_pago?.nombre || "N/A").substring(0, 20), colX + 1, y);
+      colX += acuerdosCols[1].width;
+
+      // Fecha
+      pdf.text(acuerdo.fecha_pago ? formatDate(acuerdo.fecha_pago) : "N/A", colX + 1, y);
+      colX += acuerdosCols[2].width;
+
+      // Monto
+      pdf.text(formatMoneyAllowNegative(acuerdo.monto), colX + acuerdosCols[3].width - 1, y, { align: "right" });
+      colX += acuerdosCols[3].width;
+
+      // Pagado
+      pdf.text(formatMoneyAllowNegative(pagadoAcuerdo), colX + acuerdosCols[4].width - 1, y, { align: "right" });
+      colX += acuerdosCols[4].width;
+
+      // Pendiente
+      pdf.text(formatMoney(pendiente), colX + acuerdosCols[5].width - 1, y, { align: "right" });
+      colX += acuerdosCols[5].width;
+
+      // Estado badge
+      const statusText = isPaid ? "Pagado" : "Pendiente";
+      const badgeWidth = 16;
+      const badgeX = colX + (acuerdosCols[6].width - badgeWidth) / 2;
+      
+      if (isPaid) {
+        pdf.setFillColor("#dcfce7");
+        pdf.setTextColor("#166534");
+      } else {
+        pdf.setFillColor("#fef3c7");
+        pdf.setTextColor("#92400e");
+      }
+      pdf.roundedRect(badgeX, y - 3, badgeWidth, 5, 1, 1, "F");
+      pdf.setFontSize(6);
+      pdf.text(statusText, badgeX + badgeWidth / 2, y, { align: "center" });
+      pdf.setFontSize(8);
+
+      y += 6;
     }
 
-    // Populate status
-    const accountStatus = container.querySelector("#accountStatus");
-    if (accountStatus)
-      accountStatus.textContent = data.cuenta.es_aprobado
-        ? "Aprobado"
-        : "Pendiente";
+    y += 8;
 
-    // Populate dates
-    const period = container.querySelector("#period");
-    if (period && data.acuerdos.length > 0) {
-      const firstDate = data.acuerdos[0].fecha_pago;
-      const lastDate = data.acuerdos[data.acuerdos.length - 1].fecha_pago;
-      period.textContent = `${formatDate(firstDate)} — ${formatDate(lastDate)}`;
+    // === PAGOS REALIZADOS TABLE ===
+    checkNewPage(30);
+    
+    pdf.setFontSize(12);
+    pdf.setTextColor(primaryColor);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Pagos Realizados", margin, y);
+    y += 3;
+    drawLine(y);
+    y += 5;
+
+    // Table header
+    const pagosCols = [
+      { title: "Fecha", width: 25, align: "left" as const },
+      { title: "Método", width: 25, align: "left" as const },
+      { title: "Referencia", width: 90, align: "left" as const },
+      { title: "Monto", width: 37, align: "right" as const },
+    ];
+
+    colX = margin;
+    pdf.setFillColor("#f8f9fa");
+    pdf.rect(margin, y - 1, contentWidth, 7, "F");
+    
+    pdf.setFontSize(7);
+    pdf.setTextColor("#555555");
+    pdf.setFont("helvetica", "bold");
+    
+    pagosCols.forEach((col) => {
+      if (col.align === "right") {
+        pdf.text(col.title.toUpperCase(), colX + col.width - 1, y + 4, { align: "right" });
+      } else {
+        pdf.text(col.title.toUpperCase(), colX + 1, y + 4);
+      }
+      colX += col.width;
+    });
+
+    y += 8;
+    drawLine(y - 1);
+
+    // Table rows
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+
+    let rowIndex = 0;
+    for (const pago of data.pagos) {
+      checkNewPage(8);
+
+      // Alternating row background
+      if (rowIndex % 2 === 0) {
+        pdf.setFillColor("#fafafa");
+        pdf.rect(margin, y - 3, contentWidth, 6, "F");
+      }
+
+      colX = margin;
+      pdf.setTextColor("#333333");
+
+      // Fecha
+      pdf.text(formatDate(pago.fecha_pago), colX + 1, y);
+      colX += pagosCols[0].width;
+
+      // Método
+      pdf.text((pago.metodos_pago?.nombre || "N/A").substring(0, 15), colX + 1, y);
+      colX += pagosCols[1].width;
+
+      // Referencia
+      pdf.setFontSize(7);
+      pdf.text((pago.clave_rastreo || "N/A").substring(0, 50), colX + 1, y);
+      pdf.setFontSize(8);
+      colX += pagosCols[2].width;
+
+      // Monto
+      pdf.text(formatMoneyAllowNegative(pago.monto || 0), colX + pagosCols[3].width - 1, y, { align: "right" });
+
+      y += 6;
+      rowIndex++;
     }
 
-    const issueDate = container.querySelector("#issueDate");
-    if (issueDate) issueDate.textContent = formatDate(new Date().toISOString());
-
-    // Populate summary
-    const precioFinal = container.querySelector("#precioFinal");
-    if (precioFinal) precioFinal.textContent = formatMoneyAllowNegative(data.precioFinal);
-
-    const totalPagado = container.querySelector("#totalPagado");
-    if (totalPagado) totalPagado.textContent = formatMoneyAllowNegative(data.totalPagado);
-
-    const totalMultas = container.querySelector("#totalMultas");
-    if (totalMultas) totalMultas.textContent = formatMoneyAllowNegative(data.totalMultas);
-
-    const saldoPendiente = container.querySelector("#saldoPendiente");
-    if (saldoPendiente)
-      saldoPendiente.textContent = formatMoneyAllowNegative(data.saldoPendiente);
-
-    // Populate acuerdos table with status badges
-    const acuerdosTable = container.querySelector("#acuerdosTable");
-    if (acuerdosTable) {
-      acuerdosTable.innerHTML = data.acuerdos
-        .map((acuerdo: any) => {
-          const pagadoAcuerdo = data.pagos.reduce((sum: number, pago: any) => {
-            const aplicacionesAcuerdo = pago.aplicaciones_pago.filter(
-              (ap: any) => ap.id_acuerdo_pago === acuerdo.id && !ap.es_multa
-            );
-            return (
-              sum +
-              aplicacionesAcuerdo.reduce(
-                (s: number, ap: any) => s + (ap.monto || 0),
-                0
-              )
-            );
-          }, 0);
-
-          let pendiente = acuerdo.monto - pagadoAcuerdo;
-          if (Math.abs(pendiente) < 0.01) {
-            pendiente = 0;
-          } else if (pendiente < 0) {
-            pendiente = 0;
-          }
-          
-          const isPaid = acuerdo.pago_completado;
-          const statusClass = isPaid ? "status-paid" : "status-pending";
-          const statusText = isPaid ? "Pagado" : "Pendiente";
-
-          return `
-          <tr>
-            <td class="center">${acuerdo.orden}</td>
-            <td>${acuerdo.conceptos_pago?.nombre || "N/A"}</td>
-            <td>${acuerdo.fecha_pago ? formatDate(acuerdo.fecha_pago) : "N/A"}</td>
-            <td class="right">${formatMoneyAllowNegative(acuerdo.monto)}</td>
-            <td class="right">${formatMoneyAllowNegative(pagadoAcuerdo)}</td>
-            <td class="right">${formatMoney(pendiente)}</td>
-            <td class="center"><span class="${statusClass}">${statusText}</span></td>
-          </tr>
-        `;
-        })
-        .join("");
-    }
-
-    // Populate pagos table
-    const pagosTable = container.querySelector("#pagosTable");
-    if (pagosTable) {
-      pagosTable.innerHTML = data.pagos
-        .map((pago: any) => {
-          const montoPago = pago.monto || 0;
-
-          return `
-          <tr>
-            <td>${formatDate(pago.fecha_pago)}</td>
-            <td>${pago.metodos_pago?.nombre || "N/A"}</td>
-            <td style="font-family:monospace;font-size:11px">${pago.clave_rastreo || "N/A"}</td>
-            <td class="right">${formatMoneyAllowNegative(montoPago)}</td>
-          </tr>
-        `;
-        })
-        .join("");
-    }
-
+    // Total footer
+    y += 2;
+    pdf.setFillColor("#f8f9fa");
+    pdf.rect(margin, y - 3, contentWidth, 8, "F");
+    drawLine(y - 3, "#e5e7eb");
+    
     const totalPagosReal = data.pagos.reduce((sum: number, pago: any) => sum + (pago.monto || 0), 0);
     
-    const totalPagosFooter = container.querySelector("#totalPagosFooter");
-    if (totalPagosFooter)
-      totalPagosFooter.textContent = formatMoneyAllowNegative(totalPagosReal);
+    pdf.setFont("helvetica", "bold");
+    pdf.setTextColor(primaryColor);
+    pdf.text("Total Pagos", margin + 2, y + 2);
+    pdf.text(formatMoneyAllowNegative(totalPagosReal), pageWidth - margin - 1, y + 2, { align: "right" });
 
-    // Populate notes
-    const notes = container.querySelector("#notes");
-    if (notes)
-      notes.textContent =
-        "Este estado de cuenta muestra el detalle de acuerdos de pago y pagos realizados. Generado automáticamente.";
+    y += 12;
 
-    // Generate PDF with optimized settings
-    await this.generatePDF(container, data.id_cuenta, data.oferta);
-
-    // Cleanup
-    document.body.removeChild(container);
-  }
-
-  private async generatePDF(container: HTMLElement, idCuenta: number, oferta: any): Promise<void> {
-    const card = container.querySelector(".card") as HTMLElement;
-    if (!card) return;
-
-    // Set a fixed width for consistent rendering
-    card.style.width = "800px";
-
-    // Use lower scale for smaller file size (1.5 instead of 2)
-    const canvas = await html2canvas(card, {
-      scale: 1.5,
-      useCORS: true,
-      logging: false,
-      windowWidth: 850,
-      backgroundColor: "#ffffff",
-    });
-
-    // Use JPEG with compression instead of PNG for much smaller file size
-    const imgData = canvas.toDataURL("image/jpeg", 0.85);
+    // === FOOTER ===
+    checkNewPage(15);
+    drawLine(y);
+    y += 5;
     
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-      compress: true, // Enable PDF compression
-    });
+    pdf.setFontSize(8);
+    pdf.setTextColor(lightGray);
+    pdf.setFont("helvetica", "normal");
+    pdf.text("Notas: Este estado de cuenta muestra el detalle de acuerdos de pago y pagos realizados. Generado automáticamente.", margin, y);
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    
-    // Add margins (10mm on each side)
-    const margin = 10;
-    const contentWidth = pdfWidth - (margin * 2);
-    const imgHeight = (canvas.height * contentWidth) / canvas.width;
-    
-    // If content fits in one page
-    if (imgHeight <= (pdfHeight - margin * 2)) {
-      pdf.addImage(imgData, "JPEG", margin, margin, contentWidth, imgHeight);
-    } else {
-      // Multi-page handling with margins
-      const pageContentHeight = pdfHeight - (margin * 2);
-      let heightLeft = imgHeight;
-      let position = 0;
-      let pageNum = 0;
-      
-      while (heightLeft > 0) {
-        if (pageNum > 0) {
-          pdf.addPage();
-        }
-        
-        // Calculate the y position for this page's slice
-        const yOffset = margin - (pageNum * pageContentHeight);
-        
-        pdf.addImage(imgData, "JPEG", margin, yOffset, contentWidth, imgHeight);
-        
-        heightLeft -= pageContentHeight;
-        pageNum++;
-      }
-    }
-    
-    // Format date as yyyy_mm_dd
+    // Format date for filename
     const formatDateForFilename = (date: Date): string => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -380,15 +526,10 @@ export class EstadoCuentaService {
       return `${year}_${month}_${day}`;
     };
 
-    // Determine account type for formatting
-    const tipoCuenta = oferta?.id_producto ? 'Producto' : 'Propiedad';
-    const cuentaFormatted = formatCuentaCobranzaId(idCuenta, tipoCuenta);
-    
-    // Get current date
-    const fechaActual = new Date();
-    const fechaFormatted = formatDateForFilename(fechaActual);
+    const tipoCuenta = data.oferta?.id_producto ? 'Producto' : 'Propiedad';
+    const cuentaFormatted = formatCuentaCobranzaId(data.id_cuenta, tipoCuenta);
+    const fechaFormatted = formatDateForFilename(new Date());
 
-    // Save PDF with formatted name
     const fileName = `estado_cuenta_${cuentaFormatted}_${fechaFormatted}.pdf`;
     pdf.save(fileName);
   }
