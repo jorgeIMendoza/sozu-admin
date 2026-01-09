@@ -203,7 +203,7 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
                             </div>
                           </div>
                           <Badge variant="outline">
-                            {prospecto.tipo_persona === 'Física' ? 'PF' : 'PM'}
+                            {prospecto.tipo_persona?.toLowerCase() === 'pf' || prospecto.tipo_persona === 'Física' ? 'Persona Física' : 'Persona Moral'}
                           </Badge>
                         </div>
                       </CardContent>
@@ -243,7 +243,11 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
                   </div>
                   <div>
                     <span className="text-muted-foreground">Tipo:</span>
-                    <p className="font-medium">{selectedProspecto.tipo_persona}</p>
+                    <p className="font-medium">
+                      {selectedProspecto.tipo_persona?.toLowerCase() === 'pf' || selectedProspecto.tipo_persona === 'Física' 
+                        ? 'Persona Física' 
+                        : 'Persona Moral'}
+                    </p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Email:</span>
