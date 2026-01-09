@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, Plus, Calendar, Upload, Loader2, Eye } from "lucide-react";
+import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, Plus, Calendar, Upload, Loader2, Eye, Download } from "lucide-react";
+import { EstadoCuentaMantenimientoService } from "@/services/estadoCuentaMantenimientoService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
 import { format } from "date-fns";
@@ -79,6 +80,7 @@ export default function DetalleCuentaMantenimiento() {
   const [multaDialog, setMultaDialog] = useState(false);
   const [reservaDialog, setReservaDialog] = useState(false);
   const [uploadingEvidence, setUploadingEvidence] = useState<number | null>(null);
+  const [generatingEstadoCuenta, setGeneratingEstadoCuenta] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -697,6 +699,40 @@ export default function DetalleCuentaMantenimiento() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button 
+            onClick={async () => {
+              if (!cuentaId) return;
+              try {
+                setGeneratingEstadoCuenta(true);
+                const service = new EstadoCuentaMantenimientoService();
+                await service.generateEstadoCuenta({
+                  id_cuenta: cuentaId
+                });
+                toast({
+                  title: "Estado de cuenta generado",
+                  description: "El PDF se ha descargado exitosamente."
+                });
+              } catch (error) {
+                console.error("Error generating estado de cuenta:", error);
+                toast({
+                  title: "Error",
+                  description: "No se pudo generar el estado de cuenta.",
+                  variant: "destructive"
+                });
+              } finally {
+                setGeneratingEstadoCuenta(false);
+              }
+            }}
+            variant="outline"
+            disabled={generatingEstadoCuenta}
+          >
+            {generatingEstadoCuenta ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Estado de Cuenta
+          </Button>
           <Button 
             onClick={() => setTransferDialog({ isOpen: true })}
             variant="outline"

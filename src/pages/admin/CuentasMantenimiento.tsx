@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
-import { Search, Eye, X, Edit, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Receipt, Wrench, Package, UserPlus } from "lucide-react";
+import { Search, Eye, X, Edit, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Receipt, Wrench, Package, UserPlus, FileDown } from "lucide-react";
+import { EstadoCuentaMantenimientoService } from "@/services/estadoCuentaMantenimientoService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -130,6 +131,8 @@ export default function CuentasMantenimiento() {
     isOpen: false,
     residentes: [],
   });
+  
+  const [generatingEstadoCuenta, setGeneratingEstadoCuenta] = useState<number | null>(null);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -1330,7 +1333,7 @@ export default function CuentasMantenimiento() {
                             </div>
                           </TableCell>
                            <TableCell>
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-center gap-1">
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -1342,6 +1345,47 @@ export default function CuentasMantenimiento() {
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p>Ver detalle</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon"
+                                      disabled={generatingEstadoCuenta === cuenta.id}
+                                      onClick={async () => {
+                                        try {
+                                          setGeneratingEstadoCuenta(cuenta.id);
+                                          const service = new EstadoCuentaMantenimientoService();
+                                          await service.generateEstadoCuenta({ id_cuenta: cuenta.id });
+                                          toast({
+                                            title: "Estado de cuenta generado",
+                                            description: "El PDF se ha descargado exitosamente."
+                                          });
+                                        } catch (error) {
+                                          console.error("Error generating estado de cuenta:", error);
+                                          toast({
+                                            title: "Error",
+                                            description: "No se pudo generar el estado de cuenta.",
+                                            variant: "destructive"
+                                          });
+                                        } finally {
+                                          setGeneratingEstadoCuenta(null);
+                                        }
+                                      }}
+                                    >
+                                      {generatingEstadoCuenta === cuenta.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <FileDown className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Descargar estado de cuenta</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
