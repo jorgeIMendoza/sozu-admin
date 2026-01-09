@@ -137,8 +137,9 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
   const remainingPercentage = 100 - (parseFloat(watchedEnganche || "0") + parseFloat(watchedMensualidades || "0"));
 
   // Calculate manual scheme amounts for preview
+  // precio_lista ya viene calculado (precio_m2 * metraje) cuando aplica
   const manualSchemeCalculations = useMemo(() => {
-    const basePrice = parseFloat(selectedProductData?.precio_lista || "0");
+    const basePrice = parseFloat(String(selectedProductData?.precio_lista || "0"));
     const descuentoAumento = parseFloat(watchedDescuentoAumento || "0");
     const precioAjustado = basePrice * (1 + descuentoAumento / 100);
     
@@ -414,7 +415,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
   };
 
   const handleProductSelect = async (productId: number) => {
-    // Fetch full product data including owner entity
+    // Fetch full product data including owner entity and category
     const { data: productData, error } = await supabase
       .from('productos_servicios')
       .select(`
@@ -423,6 +424,9 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
           id,
           cuenta_madre_stp,
           personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
+        ),
+        categorias_producto!fk_prodserv_categoria (
+          tiene_metraje
         )
       `)
       .eq('id', productId)
@@ -458,8 +462,58 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
       return;
     }
 
+    // Si la categoría tiene metraje, buscar el metraje de la bodega/estacionamiento asociado
+    let metraje: number | null = null;
+    let precioListaCalculado = parseFloat(String(productData.precio_lista || "0"));
+    
+    if (productData.categorias_producto?.tiene_metraje) {
+      // Primero intentar buscar en bodegas
+      const { data: bodegaData } = await supabase
+        .from('bodegas')
+        .select('m2')
+        .eq('id_producto', productId)
+        .eq('id_propiedad', propertyId)
+        .eq('activo', true)
+        .maybeSingle();
+      
+      if (bodegaData?.m2) {
+        metraje = bodegaData.m2;
+      } else {
+        // Si no hay bodega, buscar en estacionamientos
+        const { data: estacionamientoData } = await supabase
+          .from('estacionamientos')
+          .select('m2')
+          .eq('id_producto', productId)
+          .eq('id_propiedad', propertyId)
+          .eq('activo', true)
+          .maybeSingle();
+        
+        if (estacionamientoData?.m2) {
+          metraje = estacionamientoData.m2;
+        }
+      }
+      
+      // Calcular precio de lista real = precio por m2 * metraje
+      if (metraje) {
+        precioListaCalculado = parseFloat(String(productData.precio_lista || "0")) * metraje;
+        console.log('💰 Precio calculado con metraje:', { 
+          precio_m2: productData.precio_lista, 
+          metraje, 
+          precio_total: precioListaCalculado 
+        });
+      }
+    }
+
+    // Enriquecer productData con metraje y precio calculado
+    const enrichedProductData = {
+      ...productData,
+      metraje,
+      precio_lista_original: productData.precio_lista,
+      precio_lista: precioListaCalculado, // Sobrescribir con precio calculado
+    };
+
     setSelectedProduct(productId);
-    setSelectedProductData(productData);
+    setSelectedProductData(enrichedProductData);
     setShowCategoryDialog(false);
     
     toast({
@@ -698,8 +752,13 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
                       {selectedProductData.descripcion && (
                         <p><span className="font-medium">Descripción:</span> {selectedProductData.descripcion}</p>
                       )}
+                      {selectedProductData.metraje && selectedProductData.precio_lista_original && (
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium">Precio por m²:</span> ${parseFloat(String(selectedProductData.precio_lista_original)).toLocaleString('es-MX', { minimumFractionDigits: 2 })} × {selectedProductData.metraje} m²
+                        </p>
+                      )}
                       {selectedProductData.precio_lista && (
-                        <p><span className="font-medium">Precio Lista:</span> ${parseFloat(selectedProductData.precio_lista).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                        <p><span className="font-medium">Precio Lista:</span> ${parseFloat(String(selectedProductData.precio_lista)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
                       )}
                     </div>
                     <Button
