@@ -1088,37 +1088,25 @@ const [metodoPagoFilter, setMetodoPagoFilter] = useState<string>('');
 
     setIsExporting(true);
     try {
-      // For Pagos Mensuales report, ONLY apply mes_pago filter (no other filters)
+      // Export does NOT apply filters - exports all data
+      // Exception: Restricted users (Representante de empresa dueña) must have their access filters applied
       let exportFilters: Record<string, string> = {};
       
-      if (isPagosMensualesReport) {
-        // Only apply month filter for Pagos Mensuales report export
-        if (mesPagoFilter) {
-          exportFilters['mes_pago'] = format(mesPagoFilter, 'yyyy-MM-01');
+      if (isPagosMensualesReport && mesPagoFilter) {
+        // Pagos Mensuales report requires the month filter
+        exportFilters['mes_pago'] = format(mesPagoFilter, 'yyyy-MM-01');
+      }
+      
+      // Only apply ownership filters for restricted users
+      if (isRepresentanteEmpresaDuena) {
+        if (accessibleProjectIds.length > 0) {
+          exportFilters['id_proyecto'] = accessibleProjectIds.join(',');
         }
-        // IMPORTANT: Also apply owner filters for restricted users (Representante de empresa dueña)
-        if (isRepresentanteEmpresaDuena) {
-          if (ownershipPersonaIds.length > 0) {
-            exportFilters['id_dueno'] = ownershipPersonaIds.join(',');
-          }
+        if (ownershipPersonaIds.length > 0) {
+          exportFilters['id_dueno'] = ownershipPersonaIds.join(',');
         }
-      } else {
-        // For other reports, apply all filters as before
-        exportFilters = { ...filtros };
-        
-        if (isRepresentanteEmpresaDuena) {
-          // Lock project filter
-          if (accessibleProjectIds.length > 0) {
-            exportFilters['id_proyecto'] = accessibleProjectIds.join(',');
-          }
-          // Lock owner filter using id_persona (for id_dueno filter in query)
-          if (ownershipPersonaIds.length > 0) {
-            exportFilters['id_dueno'] = ownershipPersonaIds.join(',');
-          }
-          // Also keep id_entidad_relacionada_dueno for backwards compatibility
-          if (ownershipEntityIds.length > 0) {
-            exportFilters['id_entidad_relacionada_dueno'] = ownershipEntityIds.join(',');
-          }
+        if (ownershipEntityIds.length > 0) {
+          exportFilters['id_entidad_relacionada_dueno'] = ownershipEntityIds.join(',');
         }
       }
       
