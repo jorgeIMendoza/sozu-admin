@@ -1623,9 +1623,11 @@ export default function DetalleCuentaCobranza() {
   // Conceptos de cancelación (7 = Pago por cancelación, 9 = Devolución de pago)
   const CONCEPTOS_CANCELACION = [7, 9];
   
-  const totalPagado = acuerdosPago?.reduce((sum, acuerdo) => 
-    sum + (acuerdo.aplicaciones || []).reduce((appSum, app) => appSum + (app?.monto || 0), 0), 0
-  ) || 0;
+  // Total pagado - EXCLUYENDO conceptos de cancelación (7 y 9)
+  const totalPagado = acuerdosPago?.reduce((sum, acuerdo) => {
+    if (CONCEPTOS_CANCELACION.includes(acuerdo.id_concepto)) return sum;
+    return sum + (acuerdo.aplicaciones || []).reduce((appSum, app) => appSum + (app?.monto || 0), 0);
+  }, 0) || 0;
 
   // Calculate total from acuerdos_pago (sum of monto) - EXCLUYENDO conceptos de cancelación
   const totalAcuerdos = acuerdosPago?.reduce((sum, acuerdo) => {
