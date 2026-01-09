@@ -380,14 +380,16 @@ export function CancelCuentaDialog({
       if (pagoCanError) throw pagoCanError;
     }
 
-    // Insertar Devolución de pago (negativo) - concepto 9
+    // Insertar Devolución de pago - concepto 9
+    // Nota: Se guarda como positivo porque la BD tiene constraint de monto > 0
+    // El concepto 9 ya indica que es una devolución
     if (montoDevolucion > 0) {
       const { error: devError } = await supabase
         .from('acuerdos_pago')
         .insert({
           id_cuenta_cobranza: cuentaId,
           id_concepto: 9, // Devolución de pago
-          monto: -montoDevolucion, // Negativo
+          monto: montoDevolucion, // Positivo (el concepto indica que es devolución)
           orden: nuevoOrden + 1,
           pago_completado: true,
           activo: true
