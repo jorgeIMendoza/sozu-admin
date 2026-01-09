@@ -90,7 +90,7 @@ export class EstadoCuentaMantenimientoService {
         .eq("id_cuenta_cobranza", data.id_cuenta)
         .eq("activo", true)
         .gte("fecha_pago", fechaLimite)
-        .order("fecha_pago", { ascending: true });
+        .order("orden", { ascending: true });
 
       if (acuerdosError) throw acuerdosError;
 
@@ -338,8 +338,7 @@ export class EstadoCuentaMantenimientoService {
 
     // Table header
     const acuerdosCols = [
-      { title: "#", width: 10, align: "center" as const },
-      { title: "Concepto", width: 50, align: "left" as const },
+      { title: "Concepto", width: 60, align: "left" as const },
       { title: "Fecha", width: 28, align: "left" as const },
       { title: "Monto", width: 28, align: "right" as const },
       { title: "Pagado", width: 28, align: "right" as const },
@@ -366,8 +365,8 @@ export class EstadoCuentaMantenimientoService {
       colX += col.width;
     });
 
-    y += 8;
-    drawLine(y - 1);
+    y += 10;
+    drawLine(y - 2);
 
     // Table rows
     pdf.setFont("helvetica", "normal");
@@ -397,10 +396,6 @@ export class EstadoCuentaMantenimientoService {
       colX = margin;
       pdf.setTextColor("#333333");
 
-      // Row number
-      pdf.text(String(rowNum), colX + acuerdosCols[0].width / 2, y, { align: "center" });
-      colX += acuerdosCols[0].width;
-
       // Concepto - format with month if it's maintenance
       let conceptoText = acuerdo.conceptos_pago?.nombre || "N/A";
       if (acuerdo.fecha_pago && conceptoText.toLowerCase().includes("mantenimiento")) {
@@ -408,29 +403,29 @@ export class EstadoCuentaMantenimientoService {
         const mes = fecha.toLocaleDateString("es-MX", { month: "long" });
         conceptoText = `${conceptoText} - ${mes.charAt(0).toUpperCase() + mes.slice(1)}`;
       }
-      pdf.text(conceptoText.substring(0, 30), colX + 1, y);
-      colX += acuerdosCols[1].width;
+      pdf.text(conceptoText.substring(0, 35), colX + 1, y);
+      colX += acuerdosCols[0].width;
 
       // Fecha
       pdf.text(acuerdo.fecha_pago ? formatDate(acuerdo.fecha_pago) : "N/A", colX + 1, y);
-      colX += acuerdosCols[2].width;
+      colX += acuerdosCols[1].width;
 
       // Monto
-      pdf.text(formatMoneyAllowNegative(acuerdo.monto), colX + acuerdosCols[3].width - 1, y, { align: "right" });
-      colX += acuerdosCols[3].width;
+      pdf.text(formatMoneyAllowNegative(acuerdo.monto), colX + acuerdosCols[2].width - 1, y, { align: "right" });
+      colX += acuerdosCols[2].width;
 
       // Pagado
-      pdf.text(formatMoneyAllowNegative(pagadoAcuerdo), colX + acuerdosCols[4].width - 1, y, { align: "right" });
-      colX += acuerdosCols[4].width;
+      pdf.text(formatMoneyAllowNegative(pagadoAcuerdo), colX + acuerdosCols[3].width - 1, y, { align: "right" });
+      colX += acuerdosCols[3].width;
 
       // Pendiente
-      pdf.text(formatMoney(pendiente), colX + acuerdosCols[5].width - 1, y, { align: "right" });
-      colX += acuerdosCols[5].width;
+      pdf.text(formatMoney(pendiente), colX + acuerdosCols[4].width - 1, y, { align: "right" });
+      colX += acuerdosCols[4].width;
 
       // Estado badge
       const statusText = isPaid ? "Pagado" : "Pendiente";
       const badgeWidth = 16;
-      const badgeX = colX + (acuerdosCols[6].width - badgeWidth) / 2;
+      const badgeX = colX + (acuerdosCols[5].width - badgeWidth) / 2;
       
       if (isPaid) {
         pdf.setFillColor("#dcfce7");
