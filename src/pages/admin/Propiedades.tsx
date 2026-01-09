@@ -2877,7 +2877,7 @@ const Propiedades = () => {
           nombre, 
           precio_lista,
           id_categoria,
-          categorias_producto(tiene_metraje)
+          categorias_producto!productos_servicios_id_categoria_producto_fkey(tiene_metraje)
         ),
         esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(
           nombre,
@@ -3455,17 +3455,6 @@ const Propiedades = () => {
         title: "Éxito",
         description: "Cuenta de cobranza generada correctamente",
       });
-
-      // Refresh the offers data
-      if (selectedPropertyId) {
-        const updatedOffers = await fetchPropertyOffers(selectedPropertyId);
-        setSelectedPropertyOffers(updatedOffers);
-        const updatedProductOffers = await fetchPropertyProductOffers(selectedPropertyId);
-        setSelectedPropertyProductOffers(updatedProductOffers);
-      }
-
-      // Refrescar datos de propiedades para ver el nuevo estatus
-      refetchActivos();
       
       // Close confirmation dialog
       setConfirmGenerateAccountOpen(false);
@@ -3490,6 +3479,21 @@ const Propiedades = () => {
         description: "No se pudo generar la cuenta de cobranza",
         variant: "destructive",
       });
+      return; // Exit early on error
+    }
+
+    // Refresh data outside main try-catch to avoid false error logs
+    try {
+      if (selectedPropertyId) {
+        const updatedOffers = await fetchPropertyOffers(selectedPropertyId);
+        setSelectedPropertyOffers(updatedOffers);
+        const updatedProductOffers = await fetchPropertyProductOffers(selectedPropertyId);
+        setSelectedPropertyProductOffers(updatedProductOffers);
+      }
+      refetchActivos();
+    } catch (refetchError) {
+      console.error('Error refreshing data after account creation:', refetchError);
+      // Don't show error toast or log - the main operation succeeded
     }
   };
 
