@@ -262,29 +262,32 @@ export default function UsuariosDirectivos() {
 
     setIsSavingProjects(true);
     try {
-      // First, deactivate all existing project access for this user
-      const { error: deleteError } = await supabase
-        .from('proyectos_acceso')
-        .update({ activo: false })
-        .eq('usuario_id', selectedUserAuthId);
+      // First, delete all existing project access for this user (for Real Estate projects only)
+      const projectIdsToManage = proyectosRealEstate.map(p => p.id);
+      
+      if (projectIdsToManage.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('proyectos_acceso')
+          .delete()
+          .eq('usuario_id', selectedUserAuthId)
+          .in('proyecto_id', projectIdsToManage);
 
-      if (deleteError) throw deleteError;
+        if (deleteError) throw deleteError;
+      }
 
-      // Then, insert/upsert the selected projects
+      // Then, insert the selected projects
       if (selectedProjects.length > 0) {
-        for (const projectId of selectedProjects) {
-          const { error: insertError } = await supabase
-            .from('proyectos_acceso')
-            .upsert({
-              usuario_id: selectedUserAuthId,
-              proyecto_id: projectId,
-              activo: true,
-            }, {
-              onConflict: 'usuario_id,proyecto_id'
-            });
+        const insertData = selectedProjects.map(projectId => ({
+          usuario_id: selectedUserAuthId,
+          proyecto_id: projectId,
+          activo: true,
+        }));
 
-          if (insertError) throw insertError;
-        }
+        const { error: insertError } = await supabase
+          .from('proyectos_acceso')
+          .insert(insertData);
+
+        if (insertError) throw insertError;
       }
 
       queryClient.invalidateQueries({ queryKey: ['user-projects-access', selectedUserAuthId] });
