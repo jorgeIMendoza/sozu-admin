@@ -44,7 +44,6 @@ export default function UsuariosDirectivos() {
   const [isDeactivateDialogOpen, setIsDeactivateDialogOpen] = useState(false);
   const [isProjectsDialogOpen, setIsProjectsDialogOpen] = useState(false);
   const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
-  const [selectedUserAuthId, setSelectedUserAuthId] = useState<string | null>(null);
   const [selectedUserName, setSelectedUserName] = useState<string | null>(null);
   const [selectedProjects, setSelectedProjects] = useState<number[]>([]);
   const [projectSearch, setProjectSearch] = useState("");
@@ -115,22 +114,22 @@ export default function UsuariosDirectivos() {
     },
   });
 
-  // Fetch user's project access when dialog opens
+  // Fetch user's project access when dialog opens (using email as usuario_id)
   const { data: userProjects = [], refetch: refetchUserProjects } = useQuery({
-    queryKey: ['user-projects-access', selectedUserAuthId],
+    queryKey: ['user-projects-access', selectedUserEmail],
     queryFn: async () => {
-      if (!selectedUserAuthId) return [];
+      if (!selectedUserEmail) return [];
       
       const { data, error } = await supabase
         .from('proyectos_acceso')
         .select('proyecto_id')
-        .eq('usuario_id', selectedUserAuthId)
+        .eq('usuario_id', selectedUserEmail)
         .eq('activo', true);
       
       if (error) throw error;
       return (data || []).map(p => p.proyecto_id);
     },
-    enabled: !!selectedUserAuthId,
+    enabled: !!selectedUserEmail && isProjectsDialogOpen,
   });
 
   // Filter users based on search and active/inactive tab
@@ -256,9 +255,9 @@ export default function UsuariosDirectivos() {
     }
   };
 
-  // Save project access
+  // Save project access (using email as usuario_id)
   const handleSaveProjects = async () => {
-    if (!selectedUserAuthId) return;
+    if (!selectedUserEmail) return;
 
     setIsSavingProjects(true);
     try {
@@ -269,7 +268,7 @@ export default function UsuariosDirectivos() {
         const { error: deleteError } = await supabase
           .from('proyectos_acceso')
           .delete()
-          .eq('usuario_id', selectedUserAuthId)
+          .eq('usuario_id', selectedUserEmail)
           .in('proyecto_id', projectIdsToManage);
 
         if (deleteError) throw deleteError;
@@ -278,7 +277,7 @@ export default function UsuariosDirectivos() {
       // Then, insert the selected projects
       if (selectedProjects.length > 0) {
         const insertData = selectedProjects.map(projectId => ({
-          usuario_id: selectedUserAuthId,
+          usuario_id: selectedUserEmail,
           proyecto_id: projectId,
           activo: true,
         }));
@@ -290,10 +289,10 @@ export default function UsuariosDirectivos() {
         if (insertError) throw insertError;
       }
 
-      queryClient.invalidateQueries({ queryKey: ['user-projects-access', selectedUserAuthId] });
+      queryClient.invalidateQueries({ queryKey: ['user-projects-access', selectedUserEmail] });
       registrarActualizacion('usuario_directivo_proyectos', 
-        { usuario_id: selectedUserAuthId }, 
-        { usuario_id: selectedUserAuthId, proyectos: selectedProjects }
+        { usuario_id: selectedUserEmail }, 
+        { usuario_id: selectedUserEmail, proyectos: selectedProjects }
       );
 
       toast({ title: "Proyectos actualizados", description: "Los proyectos han sido asignados correctamente." });
@@ -306,8 +305,8 @@ export default function UsuariosDirectivos() {
   };
 
   // Open projects dialog
-  const handleOpenProjectsDialog = async (authId: string, name: string) => {
-    setSelectedUserAuthId(authId);
+  const handleOpenProjectsDialog = async (email: string, name: string) => {
+    setSelectedUserEmail(email);
     setSelectedUserName(name);
     setIsProjectsDialogOpen(true);
   };
@@ -378,11 +377,11 @@ export default function UsuariosDirectivos() {
                 )}
                 <TableCell className="text-right">
                   <div className="flex gap-2 justify-end">
-                    {!isInactiveTab && usuario.auth_user_id && (
+                    {!isInactiveTab && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleOpenProjectsDialog(usuario.auth_user_id!, usuario.nombre || 'Sin nombre')}
+                        onClick={() => handleOpenProjectsDialog(usuario.email, usuario.nombre || 'Sin nombre')}
                         className="hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-600"
                       >
                         <FolderOpen className="h-3 w-3 mr-1" />
