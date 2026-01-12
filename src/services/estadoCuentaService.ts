@@ -450,7 +450,7 @@ export class EstadoCuentaService {
     }
     
     if (porcentajeMensualidades > 0) {
-      detailsRight.push({ label: "Monto de parcialidades:", value: `${porcentajeMensualidades}%  ${formatMoney(montoMensualidades)} (${formatMoney(pagoMensual)} mensual)` });
+      detailsRight.push({ label: "Monto de parcialidades:", value: `${porcentajeMensualidades}%  ${formatMoney(montoMensualidades)} (${formatMoney(pagoMensual)} mens.)` });
     }
     
     if (porcentajeEntrega > 0) {
