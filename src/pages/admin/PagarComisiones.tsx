@@ -97,30 +97,39 @@ export default function PagarComisiones() {
   };
 
   const pagarComisionMutation = useMutation({
-    mutationFn: async ({ email, idCuenta, file }: { email: string; idCuenta: number; file: File }) => {
-      // Subir archivo a storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${email}_${idCuenta}_${Date.now()}.${fileExt}`;
-      const filePath = `evidencias-pago-comision/${fileName}`;
+    mutationFn: async ({ email, idCuenta, file }: { email: string; idCuenta: number; file?: File }) => {
+      let publicUrl: string | null = null;
+      
+      // Subir archivo a storage solo si se proporcionó
+      if (file) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${email}_${idCuenta}_${Date.now()}.${fileExt}`;
+        const filePath = `evidencias-pago-comision/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('documentos')
-        .upload(filePath, file);
+        const { error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(filePath, file);
 
-      if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-      // Obtener URL pública
-      const { data: { publicUrl } } = supabase.storage
-        .from('documentos')
-        .getPublicUrl(filePath);
+        // Obtener URL pública
+        const { data } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(filePath);
+        publicUrl = data.publicUrl;
+      }
 
       // Actualizar comisionista
+      const updatePayload: { pagada: boolean; url_evidencia_pago?: string } = { 
+        pagada: true
+      };
+      if (publicUrl) {
+        updatePayload.url_evidencia_pago = publicUrl;
+      }
+      
       const { data: updateData, error: updateError } = await supabase
         .from("comisionistas")
-        .update({ 
-          pagada: true,
-          url_evidencia_pago: publicUrl
-        })
+        .update(updatePayload)
         .eq("email_usuario", email)
         .eq("id_cuenta_cobranza", idCuenta)
         .eq("activo", true)
@@ -156,32 +165,41 @@ export default function PagarComisiones() {
   });
 
   const pagarTodasMutation = useMutation({
-    mutationFn: async ({ cuentas, file }: { cuentas: Array<{ email: string; idCuenta: number }>, file: File }) => {
-      // Subir archivo a storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `pago_multiple_${Date.now()}.${fileExt}`;
-      const filePath = `evidencias-pago-comision/${fileName}`;
+    mutationFn: async ({ cuentas, file }: { cuentas: Array<{ email: string; idCuenta: number }>, file?: File }) => {
+      let publicUrl: string | null = null;
+      
+      // Subir archivo a storage solo si se proporcionó
+      if (file) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `pago_multiple_${Date.now()}.${fileExt}`;
+        const filePath = `evidencias-pago-comision/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('documentos')
-        .upload(filePath, file);
+        const { error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(filePath, file);
 
-      if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-      // Obtener URL pública
-      const { data: { publicUrl } } = supabase.storage
-        .from('documentos')
-        .getPublicUrl(filePath);
+        // Obtener URL pública
+        const { data } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(filePath);
+        publicUrl = data.publicUrl;
+      }
 
       // Actualizar todas las comisiones
       const resultados = [];
       for (const cuenta of cuentas) {
+        const updatePayload: { pagada: boolean; url_evidencia_pago?: string } = { 
+          pagada: true
+        };
+        if (publicUrl) {
+          updatePayload.url_evidencia_pago = publicUrl;
+        }
+        
         const { data: updateData, error: updateError } = await supabase
           .from("comisionistas")
-          .update({ 
-            pagada: true,
-            url_evidencia_pago: publicUrl
-          })
+          .update(updatePayload)
           .eq("email_usuario", cuenta.email)
           .eq("id_cuenta_cobranza", cuenta.idCuenta)
           .eq("activo", true)
@@ -229,14 +247,12 @@ export default function PagarComisiones() {
       // Usar helper para obtener TODOS los registros sin límite de 1000
       const comisionistas = await fetchAllComisionistas();
 
-      // Obtener nombres de usuarios
+      // Obtener nombres de usuarios usando función RPC para evitar problemas de RLS
       const emails = [...new Set(comisionistas.map((c: any) => c.email_usuario))];
       const { data: usuarios } = await supabase
-        .from("usuarios")
-        .select("email, nombre")
-        .in("email", emails);
+        .rpc('get_usuarios_by_emails', { _emails: emails });
 
-      const usuariosMap = new Map(usuarios?.map(u => [u.email, u.nombre]) || []);
+      const usuariosMap = new Map(usuarios?.map((u: { email: string; nombre: string }) => [u.email, u.nombre]) || []);
 
       // Agrupar por comisionista
       const grouped = comisionistas.reduce((acc: any, com: any) => {
@@ -284,12 +300,10 @@ export default function PagarComisiones() {
       // Usar helper para obtener TODOS los registros sin límite de 1000
       const comisionistas = await fetchAllComisionistas();
 
-      // Obtener nombres de usuarios
+      // Obtener nombres de usuarios usando función RPC para evitar problemas de RLS
       const emails = [...new Set(comisionistas.map((c: any) => c.email_usuario))];
       const { data: usuarios } = await supabase
-        .from("usuarios")
-        .select("email, nombre")
-        .in("email", emails);
+        .rpc('get_usuarios_by_emails', { _emails: emails });
 
       const usuariosMap = new Map(usuarios?.map(u => [u.email, u.nombre]) || []);
 
@@ -345,15 +359,6 @@ export default function PagarComisiones() {
   };
 
   const handlePagar = () => {
-    if (!evidenciaFile) {
-      toast({
-        title: "Error",
-        description: "Debe seleccionar un archivo de evidencia",
-        variant: "destructive"
-      });
-      return;
-    }
-
     if (pagarTodas) {
       // Pagar todas las comisiones
       const cuentas = pagarTodas.type === 'comisionista'
@@ -364,13 +369,13 @@ export default function PagarComisiones() {
             .filter((c: any) => !c.pagada)
             .map((c: any) => ({ email: c.email, idCuenta: pagarTodas.data.idCuenta }));
 
-      pagarTodasMutation.mutate({ cuentas, file: evidenciaFile });
+      pagarTodasMutation.mutate({ cuentas, file: evidenciaFile || undefined });
     } else if (selectedComisionista) {
       // Pagar una sola comisión
       pagarComisionMutation.mutate({
         email: selectedComisionista.email,
         idCuenta: selectedComisionista.idCuenta,
-        file: evidenciaFile
+        file: evidenciaFile || undefined
       });
     }
   };
@@ -992,7 +997,7 @@ export default function PagarComisiones() {
               </Button>
               <Button
                 onClick={handlePagar}
-                disabled={!evidenciaFile || pagarComisionMutation.isPending || pagarTodasMutation.isPending}
+                disabled={pagarComisionMutation.isPending || pagarTodasMutation.isPending}
               >
                 {(pagarComisionMutation.isPending || pagarTodasMutation.isPending) ? "Procesando..." : "Confirmar Pago"}
               </Button>

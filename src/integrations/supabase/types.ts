@@ -6144,6 +6144,13 @@ export type Database = {
         }[]
       }
       get_user_role: { Args: never; Returns: string }
+      get_usuarios_by_emails: {
+        Args: { _emails: string[] }
+        Returns: {
+          email: string
+          nombre: string
+        }[]
+      }
       incrementar_precio_m2_mensual: { Args: never; Returns: undefined }
       insertar_pago_stp: {
         Args: {
