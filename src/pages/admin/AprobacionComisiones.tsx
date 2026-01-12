@@ -270,12 +270,14 @@ export default function AprobacionComisiones() {
   }) || [];
 
   // Separar en pendientes y completas
+  // Pendientes: cuentas que tienen comisionistas no aprobados
   const cuentasPendientes = cuentasFiltradas.filter((cuenta: any) => 
-    cuenta.comisionistas.length === 0 || cuenta.comisionistas.some((c: any) => !c.aprobada)
+    cuenta.comisionistas.length > 0 && cuenta.comisionistas.some((c: any) => !c.aprobada)
   );
 
+  // Completas: cuentas sin comisionistas O donde todos están aprobados
   const cuentasCompletas = cuentasFiltradas.filter((cuenta: any) => 
-    cuenta.comisionistas.length > 0 && cuenta.comisionistas.every((c: any) => c.aprobada)
+    cuenta.comisionistas.length === 0 || cuenta.comisionistas.every((c: any) => c.aprobada)
   );
 
   // Pagination logic
