@@ -159,14 +159,25 @@ export class EstadoCuentaService {
       if (ofertaData.id_producto) {
         const { data: producto } = await supabase
           .from("productos_servicios")
-          .select("id, nombre, id_categoria, categorias_producto(id, nombre)")
+          .select("id, nombre, id_categoria")
           .eq("id", ofertaData.id_producto)
           .maybeSingle();
+        
+        let categoriaData = null;
+        if (producto?.id_categoria) {
+          const { data: cat } = await supabase
+            .from("categorias_producto")
+            .select("id, nombre")
+            .eq("id", producto.id_categoria)
+            .maybeSingle();
+          categoriaData = cat;
+        }
+        
         if (producto) {
           productoData = {
             id: producto.id,
             nombre: producto.nombre,
-            categoria: producto.categorias_producto
+            categoria: categoriaData
           };
         }
       }
