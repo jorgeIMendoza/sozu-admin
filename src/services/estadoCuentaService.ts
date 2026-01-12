@@ -330,14 +330,11 @@ export class EstadoCuentaService {
     if (data.proyecto?.nombre) {
       detailsLeft.push({ label: "Proyecto:", value: data.proyecto.nombre });
     }
-    if (data.proyecto?.direccion) {
-      detailsLeft.push({ label: "Dirección:", value: data.proyecto.direccion });
-    }
     if (data.edificio?.nombre) {
       detailsLeft.push({ label: "Torre:", value: data.edificio.nombre });
     }
     if (data.propiedad?.numero_piso) {
-      detailsLeft.push({ label: "Piso:", value: data.propiedad.numero_piso });
+      detailsLeft.push({ label: "Nivel:", value: data.propiedad.numero_piso });
     }
     if (data.modelo?.nombre) {
       detailsLeft.push({ label: "Modelo:", value: data.modelo.nombre });
@@ -350,16 +347,16 @@ export class EstadoCuentaService {
     }
     detailsLeft.push({ label: "Precio final:", value: formatMoney(data.precioFinal) });
     
-    // Show estacionamientos/bodegas if property has them
+    // Show estacionamientos/bodegas names or "No" if none
     if (!isProduct) {
-      detailsLeft.push({ 
-        label: "Estacionamiento:", 
-        value: (data.estacionamientos && data.estacionamientos.length > 0) ? "Sí" : "No" 
-      });
-      detailsLeft.push({ 
-        label: "Bodega:", 
-        value: (data.bodegas && data.bodegas.length > 0) ? "Sí" : "No" 
-      });
+      const estNames = (data.estacionamientos && data.estacionamientos.length > 0) 
+        ? data.estacionamientos.map((e: any) => e.nombre).join(", ") 
+        : "No";
+      const bodNames = (data.bodegas && data.bodegas.length > 0) 
+        ? data.bodegas.map((b: any) => b.nombre).join(", ") 
+        : "No";
+      detailsLeft.push({ label: "Estacionamiento:", value: estNames });
+      detailsLeft.push({ label: "Bodega:", value: bodNames });
     }
 
     detailsLeft.forEach((item) => {
@@ -522,7 +519,7 @@ export class EstadoCuentaService {
       colX += col.width;
     });
 
-    y += 8;
+    y += 10;
     drawLine(y - 1);
 
     // Table rows
@@ -635,7 +632,7 @@ export class EstadoCuentaService {
       colX += col.width;
     });
 
-    y += 8;
+    y += 10;
     drawLine(y - 1);
 
     // Table rows
