@@ -343,7 +343,21 @@ export class EstadoCuentaService {
       detailsLeft.push({ label: "N° de propiedad:", value: data.propiedad.numero_propiedad });
     }
     if (isProduct && data.producto?.nombre) {
-      detailsLeft.push({ label: "Nombre del Producto/Servicio:", value: data.producto.nombre });
+      detailsLeft.push({ label: "Producto:", value: data.producto.nombre });
+    }
+    if (!isProduct && data.propiedad?.numero_propiedad && data.edificio?.nombre && data.proyecto?.nombre) {
+      // For properties, show comprehensive info
+    } else if (isProduct) {
+      // For products, show project and property context if available
+      if (data.proyecto?.nombre) {
+        detailsLeft.push({ label: "Proyecto:", value: data.proyecto.nombre });
+      }
+      if (data.edificio?.nombre) {
+        detailsLeft.push({ label: "Torre:", value: data.edificio.nombre });
+      }
+      if (data.propiedad?.numero_propiedad) {
+        detailsLeft.push({ label: "N° de propiedad:", value: data.propiedad.numero_propiedad });
+      }
     }
     detailsLeft.push({ label: "Precio final:", value: formatMoney(data.precioFinal) });
     
@@ -436,7 +450,7 @@ export class EstadoCuentaService {
     }
     
     if (porcentajeMensualidades > 0) {
-      detailsRight.push({ label: "Monto de parcialidades:", value: `${porcentajeMensualidades}%  ${formatMoney(montoMensualidades)}` });
+      detailsRight.push({ label: "Monto de parcialidades:", value: `${porcentajeMensualidades}%  ${formatMoney(montoMensualidades)} (${formatMoney(pagoMensual)} mensual)` });
     }
     
     if (porcentajeEntrega > 0) {
