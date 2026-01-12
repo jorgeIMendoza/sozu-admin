@@ -354,8 +354,8 @@ export default function AprobacionComisiones() {
   };
   
   const calcularPorcentajeDispersarComisiones = (cuenta: any) => {
-    // Sumar comisionistas aprobados pero no pagados (listos para dispersar)
-    const comisionistasADispersar = cuenta.comisionistas.filter((c: any) => c.aprobada && !c.pagada);
+    // Sumar todos los comisionistas no pagados (para mostrar el total que se dispersará)
+    const comisionistasADispersar = cuenta.comisionistas.filter((c: any) => !c.pagada);
     const totalPorcentaje = comisionistasADispersar.reduce((sum: number, c: any) => sum + (c.porcentaje_comision || 0), 0);
     return totalPorcentaje;
   };
