@@ -525,7 +525,7 @@ export default function PagarComisiones() {
       </div>
 
       {/* Cards de resumen */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -561,7 +561,7 @@ export default function PagarComisiones() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Monto Total de Comisiones
+              Monto Total de Comisiones Aprobadas
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -570,22 +570,6 @@ export default function PagarComisiones() {
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Total de comisiones aprobadas
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Monto a Dispersar
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              {totalesComisiones ? formatCompactCurrency(totalesComisiones.montoPendiente) : <Skeleton className="h-8 w-32" />}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Comisiones pendientes de pago
             </p>
           </CardContent>
         </Card>
