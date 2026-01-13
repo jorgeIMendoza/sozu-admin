@@ -308,72 +308,20 @@ class HTMLToPDFService {
       }
     };
 
-    const container = this.createContainer();
-    // Make container match A4 proportions (2550x3300px)
-    container.style.width = '2550px';
-    container.style.minHeight = '3300px';
+    // Use native PDF generation for faster, text-selectable PDFs
+    const { ofertaPdfNativeService } = await import('./ofertaPdfNativeService');
     
-    try {
-      // Create Sozu template element
-      const templateElement = React.createElement(OfferPDFTemplateSozu, {
-        offerData,
-        propertyDetails: finalPropertyDetails,
-        paymentSchemes,
-        amenities,
-        creatorInfo,
-        leadInfo,
-        legalNotices,
-        estacionamientos,
-        bodegas
-      });
-      
-      const root = createRoot(container);
-      root.render(templateElement);
-      
-      // Wait longer for all images (including logo) to load
-      await new Promise<void>(resolve => setTimeout(resolve, 12000));
-      
-      // Capture as canvas with better settings for images
-      const canvas = await html2canvas(container, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,  // Allow external images
-        logging: true,     // Enable logging to debug
-        backgroundColor: '#ffffff',
-        width: 2550,
-        height: 3300,
-        imageTimeout: 15000,  // Increase timeout for external images
-        foreignObjectRendering: false
-      });
-      
-      // Create PDF with A4 dimensions
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'px',
-        format: [2550, 3300]
-      });
-      
-      const imgData = canvas.toDataURL('image/jpeg', 1.0);
-      pdf.addImage(imgData, 'JPEG', 0, 0, 2550, 3300);
-      
-      // Generate filename
-      const projectName = propertyDetails.projectData?.nombre || 'Proyecto';
-      const propertyNumber = propertyDetails.numero_propiedad || 'N/A';
-      const offerNumber = offerData.id.toString().padStart(6, '0') || '000000';
-      
-      const cleanProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
-      const cleanPropertyNumber = propertyNumber.replace(/[^a-zA-Z0-9]/g, '_');
-      
-      const filename = `O_${offerNumber}_${cleanPropertyNumber}_${cleanProjectName}.pdf`;
-
-      // Download the PDF
-      pdf.save(filename);
-      
-      console.log('Sozu PDF generated successfully:', filename);
-      
-    } finally {
-      document.body.removeChild(container);
-    }
+    await ofertaPdfNativeService.generateOfferPDF({
+      offerData,
+      propertyDetails: finalPropertyDetails,
+      paymentSchemes,
+      creatorInfo,
+      leadInfo,
+      estacionamientos,
+      bodegas,
+    });
+    
+    console.log('Native Sozu PDF generated successfully');
   }
 
   private async generateCoverPage(
