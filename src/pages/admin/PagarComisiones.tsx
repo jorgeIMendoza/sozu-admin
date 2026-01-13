@@ -288,6 +288,35 @@ export default function PagarComisiones() {
         const aplicacionActiva = engancheAcuerdo?.aplicaciones_pago?.find((app: any) => app.activo);
         const fechaPagoEnganche = aplicacionActiva?.pagos?.fecha_pago || null;
 
+        // Filtrar por mes según la fecha actual
+        const today = new Date();
+        const currentDay = today.getDate();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+        
+        if (fechaPagoEnganche) {
+          const fechaEnganche = new Date(fechaPagoEnganche);
+          const engancheMonth = fechaEnganche.getMonth();
+          const engancheYear = fechaEnganche.getFullYear();
+          
+          if (currentDay <= 15) {
+            // Del 1 al 15: mostrar solo del mes anterior
+            const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+            const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+            if (engancheMonth !== prevMonth || engancheYear !== prevYear) {
+              return acc;
+            }
+          } else {
+            // Del 16 al último día: mostrar solo del mes actual
+            if (engancheMonth !== currentMonth || engancheYear !== currentYear) {
+              return acc;
+            }
+          }
+        } else {
+          // Si no tiene fecha de pago de enganche, no mostrar
+          return acc;
+        }
+
         acc[com.email_usuario].montoTotal += montoComision;
         acc[com.email_usuario].cuentas.push({
           idCuenta: cuenta.id,
