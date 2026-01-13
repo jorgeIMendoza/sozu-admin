@@ -67,6 +67,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { Switch } from "@/components/ui/switch";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Interface for tiered monthly payments (tramos de mensualidades)
 interface TramoMensualidad {
@@ -1661,7 +1666,16 @@ export function NewOfferDialog({ propertyId, propertyNumber }: NewOfferDialogPro
                                       </span>
                                       <span>
                                         ${(tramo.monto / 100).toLocaleString()}
-                                        {index > 0 && <span className="ml-1 text-blue-600">(mes {mensualidadesAcumuladas + 1}+)</span>}
+                                        {index > 0 && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <span className="ml-1 text-blue-600 cursor-help">(mes {mensualidadesAcumuladas + 1}+)</span>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>A partir del mes {mensualidadesAcumuladas + 1} en adelante</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        )}
                                       </span>
                                     </div>
                                   );
