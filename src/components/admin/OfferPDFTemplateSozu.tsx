@@ -572,10 +572,11 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                                 return (
                                   <div key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ color: '#000000' }}>
-                                      {tramo.numero_mensualidades} mensualidades{idx > 0 ? ` (mes ${mensualidadesAcumuladas + 1}+)` : ''}:
+                                      {tramo.numero_mensualidades} mensualidades:
                                     </span>
                                     <span style={{ color: '#000000', fontWeight: 'bold' }}>
                                       {formatCurrency(tramo.monto)}
+                                      {idx > 0 && <span style={{ fontWeight: 'normal', marginLeft: '4px', color: '#666666' }}>(mes {mensualidadesAcumuladas + 1}+)</span>}
                                     </span>
                                   </div>
                                 );
