@@ -15,7 +15,7 @@ const ALLOWED_EMAIL = 'jorge.mendoza@sozu.com';
 interface ClabeStats {
   cuenta_madre: string;
   persona_nombre: string;
-  proyecto_nombre: string;
+  proyectos: string[];
   clabes_asignadas: number;
   ultima_secuencial: string;
   porcentaje_uso: number;
@@ -53,17 +53,24 @@ export default function RastreoClabeSTP() {
       // Group by cuenta_madre_stp
       const cuentaMadreMap = new Map<string, {
         persona_nombre: string;
-        proyecto_nombre: string;
+        proyectos: Set<string>;
         id_er: number;
       }>();
 
       entidades?.forEach((er: any) => {
-        if (er.cuenta_madre_stp && !cuentaMadreMap.has(er.cuenta_madre_stp)) {
-          cuentaMadreMap.set(er.cuenta_madre_stp, {
-            persona_nombre: er.personas?.nombre_legal || "Sin nombre",
-            proyecto_nombre: er.proyectos?.nombre || "Sin proyecto",
-            id_er: er.id
-          });
+        if (er.cuenta_madre_stp) {
+          const proyectoNombre = er.proyectos?.nombre || "Sin proyecto";
+          
+          if (!cuentaMadreMap.has(er.cuenta_madre_stp)) {
+            cuentaMadreMap.set(er.cuenta_madre_stp, {
+              persona_nombre: er.personas?.nombre_legal || "Sin nombre",
+              proyectos: new Set([proyectoNombre]),
+              id_er: er.id
+            });
+          } else {
+            // Agregar el proyecto a la cuenta madre existente
+            cuentaMadreMap.get(er.cuenta_madre_stp)?.proyectos.add(proyectoNombre);
+          }
         }
       });
 
@@ -134,7 +141,7 @@ export default function RastreoClabeSTP() {
         stats.push({
           cuenta_madre: cuentaMadreCorta,
           persona_nombre: info.persona_nombre,
-          proyecto_nombre: info.proyecto_nombre,
+          proyectos: Array.from(info.proyectos),
           clabes_asignadas: clabesAsignadas,
           ultima_secuencial: ultimaSecuencial,
           porcentaje_uso: porcentajeUso
@@ -226,7 +233,7 @@ export default function RastreoClabeSTP() {
                 <TableRow>
                   <TableHead>Cuenta Madre</TableHead>
                   <TableHead>Persona/Empresa</TableHead>
-                  <TableHead>Proyecto</TableHead>
+                  <TableHead>Proyectos</TableHead>
                   <TableHead className="text-center">CLABEs Asignadas</TableHead>
                   <TableHead>Última Secuencial</TableHead>
                   <TableHead className="w-[150px]">% Uso</TableHead>
@@ -240,7 +247,15 @@ export default function RastreoClabeSTP() {
                       {stat.cuenta_madre}
                     </TableCell>
                     <TableCell>{stat.persona_nombre}</TableCell>
-                    <TableCell>{stat.proyecto_nombre}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {stat.proyectos.map((proyecto, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-xs">
+                            {proyecto}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-center font-medium">
                       {stat.clabes_asignadas} / 999
                     </TableCell>
