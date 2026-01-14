@@ -195,6 +195,7 @@ function transformValue(value: string | number | null | undefined, caseType: 'lo
         word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
       ).join(' ');
     case 'lower':
+      return strValue.toLowerCase();
     default:
       return strValue;
   }
