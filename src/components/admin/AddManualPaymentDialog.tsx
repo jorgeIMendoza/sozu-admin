@@ -332,10 +332,14 @@ export function AddManualPaymentDialog({
     const saldoPrecioFinal = precioFinal - montoPagado;
     const montoMaximoPermitido = saldoPrecioFinal + totalMultasPendientes;
     
-    if (montoNuevoPago > montoMaximoPermitido) {
+    // Round to 2 decimal places to avoid floating point precision issues
+    const montoRedondeado = Math.round(montoNuevoPago * 100) / 100;
+    const maxRedondeado = Math.round(montoMaximoPermitido * 100) / 100;
+    
+    if (montoRedondeado > maxRedondeado) {
       toast({
         title: "Error",
-        description: `El monto del pago excede el máximo permitido. Saldo pendiente: $${saldoPrecioFinal.toLocaleString('es-MX', { minimumFractionDigits: 2 })} + Multas: $${totalMultasPendientes.toLocaleString('es-MX', { minimumFractionDigits: 2 })} = Máximo: $${montoMaximoPermitido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+        description: `El monto del pago excede el máximo permitido. Saldo pendiente: $${saldoPrecioFinal.toLocaleString('es-MX', { minimumFractionDigits: 2 })} + Multas: $${totalMultasPendientes.toLocaleString('es-MX', { minimumFractionDigits: 2 })} = Máximo: $${maxRedondeado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
         variant: "destructive",
       });
       return;
