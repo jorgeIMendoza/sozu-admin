@@ -485,6 +485,8 @@ export default function UsuariosDirectivos() {
     const projectOwners = ownersByProject[projectId] || [];
     
     if (selectedOwners.length === 0) {
+      return "Ningún dueño seleccionado";
+    } else if (selectedOwners.length === projectOwners.length && projectOwners.length > 0) {
       return "Todos los dueños";
     } else if (selectedOwners.length === 1) {
       const owner = projectOwners.find(o => o.id === selectedOwners[0]);
