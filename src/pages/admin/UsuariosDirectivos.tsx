@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, UserCheck, UserX, Key, Loader2, RotateCcw, FolderOpen, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, Search, UserCheck, UserX, Key, Loader2, RotateCcw, FolderOpen, Check, ChevronsUpDown, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +36,21 @@ type Proyecto = {
   nombre: string;
 };
 
+type EntidadDueno = {
+  id: number;
+  id_proyecto: number;
+  id_tipo_entidad: number;
+  persona: {
+    id: number;
+    nombre_legal: string;
+  } | null;
+};
+
+type ProjectAccess = {
+  proyecto_id: number;
+  id_entidad_relacionada_dueno: number | null;
+};
+
 export default function UsuariosDirectivos() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewUserDialogOpen, setIsNewUserDialogOpen] = useState(false);
@@ -46,6 +60,7 @@ export default function UsuariosDirectivos() {
   const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
   const [selectedUserName, setSelectedUserName] = useState<string | null>(null);
   const [selectedProjects, setSelectedProjects] = useState<number[]>([]);
+  const [ownerSelections, setOwnerSelections] = useState<Record<number, number | null>>({});
   const [projectSearch, setProjectSearch] = useState("");
   const [newUserForm, setNewUserForm] = useState({
     email: "",
@@ -122,15 +137,53 @@ export default function UsuariosDirectivos() {
       
       const { data, error } = await supabase
         .from('proyectos_acceso')
-        .select('proyecto_id')
+        .select('proyecto_id, id_entidad_relacionada_dueno')
         .eq('usuario_id', selectedUserEmail)
         .eq('activo', true);
       
       if (error) throw error;
-      return (data || []).map(p => p.proyecto_id);
+      return (data || []) as ProjectAccess[];
     },
     enabled: !!selectedUserEmail && isProjectsDialogOpen,
   });
+
+  // Fetch owners (dueños) for selected projects - tipo_entidad 4 and 15
+  const { data: duenosData = [], isLoading: loadingDuenos } = useQuery({
+    queryKey: ['project-owners-directivos', selectedProjects],
+    queryFn: async () => {
+      if (selectedProjects.length === 0) return [];
+      
+      const { data, error } = await supabase
+        .from('entidades_relacionadas')
+        .select(`
+          id,
+          id_proyecto,
+          id_tipo_entidad,
+          persona:personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal)
+        `)
+        .in('id_proyecto', selectedProjects)
+        .in('id_tipo_entidad', [4, 15])
+        .eq('activo', true);
+      
+      if (error) throw error;
+      return (data as unknown as EntidadDueno[]) || [];
+    },
+    enabled: isProjectsDialogOpen && selectedProjects.length > 0,
+  });
+
+  // Group owners by project
+  const ownersByProject = useMemo(() => {
+    const map: Record<number, EntidadDueno[]> = {};
+    if (duenosData) {
+      for (const dueno of duenosData) {
+        if (!map[dueno.id_proyecto]) {
+          map[dueno.id_proyecto] = [];
+        }
+        map[dueno.id_proyecto].push(dueno);
+      }
+    }
+    return map;
+  }, [duenosData]);
 
   // Filter users based on search and active/inactive tab
   const activeUsers = useMemo(() => 
@@ -255,44 +308,67 @@ export default function UsuariosDirectivos() {
     }
   };
 
-  // Save project access (using email as usuario_id)
+  // Save project access with owner selection
   const handleSaveProjects = async () => {
     if (!selectedUserEmail) return;
 
     setIsSavingProjects(true);
     try {
-      // First, delete all existing project access for this user (for Real Estate projects only)
       const projectIdsToManage = proyectosRealEstate.map(p => p.id);
       
+      // Deactivate existing access for managed projects
       if (projectIdsToManage.length > 0) {
-        const { error: deleteError } = await supabase
+        const { error: updateError } = await supabase
           .from('proyectos_acceso')
-          .delete()
+          .update({ activo: false, fecha_actualizacion: new Date().toISOString() })
           .eq('usuario_id', selectedUserEmail)
           .in('proyecto_id', projectIdsToManage);
 
-        if (deleteError) throw deleteError;
+        if (updateError) throw updateError;
       }
 
-      // Then, insert the selected projects
+      // Insert or update selected projects with owner
       if (selectedProjects.length > 0) {
-        const insertData = selectedProjects.map(projectId => ({
-          usuario_id: selectedUserEmail,
-          proyecto_id: projectId,
-          activo: true,
-        }));
+        for (const projectId of selectedProjects) {
+          const ownerId = ownerSelections[projectId] ?? null;
+          
+          // Check if record exists
+          const { data: existing } = await supabase
+            .from('proyectos_acceso')
+            .select('usuario_id')
+            .eq('usuario_id', selectedUserEmail)
+            .eq('proyecto_id', projectId)
+            .maybeSingle();
 
-        const { error: insertError } = await supabase
-          .from('proyectos_acceso')
-          .insert(insertData);
-
-        if (insertError) throw insertError;
+          if (existing) {
+            // Update existing record
+            await supabase
+              .from('proyectos_acceso')
+              .update({ 
+                activo: true, 
+                fecha_actualizacion: new Date().toISOString(),
+                id_entidad_relacionada_dueno: ownerId
+              })
+              .eq('usuario_id', selectedUserEmail)
+              .eq('proyecto_id', projectId);
+          } else {
+            // Insert new record
+            await supabase
+              .from('proyectos_acceso')
+              .insert({
+                usuario_id: selectedUserEmail,
+                proyecto_id: projectId,
+                activo: true,
+                id_entidad_relacionada_dueno: ownerId,
+              });
+          }
+        }
       }
 
       queryClient.invalidateQueries({ queryKey: ['user-projects-access', selectedUserEmail] });
       registrarActualizacion('usuario_directivo_proyectos', 
         { usuario_id: selectedUserEmail }, 
-        { usuario_id: selectedUserEmail, proyectos: selectedProjects }
+        { usuario_id: selectedUserEmail, proyectos: selectedProjects, ownerSelections }
       );
 
       toast({ title: "Proyectos actualizados", description: "Los proyectos han sido asignados correctamente." });
@@ -311,19 +387,44 @@ export default function UsuariosDirectivos() {
     setIsProjectsDialogOpen(true);
   };
 
-  // Effect to set selected projects when dialog opens
+  // Effect to set selected projects and owner selections when dialog opens
   useEffect(() => {
-    if (isProjectsDialogOpen) {
-      setSelectedProjects(userProjects);
+    if (isProjectsDialogOpen && userProjects.length > 0) {
+      setSelectedProjects(userProjects.map(p => p.proyecto_id));
+      
+      // Load owner selections
+      const selections: Record<number, number | null> = {};
+      for (const access of userProjects) {
+        selections[access.proyecto_id] = access.id_entidad_relacionada_dueno;
+      }
+      setOwnerSelections(selections);
+    } else if (isProjectsDialogOpen && userProjects.length === 0) {
+      setSelectedProjects([]);
+      setOwnerSelections({});
     }
   }, [userProjects, isProjectsDialogOpen]);
 
   const toggleProject = (projectId: number) => {
-    setSelectedProjects(prev => 
-      prev.includes(projectId) 
-        ? prev.filter(id => id !== projectId)
-        : [...prev, projectId]
-    );
+    setSelectedProjects(prev => {
+      if (prev.includes(projectId)) {
+        // When deselecting, clear owner selection
+        setOwnerSelections(prevOwners => {
+          const { [projectId]: _, ...rest } = prevOwners;
+          return rest;
+        });
+        return prev.filter(id => id !== projectId);
+      } else {
+        return [...prev, projectId];
+      }
+    });
+  };
+
+  const handleOwnerChange = (projectId: number, ownerIdStr: string) => {
+    const ownerId = ownerIdStr === 'all' ? null : parseInt(ownerIdStr);
+    setOwnerSelections(prev => ({
+      ...prev,
+      [projectId]: ownerId
+    }));
   };
 
   // Users Table Component
@@ -585,16 +686,19 @@ export default function UsuariosDirectivos() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Projects Dialog */}
+      {/* Projects Dialog with Owner Selection */}
       <Dialog open={isProjectsDialogOpen} onOpenChange={(open) => {
         setIsProjectsDialogOpen(open);
-        if (!open) setProjectSearch("");
+        if (!open) {
+          setProjectSearch("");
+          setOwnerSelections({});
+        }
       }}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
             <DialogTitle>Asignar Proyectos</DialogTitle>
             <DialogDescription>
-              Selecciona los proyectos a los que <strong>{selectedUserName}</strong> tendrá acceso
+              Selecciona los proyectos y dueños a los que <strong>{selectedUserName}</strong> tendrá acceso
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -609,8 +713,8 @@ export default function UsuariosDirectivos() {
               />
             </div>
             
-            <ScrollArea className="h-[300px] pr-4">
-              <div className="space-y-2">
+            <ScrollArea className="h-[350px] pr-4">
+              <div className="space-y-3">
                 {proyectosRealEstate.length === 0 ? (
                   <p className="text-muted-foreground text-center py-4">
                     No hay proyectos disponibles de Real Estate Ventures
@@ -622,18 +726,53 @@ export default function UsuariosDirectivos() {
                       <div
                         key={proyecto.id}
                         className={cn(
-                          "flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                          "p-3 rounded-lg border transition-colors",
                           selectedProjects.includes(proyecto.id)
                             ? "border-primary bg-primary/5"
                             : "border-border hover:bg-muted/50"
                         )}
-                        onClick={() => toggleProject(proyecto.id)}
                       >
-                        <Checkbox
-                          checked={selectedProjects.includes(proyecto.id)}
-                          onCheckedChange={() => toggleProject(proyecto.id)}
-                        />
-                        <span className="font-medium">{proyecto.nombre}</span>
+                        <div 
+                          className="flex items-center space-x-3 cursor-pointer"
+                          onClick={() => toggleProject(proyecto.id)}
+                        >
+                          <Checkbox
+                            checked={selectedProjects.includes(proyecto.id)}
+                            onCheckedChange={() => toggleProject(proyecto.id)}
+                          />
+                          <span className="font-medium">{proyecto.nombre}</span>
+                        </div>
+                        
+                        {/* Owner selector - only visible when project is selected */}
+                        {selectedProjects.includes(proyecto.id) && (
+                          <div className="ml-6 mt-3">
+                            <Select
+                              value={ownerSelections[proyecto.id]?.toString() ?? 'all'}
+                              onValueChange={(value) => handleOwnerChange(proyecto.id, value)}
+                            >
+                              <SelectTrigger className="h-9 text-sm">
+                                <Users className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                <SelectValue placeholder="Seleccionar dueño" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">
+                                  <span className="font-medium">Todos los dueños</span>
+                                </SelectItem>
+                                {(ownersByProject[proyecto.id] || []).map((dueno) => (
+                                  <SelectItem key={dueno.id} value={dueno.id.toString()}>
+                                    {dueno.persona?.nombre_legal || `Entidad ${dueno.id}`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {loadingDuenos && (
+                              <p className="text-xs text-muted-foreground mt-1">Cargando dueños...</p>
+                            )}
+                            {!loadingDuenos && (!ownersByProject[proyecto.id] || ownersByProject[proyecto.id].length === 0) && (
+                              <p className="text-xs text-muted-foreground mt-1">No hay dueños específicos para este proyecto</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))
                 )}
