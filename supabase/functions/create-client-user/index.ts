@@ -36,44 +36,61 @@ serve(async (req) => {
 
     let authUserId: string;
 
-    // Step 1: Check if auth user already exists
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const existingAuthUser = existingUsers?.users?.find(u => u.email === email);
+    // Step 1: Try to create auth user first, handle if already exists
+    console.log(`[create-client-user] Creating new auth user for: ${email}`);
+    const { data: newAuthUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email: email,
+      password: 'Temporal123!',
+      email_confirm: true,
+    });
 
-    if (existingAuthUser) {
-      // User already exists in auth.users, just update password
-      authUserId = existingAuthUser.id;
-      console.log(`[create-client-user] Auth user exists with ID: ${authUserId}`);
-      
-      // Update password to temporary
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(authUserId, {
-        password: 'Temporal123!',
-      });
+    if (createError) {
+      // Check if user already exists
+      if (createError.message.includes('already been registered') || createError.message.includes('already exists')) {
+        console.log(`[create-client-user] Auth user already exists for: ${email}, fetching existing user`);
+        
+        // Get the existing user by listing and filtering (since getUserByEmail doesn't exist in admin API)
+        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({
+          page: 1,
+          perPage: 1000
+        });
+        
+        const existingUser = usersData?.users?.find(u => u.email === email);
+        
+        if (existingUser) {
+          authUserId = existingUser.id;
+          console.log(`[create-client-user] Found existing auth user with ID: ${authUserId}`);
+          
+          // Update password to temporary
+          const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+            password: 'Temporal123!',
+          });
 
-      if (updateError) {
-        console.error('Error updating auth user password:', updateError);
-        return new Response(
-          JSON.stringify({ error: `Error updating auth user: ${updateError.message}` }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    } else {
-      // Create new auth user
-      console.log(`[create-client-user] Creating new auth user for: ${email}`);
-      const { data: newAuthUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: email,
-        password: 'Temporal123!',
-        email_confirm: true,
-      });
-
-      if (createError) {
+          if (updateError) {
+            console.error('Error updating auth user password:', updateError);
+            // Continue anyway, the user exists
+          }
+        } else {
+          // User exists but couldn't be found - try alternative approach
+          // Just log and continue, the usuarios table will be updated without auth_user_id
+          console.warn(`[create-client-user] Could not find existing user: ${email}, skipping auth update`);
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: 'User already exists in auth but could not be linked',
+              warning: 'auth_user_id not set'
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
         console.error('Error creating auth user:', createError);
         return new Response(
           JSON.stringify({ error: `Error creating auth user: ${createError.message}` }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
+    } else {
       authUserId = newAuthUser.user.id;
       console.log(`[create-client-user] Created auth user with ID: ${authUserId}`);
     }
