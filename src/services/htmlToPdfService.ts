@@ -135,7 +135,7 @@ class HTMLToPDFService {
 
       // Fetch all required data for property offers
       const [propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas] = await Promise.all([
-        this.fetchPropertyDetails(offerData.propertyId),
+        this.fetchPropertyDetails(offerData.propertyId, offerData.offerId),
         this.fetchPaymentSchemes(offerData.propertyId, offerData.offerId),
         this.fetchProjectAmenities(offerData.propertyId),
         this.fetchCreatorInfo(offerDetails.email_creador),
@@ -499,8 +499,8 @@ class HTMLToPDFService {
     }
   }
 
-  private async fetchPropertyDetails(propertyId: number): Promise<PropertyDetails> {
-    console.log('Fetching property details for ID:', propertyId);
+  private async fetchPropertyDetails(propertyId: number, offerId?: number): Promise<PropertyDetails> {
+    console.log('Fetching property details for ID:', propertyId, 'offerId:', offerId);
 
     // Get property basic data
     const { data: propiedad, error: propiedadError } = await supabase
@@ -771,20 +771,15 @@ class HTMLToPDFService {
       }
     }
 
-    // Get CLABE: first try clabe_stp_tmp_apartado, if null get from cuentas_cobranza
+    // Get CLABE: first try clabe_stp_tmp_apartado, if null get from cuentas_cobranza using offerId
     let clabeStp = propiedad.clabe_stp_tmp_apartado;
-    if (!clabeStp) {
+    if (!clabeStp && offerId) {
       const { data: cuentaCobranza } = await supabase
         .from('cuentas_cobranza')
-        .select(`
-          clabe_stp,
-          ofertas!inner(id_propiedad)
-        `)
-        .eq('ofertas.id_propiedad', propertyId)
+        .select('clabe_stp')
+        .eq('id_oferta', offerId)
         .eq('activo', true)
         .not('clabe_stp', 'is', null)
-        .order('fecha_creacion', { ascending: false })
-        .limit(1)
         .maybeSingle();
 
       if (cuentaCobranza?.clabe_stp) {
