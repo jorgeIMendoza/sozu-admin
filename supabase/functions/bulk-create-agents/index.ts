@@ -266,7 +266,7 @@ Deno.serve(async (req) => {
           const { data: newPersona, error: personaError } = await supabaseAdmin
             .from('personas')
             .insert({
-              tipo_persona: 'fisica',
+              tipo_persona: 'pf',
               nombre_legal: nombre,
               email: email,
               telefono: telefono || null,
