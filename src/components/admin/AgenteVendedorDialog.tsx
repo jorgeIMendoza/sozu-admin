@@ -37,21 +37,6 @@ export function AgenteVendedorDialog({ isOpen, onClose, agente }: AgenteVendedor
             </div>
             <div>
               <p className="font-semibold text-lg">{agente.nombre}</p>
-              {agente.tipoAgente === 'interno' && (
-                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                  Agente Sozu
-                </Badge>
-              )}
-              {agente.tipoAgente === 'inmobiliario' && (
-                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
-                  Agente Inmobiliario
-                </Badge>
-              )}
-              {agente.tipoAgente === 'otro' && (
-                <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200">
-                  {agente.rolNombre || 'Usuario'}
-                </Badge>
-              )}
             </div>
           </div>
 
@@ -64,15 +49,17 @@ export function AgenteVendedorDialog({ isOpen, onClose, agente }: AgenteVendedor
               </a>
             </div>
 
-            {agente.telefono && (
-              <div className="flex items-center gap-3 text-sm">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Teléfono:</span>
+            <div className="flex items-center gap-3 text-sm">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Teléfono:</span>
+              {agente.telefono ? (
                 <a href={`tel:${agente.telefono}`} className="text-primary hover:underline">
                   {agente.telefono}
                 </a>
-              </div>
-            )}
+              ) : (
+                <span className="text-muted-foreground italic">No disponible</span>
+              )}
+            </div>
 
             {agente.organizacion && (
               <div className="flex items-center gap-3 text-sm">
