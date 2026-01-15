@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, UserX, RotateCcw, Upload } from "lucide-react";
+import { Plus, Search, Edit, Trash2, UserX, RotateCcw, Upload, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";  
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +31,8 @@ type Agente = {
   inmobiliaria_nombre?: string;
 };
 
+const ITEMS_PER_PAGE = 50;
+
 export default function Agentes() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
@@ -44,6 +46,7 @@ export default function Agentes() {
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [agenteToRestore, setAgenteToRestore] = useState<Agente | null>(null);
   const [isBulkUploadDialogOpen, setIsBulkUploadDialogOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canCreate } = usePagePermissions('/admin/agentes');
@@ -392,6 +395,24 @@ export default function Agentes() {
   const filteredDeletedAgentes = deletedAgentes.filter(filterAgente);
   const filteredAgentes = activeTab === 'active' ? filteredActiveAgentes : filteredDeletedAgentes;
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredAgentes.length / ITEMS_PER_PAGE);
+  const paginatedAgentes = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredAgentes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredAgentes, currentPage]);
+
+  // Reset page when tab or search changes
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
+  };
+
   const handleEdit = (agente: Agente) => {
     setEditingAgente(agente);
     setIsEditDialogOpen(true);
@@ -466,7 +487,7 @@ export default function Agentes() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAgentes.map((agente) => (
+            {paginatedAgentes.map((agente) => (
               <TableRow key={agente.id} className="hover:bg-muted/10 transition-colors">
                 <TableCell className="font-medium text-foreground">
                   {agente.nombre_legal}
@@ -579,7 +600,7 @@ export default function Agentes() {
         </CardHeader>
         
         <CardContent className="p-6">
-          <Tabs defaultValue="active" value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs defaultValue="active" value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="active">Activos ({filteredActiveAgentes.length})</TabsTrigger>
               <TabsTrigger value="deleted">Eliminados ({filteredDeletedAgentes.length})</TabsTrigger>
@@ -592,7 +613,7 @@ export default function Agentes() {
                   type="text"
                   placeholder="Buscar por nombre, email, CURP, RFC..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={handleSearchChange}
                   className="pl-10 border-border focus:ring-primary/20"
                 />
               </div>
@@ -600,10 +621,72 @@ export default function Agentes() {
 
             <TabsContent value="active" className="mt-6">
               {renderTable()}
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 px-2">
+                  <div className="text-sm text-muted-foreground">
+                    Mostrando {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredAgentes.length)} de {filteredAgentes.length}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Anterior
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Siguiente
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="deleted" className="mt-6">
               {renderTable()}
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 px-2">
+                  <div className="text-sm text-muted-foreground">
+                    Mostrando {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredAgentes.length)} de {filteredAgentes.length}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Anterior
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Siguiente
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>
