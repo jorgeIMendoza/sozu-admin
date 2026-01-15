@@ -44,17 +44,24 @@ export function OwnerHistoryDialog({
   const { data: historyData, isLoading } = useQuery({
     queryKey: ['owner-history', propertyId],
     queryFn: async () => {
-      // 1. Get all active cuentas_cobranza for this property (not products)
+      // 1. First get ofertas for this property (not products)
+      const { data: ofertasData, error: ofertasError } = await supabase
+        .from('ofertas')
+        .select('id')
+        .eq('id_propiedad', propertyId)
+        .is('id_producto', null)
+        .eq('activo', true);
+
+      if (ofertasError) throw ofertasError;
+      if (!ofertasData || ofertasData.length === 0) return [];
+
+      const ofertaIds = ofertasData.map(o => o.id);
+
+      // 2. Get cuentas_cobranza for these ofertas
       const { data: cuentasData, error: cuentasError } = await supabase
         .from('cuentas_cobranza')
-        .select(`
-          id,
-          precio_final,
-          fecha_creacion,
-          ofertas!inner(id_propiedad, id_producto)
-        `)
-        .eq('ofertas.id_propiedad', propertyId)
-        .is('ofertas.id_producto', null)
+        .select('id, precio_final, fecha_creacion, id_oferta')
+        .in('id_oferta', ofertaIds)
         .eq('activo', true)
         .is('id_tipo_cancelacion', null)
         .order('fecha_creacion', { ascending: true });
