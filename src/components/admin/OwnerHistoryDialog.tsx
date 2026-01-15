@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, User, CreditCard, BadgeCheck, Clock, History, ArrowDown, CalendarCheck } from 'lucide-react';
+import { Building2, User, CreditCard, BadgeCheck, Clock, History, CalendarCheck } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -58,14 +58,14 @@ export function OwnerHistoryDialog({
 
       const ofertaIds = ofertasData.map(o => o.id);
 
-      // 2. Get cuentas_cobranza for these ofertas
+      // 2. Get cuentas_cobranza for these ofertas (only main accounts, not maintenance)
       const { data: cuentasData, error: cuentasError } = await supabase
         .from('cuentas_cobranza')
         .select('id, precio_final, fecha_creacion, id_oferta')
         .in('id_oferta', ofertaIds)
         .eq('activo', true)
         .is('id_tipo_cancelacion', null)
-        .is('id_cuenta_cobranza_padre', null) // Only main accounts, not maintenance
+        .is('id_cuenta_cobranza_padre', null)
         .order('fecha_creacion', { ascending: true });
 
       if (cuentasError) throw cuentasError;
@@ -73,14 +73,14 @@ export function OwnerHistoryDialog({
 
       const cuentaIds = cuentasData.map(c => c.id);
 
-      // 3. Check which cuentas have maintenance accounts (this indicates delivery)
+      // 3. Get maintenance accounts (fecha_entrega) for each main account
       const { data: cuentasMantenimiento } = await supabase
         .from('cuentas_cobranza')
         .select('id_cuenta_cobranza_padre, fecha_creacion')
         .in('id_cuenta_cobranza_padre', cuentaIds)
         .eq('activo', true);
 
-      // Map: cuenta_padre_id -> fecha_creacion (delivery date)
+      // Map: cuenta_padre_id -> fecha_creacion (delivery date = when maintenance account was created)
       const cuentasConMantenimiento: Record<number, string> = {};
       cuentasMantenimiento?.forEach(cm => {
         if (cm.id_cuenta_cobranza_padre) {
@@ -102,29 +102,44 @@ export function OwnerHistoryDialog({
           (pagosPorCuenta[pago.id_cuenta_cobranza] || 0) + Number(pago.monto || 0);
       });
 
-      // 5. Get compradores for each cuenta
+      // 5. Get compradores for each cuenta - separate query for personas
       const { data: compradoresData } = await supabase
         .from('compradores')
-        .select(`
-          id_cuenta_cobranza,
-          id_persona,
-          porcentaje_copropiedad,
-          personas!inner(nombre_legal, rfc)
-        `)
+        .select('id_cuenta_cobranza, id_persona, porcentaje_copropiedad')
         .in('id_cuenta_cobranza', cuentaIds)
         .eq('activo', true)
         .order('porcentaje_copropiedad', { ascending: false });
 
-      // Group compradores by cuenta
+      // Get persona IDs
+      const personaIds = (compradoresData || []).map(c => c.id_persona);
+      
+      // Fetch personas separately
+      let personasMap: Record<number, { nombre_legal: string; rfc: string | null }> = {};
+      if (personaIds.length > 0) {
+        const { data: personasData } = await supabase
+          .from('personas')
+          .select('id, nombre_legal, rfc')
+          .in('id', personaIds);
+        
+        (personasData || []).forEach(p => {
+          personasMap[p.id] = {
+            nombre_legal: p.nombre_legal || 'Sin nombre',
+            rfc: p.rfc || null
+          };
+        });
+      }
+
+      // Group compradores by cuenta with persona data
       const compradoresPorCuenta: Record<number, any[]> = {};
-      compradoresData?.forEach(comp => {
+      (compradoresData || []).forEach(comp => {
         if (!compradoresPorCuenta[comp.id_cuenta_cobranza]) {
           compradoresPorCuenta[comp.id_cuenta_cobranza] = [];
         }
+        const persona = personasMap[comp.id_persona];
         compradoresPorCuenta[comp.id_cuenta_cobranza].push({
           id_persona: comp.id_persona,
-          nombre_legal: (comp.personas as any)?.nombre_legal || 'Sin nombre',
-          rfc: (comp.personas as any)?.rfc || null,
+          nombre_legal: persona?.nombre_legal || 'Sin nombre',
+          rfc: persona?.rfc || null,
           porcentaje_copropiedad: Number(comp.porcentaje_copropiedad) || 0
         });
       });
@@ -174,19 +189,16 @@ export function OwnerHistoryDialog({
     setOpen(true);
   };
 
-  // Get the current owner for display
-  const getCurrentOwnerDisplay = () => {
+  // Get the current owner name for delivered properties
+  const getCurrentOwnerNames = () => {
     if (!historyData || historyData.length === 0) return null;
     
-    // Find the entry with maintenance account (delivered)
     const entregada = historyData.find(e => e.tiene_cuenta_mantenimiento);
     if (entregada && entregada.compradores.length > 0) {
-      return entregada.compradores.map(c => c.nombre_legal).join(', ');
+      return entregada.compradores.map(c => c.nombre_legal);
     }
     return null;
   };
-
-  const currentOwner = historyData ? getCurrentOwnerDisplay() : null;
 
   return (
     <>
@@ -245,7 +257,7 @@ export function OwnerHistoryDialog({
                       </span>
                     </div>
                     <h3 className="text-lg font-semibold">{propietarioOriginal}</h3>
-                    {!esPropietarioActualComprador && !currentOwner && (
+                    {!historyData?.some(e => e.tiene_cuenta_mantenimiento) && (
                       <Badge variant="default" className="mt-2">
                         Propietario Actual
                       </Badge>
@@ -312,28 +324,32 @@ export function OwnerHistoryDialog({
                           </div>
                         </div>
 
-                        {/* Compradores */}
-                        {entry.compradores.length > 0 && (
+                        {/* Compradores - Show names prominently */}
+                        {entry.compradores.length > 0 ? (
                           <div className="mb-4">
                             {entry.compradores.map((comprador, cidx) => (
                               <div key={comprador.id_persona} className={cn(
                                 "flex items-center gap-2",
-                                cidx > 0 && "mt-1"
+                                cidx > 0 && "mt-2"
                               )}>
-                                <User className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-semibold">{comprador.nombre_legal}</span>
+                                <User className="h-5 w-5 text-muted-foreground" />
+                                <span className="text-lg font-semibold">{comprador.nombre_legal}</span>
                                 {entry.compradores.length > 1 && (
-                                  <span className="text-xs text-muted-foreground">
-                                    ({comprador.porcentaje_copropiedad.toFixed(0)}%)
-                                  </span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {comprador.porcentaje_copropiedad.toFixed(0)}%
+                                  </Badge>
                                 )}
                               </div>
                             ))}
                           </div>
+                        ) : (
+                          <div className="mb-4 text-muted-foreground italic">
+                            Sin compradores registrados
+                          </div>
                         )}
 
                         {/* Details grid */}
-                        <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="grid grid-cols-2 gap-3 text-sm border-t pt-3">
                           <div className="flex items-center gap-2">
                             <CreditCard className="h-4 w-4 text-muted-foreground" />
                             <span className="text-muted-foreground">Cuenta:</span>

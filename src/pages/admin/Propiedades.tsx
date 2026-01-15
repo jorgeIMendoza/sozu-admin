@@ -1157,14 +1157,10 @@ const Propiedades = () => {
     let cuentasConMantenimiento: Set<number> = new Set(); // Track which cuentas have maintenance accounts
     
     if (cuentaIdsAll.length > 0) {
-      // Fetch compradores
+      // Fetch compradores (separate query, no join to avoid issues)
       const compradoresPromise = supabase
         .from('compradores')
-        .select(`
-          id_cuenta_cobranza,
-          porcentaje_copropiedad,
-          personas!inner(nombre_legal)
-        `)
+        .select('id_cuenta_cobranza, id_persona, porcentaje_copropiedad')
         .in('id_cuenta_cobranza', cuentaIdsAll)
         .eq('activo', true)
         .order('porcentaje_copropiedad', { ascending: false });
@@ -1181,12 +1177,27 @@ const Propiedades = () => {
         mantenimientoPromise
       ]);
 
+      // Get persona IDs and fetch personas separately
+      const personaIds = (compradoresResult.data || []).map((c: any) => c.id_persona);
+      let personasMap: Record<number, string> = {};
+      
+      if (personaIds.length > 0) {
+        const { data: personasData } = await supabase
+          .from('personas')
+          .select('id, nombre_legal')
+          .in('id', personaIds);
+        
+        (personasData || []).forEach((p: any) => {
+          personasMap[p.id] = p.nombre_legal || 'Sin nombre';
+        });
+      }
+
       (compradoresResult.data || []).forEach((c: any) => {
         if (!compradoresPorCuenta[c.id_cuenta_cobranza]) {
           compradoresPorCuenta[c.id_cuenta_cobranza] = [];
         }
         compradoresPorCuenta[c.id_cuenta_cobranza].push({
-          nombre: (c.personas as any)?.nombre_legal || 'Sin nombre',
+          nombre: personasMap[c.id_persona] || 'Sin nombre',
           porcentaje: Number(c.porcentaje_copropiedad) || 0
         });
       });
