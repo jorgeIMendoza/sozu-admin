@@ -30,6 +30,8 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isCreatingPersona, setIsCreatingPersona] = useState(false);
+  const [localIdPersona, setLocalIdPersona] = useState<number | null>(null);
 
   // Check if user is super admin (rol_id 1 or 2)
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
@@ -63,16 +65,19 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
     enabled: open && !!profile?.email && !isSuperAdmin,
   });
 
+  // Use localIdPersona if set (after creating persona), otherwise use profile's id_persona
+  const effectiveIdPersona = localIdPersona || profile?.id_persona;
+
   // Query for user's persona data
-  const { data: personaData, isLoading: personaLoading } = useQuery({
-    queryKey: ["user_persona_data", profile?.id_persona],
+  const { data: personaData, isLoading: personaLoading, refetch: refetchPersona } = useQuery({
+    queryKey: ["user_persona_data", effectiveIdPersona],
     queryFn: async () => {
-      if (!profile?.id_persona) return null;
+      if (!effectiveIdPersona) return null;
 
       const { data, error } = await supabase
         .from('personas')
         .select('*')
-        .eq('id', profile.id_persona)
+        .eq('id', effectiveIdPersona)
         .single();
 
       if (error) {
@@ -82,8 +87,55 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
 
       return data;
     },
-    enabled: open && !!profile?.id_persona,
+    enabled: open && !!effectiveIdPersona,
   });
+
+  // Function to create a new persona record if user doesn't have one
+  const handleCreateAndEditProfile = async () => {
+    if (effectiveIdPersona) {
+      // Already has persona, just open editor
+      setIsEditingProfile(true);
+      return;
+    }
+
+    setIsCreatingPersona(true);
+    try {
+      // Create a new persona record with basic info
+      const { data: newPersona, error: insertError } = await supabase
+        .from('personas')
+        .insert({
+          tipo_persona: 'pf',
+          nombre_legal: profile?.nombre || 'Sin nombre',
+          email: profile?.email || '',
+          activo: true,
+        })
+        .select('id')
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Update the user record with the new id_persona
+      const { error: updateError } = await supabase
+        .from('usuarios')
+        .update({ id_persona: newPersona.id })
+        .eq('email', profile?.email);
+
+      if (updateError) throw updateError;
+
+      // Set local id_persona and refresh profile
+      setLocalIdPersona(newPersona.id);
+      await refreshProfile();
+      await refetchPersona();
+      
+      toast.success("Se creó tu perfil de persona. Ahora puedes completar tus datos.");
+      setIsEditingProfile(true);
+    } catch (error: any) {
+      console.error('Error creating persona:', error);
+      toast.error("Error al crear el perfil: " + error.message);
+    } finally {
+      setIsCreatingPersona(false);
+    }
+  };
 
   const passwordRequirements = [
     { text: 'Al menos 8 caracteres', valid: newPassword.length >= 8 },
@@ -149,7 +201,7 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
   };
 
   const handleProfileUpdate = async (data: any) => {
-    if (!profile?.id_persona) {
+    if (!effectiveIdPersona) {
       toast.error("No se encontró información de persona asociada");
       return;
     }
@@ -194,7 +246,7 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
           direccion_fiscal_id_municipio: data.direccion_fiscal_id_municipio,
           fecha_actualizacion: new Date().toISOString(),
         })
-        .eq('id', profile.id_persona);
+        .eq('id', effectiveIdPersona);
 
       if (error) throw error;
 
@@ -352,31 +404,29 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
 
           <Separator />
 
-          {/* Edit Profile Section */}
-          {profile?.id_persona && (
-            <>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <UserCog className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Mis datos personales</span>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setIsEditingProfile(true)}
-                    disabled={personaLoading}
-                  >
-                    {personaLoading ? "Cargando..." : "Editar"}
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Actualiza tu información personal, dirección, datos fiscales y documentos.
-                </p>
+          {/* Edit Profile Section - Always visible */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <UserCog className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">Mis datos personales</span>
               </div>
-              <Separator />
-            </>
-          )}
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleCreateAndEditProfile}
+                disabled={personaLoading || isCreatingPersona}
+              >
+                {isCreatingPersona ? "Creando perfil..." : personaLoading ? "Cargando..." : "Editar"}
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {effectiveIdPersona 
+                ? "Actualiza tu información personal, dirección, datos fiscales y documentos."
+                : "Completa tu información personal para acceder a todas las funcionalidades."}
+            </p>
+          </div>
+          <Separator />
 
           {/* Change Password Section */}
           <div className="space-y-4">
