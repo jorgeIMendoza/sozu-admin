@@ -259,8 +259,11 @@ export class EstadoCuentaService {
       }).format(normalizedAmount);
     };
 
-    const formatDate = (date: string) =>
-      new Date(date).toLocaleDateString("es-MX");
+    const formatDate = (date: string) => {
+      // Add T12:00:00 to avoid timezone issues when parsing date-only strings
+      const dateStr = date.includes('T') ? date : `${date}T12:00:00`;
+      return new Date(dateStr).toLocaleDateString("es-MX");
+    };
 
     const checkNewPage = (neededHeight: number) => {
       if (y + neededHeight > pageHeight - margin) {
