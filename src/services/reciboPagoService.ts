@@ -232,9 +232,10 @@ export class ReciboPagoService {
     const articulo = data.compradores.length > 1 ? 'de' : (sexoComprador === 'M' ? 'del Señor' : 'de la Señora');
     const articuloElLa = data.compradores.length > 1 ? 'los compradores' : (sexoComprador === 'M' ? 'el Señor' : 'la Señora');
 
-    // Payment date formatting
-    const paymentDate = data.pago?.fecha_pago
-      ? new Date(data.pago.fecha_pago)
+    // Payment date formatting - add T12:00:00 to avoid timezone issues
+    const paymentDateStr = data.pago?.fecha_pago;
+    const paymentDate = paymentDateStr
+      ? new Date(paymentDateStr.includes('T') ? paymentDateStr : `${paymentDateStr}T12:00:00`)
       : new Date();
     
     const dia = paymentDate.getDate();
@@ -349,9 +350,10 @@ export class ReciboPagoService {
     const tipoCuenta = data.oferta?.id_producto ? 'Producto' : 'Propiedad';
     const cuentaFormatted = formatCuentaCobranzaId(data.cuentaCobranzaId, tipoCuenta);
     
-    // Get payment date
-    const fechaPago = data.pago?.fecha_pago 
-      ? new Date(data.pago.fecha_pago) 
+    // Get payment date - add T12:00:00 to avoid timezone issues
+    const fechaPagoStr = data.pago?.fecha_pago;
+    const fechaPago = fechaPagoStr 
+      ? new Date(fechaPagoStr.includes('T') ? fechaPagoStr : `${fechaPagoStr}T12:00:00`) 
       : new Date();
     const fechaFormatted = formatDateForFilename(fechaPago);
 
