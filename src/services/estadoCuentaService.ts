@@ -62,17 +62,21 @@ export class EstadoCuentaService {
 
       if (acuerdosError) throw acuerdosError;
 
-      // Fetch multas
-      // @ts-ignore - Type instantiation too deep
-      const multasResult = await supabase
-        .from("multas")
-        .select("id, monto, descripcion, es_pagada, fecha_creacion")
-        .eq("id_cuenta_cobranza", data.id_cuenta)
-        .eq("activo", true)
-        .order("fecha_creacion", { ascending: true });
-      
-      const multas = (multasResult.data || []) as any[];
-      if (multasResult.error) throw multasResult.error;
+      // Fetch multas - get them through acuerdos_pago since multas.id_acuerdo_pago references acuerdos_pago
+      const acuerdoIds = (acuerdos || []).map((a: any) => a.id);
+      let multas: any[] = [];
+      if (acuerdoIds.length > 0) {
+        // @ts-ignore - Type instantiation too deep
+        const multasResult = await supabase
+          .from("multas")
+          .select("id, monto, descripcion, es_pagada, fecha_creacion, id_acuerdo_pago")
+          .in("id_acuerdo_pago", acuerdoIds)
+          .eq("activo", true)
+          .order("fecha_creacion", { ascending: true });
+        
+        multas = (multasResult.data || []) as any[];
+        if (multasResult.error) throw multasResult.error;
+      }
 
       // Fetch pagos
       const { data: pagos, error: pagosError } = await supabase
