@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { NewMultaDialog } from "@/components/admin/NewMultaDialog";
+import { EditMultaDialog } from "@/components/admin/EditMultaDialog";
 import { AddCepDialog } from "@/components/admin/AddCepDialog";
 import { AddManualPaymentDialog } from "@/components/admin/AddManualPaymentDialog";
 import { EditPaymentDialog } from "@/components/admin/EditPaymentDialog";
@@ -399,6 +400,13 @@ export default function DetalleCuentaCobranza() {
     existingMultas: []
   });
   const [deleteMultaDialog, setDeleteMultaDialog] = useState<{ 
+    isOpen: boolean; 
+    multa: Multa | null 
+  }>({
+    isOpen: false,
+    multa: null
+  });
+  const [editMultaDialog, setEditMultaDialog] = useState<{ 
     isOpen: boolean; 
     multa: Multa | null 
   }>({
@@ -2353,6 +2361,46 @@ export default function DetalleCuentaCobranza() {
   // Mutation to delete multa
   const deleteMultaMutation = useMutation({
     mutationFn: async (multaId: number) => {
+      // First check if there are active payment applications for this multa
+      const multaToDelete = deleteMultaDialog.multa;
+      
+      if (!multaToDelete) {
+        throw new Error("No multa selected");
+      }
+      
+      // Check if the multa has payments applied (either from frontend calculation or DB)
+      const pagosAplicados = multaToDelete.pagosAplicados || 0;
+      
+      if (pagosAplicados > 0 || multaToDelete.estaPagada) {
+        throw new Error("No se puede eliminar una multa que ya tiene pagos aplicados");
+      }
+      
+      // Additional check: verify directly in DB that there are no payment applications
+      const { data: aplicaciones, error: checkError } = await supabase
+        .from('aplicaciones_pago')
+        .select('id, monto')
+        .eq('es_multa', true)
+        .eq('activo', true);
+      
+      if (checkError) {
+        console.error('Error checking payment applications:', checkError);
+      }
+      
+      // Also check the es_pagada field directly from DB
+      const { data: multaData, error: multaError } = await supabase
+        .from('multas')
+        .select('es_pagada')
+        .eq('id', multaId)
+        .single();
+      
+      if (multaError) {
+        console.error('Error checking multa status:', multaError);
+      }
+      
+      if (multaData?.es_pagada) {
+        throw new Error("No se puede eliminar una multa que está marcada como pagada en la base de datos");
+      }
+      
       const { error } = await supabase
         .from('multas')
         .delete()
@@ -2368,10 +2416,10 @@ export default function DetalleCuentaCobranza() {
       queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "No se pudo eliminar la multa",
+        description: error.message || "No se pudo eliminar la multa",
         variant: "destructive",
       });
     },
@@ -3863,19 +3911,36 @@ export default function DetalleCuentaCobranza() {
                                     </div>
                                     <div className="flex gap-2 ml-4">
                                       <TooltipProvider>
+                                        {/* Edit Button - only show if multa has payments but is not fully paid */}
+                                        {(multa.pagosAplicados ?? 0) > 0 && !multa.estaPagada && !esCuentaCancelada && !isReadOnly && !isEnDemanda && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant="outline"
+                                                size="icon"
+                                                onClick={() => setEditMultaDialog({ isOpen: true, multa })}
+                                              >
+                                                <Edit className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>Editar Multa</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        )}
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <Button
                                               variant="destructive"
                                               size="icon"
                                               onClick={() => setDeleteMultaDialog({ isOpen: true, multa })}
-                                              disabled={deleteMultaMutation.isPending || multa.estaPagada || esCuentaCancelada || isReadOnly || isEnDemanda}
+                                              disabled={deleteMultaMutation.isPending || (multa.pagosAplicados ?? 0) > 0 || multa.estaPagada || esCuentaCancelada || isReadOnly || isEnDemanda}
                                             >
                                               <Trash2 className="h-4 w-4" />
                                             </Button>
                                           </TooltipTrigger>
                                            <TooltipContent>
-                                             <p>{isEnDemanda ? "Propiedad en demanda - cuenta bloqueada" : isReadOnly ? "Propiedad entregada - no se pueden eliminar multas" : esCuentaCancelada ? "Cuenta cancelada - no se pueden eliminar multas" : multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
+                                             <p>{isEnDemanda ? "Propiedad en demanda - cuenta bloqueada" : isReadOnly ? "Propiedad entregada - no se pueden eliminar multas" : esCuentaCancelada ? "Cuenta cancelada - no se pueden eliminar multas" : (multa.pagosAplicados ?? 0) > 0 ? "No se pueden eliminar multas con pagos aplicados" : multa.estaPagada ? "No se pueden eliminar multas pagadas" : "Eliminar Multa"}</p>
                                            </TooltipContent>
                                         </Tooltip>
                                       </TooltipProvider>
@@ -4488,6 +4553,13 @@ export default function DetalleCuentaCobranza() {
         isOpen={agenteVendedorDialog}
         onClose={() => setAgenteVendedorDialog(false)}
         agente={agenteVendedor || null}
+      />
+
+      <EditMultaDialog
+        open={editMultaDialog.isOpen}
+        onOpenChange={(open) => setEditMultaDialog({ isOpen: open, multa: open ? editMultaDialog.multa : null })}
+        multa={editMultaDialog.multa}
+        cuentaId={cuentaId}
       />
     </div>
   );
