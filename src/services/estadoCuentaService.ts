@@ -687,10 +687,10 @@ export class EstadoCuentaService {
       // Table header
       const multasCols = [
         { title: "#", width: 8, align: "center" as const },
-        { title: "Descripción", width: 80, align: "left" as const },
-        { title: "Monto", width: 30, align: "right" as const },
-        { title: "Pagado", width: 30, align: "right" as const },
-        { title: "Estado", width: 25, align: "center" as const },
+        { title: "Descripción", width: 95, align: "left" as const },
+        { title: "Monto", width: 28, align: "right" as const },
+        { title: "Pagado", width: 22, align: "right" as const },
+        { title: "Estado", width: 20, align: "center" as const },
       ];
 
       colX = margin;
@@ -747,8 +747,8 @@ export class EstadoCuentaService {
         pdf.text(String(multaIndex + 1), colX + multasCols[0].width / 2, y, { align: "center" });
         colX += multasCols[0].width;
 
-        // Descripción
-        pdf.text((multa.descripcion || "Multa").substring(0, 50), colX + 1, y);
+        // Descripción - allow longer text
+        pdf.text((multa.descripcion || "Multa").substring(0, 70), colX + 1, y);
         colX += multasCols[1].width;
 
         // Monto
