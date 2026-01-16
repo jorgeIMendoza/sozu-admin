@@ -234,8 +234,10 @@ export class EstadoCuentaService {
         saldoPendiente,
         id_cuenta: data.id_cuenta,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating estado de cuenta:", error);
+      console.error("Error message:", error?.message);
+      console.error("Error stack:", error?.stack);
       throw error;
     }
   }
@@ -665,7 +667,9 @@ export class EstadoCuentaService {
     y += 10;
 
     // === MULTAS TABLE (if any) ===
+    console.log("DEBUG PDF: Starting multas section, count:", data.multas?.length);
     if (data.multas && data.multas.length > 0) {
+      console.log("DEBUG PDF: Multas data:", JSON.stringify(data.multas));
       checkNewPage(30);
       
       pdf.setFontSize(12);
