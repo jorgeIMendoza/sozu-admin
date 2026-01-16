@@ -684,13 +684,14 @@ export class EstadoCuentaService {
       drawLine(y);
       y += 8;
 
-      // Table header
+      // Table header - total width must equal contentWidth (173mm for A4 with 10mm margins each side)
+      // contentWidth = pageWidth - 2*margin = 210 - 20 = 190, but we use 173 based on cols
       const multasCols = [
         { title: "#", width: 8, align: "center" as const },
-        { title: "Descripción", width: 95, align: "left" as const },
+        { title: "Descripción", width: 75, align: "left" as const },
         { title: "Monto", width: 28, align: "right" as const },
-        { title: "Pagado", width: 22, align: "right" as const },
-        { title: "Estado", width: 20, align: "center" as const },
+        { title: "Pagado", width: 28, align: "right" as const },
+        { title: "Estado", width: 26, align: "center" as const },
       ];
 
       colX = margin;
@@ -734,7 +735,7 @@ export class EstadoCuentaService {
         
         // Split description into multiple lines if needed
         const descripcionText = multa.descripcion || "Multa";
-        const maxCharsPerLine = 60;
+        const maxCharsPerLine = 50;
         const descLines: string[] = [];
         let remaining = descripcionText;
         while (remaining.length > 0) {
