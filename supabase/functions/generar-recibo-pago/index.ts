@@ -62,6 +62,7 @@ function numberToWordsWithPesos(num: number): string {
     resultado += ' 00/100 M.N.';
   }
   
+  // Capitalize first letter
   return resultado.charAt(0).toUpperCase() + resultado.slice(1);
 }
 
@@ -75,18 +76,43 @@ function formatMoney(amount: number): string {
 }
 
 function formatCuentaCobranzaId(id: number, tipo: string): string {
-  const prefix = tipo === 'mantenimiento' ? 'MN' : 'PR';
-  return `${prefix}${id.toString().padStart(6, '0')}`;
+  const prefix = tipo === 'mantenimiento' ? 'MN' : 'CC';
+  return `${prefix}-${id.toString().padStart(6, '0')}`;
 }
 
-function wrapText(text: string, maxCharsPerLine: number): string[] {
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const day = date.getDate();
+  const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day} de ${month} de ${year}`;
+}
+
+function numberToWordsM2(num: number): string {
+  const entero = Math.floor(num);
+  const decimales = Math.round((num - entero) * 100);
+  
+  let resultado = convertirEntero(entero);
+  if (decimales > 0) {
+    resultado += ' punto ' + convertirEntero(decimales);
+  }
+  
+  return resultado.charAt(0).toUpperCase() + resultado.slice(1);
+}
+
+function wrapText(text: string, maxWidth: number, font: any, fontSize: number): string[] {
   const words = text.split(' ');
   const lines: string[] = [];
   let currentLine = '';
 
   for (const word of words) {
-    if ((currentLine + ' ' + word).trim().length <= maxCharsPerLine) {
-      currentLine = (currentLine + ' ' + word).trim();
+    const testLine = currentLine ? currentLine + ' ' + word : word;
+    const width = font.widthOfTextAtSize(testLine, fontSize);
+    
+    if (width <= maxWidth) {
+      currentLine = testLine;
     } else {
       if (currentLine) lines.push(currentLine);
       currentLine = word;
@@ -154,7 +180,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Cuenta found:', { id: cuenta.id, tipo: cuenta.tipo, id_oferta: cuenta.id_oferta });
+    console.log('Cuenta found:', { id: cuenta.id, tipo: cuenta.tipo, id_oferta: cuenta.id_oferta, precio_final: cuenta.precio_final });
 
     // 3. Fetch the oferta
     console.log('Fetching oferta...');
@@ -186,11 +212,7 @@ Deno.serve(async (req) => {
           id,
           nombre_legal,
           rfc,
-          direccion_calle,
-          direccion_colonia,
-          direccion_municipio,
-          direccion_estado,
-          direccion_codigo_postal
+          tipo_persona
         )
       `)
       .eq('id_oferta', oferta.id)
@@ -202,15 +224,19 @@ Deno.serve(async (req) => {
 
     console.log('Compradores found:', compradores?.length || 0);
 
-    // Get buyer names
-    const buyerNames = compradores?.map((c: any) => c.personas?.nombre_legal).filter(Boolean).join(', ') || 'Sin comprador';
-    const titularComprador = compradores?.find((c: any) => c.es_titular);
+    // Get buyer info
+    const titularComprador = compradores?.find((c: any) => c.es_titular) || compradores?.[0];
     const titularPersona = titularComprador?.personas;
+    const nombreComprador = titularPersona?.nombre_legal || 'Sin nombre';
+    const tipoPersona = titularPersona?.tipo_persona || 'fisica';
+    
+    // Determine title (Señor/Señora or company)
+    const titulo = tipoPersona === 'moral' ? '' : 'la Señora ';
 
     // 5. Fetch property or product details
     let unidadNombre = '';
     let proyectoNombre = '';
-    let edificioNombre = '';
+    let m2Totales = 0;
     let proyectoData: any = null;
 
     if (oferta.id_propiedad) {
@@ -219,8 +245,11 @@ Deno.serve(async (req) => {
         .from('propiedades')
         .select(`
           id,
-          numero,
-          piso,
+          numero_propiedad,
+          numero_piso,
+          m2_interiores,
+          m2_exteriores,
+          m2_loft,
           id_proyecto,
           id_edificio_modelo,
           proyectos:id_proyecto (
@@ -242,11 +271,17 @@ Deno.serve(async (req) => {
         .single();
 
       if (!propiedadError && propiedad) {
-        unidadNombre = `Unidad ${propiedad.numero}${propiedad.piso ? ` - Piso ${propiedad.piso}` : ''}`;
+        unidadNombre = propiedad.numero_propiedad || '';
         proyectoData = propiedad.proyectos;
         proyectoNombre = proyectoData?.nombre || '';
-        edificioNombre = (propiedad.edificios_modelos as any)?.edificios?.nombre || '';
-        console.log('Propiedad found:', { numero: propiedad.numero, proyecto: proyectoNombre });
+        
+        // Calculate total m2
+        const m2Int = Number(propiedad.m2_interiores) || 0;
+        const m2Ext = Number(propiedad.m2_exteriores) || 0;
+        const m2Loft = Number(propiedad.m2_loft) || 0;
+        m2Totales = m2Int + m2Ext + m2Loft;
+        
+        console.log('Propiedad found:', { numero: propiedad.numero_propiedad, proyecto: proyectoNombre, m2: m2Totales });
       }
     } else if (oferta.id_producto_servicio) {
       console.log('Fetching producto...');
@@ -255,6 +290,7 @@ Deno.serve(async (req) => {
         .select(`
           id,
           nombre,
+          m2,
           id_proyecto,
           proyectos:id_proyecto (
             id,
@@ -271,22 +307,30 @@ Deno.serve(async (req) => {
         unidadNombre = producto.nombre || 'Producto';
         proyectoData = producto.proyectos;
         proyectoNombre = proyectoData?.nombre || '';
+        m2Totales = Number(producto.m2) || 0;
         console.log('Producto found:', { nombre: producto.nombre, proyecto: proyectoNombre });
       }
     }
 
     // ============ Generate PDF ============
-    console.log('Generating PDF...');
+    console.log('Generating PDF with new format...');
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([612, 792]); // Letter size
-    const { height } = page.getSize();
+    const { width, height } = page.getSize();
 
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
-    let yPosition = height - 50;
+    const margin = 60;
+    const contentWidth = width - (margin * 2);
+    let yPosition = height - 60;
 
-    // Try to load project logo
+    // Colors
+    const black = rgb(0, 0, 0);
+    const darkGray = rgb(0.3, 0.3, 0.3);
+
+    // Try to load project logo (centered at top)
     if (proyectoData?.url_logo) {
       try {
         const logoResponse = await fetch(proyectoData.url_logo);
@@ -299,15 +343,17 @@ Deno.serve(async (req) => {
           logoImage = await pdfDoc.embedJpg(logoBytes);
         }
         
-        const logoWidth = 120;
-        const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
+        const logoHeight = 60;
+        const logoWidth = (logoImage.width / logoImage.height) * logoHeight;
+        const logoX = (width - logoWidth) / 2;
+        
         page.drawImage(logoImage, {
-          x: 50,
-          y: yPosition - logoHeight + 20,
+          x: logoX,
+          y: yPosition - logoHeight,
           width: logoWidth,
           height: logoHeight,
         });
-        yPosition -= logoHeight + 30;
+        yPosition -= logoHeight + 40;
       } catch (e) {
         console.error('Error loading logo:', e);
         yPosition -= 30;
@@ -316,256 +362,184 @@ Deno.serve(async (req) => {
       yPosition -= 30;
     }
 
-    // Title
-    page.drawText('RECIBO DE PAGO', {
-      x: 50,
+    // ========== TITLE: RECIBO ==========
+    const titleText = 'RECIBO';
+    const titleWidth = helveticaBold.widthOfTextAtSize(titleText, 24);
+    page.drawText(titleText, {
+      x: (width - titleWidth) / 2,
       y: yPosition,
-      size: 18,
-      font: helveticaBold,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 30;
-
-    // Receipt number
-    const cuentaFormateada = formatCuentaCobranzaId(cuenta.id, cuenta.tipo || 'propiedad');
-    page.drawText(`Recibo: ${cuentaFormateada}-${pago.id}`, {
-      x: 50,
-      y: yPosition,
-      size: 10,
-      font: helvetica,
-      color: rgb(0.3, 0.3, 0.3),
-    });
-    yPosition -= 15;
-
-    // Date
-    const fechaPago = new Date(pago.fecha_pago);
-    const fechaFormateada = fechaPago.toLocaleDateString('es-MX', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric'
-    });
-    page.drawText(`Fecha: ${fechaFormateada}`, {
-      x: 50,
-      y: yPosition,
-      size: 10,
-      font: helvetica,
-      color: rgb(0.3, 0.3, 0.3),
-    });
-    yPosition -= 40;
-
-    // Amount section
-    page.drawRectangle({
-      x: 50,
-      y: yPosition - 60,
-      width: 512,
-      height: 70,
-      color: rgb(0.95, 0.95, 0.95),
-    });
-
-    page.drawText('CANTIDAD RECIBIDA:', {
-      x: 60,
-      y: yPosition - 20,
-      size: 12,
-      font: helveticaBold,
-      color: rgb(0.2, 0.2, 0.2),
-    });
-
-    page.drawText(formatMoney(pago.monto), {
-      x: 60,
-      y: yPosition - 45,
       size: 24,
       font: helveticaBold,
-      color: rgb(0.1, 0.4, 0.1),
+      color: black,
     });
+    yPosition -= 50;
 
-    yPosition -= 80;
-
-    // Amount in words
+    // ========== BUENO POR ==========
+    const montoFormateado = formatMoney(pago.monto);
     const montoEnLetras = numberToWordsWithPesos(pago.monto);
-    const letrasLines = wrapText(`(${montoEnLetras})`, 80);
-    for (const line of letrasLines) {
-      page.drawText(line, {
-        x: 50,
-        y: yPosition,
-        size: 10,
-        font: helvetica,
-        color: rgb(0.3, 0.3, 0.3),
-      });
-      yPosition -= 15;
-    }
-    yPosition -= 20;
-
-    // Buyer info section
-    page.drawText('RECIBIDO DE:', {
-      x: 50,
-      y: yPosition,
-      size: 11,
-      font: helveticaBold,
-      color: rgb(0.2, 0.2, 0.2),
-    });
-    yPosition -= 18;
-
-    const nombreLines = wrapText(buyerNames, 70);
-    for (const line of nombreLines) {
-      page.drawText(line, {
-        x: 50,
-        y: yPosition,
-        size: 11,
-        font: helvetica,
-        color: rgb(0, 0, 0),
-      });
-      yPosition -= 15;
-    }
-    yPosition -= 10;
-
-    // RFC if available
-    if (titularPersona?.rfc) {
-      page.drawText(`RFC: ${titularPersona.rfc}`, {
-        x: 50,
-        y: yPosition,
-        size: 10,
-        font: helvetica,
-        color: rgb(0.3, 0.3, 0.3),
-      });
-      yPosition -= 20;
-    }
-    yPosition -= 10;
-
-    // Property/Product info
-    page.drawText('POR CONCEPTO DE:', {
-      x: 50,
-      y: yPosition,
-      size: 11,
-      font: helveticaBold,
-      color: rgb(0.2, 0.2, 0.2),
-    });
-    yPosition -= 18;
-
-    const conceptoText = cuenta.tipo === 'mantenimiento' 
-      ? `Cuota de mantenimiento - ${unidadNombre}`
-      : `Pago de ${unidadNombre}`;
+    const buenoPorText = `Bueno por: ${montoFormateado} (${montoEnLetras})`;
     
-    const conceptoLines = wrapText(conceptoText, 70);
-    for (const line of conceptoLines) {
+    const buenoPorLines = wrapText(buenoPorText, contentWidth, helveticaBold, 12);
+    for (const line of buenoPorLines) {
       page.drawText(line, {
-        x: 50,
+        x: margin,
+        y: yPosition,
+        size: 12,
+        font: helveticaBold,
+        color: black,
+      });
+      yPosition -= 18;
+    }
+    yPosition -= 15;
+
+    // ========== MAIN PARAGRAPH ==========
+    const fechaFormateada = formatDate(pago.fecha_pago);
+    const precioTotal = Number(cuenta.precio_final) || 0;
+    const precioTotalFormateado = formatMoney(precioTotal);
+    const precioTotalEnLetras = numberToWordsWithPesos(precioTotal);
+    const m2Formateado = m2Totales.toFixed(2);
+    const m2EnLetras = numberToWordsM2(m2Totales);
+
+    const mainParagraph = `Recibimos de ${titulo}${nombreComprador.toUpperCase()} la cantidad de ${montoFormateado} (${montoEnLetras}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}, al efecto de adquirir siguiente la unidad condominal, cuyas características serán:`;
+
+    const mainLines = wrapText(mainParagraph, contentWidth, helvetica, 11);
+    for (const line of mainLines) {
+      page.drawText(line, {
+        x: margin,
         y: yPosition,
         size: 11,
         font: helvetica,
-        color: rgb(0, 0, 0),
+        color: black,
       });
-      yPosition -= 15;
+      yPosition -= 16;
     }
-    yPosition -= 5;
+    yPosition -= 15;
 
-    // Project info
-    if (proyectoNombre) {
-      page.drawText(`Proyecto: ${proyectoNombre}`, {
-        x: 50,
+    // ========== NUMBERED LIST ==========
+    const listItems = [
+      `1. Unidad condominal: ${unidadNombre}`,
+      `2. Metros estimados: ${m2Formateado} m² (${m2EnLetras} metros cuadrados)`,
+      `3. Monto total de depósito en garantía de cumplimiento al que se compromete ${titulo}${nombreComprador.toUpperCase()}: ${precioTotalFormateado} (${precioTotalEnLetras})`
+    ];
+
+    for (const item of listItems) {
+      const itemLines = wrapText(item, contentWidth - 20, helvetica, 11);
+      for (let i = 0; i < itemLines.length; i++) {
+        page.drawText(itemLines[i], {
+          x: margin + (i === 0 ? 0 : 20),
+          y: yPosition,
+          size: 11,
+          font: helvetica,
+          color: black,
+        });
+        yPosition -= 16;
+      }
+      yPosition -= 5;
+    }
+    yPosition -= 15;
+
+    // ========== LEGAL PARAGRAPHS ==========
+    const legalParagraph1 = `La cantidad aquí entregada y recibida será aplicada al depósito en garantía de cumplimiento, al momento de la celebración del contrato de promesa de compraventa.`;
+    
+    const legal1Lines = wrapText(legalParagraph1, contentWidth, helvetica, 11);
+    for (const line of legal1Lines) {
+      page.drawText(line, {
+        x: margin,
         y: yPosition,
-        size: 10,
+        size: 11,
         font: helvetica,
-        color: rgb(0.3, 0.3, 0.3),
+        color: black,
       });
-      yPosition -= 15;
+      yPosition -= 16;
     }
+    yPosition -= 15;
 
-    if (edificioNombre) {
-      page.drawText(`Edificio: ${edificioNombre}`, {
-        x: 50,
+    const legalParagraph2 = `Será obligación de la empresa mantener debidamente informado al aportante de la forma y términos en los que se lleve a cabo la gestión la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}.`;
+    
+    const legal2Lines = wrapText(legalParagraph2, contentWidth, helvetica, 11);
+    for (const line of legal2Lines) {
+      page.drawText(line, {
+        x: margin,
         y: yPosition,
-        size: 10,
+        size: 11,
         font: helvetica,
-        color: rgb(0.3, 0.3, 0.3),
+        color: black,
       });
-      yPosition -= 15;
+      yPosition -= 16;
     }
-
-    page.drawText(`Cuenta: ${cuentaFormateada}`, {
-      x: 50,
-      y: yPosition,
-      size: 10,
-      font: helvetica,
-      color: rgb(0.3, 0.3, 0.3),
-    });
     yPosition -= 40;
 
-    // Legal notice
-    page.drawLine({
-      start: { x: 50, y: yPosition },
-      end: { x: 562, y: yPosition },
-      thickness: 0.5,
-      color: rgb(0.8, 0.8, 0.8),
+    // ========== ATENTAMENTE ==========
+    page.drawText('ATENTAMENTE', {
+      x: margin,
+      y: yPosition,
+      size: 11,
+      font: helveticaBold,
+      color: black,
     });
-    yPosition -= 20;
+    yPosition -= 50;
 
-    const legalText = 'Este recibo es un comprobante de pago y no sustituye la factura fiscal correspondiente. ' +
-      'Para cualquier aclaración, favor de comunicarse con la administración del proyecto.';
-    const legalLines = wrapText(legalText, 90);
-    for (const line of legalLines) {
-      page.drawText(line, {
-        x: 50,
-        y: yPosition,
-        size: 8,
-        font: helvetica,
-        color: rgb(0.5, 0.5, 0.5),
-      });
-      yPosition -= 12;
-    }
-    yPosition -= 30;
-
-    // Signature section
-    if (proyectoData?.nombre_firmante_recibos) {
-      // Try to load signature image
-      if (proyectoData?.url_firma_recibos) {
-        try {
-          const firmaResponse = await fetch(proyectoData.url_firma_recibos);
-          const firmaBytes = await firmaResponse.arrayBuffer();
-          let firmaImage;
-          
-          if (proyectoData.url_firma_recibos.toLowerCase().includes('.png')) {
-            firmaImage = await pdfDoc.embedPng(firmaBytes);
-          } else {
-            firmaImage = await pdfDoc.embedJpg(firmaBytes);
-          }
-          
-          const firmaWidth = 100;
-          const firmaHeight = (firmaImage.height / firmaImage.width) * firmaWidth;
-          page.drawImage(firmaImage, {
-            x: 250,
-            y: yPosition - firmaHeight + 20,
-            width: firmaWidth,
-            height: firmaHeight,
-          });
-          yPosition -= firmaHeight + 10;
-        } catch (e) {
-          console.error('Error loading signature:', e);
+    // ========== SIGNATURE SECTION ==========
+    // Try to load signature/company logo
+    if (proyectoData?.url_firma_recibos) {
+      try {
+        const firmaResponse = await fetch(proyectoData.url_firma_recibos);
+        const firmaBytes = await firmaResponse.arrayBuffer();
+        let firmaImage;
+        
+        if (proyectoData.url_firma_recibos.toLowerCase().includes('.png')) {
+          firmaImage = await pdfDoc.embedPng(firmaBytes);
+        } else {
+          firmaImage = await pdfDoc.embedJpg(firmaBytes);
         }
+        
+        const firmaHeight = 40;
+        const firmaWidth = (firmaImage.width / firmaImage.height) * firmaHeight;
+        
+        page.drawImage(firmaImage, {
+          x: margin,
+          y: yPosition - firmaHeight + 20,
+          width: firmaWidth,
+          height: firmaHeight,
+        });
+        yPosition -= firmaHeight + 20;
+      } catch (e) {
+        console.error('Error loading firma:', e);
+        yPosition -= 20;
       }
+    } else {
+      yPosition -= 20;
+    }
 
-      page.drawLine({
-        start: { x: 200, y: yPosition },
-        end: { x: 400, y: yPosition },
-        thickness: 1,
-        color: rgb(0, 0, 0),
+    // Signature line and name
+    if (proyectoData?.nombre_firmante_recibos) {
+      // Signature line (cursive-style representation)
+      page.drawText('lf', {
+        x: margin,
+        y: yPosition,
+        size: 14,
+        font: helveticaOblique,
+        color: darkGray,
+      });
+      yPosition -= 20;
+
+      // Signer name
+      page.drawText(proyectoData.nombre_firmante_recibos, {
+        x: margin,
+        y: yPosition,
+        size: 11,
+        font: helvetica,
+        color: black,
       });
       yPosition -= 15;
 
-      page.drawText(proyectoData.nombre_firmante_recibos, {
-        x: 200 + (200 - helvetica.widthOfTextAtSize(proyectoData.nombre_firmante_recibos, 10)) / 2,
+      // Signer title
+      page.drawText('Gerente de cobranza', {
+        x: margin,
         y: yPosition,
         size: 10,
-        font: helveticaBold,
-        color: rgb(0, 0, 0),
-      });
-      yPosition -= 12;
-
-      page.drawText('Firma Autorizada', {
-        x: 200 + (200 - helvetica.widthOfTextAtSize('Firma Autorizada', 8)) / 2,
-        y: yPosition,
-        size: 8,
         font: helvetica,
-        color: rgb(0.5, 0.5, 0.5),
+        color: darkGray,
       });
     }
 
@@ -574,6 +548,8 @@ Deno.serve(async (req) => {
     console.log('PDF generated, size:', pdfBytes.length, 'bytes');
 
     // Upload to Supabase Storage
+    const cuentaFormateada = formatCuentaCobranzaId(cuenta.id, cuenta.tipo || 'propiedad');
+    const fechaPago = new Date(pago.fecha_pago);
     const timestamp = Date.now();
     const fileName = `recibo_cuenta_${cuentaFormateada}_${fechaPago.toISOString().split('T')[0]}_${timestamp}.pdf`;
     const filePath = `recibos_temp/${fileName}`;
