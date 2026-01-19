@@ -398,7 +398,7 @@ Deno.serve(async (req) => {
           logoImage = await pdfDoc.embedJpg(logoBytes);
         }
         
-        const logoHeight = 70;
+        const logoHeight = 50;
         const logoWidth = (logoImage.width / logoImage.height) * logoHeight;
         const logoX = (width - logoWidth) / 2;
         
@@ -408,7 +408,7 @@ Deno.serve(async (req) => {
           width: logoWidth,
           height: logoHeight,
         });
-        yPosition -= logoHeight + 15;
+        yPosition -= logoHeight + 10;
 
         // Subtle separator line under logo
         page.drawLine({
@@ -417,7 +417,7 @@ Deno.serve(async (req) => {
           thickness: 0.5,
           color: lightGray,
         });
-        yPosition -= 35;
+        yPosition -= 25;
       } catch (e) {
         console.error('Error loading logo:', e);
         yPosition -= 20;
@@ -684,17 +684,17 @@ Deno.serve(async (req) => {
       thickness: 1,
       color: black,
     });
-    yPosition -= 18;
+    yPosition -= 15;
 
     // Signer name (centered)
     if (proyectoData?.nombre_firmante_recibos) {
       drawCenteredText(page, proyectoData.nombre_firmante_recibos, yPosition, helveticaBold, 11, black, width);
-      yPosition -= 15;
+      yPosition -= 14;
     }
 
     // Signer title (centered)
     drawCenteredText(page, 'Gerente de cobranza', yPosition, helvetica, 10, mediumGray, width);
-    yPosition -= 40;
+    yPosition -= 30;
 
     // ========== FOOTER ==========
     const cuentaFormateada = formatCuentaCobranzaId(cuenta.id, cuenta.tipo || 'propiedad');
