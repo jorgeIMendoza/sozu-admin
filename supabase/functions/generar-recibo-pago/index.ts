@@ -501,65 +501,100 @@ Deno.serve(async (req) => {
     yPosition -= 12;
 
     // ========== NUMBERED LIST ==========
-    const listItems = [
-      { number: '1.', label: 'Unidad condominal:', value: unidadNombre },
-      { number: '2.', label: 'Metros estimados:', value: `${m2Formateado} m² (${m2EnLetras} metros cuadrados)` },
-      { number: '3.', label: 'Monto total de depósito en garantía:', value: '' }
-    ];
+    // Item 1
+    page.drawText('1.', {
+      x: margin + 5,
+      y: yPosition,
+      size: 11,
+      font: helveticaBold,
+      color: accentColor,
+    });
+    page.drawText('Unidad condominal:', {
+      x: margin + 25,
+      y: yPosition,
+      size: 11,
+      font: helveticaBold,
+      color: black,
+    });
+    page.drawText(unidadNombre, {
+      x: margin + 155,
+      y: yPosition,
+      size: 11,
+      font: helvetica,
+      color: black,
+    });
+    yPosition -= 22;
 
-    for (const item of listItems) {
-      // Number
-      page.drawText(item.number, {
-        x: margin + 5,
-        y: yPosition,
-        size: 11,
-        font: helveticaBold,
-        color: accentColor,
-      });
-      
-      // Label
-      page.drawText(item.label, {
-        x: margin + 25,
-        y: yPosition,
-        size: 11,
-        font: helveticaBold,
-        color: black,
-      });
+    // Item 2
+    page.drawText('2.', {
+      x: margin + 5,
+      y: yPosition,
+      size: 11,
+      font: helveticaBold,
+      color: accentColor,
+    });
+    page.drawText('Metros estimados:', {
+      x: margin + 25,
+      y: yPosition,
+      size: 11,
+      font: helveticaBold,
+      color: black,
+    });
+    page.drawText(`${m2Formateado} m²`, {
+      x: margin + 145,
+      y: yPosition,
+      size: 11,
+      font: helvetica,
+      color: black,
+    });
+    yPosition -= 16;
+    // M2 in words on new line
+    page.drawText(`(${m2EnLetras} metros cuadrados)`, {
+      x: margin + 25,
+      y: yPosition,
+      size: 10,
+      font: helvetica,
+      color: mediumGray,
+    });
+    yPosition -= 22;
 
-      // Value (on same line or wrapped)
-      if (item.value) {
-        const labelWidth = helveticaBold.widthOfTextAtSize(item.label, 11);
-        const valueX = margin + 25 + labelWidth + 8;
-        const valueLines = wrapText(item.value, contentWidth - (valueX - margin), helvetica, 11);
-        
-        for (let i = 0; i < valueLines.length; i++) {
-          page.drawText(valueLines[i], {
-            x: i === 0 ? valueX : margin + 25,
-            y: yPosition - (i * 16),
-            size: 11,
-            font: helvetica,
-            color: black,
-          });
-        }
-        yPosition -= (valueLines.length - 1) * 16;
-      }
-      
-      yPosition -= 20;
-    }
-
-    // Special handling for item 3 (long text)
-    yPosition += 20; // Go back up for item 3 value
-    const item3Value = `${precioTotalFormateado} (${precioTotalEnLetras})`;
-    const item3Lines = wrapText(item3Value, contentWidth - 35, helvetica, 11);
-    for (const line of item3Lines) {
+    // Item 3
+    page.drawText('3.', {
+      x: margin + 5,
+      y: yPosition,
+      size: 11,
+      font: helveticaBold,
+      color: accentColor,
+    });
+    page.drawText('Monto total de depósito en garantía:', {
+      x: margin + 25,
+      y: yPosition,
+      size: 11,
+      font: helveticaBold,
+      color: black,
+    });
+    yPosition -= 16;
+    // Amount on new line
+    page.drawText(precioTotalFormateado, {
+      x: margin + 25,
+      y: yPosition,
+      size: 11,
+      font: helveticaBold,
+      color: black,
+    });
+    yPosition -= 16;
+    // Amount in words
+    const item3InWords = `(${precioTotalEnLetras})`;
+    const item3WordsLines = wrapText(item3InWords, contentWidth - 30, helvetica, 10);
+    for (const line of item3WordsLines) {
       page.drawText(line, {
         x: margin + 25,
         y: yPosition,
-        size: 11,
+        size: 10,
         font: helvetica,
-        color: black,
+        color: mediumGray,
       });
-      yPosition -= 16;
+      yPosition -= 14;
     }
     yPosition -= 15;
 
