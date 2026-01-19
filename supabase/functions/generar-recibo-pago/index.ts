@@ -90,6 +90,14 @@ function formatDate(dateStr: string): string {
   return `${day} de ${month} de ${year}`;
 }
 
+function formatShortDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 function numberToWordsM2(num: number): string {
   const entero = Math.floor(num);
   const decimales = Math.round((num - entero) * 100);
@@ -121,6 +129,17 @@ function wrapText(text: string, maxWidth: number, font: any, fontSize: number): 
   if (currentLine) lines.push(currentLine);
 
   return lines;
+}
+
+function drawCenteredText(page: any, text: string, y: number, font: any, fontSize: number, color: any, pageWidth: number) {
+  const textWidth = font.widthOfTextAtSize(text, fontSize);
+  page.drawText(text, {
+    x: (pageWidth - textWidth) / 2,
+    y,
+    size: fontSize,
+    font,
+    color,
+  });
 }
 
 Deno.serve(async (req) => {
@@ -212,7 +231,8 @@ Deno.serve(async (req) => {
           id,
           nombre_legal,
           rfc,
-          tipo_persona
+          tipo_persona,
+          sexo
         )
       `)
       .eq('id_oferta', oferta.id)
@@ -229,18 +249,24 @@ Deno.serve(async (req) => {
     const titularPersona = titularComprador?.personas;
     const nombreComprador = titularPersona?.nombre_legal || 'Sin nombre';
     const tipoPersona = titularPersona?.tipo_persona || 'fisica';
+    const sexo = titularPersona?.sexo || 'F';
     
     // Determine title (Señor/Señora or company)
-    const titulo = tipoPersona === 'moral' ? '' : 'la Señora ';
+    let titulo = '';
+    if (tipoPersona === 'moral') {
+      titulo = '';
+    } else {
+      titulo = sexo === 'M' ? 'el Señor ' : 'la Señora ';
+    }
 
-    // 5. Fetch property or product details
+    // 5. Fetch property or product details with CORRECT relationship path
     let unidadNombre = '';
     let proyectoNombre = '';
     let m2Totales = 0;
     let proyectoData: any = null;
 
     if (oferta.id_propiedad) {
-      console.log('Fetching propiedad...');
+      console.log('Fetching propiedad with correct relationship path...');
       const { data: propiedad, error: propiedadError } = await supabase
         .from('propiedades')
         .select(`
@@ -250,20 +276,18 @@ Deno.serve(async (req) => {
           m2_interiores,
           m2_exteriores,
           m2_loft,
-          id_proyecto,
-          id_edificio_modelo,
-          proyectos:id_proyecto (
-            id,
-            nombre,
-            url_logo,
-            nombre_firmante_recibos,
-            url_firma_recibos
-          ),
           edificios_modelos:id_edificio_modelo (
             id,
             edificios:id_edificio (
               id,
-              nombre
+              nombre,
+              proyectos:id_proyecto (
+                id,
+                nombre,
+                url_logo,
+                nombre_firmante_recibos,
+                url_firma_recibos
+              )
             )
           )
         `)
@@ -272,7 +296,10 @@ Deno.serve(async (req) => {
 
       if (!propiedadError && propiedad) {
         unidadNombre = propiedad.numero_propiedad || '';
-        proyectoData = propiedad.proyectos;
+        // Navigate the correct path: propiedad -> edificios_modelos -> edificios -> proyectos
+        const edificioModelo = propiedad.edificios_modelos;
+        const edificio = edificioModelo?.edificios;
+        proyectoData = edificio?.proyectos;
         proyectoNombre = proyectoData?.nombre || '';
         
         // Calculate total m2
@@ -282,6 +309,8 @@ Deno.serve(async (req) => {
         m2Totales = m2Int + m2Ext + m2Loft;
         
         console.log('Propiedad found:', { numero: propiedad.numero_propiedad, proyecto: proyectoNombre, m2: m2Totales });
+      } else {
+        console.error('Error fetching propiedad:', propiedadError);
       }
     } else if (oferta.id_producto_servicio) {
       console.log('Fetching producto...');
@@ -312,25 +341,27 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ============ Generate PDF ============
-    console.log('Generating PDF with new format...');
+    // ============ Generate Professional PDF ============
+    console.log('Generating professional PDF...');
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([612, 792]); // Letter size
     const { width, height } = page.getSize();
 
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
-    const margin = 60;
+    const margin = 55;
     const contentWidth = width - (margin * 2);
-    let yPosition = height - 60;
+    let yPosition = height - 50;
 
     // Colors
     const black = rgb(0, 0, 0);
-    const darkGray = rgb(0.3, 0.3, 0.3);
+    const darkGray = rgb(0.35, 0.35, 0.35);
+    const mediumGray = rgb(0.5, 0.5, 0.5);
+    const lightGray = rgb(0.85, 0.85, 0.85);
+    const accentColor = rgb(0.15, 0.25, 0.45); // Professional dark blue
 
-    // Try to load project logo (centered at top)
+    // ========== HEADER WITH LOGO ==========
     if (proyectoData?.url_logo) {
       try {
         const logoResponse = await fetch(proyectoData.url_logo);
@@ -343,7 +374,7 @@ Deno.serve(async (req) => {
           logoImage = await pdfDoc.embedJpg(logoBytes);
         }
         
-        const logoHeight = 60;
+        const logoHeight = 70;
         const logoWidth = (logoImage.width / logoImage.height) * logoHeight;
         const logoX = (width - logoWidth) / 2;
         
@@ -353,44 +384,79 @@ Deno.serve(async (req) => {
           width: logoWidth,
           height: logoHeight,
         });
-        yPosition -= logoHeight + 40;
+        yPosition -= logoHeight + 15;
+
+        // Subtle separator line under logo
+        page.drawLine({
+          start: { x: margin + 100, y: yPosition },
+          end: { x: width - margin - 100, y: yPosition },
+          thickness: 0.5,
+          color: lightGray,
+        });
+        yPosition -= 35;
       } catch (e) {
         console.error('Error loading logo:', e);
-        yPosition -= 30;
+        yPosition -= 20;
       }
     } else {
-      yPosition -= 30;
+      yPosition -= 20;
     }
 
     // ========== TITLE: RECIBO ==========
-    const titleText = 'RECIBO';
-    const titleWidth = helveticaBold.widthOfTextAtSize(titleText, 24);
-    page.drawText(titleText, {
-      x: (width - titleWidth) / 2,
-      y: yPosition,
-      size: 24,
+    drawCenteredText(page, 'RECIBO', yPosition, helveticaBold, 28, accentColor, width);
+    yPosition -= 50;
+
+    // ========== BUENO POR SECTION ==========
+    const montoFormateado = formatMoney(pago.monto);
+    const montoEnLetras = numberToWordsWithPesos(pago.monto);
+    
+    // Background box for amount
+    const boxHeight = 50;
+    const boxY = yPosition - boxHeight + 15;
+    page.drawRectangle({
+      x: margin,
+      y: boxY,
+      width: contentWidth,
+      height: boxHeight,
+      color: rgb(0.97, 0.97, 0.97),
+      borderColor: lightGray,
+      borderWidth: 1,
+    });
+
+    // "Bueno por:" label
+    page.drawText('Bueno por:', {
+      x: margin + 15,
+      y: yPosition - 5,
+      size: 11,
+      font: helvetica,
+      color: darkGray,
+    });
+
+    // Amount value
+    page.drawText(montoFormateado, {
+      x: margin + 15,
+      y: yPosition - 25,
+      size: 16,
       font: helveticaBold,
       color: black,
     });
-    yPosition -= 50;
 
-    // ========== BUENO POR ==========
-    const montoFormateado = formatMoney(pago.monto);
-    const montoEnLetras = numberToWordsWithPesos(pago.monto);
-    const buenoPorText = `Bueno por: ${montoFormateado} (${montoEnLetras})`;
-    
-    const buenoPorLines = wrapText(buenoPorText, contentWidth, helveticaBold, 12);
-    for (const line of buenoPorLines) {
+    // Amount in words
+    const amountInWordsX = margin + 150;
+    const amountLines = wrapText(`(${montoEnLetras})`, contentWidth - 160, helvetica, 10);
+    let amountY = yPosition - 8;
+    for (const line of amountLines) {
       page.drawText(line, {
-        x: margin,
-        y: yPosition,
-        size: 12,
-        font: helveticaBold,
-        color: black,
+        x: amountInWordsX,
+        y: amountY,
+        size: 10,
+        font: helvetica,
+        color: mediumGray,
       });
-      yPosition -= 18;
+      amountY -= 14;
     }
-    yPosition -= 15;
+
+    yPosition -= boxHeight + 25;
 
     // ========== MAIN PARAGRAPH ==========
     const fechaFormateada = formatDate(pago.fecha_pago);
@@ -400,7 +466,7 @@ Deno.serve(async (req) => {
     const m2Formateado = m2Totales.toFixed(2);
     const m2EnLetras = numberToWordsM2(m2Totales);
 
-    const mainParagraph = `Recibimos de ${titulo}${nombreComprador.toUpperCase()} la cantidad de ${montoFormateado} (${montoEnLetras}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}, al efecto de adquirir siguiente la unidad condominal, cuyas características serán:`;
+    const mainParagraph = `Recibimos de ${titulo}${nombreComprador.toUpperCase()} la cantidad de ${montoFormateado} (${montoEnLetras}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}, al efecto de adquirir la siguiente unidad condominal, cuyas características serán:`;
 
     const mainLines = wrapText(mainParagraph, contentWidth, helvetica, 11);
     for (const line of mainLines) {
@@ -411,76 +477,109 @@ Deno.serve(async (req) => {
         font: helvetica,
         color: black,
       });
-      yPosition -= 16;
+      yPosition -= 17;
     }
-    yPosition -= 15;
+    yPosition -= 12;
 
     // ========== NUMBERED LIST ==========
     const listItems = [
-      `1. Unidad condominal: ${unidadNombre}`,
-      `2. Metros estimados: ${m2Formateado} m² (${m2EnLetras} metros cuadrados)`,
-      `3. Monto total de depósito en garantía de cumplimiento al que se compromete ${titulo}${nombreComprador.toUpperCase()}: ${precioTotalFormateado} (${precioTotalEnLetras})`
+      { number: '1.', label: 'Unidad condominal:', value: unidadNombre },
+      { number: '2.', label: 'Metros estimados:', value: `${m2Formateado} m² (${m2EnLetras} metros cuadrados)` },
+      { number: '3.', label: 'Monto total de depósito en garantía:', value: '' }
     ];
 
     for (const item of listItems) {
-      const itemLines = wrapText(item, contentWidth - 20, helvetica, 11);
-      for (let i = 0; i < itemLines.length; i++) {
-        page.drawText(itemLines[i], {
-          x: margin + (i === 0 ? 0 : 20),
-          y: yPosition,
-          size: 11,
-          font: helvetica,
-          color: black,
-        });
-        yPosition -= 16;
+      // Number
+      page.drawText(item.number, {
+        x: margin + 5,
+        y: yPosition,
+        size: 11,
+        font: helveticaBold,
+        color: accentColor,
+      });
+      
+      // Label
+      page.drawText(item.label, {
+        x: margin + 25,
+        y: yPosition,
+        size: 11,
+        font: helveticaBold,
+        color: black,
+      });
+
+      // Value (on same line or wrapped)
+      if (item.value) {
+        const labelWidth = helveticaBold.widthOfTextAtSize(item.label, 11);
+        const valueX = margin + 25 + labelWidth + 8;
+        const valueLines = wrapText(item.value, contentWidth - (valueX - margin), helvetica, 11);
+        
+        for (let i = 0; i < valueLines.length; i++) {
+          page.drawText(valueLines[i], {
+            x: i === 0 ? valueX : margin + 25,
+            y: yPosition - (i * 16),
+            size: 11,
+            font: helvetica,
+            color: black,
+          });
+        }
+        yPosition -= (valueLines.length - 1) * 16;
       }
-      yPosition -= 5;
+      
+      yPosition -= 20;
+    }
+
+    // Special handling for item 3 (long text)
+    yPosition += 20; // Go back up for item 3 value
+    const item3Value = `${precioTotalFormateado} (${precioTotalEnLetras})`;
+    const item3Lines = wrapText(item3Value, contentWidth - 35, helvetica, 11);
+    for (const line of item3Lines) {
+      page.drawText(line, {
+        x: margin + 25,
+        y: yPosition,
+        size: 11,
+        font: helvetica,
+        color: black,
+      });
+      yPosition -= 16;
     }
     yPosition -= 15;
 
     // ========== LEGAL PARAGRAPHS ==========
     const legalParagraph1 = `La cantidad aquí entregada y recibida será aplicada al depósito en garantía de cumplimiento, al momento de la celebración del contrato de promesa de compraventa.`;
     
-    const legal1Lines = wrapText(legalParagraph1, contentWidth, helvetica, 11);
+    const legal1Lines = wrapText(legalParagraph1, contentWidth, helvetica, 10);
     for (const line of legal1Lines) {
       page.drawText(line, {
         x: margin,
         y: yPosition,
-        size: 11,
+        size: 10,
         font: helvetica,
-        color: black,
+        color: darkGray,
       });
-      yPosition -= 16;
+      yPosition -= 15;
     }
-    yPosition -= 15;
+    yPosition -= 10;
 
-    const legalParagraph2 = `Será obligación de la empresa mantener debidamente informado al aportante de la forma y términos en los que se lleve a cabo la gestión la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}.`;
+    const legalParagraph2 = `Será obligación de la empresa mantener debidamente informado al aportante de la forma y términos en los que se lleve a cabo la gestión de la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}.`;
     
-    const legal2Lines = wrapText(legalParagraph2, contentWidth, helvetica, 11);
+    const legal2Lines = wrapText(legalParagraph2, contentWidth, helvetica, 10);
     for (const line of legal2Lines) {
       page.drawText(line, {
         x: margin,
         y: yPosition,
-        size: 11,
+        size: 10,
         font: helvetica,
-        color: black,
+        color: darkGray,
       });
-      yPosition -= 16;
+      yPosition -= 15;
     }
-    yPosition -= 40;
+    yPosition -= 35;
 
-    // ========== ATENTAMENTE ==========
-    page.drawText('ATENTAMENTE', {
-      x: margin,
-      y: yPosition,
-      size: 11,
-      font: helveticaBold,
-      color: black,
-    });
-    yPosition -= 50;
+    // ========== SIGNATURE SECTION (Centered) ==========
+    drawCenteredText(page, 'ATENTAMENTE', yPosition, helveticaBold, 12, black, width);
+    yPosition -= 45;
 
-    // ========== SIGNATURE SECTION ==========
-    // Try to load signature/company logo
+    // Signature image
     if (proyectoData?.url_firma_recibos) {
       try {
         const firmaResponse = await fetch(proyectoData.url_firma_recibos);
@@ -493,62 +592,64 @@ Deno.serve(async (req) => {
           firmaImage = await pdfDoc.embedJpg(firmaBytes);
         }
         
-        const firmaHeight = 40;
+        const firmaHeight = 50;
         const firmaWidth = (firmaImage.width / firmaImage.height) * firmaHeight;
+        const firmaX = (width - firmaWidth) / 2;
         
         page.drawImage(firmaImage, {
-          x: margin,
-          y: yPosition - firmaHeight + 20,
+          x: firmaX,
+          y: yPosition - firmaHeight + 10,
           width: firmaWidth,
           height: firmaHeight,
         });
-        yPosition -= firmaHeight + 20;
+        yPosition -= firmaHeight + 5;
       } catch (e) {
         console.error('Error loading firma:', e);
-        yPosition -= 20;
       }
-    } else {
-      yPosition -= 20;
     }
 
-    // Signature line and name
+    // Signature line
+    const lineWidth = 180;
+    const lineX = (width - lineWidth) / 2;
+    page.drawLine({
+      start: { x: lineX, y: yPosition },
+      end: { x: lineX + lineWidth, y: yPosition },
+      thickness: 1,
+      color: black,
+    });
+    yPosition -= 18;
+
+    // Signer name (centered)
     if (proyectoData?.nombre_firmante_recibos) {
-      // Signature line (cursive-style representation)
-      page.drawText('lf', {
-        x: margin,
-        y: yPosition,
-        size: 14,
-        font: helveticaOblique,
-        color: darkGray,
-      });
-      yPosition -= 20;
-
-      // Signer name
-      page.drawText(proyectoData.nombre_firmante_recibos, {
-        x: margin,
-        y: yPosition,
-        size: 11,
-        font: helvetica,
-        color: black,
-      });
+      drawCenteredText(page, proyectoData.nombre_firmante_recibos, yPosition, helveticaBold, 11, black, width);
       yPosition -= 15;
-
-      // Signer title
-      page.drawText('Gerente de cobranza', {
-        x: margin,
-        y: yPosition,
-        size: 10,
-        font: helvetica,
-        color: darkGray,
-      });
     }
+
+    // Signer title (centered)
+    drawCenteredText(page, 'Gerente de cobranza', yPosition, helvetica, 10, mediumGray, width);
+    yPosition -= 40;
+
+    // ========== FOOTER ==========
+    const cuentaFormateada = formatCuentaCobranzaId(cuenta.id, cuenta.tipo || 'propiedad');
+    const fechaEmision = formatShortDate(new Date().toISOString());
+    
+    // Footer separator line
+    page.drawLine({
+      start: { x: margin, y: 55 },
+      end: { x: width - margin, y: 55 },
+      thickness: 0.5,
+      color: lightGray,
+    });
+
+    // Footer text
+    const footerText = `Ref: ${cuentaFormateada}  •  Emitido: ${fechaEmision}  •  Pago ID: ${pago.id}`;
+    drawCenteredText(page, footerText, 40, helvetica, 9, mediumGray, width);
 
     // Generate PDF bytes
     const pdfBytes = await pdfDoc.save();
     console.log('PDF generated, size:', pdfBytes.length, 'bytes');
 
     // Upload to Supabase Storage
-    const cuentaFormateada = formatCuentaCobranzaId(cuenta.id, cuenta.tipo || 'propiedad');
     const fechaPago = new Date(pago.fecha_pago);
     const timestamp = Date.now();
     const fileName = `recibo_cuenta_${cuentaFormateada}_${fechaPago.toISOString().split('T')[0]}_${timestamp}.pdf`;
