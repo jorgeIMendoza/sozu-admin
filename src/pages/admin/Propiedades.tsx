@@ -421,6 +421,7 @@ const Propiedades = () => {
   const [banosFilterInput, setBanosFilterInput] = useState("");
   const [banosFilter, setBanosFilter] = useState("");
   const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>([]);
+  const [tipoTransaccionFilter, setTipoTransaccionFilter] = useState<string[]>([]);
   const [bodegasFilter, setBodegasFilter] = useState("");
   const [estacionamientosFilter, setEstacionamientosFilter] = useState("");
   const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState("");
@@ -539,6 +540,7 @@ const Propiedades = () => {
     recamarasFilter !== "" ||
     banosFilter !== "" ||
     disponibilidadFilter.length > 0 ||
+    tipoTransaccionFilter.length > 0 ||
     bodegasFilter !== "" ||
     estacionamientosFilter !== "" ||
     cuentaCobranzaFilter !== "" ||
@@ -560,6 +562,7 @@ const Propiedades = () => {
           m2_exteriores,
           precio_lista,
           clabe_stp_tmp_apartado,
+          id_tipo_transaccion,
           edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(
             edificios!edificios_modelos_id_edificio_fkey!inner(
               nombre,
@@ -578,6 +581,7 @@ const Propiedades = () => {
           ),
           vistas(nombre),
           estatus_disponibilidad!inner(id, nombre),
+          tipos_transaccion(id, nombre),
           ofertas!ofertas_id_propiedad_fkey(
             id,
             id_producto,
@@ -700,6 +704,20 @@ const Propiedades = () => {
       if (disponibilidadFilter.length > 0) {
         query = query.in('estatus_disponibilidad.nombre', disponibilidadFilter);
       }
+      
+      if (tipoTransaccionFilter.length > 0) {
+        // Get tipo_transaccion IDs for the filter
+        const { data: tiposData } = await supabase
+          .from('tipos_transaccion')
+          .select('id')
+          .in('nombre', tipoTransaccionFilter)
+          .eq('activo', true);
+        
+        const tipoIds = tiposData?.map(t => t.id) || [];
+        if (tipoIds.length > 0) {
+          query = query.in('id_tipo_transaccion', tipoIds);
+        }
+      }
 
       // Ejecutar query - obtener hasta 5000 registros para exportación
       const { data, error } = await query.range(0, 4999);
@@ -798,6 +816,7 @@ const Propiedades = () => {
           "M2 Interiores": prop.m2_interiores || 0,
           "M2 Exteriores": prop.m2_exteriores || 0,
           "M2 Reales": (prop.m2_interiores || 0) + (prop.m2_exteriores || 0),
+          "Tipo de Transacción": prop.tipos_transaccion?.nombre || '',
           "Precio Lista": prop.precio_lista || 0,
           "Precio Final": cuentaCobranza?.precio_final || '',
           Disponibilidad: prop.estatus_disponibilidad?.nombre || '',
@@ -887,6 +906,20 @@ const Propiedades = () => {
       
       const { data, error } = await query;
       
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Query para tipos de transacción (para filtro)
+  const { data: tiposTransaccionOptions } = useQuery({
+    queryKey: ['tipos-transaccion-filter'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tipos_transaccion')
+        .select('id, nombre')
+        .eq('activo', true)
+        .order('nombre', { ascending: true });
       if (error) throw error;
       return data || [];
     },
@@ -1632,7 +1665,7 @@ const Propiedades = () => {
 
   // Separate queries for each tab with server-side pagination
   const { data: propiedadesActivasData, isLoading: loadingActivos, refetch: refetchActivos } = useQuery({
-    queryKey: ['properties-activos', currentPageActive, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusIds, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
+    queryKey: ['properties-activos', currentPageActive, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, tipoTransaccionFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusIds, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
     queryFn: async () => {
       try {
         const from = (currentPageActive - 1) * itemsPerPage;
@@ -1824,6 +1857,14 @@ const Propiedades = () => {
           query = query.in('id_estatus_disponibilidad', allowedEstatusIds);
         }
         // Note: If allowedEstatusIds is empty or null, no status filter is applied (show all)
+        
+        // Filter by tipo de transaccion
+        if (tipoTransaccionFilter.length > 0) {
+          const tipoIds = tiposTransaccionOptions?.filter(opt => tipoTransaccionFilter.includes(opt.nombre)).map(opt => opt.id) || [];
+          if (tipoIds.length > 0) {
+            query = query.in('id_tipo_transaccion', tipoIds);
+          }
+        }
 
         // PRE-FILTER: If cuentaCobranzaFilter is set, get property IDs with/without cuentas first
         let propertyIdsWithCuentas: number[] = [];
@@ -1998,7 +2039,7 @@ const Propiedades = () => {
   });
 
   const { data: propiedadesDraftData, isLoading: loadingDraft, refetch: refetchDraft } = useQuery({
-    queryKey: ['properties-draft', currentPageDraft, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusIds, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
+    queryKey: ['properties-draft', currentPageDraft, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, tipoTransaccionFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusIds, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
     queryFn: async () => {
       try {
         const from = (currentPageDraft - 1) * itemsPerPage;
@@ -2232,6 +2273,14 @@ const Propiedades = () => {
           query = query.in('id_estatus_disponibilidad', allowedEstatusIds);
         }
         // Note: If allowedEstatusIds is empty or null, no status filter is applied (show all)
+        
+        // Filter by tipo de transaccion
+        if (tipoTransaccionFilter.length > 0) {
+          const tipoIds = tiposTransaccionOptions?.filter(opt => tipoTransaccionFilter.includes(opt.nombre)).map(opt => opt.id) || [];
+          if (tipoIds.length > 0) {
+            query = query.in('id_tipo_transaccion', tipoIds);
+          }
+        }
 
         // PRE-FILTER: If cuentaCobranzaFilter is set, get property IDs with/without cuentas first
         let propertyIdsWithCuentas: number[] = [];
@@ -2403,7 +2452,7 @@ const Propiedades = () => {
   });
 
   const { data: propiedadesEliminadasData, isLoading: loadingEliminados, refetch: refetchEliminados } = useQuery({
-    queryKey: ['properties-eliminados', currentPageDeleted, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusIds, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
+    queryKey: ['properties-eliminados', currentPageDeleted, searchTerm, selectedProyectos, selectedModelos, recamarasFilter, banosFilter, disponibilidadFilter, tipoTransaccionFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort, accessibleProjectIds, hasUnrestrictedAccess, allowedEstatusIds, isRepresentanteEmpresaDuena, ownershipEntityIds, accessiblePropertyIds],
     queryFn: async () => {
       try {
         const from = (currentPageDeleted - 1) * itemsPerPage;
@@ -2637,6 +2686,14 @@ const Propiedades = () => {
           query = query.in('id_estatus_disponibilidad', allowedEstatusIds);
         }
         // Note: If allowedEstatusIds is empty or null, no status filter is applied (show all)
+        
+        // Filter by tipo de transaccion
+        if (tipoTransaccionFilter.length > 0) {
+          const tipoIds = tiposTransaccionOptions?.filter(opt => tipoTransaccionFilter.includes(opt.nombre)).map(opt => opt.id) || [];
+          if (tipoIds.length > 0) {
+            query = query.in('id_tipo_transaccion', tipoIds);
+          }
+        }
 
         // PRE-FILTER: If cuentaCobranzaFilter is set, get property IDs with/without cuentas first
         let propertyIdsWithCuentas: number[] = [];
@@ -5033,6 +5090,65 @@ const Propiedades = () => {
                 </div>
               )}
               {canSeeAdvancedFilters && (
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Tipo de Transacción</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between font-normal"
+                      >
+                        {tipoTransaccionFilter.length === 0 
+                          ? "Filtrar por tipo..." 
+                          : `${tipoTransaccionFilter.length} seleccionado${tipoTransaccionFilter.length > 1 ? 's' : ''}`
+                        }
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Buscar tipo..." />
+                        <CommandEmpty>No se encontró tipo.</CommandEmpty>
+                        <CommandGroup className="max-h-64 overflow-auto">
+                          {tiposTransaccionOptions?.map((option) => (
+                            <CommandItem
+                              key={option.id}
+                              onSelect={() => {
+                                setTipoTransaccionFilter(prev => 
+                                  prev.includes(option.nombre)
+                                    ? prev.filter(item => item !== option.nombre)
+                                    : [...prev, option.nombre]
+                                );
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={tipoTransaccionFilter.includes(option.nombre)}
+                                className="mr-2"
+                              />
+                              {option.nombre}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                        {tipoTransaccionFilter.length > 0 && (
+                          <div className="border-t p-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setTipoTransaccionFilter([])}
+                              className="w-full justify-center"
+                            >
+                              <X className="h-4 w-4 mr-2" />
+                              Limpiar selección
+                            </Button>
+                          </div>
+                        )}
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+              {canSeeAdvancedFilters && (
                 <>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Bodegas</label>
@@ -5210,6 +5326,7 @@ const Propiedades = () => {
                   setBanosFilterInput("");
                   setBanosFilter("");
                   setDisponibilidadFilter([]);
+                  setTipoTransaccionFilter([]);
                   setBodegasFilter("");
                   setEstacionamientosFilter("");
                   setCuentaCobranzaFilter("");
