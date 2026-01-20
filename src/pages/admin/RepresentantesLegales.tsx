@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, RotateCcw } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RotateCcw, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -29,7 +30,8 @@ type RepresentanteLegal = {
 };
 
 export default function RepresentantesLegales() {
-  const { canCreate, canUpdate, canDelete, canApprove, isSuperAdmin } = usePagePermissions('/admin/representantes-legales');
+  const { canCreate, canUpdate, canDelete, canApprove, canExport, isSuperAdmin } = usePagePermissions('/admin/representantes-legales');
+  const { exportToExcel, isExporting } = useExportToExcel();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
@@ -325,15 +327,35 @@ export default function RepresentantesLegales() {
                 Gestiona la información de los representantes legales
               </p>
             </div>
-            {(canCreate || isSuperAdmin) && (
-              <Button 
-                onClick={() => setIsNewDialogOpen(true)}
-                className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Nuevo Representante Legal
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {(canExport || isSuperAdmin) && filteredRepresentantes.length > 0 && (
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    const exportData = filteredRepresentantes.map(r => ({
+                      'Nombre': r.nombre_legal,
+                      'Email': r.email,
+                      'Teléfono': r.telefono || '',
+                      'CURP': r.curp || '',
+                    }));
+                    exportToExcel({ data: exportData, filename: 'representantes_legales' });
+                  }}
+                  disabled={isExporting}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  {isExporting ? 'Exportando...' : 'Exportar Excel'}
+                </Button>
+              )}
+              {(canCreate || isSuperAdmin) && (
+                <Button 
+                  onClick={() => setIsNewDialogOpen(true)}
+                  className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nuevo Representante Legal
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         

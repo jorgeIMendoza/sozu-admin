@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, UserX, RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";  
+import { Plus, Search, Edit, Trash2, UserX, RotateCcw, FileSpreadsheet } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -28,7 +29,8 @@ type Residente = {
 };
 
 export default function Residentes() {
-  const { canCreate, canUpdate, canDelete, canApprove, isSuperAdmin } = usePagePermissions('/admin/residentes');
+  const { canCreate, canUpdate, canDelete, canApprove, canExport, isSuperAdmin } = usePagePermissions('/admin/residentes');
+  const { exportToExcel, isExporting } = useExportToExcel();
   const [inputValue, setInputValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
@@ -469,13 +471,38 @@ export default function Residentes() {
                 Gestiona la información de los residentes
               </p>
             </div>
-            <Button 
-              onClick={() => setIsNewDialogOpen(true)}
-              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Nuevo Residente
-            </Button>
+            <div className="flex gap-2">
+              {(canExport || isSuperAdmin) && filteredResidentes.length > 0 && (
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    const exportData = filteredResidentes.map(r => ({
+                      'Nombre': r.nombre_legal,
+                      'Email': r.email,
+                      'Teléfono': r.telefono || '',
+                      'Tipo Persona': r.tipo_persona === 'pf' ? 'Física' : 'Moral',
+                      'RFC': r.rfc || '',
+                      'CURP': r.curp || '',
+                      'Representante Legal': r.representante_legal_nombre || '',
+                    }));
+                    exportToExcel({ data: exportData, filename: 'residentes' });
+                  }}
+                  disabled={isExporting}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  {isExporting ? 'Exportando...' : 'Exportar Excel'}
+                </Button>
+              )}
+              {(canCreate || isSuperAdmin) && (
+                <Button 
+                  onClick={() => setIsNewDialogOpen(true)}
+                  className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nuevo Residente
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         

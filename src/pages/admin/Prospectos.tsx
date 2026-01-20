@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, Users, RotateCcw } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Users, RotateCcw, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,7 +52,8 @@ type Prospecto = {
 };
 
 export default function Prospectos() {
-  const { canCreate, canUpdate, canDelete, canApprove, isSuperAdmin } = usePagePermissions('/admin/prospectos');
+  const { canCreate, canUpdate, canDelete, canApprove, canExport, isSuperAdmin } = usePagePermissions('/admin/prospectos');
+  const { exportToExcel, isExporting } = useExportToExcel();
   const [inputValue, setInputValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
@@ -1103,15 +1105,41 @@ export default function Prospectos() {
                 Gestiona la información de los prospectos
               </p>
             </div>
-            {(canCreate || isSuperAdmin) && (
-              <Button 
-                onClick={() => setIsNewDialogOpen(true)}
-                className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Nuevo Prospecto
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {(canExport || isSuperAdmin) && activeProspectos.length > 0 && (
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    const exportData = activeProspectos.map(p => ({
+                      'Nombre': p.nombre_legal,
+                      'Email': p.email,
+                      'Teléfono': p.telefono || '',
+                      'Tipo Persona': p.tipo_persona === 'pf' ? 'Física' : 'Moral',
+                      'RFC': p.rfc || '',
+                      'CURP': p.curp || '',
+                      'Estatus': p.estatus_nombre || '',
+                      'Proyecto': p.proyecto_nombre || '',
+                      'Agente': p.agente_nombre || '',
+                      'Representante Legal': p.representante_legal_nombre || '',
+                    }));
+                    exportToExcel({ data: exportData, filename: 'prospectos' });
+                  }}
+                  disabled={isExporting}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  {isExporting ? 'Exportando...' : 'Exportar Excel'}
+                </Button>
+              )}
+              {(canCreate || isSuperAdmin) && (
+                <Button 
+                  onClick={() => setIsNewDialogOpen(true)}
+                  className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nuevo Prospecto
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         

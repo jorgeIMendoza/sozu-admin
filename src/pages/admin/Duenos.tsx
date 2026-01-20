@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, UserX, RotateCcw } from "lucide-react";
+import { Plus, Search, Edit, Trash2, UserX, RotateCcw, FileSpreadsheet } from "lucide-react";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +29,8 @@ type Dueno = {
 };
 
 export default function Duenos() {
-  const { canCreate, canUpdate, canDelete, canApprove, isSuperAdmin } = usePagePermissions('/admin/duenos');
+  const { canCreate, canUpdate, canDelete, canApprove, canExport, isSuperAdmin } = usePagePermissions('/admin/duenos');
+  const { exportToExcel, isExporting } = useExportToExcel();
   const [inputValue, setInputValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("active");
@@ -475,15 +477,38 @@ export default function Duenos() {
                 Gestiona la información de los dueños
               </p>
             </div>
-            {(canCreate || isSuperAdmin) && (
-              <Button 
-                onClick={() => setIsNewDialogOpen(true)}
-                className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Nuevo Dueño
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {(canExport || isSuperAdmin) && filteredDuenos.length > 0 && (
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    const exportData = filteredDuenos.map(d => ({
+                      'Nombre': d.nombre_legal,
+                      'Email': d.email,
+                      'Teléfono': d.telefono || '',
+                      'Tipo Persona': d.tipo_persona === 'pf' ? 'Física' : 'Moral',
+                      'RFC': d.rfc || '',
+                      'CURP': d.curp || '',
+                      'Representante Legal': d.representante_legal_nombre || '',
+                    }));
+                    exportToExcel({ data: exportData, filename: 'duenos' });
+                  }}
+                  disabled={isExporting}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  {isExporting ? 'Exportando...' : 'Exportar Excel'}
+                </Button>
+              )}
+              {(canCreate || isSuperAdmin) && (
+                <Button 
+                  onClick={() => setIsNewDialogOpen(true)}
+                  className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nuevo Dueño
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         
