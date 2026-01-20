@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, RotateCcw, CreditCard, UserX, HeartHandshake, RefreshCw, UserPlus } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RotateCcw, CreditCard, UserX, HeartHandshake, RefreshCw, UserPlus, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -38,7 +39,8 @@ type Comprador = {
 };
 
 export default function Compradores() {
-  const { canCreate, canUpdate, canDelete, canApprove, isSuperAdmin } = usePagePermissions('/admin/compradores');
+  const { canCreate, canUpdate, canDelete, canApprove, canExport, isSuperAdmin } = usePagePermissions('/admin/compradores');
+  const { exportToExcel, isExporting } = useExportToExcel();
   const [searchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -704,25 +706,50 @@ export default function Compradores() {
                 Gestiona la información de los compradores
               </p>
             </div>
-            {(canCreate || isSuperAdmin) && (
-              <Button 
-                onClick={() => setIsNewDialogOpen(true)}
-                className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Nuevo Comprador
-              </Button>
-            )}
-            {(canCreate || isSuperAdmin) && (
-              <Button 
-                variant="outline"
-                onClick={() => setIsConvertirDialogOpen(true)}
-                className="border-primary text-primary hover:bg-primary/10 font-semibold px-6"
-              >
-                <UserPlus className="w-4 h-4 mr-2" />
-                Convertir a Comprador
-              </Button>
-            )}
+            <div className="flex gap-2 flex-wrap">
+              {(canExport || isSuperAdmin) && activeCompradores.length > 0 && (
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    const exportData = activeCompradores.map(c => ({
+                      'Nombre': c.nombre_legal,
+                      'Email': c.email,
+                      'Teléfono': c.telefono || '',
+                      'Tipo Persona': c.tipo_persona === 'pf' ? 'Física' : 'Moral',
+                      'RFC': c.rfc || '',
+                      'CURP': c.curp || '',
+                      'Estado Civil': c.estado_civil_nombre || '',
+                      'Cónyuge': c.conyuge_nombre || '',
+                      'Representante Legal': c.representante_legal_nombre || '',
+                    }));
+                    exportToExcel({ data: exportData, filename: 'compradores' });
+                  }}
+                  disabled={isExporting}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  {isExporting ? 'Exportando...' : 'Exportar Excel'}
+                </Button>
+              )}
+              {(canCreate || isSuperAdmin) && (
+                <Button 
+                  onClick={() => setIsNewDialogOpen(true)}
+                  className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nuevo Comprador
+                </Button>
+              )}
+              {(canCreate || isSuperAdmin) && (
+                <Button 
+                  variant="outline"
+                  onClick={() => setIsConvertirDialogOpen(true)}
+                  className="border-primary text-primary hover:bg-primary/10 font-semibold px-6"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Convertir a Comprador
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         
