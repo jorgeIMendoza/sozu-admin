@@ -1364,13 +1364,21 @@ export default function DetalleCuentaCobranza() {
     enabled: !!cuentaId
   });
 
-  // Query to get aplicaciones_pago for all pagos
-  const { data: aplicacionesPorPago } = useQuery({
+  // Query to get aplicaciones_pago for all pagos - independiente de la query de pagos para evitar race conditions
+  const { data: aplicacionesPorPago, isLoading: aplicacionesPorPagoLoading } = useQuery({
     queryKey: ["aplicaciones_por_pago", cuentaId],
     queryFn: async () => {
-      if (!pagos || pagos.length === 0) return [];
+      // Obtener pagos directamente dentro de la query para evitar dependencia
+      const { data: pagosData, error: pagosError } = await supabase
+        .from('pagos')
+        .select('id')
+        .eq('id_cuenta_cobranza', cuentaId)
+        .eq('activo', true);
 
-      const pagoIds = pagos.map(p => p.id);
+      if (pagosError) throw pagosError;
+      if (!pagosData || pagosData.length === 0) return [];
+
+      const pagoIds = pagosData.map(p => p.id);
       const { data, error } = await supabase
         .from('aplicaciones_pago')
         .select(`
@@ -1391,7 +1399,7 @@ export default function DetalleCuentaCobranza() {
       if (error) throw error;
       return data;
     },
-    enabled: !!pagos && pagos.length > 0
+    enabled: !!cuentaId
   });
 
   // Query for cash payments limit calculation (only for properties)
@@ -1935,9 +1943,11 @@ export default function DetalleCuentaCobranza() {
   const totalPendiente = Math.max(0, diferenciaReal);
 
   // Detectar discrepancia entre pagos y aplicaciones (para mostrar botón recalcular)
+  // Solo calcular cuando ambas queries estén cargadas para evitar falsos positivos
+  const isLoadingPaymentData = !pagos || aplicacionesPorPagoLoading;
   const totalAplicaciones = aplicacionesPorPago?.reduce((sum, app) => sum + (app.monto || 0), 0) || 0;
   const discrepanciaAplicaciones = totalPagado - totalAplicaciones;
-  const hayDiscrepanciaAplicaciones = pagos && pagos.length > 0 && Math.abs(discrepanciaAplicaciones) > 0.01;
+  const hayDiscrepanciaAplicaciones = !isLoadingPaymentData && pagos && pagos.length > 0 && Math.abs(discrepanciaAplicaciones) > 0.01;
 
   // Calculate pending balance breakdown (only for properties)
   const pendingBalanceBreakdown = cuentaDetalle?.tipo_cuenta === 'Propiedad' && acuerdosPago ? (() => {
@@ -4870,6 +4880,8 @@ export default function DetalleCuentaCobranza() {
           onUpdate={() => {
             queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
             queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
+            queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
           }}
         />
       )}
