@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.generar-recibo-pago]
 verify_jwt = false
+
+[functions.recalcular-aplicaciones]
+verify_jwt = false
