@@ -252,13 +252,14 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId }: { cuentaCobranzaId: number 
   const clientDocuments = documentos?.filter(doc => doc.id_persona) || [];
   const propertyDocuments = documentos?.filter(doc => !doc.id_persona) || [];
   
-  // Get delivery documents (categoria 7) from property documents
-  const deliveryDocuments = propertyDocuments.filter(
+  // Get delivery documents (categoria 7) from ALL documents (both property and client)
+  // This ensures documents like Factura PDF/XML uploaded with id_persona are also considered
+  const allDeliveryDocuments = (documentos || []).filter(
     doc => (doc.tipos_documento as any)?.id_categoria_documento === 7
   );
   
-  // Find missing delivery documents
-  const uploadedDeliveryTypeIds = deliveryDocuments.map(d => d.id_tipo_documento);
+  // Find missing delivery documents by checking all uploaded delivery docs
+  const uploadedDeliveryTypeIds = allDeliveryDocuments.map(d => d.id_tipo_documento);
   const missingDeliveryDocs = tiposDocEntrega?.filter(
     tipo => !uploadedDeliveryTypeIds.includes(tipo.id)
   ) || [];
