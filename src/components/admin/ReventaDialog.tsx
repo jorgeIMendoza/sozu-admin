@@ -15,7 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, AlertTriangle, Info } from "lucide-react";
+import { Repeat2, AlertTriangle, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -152,7 +152,7 @@ export const ReventaDialog = ({
             className="h-8 w-8 p-0"
             onClick={() => setOpen(true)}
           >
-            <RefreshCw className="h-4 w-4" />
+            <Repeat2 className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
         <TooltipContent>
@@ -164,7 +164,7 @@ export const ReventaDialog = ({
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" />
+              <Repeat2 className="h-5 w-5" />
               Poner Propiedad en Reventa
             </DialogTitle>
             <DialogDescription>
@@ -191,7 +191,7 @@ export const ReventaDialog = ({
               </div>
               <div className="flex items-start gap-2">
                 <Info className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                <span>La <strong>cuenta de cobranza</strong> y <strong>cuenta CLABE</strong> ya no se mostrarán para esta propiedad</span>
+                <span>La <strong>cuenta de cobranza</strong> y <strong>cuenta CLABE</strong> anteriores quedarán obsoletas y ya no se mostrarán para esta propiedad</span>
               </div>
               <div className="flex items-start gap-2">
                 <Info className="h-4 w-4 mt-0.5 text-muted-foreground" />
