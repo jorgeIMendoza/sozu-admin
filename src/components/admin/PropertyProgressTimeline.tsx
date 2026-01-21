@@ -67,30 +67,56 @@ export function PropertyProgressTimeline({
     staleTime: 30000,
   });
 
+  // Define explicit types to avoid Supabase type inference issues
+  interface DocumentoRow {
+    id: number;
+    id_tipo_documento: number;
+    id_estatus_verificacion: number | null;
+    id_persona: number | null;
+  }
+
+  interface TipoDocumentoRow {
+    id: number;
+    nombre: string;
+    id_categoria_documento: number | null;
+  }
+
   // Fetch documents with their types
   const { data: documentosData } = useQuery({
     queryKey: ['progress-documentos', cuentaId],
-    queryFn: async () => {
-      // Get documents - using explicit type assertion
-      const { data: docs, error } = await supabase
+    queryFn: async (): Promise<Array<{
+      id: number;
+      id_tipo_documento: number;
+      id_estatus_verificacion: number | null;
+      id_persona: number | null;
+      tipos_documento: TipoDocumentoRow | null;
+    }>> => {
+      // Cast supabase to any to avoid deep type instantiation errors
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supabaseAny = supabase as any;
+      
+      const { data: rawDocs, error } = await supabaseAny
         .from('documentos_cuenta')
         .select('id, id_tipo_documento, id_estatus_verificacion, id_persona')
         .eq('id_cuenta_cobranza', cuentaId)
         .eq('activo', true);
       
+      const docs = rawDocs as DocumentoRow[] | null;
       if (error || !docs || docs.length === 0) return [];
 
       // Get unique tipo_documento ids
       const tipoIds = [...new Set(docs.map(d => d.id_tipo_documento))];
       
       // Get tipos_documento info
-      const { data: tipos } = await supabase
+      const { data: rawTipos } = await supabaseAny
         .from('tipos_documento')
         .select('id, nombre, id_categoria_documento')
         .in('id', tipoIds);
       
+      const tipos = rawTipos as TipoDocumentoRow[] | null;
+      
       // Create a map for quick lookup
-      const tiposMap = new Map<number, { id: number; nombre: string; id_categoria_documento: number | null }>();
+      const tiposMap = new Map<number, TipoDocumentoRow>();
       tipos?.forEach(t => tiposMap.set(t.id, t));
       
       // Merge the data
