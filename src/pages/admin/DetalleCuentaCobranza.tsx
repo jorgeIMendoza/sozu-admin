@@ -2113,16 +2113,13 @@ export default function DetalleCuentaCobranza() {
         description: "El pago ha sido eliminado. Recalculando aplicaciones...",
       });
 
-      // Call webhook to redistribute remaining payments (using no-cors to avoid CORS issues)
+      // Call edge function proxy to redistribute remaining payments (avoids CORS issues)
       try {
-        await fetch(`${N8N_WEBHOOK_BASE_URL}/ajustaAplicacionesPagoCuentaEspecifica`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id_cuenta_cobranza: cuentaId }),
-          mode: 'no-cors'
+        await supabase.functions.invoke('recalcular-aplicaciones', {
+          body: { id_cuenta_cobranza: cuentaId }
         });
       } catch (webhookError) {
-        console.error('Error calling adjustment webhook:', webhookError);
+        console.error('Error calling recalcular-aplicaciones:', webhookError);
       }
 
       // Invalidate queries after a short delay to allow webhook to complete
@@ -2804,12 +2801,14 @@ export default function DetalleCuentaCobranza() {
                     onClick={async () => {
                       setIsRecalculatingAplicaciones(true);
                       try {
-                        await fetch(`${N8N_WEBHOOK_BASE_URL}/ajustaAplicacionesPagoCuentaEspecifica`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ id_cuenta_cobranza: cuentaId }),
-                          mode: 'no-cors' // Allow cross-origin requests without CORS
+                        // Use edge function proxy to avoid CORS issues with external n8n webhook
+                        const { data, error } = await supabase.functions.invoke('recalcular-aplicaciones', {
+                          body: { id_cuenta_cobranza: cuentaId }
                         });
+                        
+                        if (error) {
+                          throw error;
+                        }
                         
                         // Log activity
                         await registrarActualizacion(
@@ -2825,10 +2824,9 @@ export default function DetalleCuentaCobranza() {
                           'exito'
                         );
                         
-                        // With no-cors mode, we can't read the response, but the request is sent
                         toast({
-                          title: "Recálculo solicitado",
-                          description: "Se envió la solicitud de recálculo. Los datos se actualizarán en unos segundos...",
+                          title: "Recálculo iniciado",
+                          description: "Las aplicaciones de pago se están redistribuyendo...",
                         });
                         
                         // Refresh after delay to allow webhook to complete
@@ -2855,8 +2853,9 @@ export default function DetalleCuentaCobranza() {
                         );
                         
                         toast({
-                          title: "Solicitud enviada",
-                          description: "Se intentó enviar la solicitud de recálculo. Refresca la página en unos segundos para ver los cambios.",
+                          title: "Error",
+                          description: "No se pudo iniciar el recálculo. Intenta de nuevo.",
+                          variant: "destructive",
                         });
                         setIsRecalculatingAplicaciones(false);
                       }
