@@ -2292,7 +2292,7 @@ export default function Pagos() {
                       <TableHead>Pagado</TableHead>
                       <TableHead>Restante</TableHead>
                       <TableHead>Pagos en Efectivo</TableHead>
-                      <TableHead>Progreso</TableHead>
+                      <TableHead>Progreso para Entrega</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>

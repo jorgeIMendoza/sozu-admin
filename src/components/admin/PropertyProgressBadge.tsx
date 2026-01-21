@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Check, Clock, Circle, AlertTriangle, CreditCard, Users, FileCheck } from "lucide-react";
+import { Check, Clock, Circle, AlertTriangle, CreditCard, Users, FileCheck, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -12,6 +12,11 @@ import {
 interface PropertyProgressBadgeProps {
   cuentaId: number;
   estatusActual: number;
+  cuentaDetalle?: {
+    numero_escritura?: string | null;
+    fecha_escritura?: string | null;
+    id_notario?: number | null;
+  } | null;
 }
 
 interface ConditionItem {
@@ -27,9 +32,24 @@ interface StageData {
   conditions: ConditionItem[];
 }
 
+// Define explicit types to avoid Supabase type inference issues
+interface DocumentoRow {
+  id: number;
+  id_tipo_documento: number;
+  id_estatus_verificacion: number | null;
+  id_persona: number | null;
+}
+
+interface TipoDocumentoRow {
+  id: number;
+  nombre: string;
+  id_categoria_documento: number | null;
+}
+
 export function PropertyProgressBadge({
   cuentaId,
   estatusActual,
+  cuentaDetalle,
 }: PropertyProgressBadgeProps) {
   // Fetch payment agreements status
   const { data: acuerdosPago, isLoading: isLoadingAcuerdos } = useQuery({
@@ -59,11 +79,62 @@ export function PropertyProgressBadge({
     staleTime: 60000,
   });
 
-  const isLoading = isLoadingAcuerdos || isLoadingCompradores;
+  // Fetch documents with their types
+  const { data: documentosData, isLoading: isLoadingDocs } = useQuery({
+    queryKey: ['progress-badge-documentos', cuentaId],
+    queryFn: async (): Promise<Array<{
+      id: number;
+      id_tipo_documento: number;
+      id_estatus_verificacion: number | null;
+      id_persona: number | null;
+      tipos_documento: TipoDocumentoRow | null;
+    }>> => {
+      // Cast supabase to any to avoid deep type instantiation errors
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supabaseAny = supabase as any;
+      
+      const { data: rawDocs, error } = await supabaseAny
+        .from('documentos_cuenta')
+        .select('id, id_tipo_documento, id_estatus_verificacion, id_persona')
+        .eq('id_cuenta_cobranza', cuentaId)
+        .eq('activo', true);
+      
+      const docs = rawDocs as DocumentoRow[] | null;
+      if (error || !docs || docs.length === 0) return [];
+
+      // Get unique tipo_documento ids
+      const tipoIds = [...new Set(docs.map(d => d.id_tipo_documento))];
+      
+      // Get tipos_documento info
+      const { data: rawTipos } = await supabaseAny
+        .from('tipos_documento')
+        .select('id, nombre, id_categoria_documento')
+        .in('id', tipoIds);
+      
+      const tipos = rawTipos as TipoDocumentoRow[] | null;
+      
+      // Create a map for quick lookup
+      const tiposMap = new Map<number, TipoDocumentoRow>();
+      tipos?.forEach(t => tiposMap.set(t.id, t));
+      
+      // Merge the data
+      return docs.map(d => ({
+        id: d.id,
+        id_tipo_documento: d.id_tipo_documento,
+        id_estatus_verificacion: d.id_estatus_verificacion,
+        id_persona: d.id_persona,
+        tipos_documento: tiposMap.get(d.id_tipo_documento) || null
+      }));
+    },
+    staleTime: 60000,
+  });
+
+  const isLoading = isLoadingAcuerdos || isLoadingCompradores || isLoadingDocs;
 
   const calculateStages = (): StageData[] => {
     const stages: StageData[] = [];
     const hasCompradores = (compradoresCount ?? 0) > 0;
+    const documentos = documentosData || [];
 
     // ============ VENDIDO ============
     const vendidoConditions: ConditionItem[] = [];
@@ -92,6 +163,13 @@ export function PropertyProgressBadge({
       detail: hasCompradores ? `${compradoresCount} comprador(es)` : 'Sin compradores'
     });
 
+    const contratoFirmado = documentos.some(d => d.id_tipo_documento === 14 && d.id_estatus_verificacion === 2);
+    vendidoConditions.push({
+      label: 'Contrato firmado verificado',
+      completed: contratoFirmado,
+      detail: contratoFirmado ? 'Verificado' : 'Pendiente de verificación'
+    });
+
     const vendidoCompleted = vendidoConditions.filter(c => c.completed).length;
     const vendidoPercentage = Math.round((vendidoCompleted / vendidoConditions.length) * 100);
     stages.push({
@@ -106,7 +184,7 @@ export function PropertyProgressBadge({
     
     const estatusValidoEscrituracion = estatusActual === 5 || estatusActual === 9;
     escrituracionConditions.push({
-      label: 'Estatus válido',
+      label: 'Estatus válido (Vendido o Pagada)',
       completed: estatusValidoEscrituracion || estatusActual >= 7,
       detail: estatusActual >= 7 ? 'Ya en escrituración' : estatusValidoEscrituracion ? 'Listo' : 'Debe estar Vendido o Pagada'
     });
@@ -114,15 +192,27 @@ export function PropertyProgressBadge({
     const pagosPendientes = acuerdosPago?.filter(a => a.id_concepto !== 7 && a.id_concepto !== 9 && !a.pago_completado) ?? [];
     const cuentaPagada = pagosPendientes.length === 0;
     escrituracionConditions.push({
-      label: 'Cuenta pagada',
+      label: 'Cuenta pagada completamente',
       completed: cuentaPagada,
-      detail: cuentaPagada ? 'Todos los pagos completados' : `${pagosPendientes.length} pendiente(s)`
+      detail: cuentaPagada ? 'Todos los pagos completados' : `${pagosPendientes.length} pago(s) pendiente(s)`
     });
 
     escrituracionConditions.push({
       label: 'Compradores registrados',
       completed: hasCompradores,
       detail: hasCompradores ? `${compradoresCount} comprador(es)` : 'Sin compradores'
+    });
+
+    const docsCompradoresPendientes = documentos.filter(d => {
+      const cat = d.tipos_documento?.id_categoria_documento;
+      const isExcludedCategory = cat === 7 || cat === 8;
+      return d.id_persona && !isExcludedCategory && d.id_estatus_verificacion !== 2;
+    });
+    const docsVerificados = docsCompradoresPendientes.length === 0 && hasCompradores;
+    escrituracionConditions.push({
+      label: 'Documentos de compradores verificados',
+      completed: docsVerificados,
+      detail: docsVerificados ? 'Todos verificados' : `${docsCompradoresPendientes.length} documento(s) pendiente(s)`
     });
 
     const escrituracionCompleted = escrituracionConditions.filter(c => c.completed).length;
@@ -142,6 +232,22 @@ export function PropertyProgressBadge({
       label: 'Propiedad en escrituración',
       completed: enEscrituracion || estatusActual === 8,
       detail: estatusActual === 8 ? 'Entregada' : enEscrituracion ? 'En proceso' : 'Debe completar escrituración'
+    });
+
+    const datosEscrituraCompletos = !!(cuentaDetalle?.numero_escritura && cuentaDetalle?.fecha_escritura && cuentaDetalle?.id_notario);
+    entregaConditions.push({
+      label: 'Datos de escritura completos',
+      completed: datosEscrituraCompletos,
+      detail: datosEscrituraCompletos ? 'Número, fecha y notario registrados' : 'Faltan datos de escritura'
+    });
+
+    const docsEntrega = documentos.filter(d => d.tipos_documento?.id_categoria_documento === 7);
+    const docsEntregaVerificados = docsEntrega.filter(d => d.id_estatus_verificacion === 2);
+    const entregaDocsOk = docsEntrega.length > 0 && docsEntregaVerificados.length === docsEntrega.length;
+    entregaConditions.push({
+      label: 'Documentos de entrega verificados',
+      completed: entregaDocsOk,
+      detail: docsEntrega.length === 0 ? 'Sin documentos de entrega' : `${docsEntregaVerificados.length}/${docsEntrega.length} verificados`
     });
 
     const contraEntregaAcuerdo = acuerdosPago?.find(a => a.id_concepto === 7);
@@ -209,6 +315,7 @@ function StageIndicatorBadge({ stage }: { stage: StageData }) {
   const getConditionIcon = (label: string) => {
     if (label.includes('Pago') || label.includes('pagada')) return <CreditCard className="h-3 w-3" />;
     if (label.includes('Comprador')) return <Users className="h-3 w-3" />;
+    if (label.includes('Documento') || label.includes('Contrato')) return <FileText className="h-3 w-3" />;
     return <FileCheck className="h-3 w-3" />;
   };
 
@@ -225,7 +332,7 @@ function StageIndicatorBadge({ stage }: { stage: StageData }) {
           {getStatusIcon()}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-3" align="center">
+      <PopoverContent className="w-72 p-3" align="center">
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm">{stage.name}</h4>
