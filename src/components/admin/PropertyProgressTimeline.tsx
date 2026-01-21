@@ -137,50 +137,50 @@ export function PropertyProgressTimeline({
     const hasCompradores = (compradoresCount ?? 0) > 0;
     const documentos = documentosData || [];
 
-    // ============ ETAPA 1: VENDIDO ============
-    const vendidoConditions: ConditionItem[] = [];
+    // ============ ETAPA 1: PAGOS (antes Vendido) ============
+    const pagosConditions: ConditionItem[] = [];
     
     const statusOk = estatusActual >= 4;
-    vendidoConditions.push({
+    pagosConditions.push({
       label: 'Propiedad apartada',
       completed: statusOk,
       detail: statusOk ? 'Estatus válido' : 'La propiedad debe estar apartada'
     });
 
     // Show consolidated "Pagos" condition with X/N format
-    // Exclude contra entrega (7) and escrituración (9) from this calculation
-    const pagosVendido = acuerdosPago?.filter(a => a.id_concepto !== 7 && a.id_concepto !== 9) ?? [];
-    if (pagosVendido.length > 0) {
-      const pagosCompletados = pagosVendido.filter(p => p.pago_completado).length;
-      const todosPagosCompletos = pagosCompletados === pagosVendido.length;
-      vendidoConditions.push({
+    // Exclude escrituración (9) from this calculation - include contra entrega (7)
+    const pagosTodos = acuerdosPago?.filter(a => a.id_concepto !== 9) ?? [];
+    if (pagosTodos.length > 0) {
+      const pagosCompletados = pagosTodos.filter(p => p.pago_completado).length;
+      const todosPagosCompletos = pagosCompletados === pagosTodos.length;
+      pagosConditions.push({
         label: 'Pagos',
         completed: todosPagosCompletos,
-        detail: `${pagosCompletados}/${pagosVendido.length} completado(s)`
+        detail: `${pagosCompletados}/${pagosTodos.length} completado(s)`
       });
     }
 
-    vendidoConditions.push({
+    pagosConditions.push({
       label: 'Compradores registrados',
       completed: hasCompradores,
       detail: hasCompradores ? `${compradoresCount} comprador(es)` : 'Sin compradores'
     });
 
     const contratoFirmado = documentos.some(d => d.id_tipo_documento === 14 && d.id_estatus_verificacion === 2);
-    vendidoConditions.push({
+    pagosConditions.push({
       label: 'Contrato firmado verificado',
       completed: contratoFirmado,
       detail: contratoFirmado ? 'Verificado' : 'Pendiente de verificación'
     });
 
-    const vendidoCompleted = vendidoConditions.filter(c => c.completed).length;
-    const vendidoPercentage = Math.round((vendidoCompleted / vendidoConditions.length) * 100);
+    const pagosCompleted = pagosConditions.filter(c => c.completed).length;
+    const pagosPercentage = Math.round((pagosCompleted / pagosConditions.length) * 100);
 
     stages.push({
-      name: 'Vendido',
-      status: estatusActual >= 5 ? 'completed' : vendidoCompleted > 0 ? 'in-progress' : 'pending',
-      conditions: vendidoConditions,
-      percentage: estatusActual >= 5 ? 100 : vendidoPercentage,
+      name: 'Pagos',
+      status: estatusActual >= 5 ? 'completed' : pagosCompleted > 0 ? 'in-progress' : 'pending',
+      conditions: pagosConditions,
+      percentage: estatusActual >= 5 ? 100 : pagosPercentage,
     });
 
     // ============ ETAPA 2: ESCRITURACIÓN ============
@@ -193,7 +193,7 @@ export function PropertyProgressTimeline({
       detail: estatusActual >= 7 ? 'Ya en escrituración' : estatusValidoEscrituracion ? 'Listo' : 'Debe estar Vendido o Pagada'
     });
 
-    const pagosPendientes = acuerdosPago?.filter(a => a.id_concepto !== 7 && a.id_concepto !== 9 && !a.pago_completado) ?? [];
+    const pagosPendientes = acuerdosPago?.filter(a => a.id_concepto !== 9 && !a.pago_completado) ?? [];
     const cuentaPagada = pagosPendientes.length === 0;
     escrituracionConditions.push({
       label: 'Cuenta pagada completamente',
@@ -255,13 +255,6 @@ export function PropertyProgressTimeline({
       detail: docsEntrega.length === 0 ? 'Sin documentos de entrega' : `${docsEntregaVerificados.length}/${docsEntrega.length} verificados`
     });
 
-    const contraEntregaAcuerdo = acuerdosPago?.find(a => a.id_concepto === 7);
-    const contraEntregaPaid = !contraEntregaAcuerdo || contraEntregaAcuerdo.pago_completado;
-    entregaConditions.push({
-      label: 'Pago contra entrega',
-      completed: contraEntregaPaid,
-      detail: !contraEntregaAcuerdo ? 'No aplica' : contraEntregaAcuerdo.pago_completado ? 'Completado' : 'Pendiente'
-    });
 
     const entregaCompleted = entregaConditions.filter(c => c.completed).length;
     const entregaPercentage = Math.round((entregaCompleted / entregaConditions.length) * 100);
