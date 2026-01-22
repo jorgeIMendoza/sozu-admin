@@ -6182,11 +6182,13 @@ export type Database = {
           clabe_stp: string
           comprador: string
           compradores_json: Json
+          dueno: string
           edificio: string
           estatus_disponibilidad_nombre: string
           fecha_compra: string
           id: number
           id_cuenta_cobranza_padre: number
+          id_entidad_relacionada_dueno: number
           id_estatus_disponibilidad: number
           id_oferta: number
           id_producto: number

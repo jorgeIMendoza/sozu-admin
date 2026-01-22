@@ -90,6 +90,8 @@ interface CuentaCobranzaRPCResult {
   id_estatus_disponibilidad: number | null;
   estatus_disponibilidad_nombre: string | null;
   vendedor: string | null;
+  dueno: string | null;
+  id_entidad_relacionada_dueno: number | null;
   id_cuenta_cobranza_padre: number | null;
   total_count: number;
 }
@@ -173,7 +175,7 @@ export function useCuentasCobranzaPaginadas({
         precio_lista: null,
         pagado: 0,
         restante: 0,
-        dueno: row.vendedor || '',
+        dueno: row.dueno || '',
         proyecto: row.proyecto || '',
         edificio: row.edificio || '',
         numero_propiedad: row.numero_propiedad || '',
@@ -186,6 +188,7 @@ export function useCuentasCobranzaPaginadas({
         estatus_propiedad: row.estatus_disponibilidad_nombre || undefined,
         cash_payments: [],
         id_proyecto: row.id_proyecto || undefined,
+        id_entidad_relacionada_dueno: row.id_entidad_relacionada_dueno || undefined,
         compradores: (row.compradores_json || []).map(c => ({
           nombre_legal: c.nombre_legal,
           rfc: c.rfc,
