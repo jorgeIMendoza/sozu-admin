@@ -1,0 +1,2 @@
+-- Drop the OLD version of the function with the different parameter order
+DROP FUNCTION IF EXISTS get_cuentas_cobranza_paginadas(integer, integer, text, text, text, text, text, text, text, integer[], text[], boolean, integer[], integer[]);
