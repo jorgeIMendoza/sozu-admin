@@ -1321,39 +1321,56 @@ export default function Pagos() {
                       onClick={async () => {
                         setIsExportingData(true);
                         try {
-                          console.log('[Export] Starting export for active accounts using optimized RPC');
+                          console.log('[Export] Starting batched export for active accounts');
                           
-                          // Use optimized export RPC with explicit client-side limit to override PostgREST default
-                          const { data: allData, error } = await supabase
-                            .rpc('get_cuentas_cobranza_export' as any, {
-                              p_id_cuenta: idCuentaFilter || null,
-                              p_proyecto: proyectoFilter || null,
-                              p_clabe: clabeFilter || null,
-                              p_no_propiedad: noPropiedadFilter || null,
-                              p_modelo: modeloFilter || null,
-                              p_compradores: compradoresFilter || null,
-                              p_producto: productoFilter || null,
-                              p_estatus_ids: estatusFilter.length > 0 ? estatusFilter : null,
-                              p_tipos: selectedTipos.length < 3 ? selectedTipos : null,
-                              p_activo: true,
-                              p_proyecto_ids: hasUnrestrictedAccess ? null : (accessibleProjectIds.length > 0 ? accessibleProjectIds : null),
-                              p_dueno_entity_ids: isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0 ? ownershipEntityIds : null,
-                              p_limit: 50000,
-                            })
-                            .limit(50000);
+                          const batchSize = 1000;
+                          let allData: any[] = [];
+                          let offset = 0;
+                          let hasMore = true;
                           
-                          if (error) {
-                            console.error('Error fetching data for export:', error);
-                            toast({ title: "Error", description: "No se pudo obtener los datos para exportar.", variant: "destructive" });
-                            return;
+                          // Fetch in batches to bypass PostgREST 1000 row limit
+                          while (hasMore) {
+                            console.log(`[Export] Fetching batch at offset ${offset}`);
+                            const { data: batchData, error } = await supabase
+                              .rpc('get_cuentas_cobranza_export' as any, {
+                                p_id_cuenta: idCuentaFilter || null,
+                                p_proyecto: proyectoFilter || null,
+                                p_clabe: clabeFilter || null,
+                                p_no_propiedad: noPropiedadFilter || null,
+                                p_modelo: modeloFilter || null,
+                                p_compradores: compradoresFilter || null,
+                                p_producto: productoFilter || null,
+                                p_estatus_ids: estatusFilter.length > 0 ? estatusFilter : null,
+                                p_tipos: selectedTipos.length < 3 ? selectedTipos : null,
+                                p_activo: true,
+                                p_proyecto_ids: hasUnrestrictedAccess ? null : (accessibleProjectIds.length > 0 ? accessibleProjectIds : null),
+                                p_dueno_entity_ids: isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0 ? ownershipEntityIds : null,
+                                p_limit: batchSize,
+                              })
+                              .range(offset, offset + batchSize - 1);
+                            
+                            if (error) {
+                              console.error('Error fetching batch:', error);
+                              toast({ title: "Error", description: "No se pudo obtener los datos para exportar.", variant: "destructive" });
+                              return;
+                            }
+                            
+                            if (batchData && batchData.length > 0) {
+                              allData = [...allData, ...batchData];
+                              console.log(`[Export] Retrieved ${batchData.length} records, total: ${allData.length}`);
+                              offset += batchSize;
+                              hasMore = batchData.length === batchSize;
+                            } else {
+                              hasMore = false;
+                            }
                           }
                           
-                          if (!allData || allData.length === 0) {
+                          if (allData.length === 0) {
                             toast({ title: "Sin datos", description: "No hay datos para exportar.", variant: "destructive" });
                             return;
                           }
                           
-                          console.log(`[Export] Retrieved ${allData.length} records`);
+                          console.log(`[Export] Total retrieved: ${allData.length} records`);
                           
                           const exportData = allData.map((cuenta: any) => ({
                             'ID Cuenta': formatCuentaCobranzaId(cuenta.id, cuenta.tipo),
@@ -1927,39 +1944,56 @@ export default function Pagos() {
                       onClick={async () => {
                         setIsExportingData(true);
                         try {
-                          console.log('[Export] Starting export for cancelled accounts using optimized RPC');
+                          console.log('[Export] Starting batched export for cancelled accounts');
                           
-                          // Use optimized export RPC with explicit client-side limit to override PostgREST default
-                          const { data: allData, error } = await supabase
-                            .rpc('get_cuentas_cobranza_export' as any, {
-                              p_id_cuenta: idCuentaFilter || null,
-                              p_proyecto: proyectoFilter || null,
-                              p_clabe: clabeFilter || null,
-                              p_no_propiedad: noPropiedadFilter || null,
-                              p_modelo: modeloFilter || null,
-                              p_compradores: compradoresFilter || null,
-                              p_producto: productoFilter || null,
-                              p_estatus_ids: estatusFilter.length > 0 ? estatusFilter : null,
-                              p_tipos: selectedTipos.length < 3 ? selectedTipos : null,
-                              p_activo: false, // Cancelled accounts
-                              p_proyecto_ids: hasUnrestrictedAccess ? null : (accessibleProjectIds.length > 0 ? accessibleProjectIds : null),
-                              p_dueno_entity_ids: isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0 ? ownershipEntityIds : null,
-                              p_limit: 50000,
-                            })
-                            .limit(50000);
+                          const batchSize = 1000;
+                          let allData: any[] = [];
+                          let offset = 0;
+                          let hasMore = true;
                           
-                          if (error) {
-                            console.error('Error fetching data for export:', error);
-                            toast({ title: "Error", description: "No se pudo obtener los datos para exportar.", variant: "destructive" });
-                            return;
+                          // Fetch in batches to bypass PostgREST 1000 row limit
+                          while (hasMore) {
+                            console.log(`[Export] Fetching batch at offset ${offset}`);
+                            const { data: batchData, error } = await supabase
+                              .rpc('get_cuentas_cobranza_export' as any, {
+                                p_id_cuenta: idCuentaFilter || null,
+                                p_proyecto: proyectoFilter || null,
+                                p_clabe: clabeFilter || null,
+                                p_no_propiedad: noPropiedadFilter || null,
+                                p_modelo: modeloFilter || null,
+                                p_compradores: compradoresFilter || null,
+                                p_producto: productoFilter || null,
+                                p_estatus_ids: estatusFilter.length > 0 ? estatusFilter : null,
+                                p_tipos: selectedTipos.length < 3 ? selectedTipos : null,
+                                p_activo: false, // Cancelled accounts
+                                p_proyecto_ids: hasUnrestrictedAccess ? null : (accessibleProjectIds.length > 0 ? accessibleProjectIds : null),
+                                p_dueno_entity_ids: isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0 ? ownershipEntityIds : null,
+                                p_limit: batchSize,
+                              })
+                              .range(offset, offset + batchSize - 1);
+                            
+                            if (error) {
+                              console.error('Error fetching batch:', error);
+                              toast({ title: "Error", description: "No se pudo obtener los datos para exportar.", variant: "destructive" });
+                              return;
+                            }
+                            
+                            if (batchData && batchData.length > 0) {
+                              allData = [...allData, ...batchData];
+                              console.log(`[Export] Retrieved ${batchData.length} records, total: ${allData.length}`);
+                              offset += batchSize;
+                              hasMore = batchData.length === batchSize;
+                            } else {
+                              hasMore = false;
+                            }
                           }
                           
-                          if (!allData || allData.length === 0) {
+                          if (allData.length === 0) {
                             toast({ title: "Sin datos", description: "No hay datos para exportar.", variant: "destructive" });
                             return;
                           }
                           
-                          console.log(`[Export] Retrieved ${allData.length} records`);
+                          console.log(`[Export] Total retrieved: ${allData.length} records`);
                           
                           const exportData = allData.map((cuenta: any) => ({
                             'ID Cuenta': formatCuentaCobranzaId(cuenta.id, cuenta.tipo),
