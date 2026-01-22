@@ -1568,7 +1568,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     enabled: searchUsuario.length >= 2
   });
 
-  // Query for searching inmobiliarias (personas with id_tipo_persona = 4)
+  // Query for searching inmobiliarias (personas morales - tipo_persona = 'pm')
   const { data: inmobiliarias } = useQuery({
     queryKey: ["inmobiliarias_search", searchUsuario],
     queryFn: async (): Promise<Array<{ email: string; nombre: string; esInmobiliaria: boolean }>> => {
@@ -1577,20 +1577,19 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       // Get existing comisionistas emails
       const existingEmails = comisionistas?.map(c => c.email_usuario) || [];
       
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabaseAny = supabase as any;
-      
-      const { data } = await supabaseAny
+      const { data } = await supabase
         .from('personas')
         .select('id, nombre_legal, email, rfc')
-        .eq('id_tipo_persona', 4) // Inmobiliaria
+        .eq('tipo_persona', 'pm') // Persona Moral (Inmobiliaria/Empresa)
         .eq('activo', true)
         .or(`email.ilike.%${searchUsuario}%,nombre_legal.ilike.%${searchUsuario}%`)
-        .not('email', 'in', existingEmails.length > 0 ? `(${existingEmails.map((e: string) => `"${e}"`).join(',')})` : '("")')
-        .limit(10);
+        .limit(20);
+      
+      // Filter out existing comisionistas
+      const filtered = (data || []).filter((p: { email: string }) => !existingEmails.includes(p.email));
       
       // Transform to match usuario format
-      return (data || []).map((p: { email: string; nombre_legal: string }) => ({
+      return filtered.map((p: { email: string; nombre_legal: string }) => ({
         email: p.email,
         nombre: p.nombre_legal,
         esInmobiliaria: true
