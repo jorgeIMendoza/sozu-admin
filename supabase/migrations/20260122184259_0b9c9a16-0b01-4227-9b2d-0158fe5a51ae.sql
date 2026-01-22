@@ -1,0 +1,2 @@
+-- Drop the old version without p_vendedor parameter
+DROP FUNCTION IF EXISTS get_cuentas_cobranza_paginadas(INTEGER, INTEGER, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, INTEGER[], TEXT[], BOOLEAN, INTEGER[], INTEGER[]);
