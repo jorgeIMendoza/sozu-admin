@@ -6185,21 +6185,18 @@ export type Database = {
           estatus_disponibilidad: string
           fecha_compra: string
           id: number
+          id_cuenta_cobranza_padre: number
           id_estatus_disponibilidad: number
           id_oferta: number
-          id_producto: number
-          id_propiedad: number
           id_proyecto: number
           modelo: string
           numero_propiedad: string
           pagos_efectivo: Json
-          porcentaje_comision_venta: number
           precio_final: number
           producto: string
           proyecto: string
           tipo: string
           total_count: number
-          valor_uma: number
           vendedor: string
         }[]
       }
