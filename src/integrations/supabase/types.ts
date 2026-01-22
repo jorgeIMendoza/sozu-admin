@@ -6179,24 +6179,26 @@ export type Database = {
         }
         Returns: {
           activo: boolean
+          apartado_pagado: boolean
           clabe_stp: string
           compradores: Json
-          edificio: string
-          estatus_disponibilidad: string
+          dueno: string
+          estatus_disponibilidad_nombre: string
           fecha_compra: string
           id: number
-          id_cuenta_cobranza_padre: number
           id_estatus_disponibilidad: number
-          id_oferta: number
+          id_propiedad: number
           id_proyecto: number
-          modelo: string
+          nombre_edificio: string
+          nombre_modelo: string
+          nombre_proyecto: string
           numero_propiedad: string
           pagos_efectivo: Json
+          porcentaje_comision_venta: number
           precio_final: number
-          producto: string
-          proyecto: string
           tipo: string
           total_count: number
+          valor_uma: number
           vendedor: string
         }[]
       }
