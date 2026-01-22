@@ -1,21 +1,46 @@
 import { useState, useEffect } from 'react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { Button } from '@/components/ui/button';
-import { X, Download } from 'lucide-react';
+import { X, Download, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
-
 export function PWAInstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
+  // PWA update management
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(r) {
+      console.log('SW registrado correctamente');
+    },
+    onRegisterError(error) {
+      console.error('Error al registrar SW:', error);
+    },
+  });
+
+  // Show toast when update is available
+  useEffect(() => {
+    if (needRefresh) {
+      toast.info('Nueva versión disponible', {
+        description: 'Hay una actualización disponible para la aplicación',
+        action: {
+          label: 'Actualizar',
+          onClick: () => updateServiceWorker(true),
+        },
+        duration: 60000, // 1 minuto
+        icon: <RefreshCw className="w-4 h-4" />,
+      });
+    }
+  }, [needRefresh, updateServiceWorker]);
+
+  // Install prompt handling
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setDeferredPrompt(e);
       setShowInstallPrompt(true);
     };
 
