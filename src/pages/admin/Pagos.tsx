@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
-import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload, Banknote, ChevronDown, ChevronUp, Wallet, Scale, Building2 } from "lucide-react";
+import { Search, CreditCard, Eye, X, Edit, Plus, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Upload, Banknote, ChevronDown, ChevronUp, Wallet, Scale, Building2, FileSpreadsheet as SatIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -19,6 +19,7 @@ import { CancelCuentaDialog } from "@/components/admin/CancelCuentaDialog";
 import { CashPaymentDetailDialog } from "@/components/admin/CashPaymentDetailDialog";
 import { ProjectCollectionSummaryDialog } from "@/components/admin/ProjectCollectionSummaryDialog";
 import { PropertyProgressBadge } from "@/components/admin/PropertyProgressBadge";
+import { SATNotificationDialog } from "@/components/admin/SATNotificationDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -123,6 +124,13 @@ export default function Pagos() {
   });
   const [uploadingCep, setUploadingCep] = useState(false);
   const [isGeneratingEstadoCuenta, setIsGeneratingEstadoCuenta] = useState<number | null>(null);
+  const [satDialog, setSatDialog] = useState<{
+    isOpen: boolean;
+    cuenta: CuentaCobranza | null;
+  }>({
+    isOpen: false,
+    cuenta: null
+  });
   
   // Estado para controlar si las estadísticas están expandidas (con persistencia en localStorage)
   const [statsExpanded, setStatsExpanded] = useState(() => {
@@ -2609,6 +2617,24 @@ export default function Pagos() {
                                    </TooltipContent>
                                  </Tooltip>
                                  )}
+                                 {/* SAT Notification Button - Only for Propiedad with estatus 9 */}
+                                 {cuenta.tipo === 'Propiedad' && cuenta.id_estatus_disponibilidad === 9 && (
+                                   <Tooltip>
+                                     <TooltipTrigger asChild>
+                                       <Button 
+                                         variant="outline" 
+                                         size="icon" 
+                                         onClick={() => setSatDialog({ isOpen: true, cuenta })}
+                                         className="relative"
+                                       >
+                                         <span className="font-bold text-[10px]">SAT</span>
+                                       </Button>
+                                     </TooltipTrigger>
+                                     <TooltipContent>
+                                       <p>Notificación al SAT</p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 )}
                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                      <Button variant="outline" size="icon" onClick={() => handleDownloadOffer(cuenta)} disabled={loadingDownload === cuenta.id}>
@@ -3156,5 +3182,15 @@ export default function Pagos() {
         isRepresentanteEmpresaDuena={isRepresentanteEmpresaDuena}
         ownershipEntityIds={ownershipEntityIds}
       />
+
+      {satDialog.cuenta && (
+        <SATNotificationDialog
+          isOpen={satDialog.isOpen}
+          onClose={() => setSatDialog({ isOpen: false, cuenta: null })}
+          cuentaCobranzaId={satDialog.cuenta.id}
+          cuentaLabel={formatCuentaCobranzaId(satDialog.cuenta.id, satDialog.cuenta.tipo)}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['cuentas_cobranza'] })}
+        />
+      )}
     </div>;
 }

@@ -6139,6 +6139,10 @@ export type Database = {
       borrar_sp_esquemas_pago_proyecto: { Args: never; Returns: undefined }
       borrar_sp_vistas: { Args: never; Returns: undefined }
       can_view_all_prospects: { Args: never; Returns: boolean }
+      check_sat_notification_conditions: {
+        Args: { p_cuenta_cobranza_id: number }
+        Returns: boolean
+      }
       crear_referencia_bancaria: {
         Args: { id_er_dueno: number }
         Returns: string
