@@ -1344,7 +1344,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
                 {selectedProductData && (
                   <Button 
                     onClick={handleGenerateOffer} 
-                    disabled={isGenerating || productPaymentSchemes.length === 0}
+                    disabled={isGenerating || (selectedMode === "precargada" && productPaymentSchemes.length === 0)}
                   >
                     {isGenerating ? "Generando..." : "Generar Oferta"}
                   </Button>
