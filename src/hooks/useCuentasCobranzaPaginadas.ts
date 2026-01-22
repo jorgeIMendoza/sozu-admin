@@ -71,40 +71,23 @@ interface UseCuentasCobranzaParams {
 
 interface CuentaCobranzaRPCResult {
   id: number;
-  tipo: string;
-  producto_nombre: string | null;
   clabe_stp: string | null;
+  fecha_compra: string | null;
   precio_final: number;
-  precio_lista: number | null;
-  es_comision_venta_efectivo: boolean;
-  porcentaje_comision_venta: number;
-  pagado: number;
-  restante: number;
-  cash_limit: number;
-  cash_paid: number;
-  cash_remaining: number;
-  cash_percentage: number;
-  dueno: string;
-  proyecto: string;
-  edificio: string;
-  numero_propiedad: string;
-  modelo: string;
   activo: boolean;
   id_oferta: number;
-  motivo_cancelacion: string | null;
-  apartado_pagado: boolean;
-  tiene_acuerdos: boolean;
-  tiene_multas_pendientes: boolean;
-  id_estatus_disponibilidad: number | null;
-  estatus_propiedad: string | null;
-  collection_id: number | null;
-  total_acuerdos: number;
-  discrepancia: number;
-  metraje: number | null;
-  precio_por_m2: number | null;
+  tipo: string;
+  nombre_proyecto: string | null;
   id_proyecto: number | null;
-  id_entidad_relacionada_dueno: number | null;
-  compradores: Comprador[];
+  nombre_modelo: string | null;
+  numero_propiedad: string | null;
+  id_propiedad: number | null;
+  nombre_producto: string | null;
+  id_producto: number | null;
+  compradores: Array<{ id: number; nombre_legal: string; rfc: string | null; porcentaje: number }> | null;
+  id_estatus_disponibilidad: number | null;
+  nombre_vendedor: string | null;
+  pagos_efectivo: Array<{ fecha_pago: string; monto: number }> | null;
   total_count: number;
 }
 
@@ -155,7 +138,7 @@ export function useCuentasCobranzaPaginadas({
       const { data, error } = await supabase.rpc('get_cuentas_cobranza_paginadas' as any, {
         p_page: page,
         p_per_page: perPage,
-        p_id_cuenta: idCuenta ? parseInt(idCuenta) : null,
+        p_id_cuenta: idCuenta || null,
         p_proyecto: proyecto || null,
         p_clabe: clabe || null,
         p_no_propiedad: noPropiedad || null,
@@ -181,40 +164,30 @@ export function useCuentasCobranzaPaginadas({
       const cuentas: CuentaCobranza[] = result.map(row => ({
         id: row.id,
         tipo: row.tipo as 'Propiedad' | 'Producto' | 'Servicio',
-        producto_nombre: row.producto_nombre || undefined,
+        producto_nombre: row.nombre_producto || undefined,
         clabe_stp: row.clabe_stp,
         precio_final: Number(row.precio_final) || 0,
-        precio_lista: row.precio_lista ? Number(row.precio_lista) : null,
-        es_comision_venta_efectivo: row.es_comision_venta_efectivo,
-        porcentaje_comision_venta: Number(row.porcentaje_comision_venta) || 0,
-        pagado: Number(row.pagado) || 0,
-        restante: Number(row.restante) || 0,
-        cash_limit: Number(row.cash_limit) || 0,
-        cash_paid: Number(row.cash_paid) || 0,
-        cash_remaining: Number(row.cash_remaining) || 0,
-        cash_percentage: Number(row.cash_percentage) || 0,
-        cash_payments: [], // Not included in RPC for performance, can be fetched separately if needed
-        dueno: row.dueno,
-        proyecto: row.proyecto,
-        edificio: row.edificio,
-        numero_propiedad: row.numero_propiedad,
-        modelo: row.modelo,
+        precio_lista: null, // Not available in RPC
+        pagado: 0, // Not available in RPC - would need to calculate or add to function
+        restante: 0, // Not available in RPC
+        dueno: '', // Not available in RPC
+        proyecto: row.nombre_proyecto || '',
+        edificio: '', // Not available in RPC
+        numero_propiedad: row.numero_propiedad || '',
+        modelo: row.nombre_modelo || '',
         activo: row.activo,
         id_oferta: row.id_oferta,
-        motivo_cancelacion: row.motivo_cancelacion,
-        apartado_pagado: row.apartado_pagado,
-        tiene_acuerdos: row.tiene_acuerdos,
-        tiene_multas_pendientes: row.tiene_multas_pendientes,
+        apartado_pagado: false, // Not available in RPC
+        tiene_acuerdos: false, // Not available in RPC
         id_estatus_disponibilidad: row.id_estatus_disponibilidad || undefined,
-        estatus_propiedad: row.estatus_propiedad || undefined,
-        collection_id: row.collection_id,
-        total_acuerdos: Number(row.total_acuerdos) || 0,
-        discrepancia: Number(row.discrepancia) || 0,
-        metraje: row.metraje ? Number(row.metraje) : undefined,
-        precio_por_m2: row.precio_por_m2 ? Number(row.precio_por_m2) : undefined,
+        cash_payments: row.pagos_efectivo || [],
         id_proyecto: row.id_proyecto || undefined,
-        id_entidad_relacionada_dueno: row.id_entidad_relacionada_dueno || undefined,
-        compradores: Array.isArray(row.compradores) ? row.compradores : [],
+        compradores: (row.compradores || []).map(c => ({
+          nombre_legal: c.nombre_legal,
+          rfc: c.rfc,
+          porcentaje_copropiedad: c.porcentaje,
+          id_persona: c.id,
+        })),
       }));
 
       return {
