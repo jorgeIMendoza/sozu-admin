@@ -6179,39 +6179,30 @@ export type Database = {
         }
         Returns: {
           activo: boolean
-          apartado_pagado: boolean
-          cash_limit: number
-          cash_paid: number
-          cash_payments: Json
           clabe_stp: string
-          collection_id: number
-          compradores_json: Json
-          discrepancia: number
-          dueno: string
+          compradores: Json
           edificio: string
-          estatus_disponibilidad_nombre: string
+          estatus: string
+          estatus_disponibilidad: string
           fecha_compra: string
+          fecha_creacion: string
           id: number
-          id_entidad_relacionada_dueno: number
+          id_estatus_cuenta: number
           id_estatus_disponibilidad: number
-          id_modelo: number
           id_oferta: number
           id_producto: number
           id_propiedad: number
           id_proyecto: number
-          metraje: number
+          id_vendedor: number
           modelo: string
           numero_propiedad: string
-          pagado: number
+          pagos_efectivo: Json
+          porcentaje_comision_venta: number
           precio_final: number
-          precio_lista: number
           producto: string
           proyecto: string
-          restante: number
-          tiene_acuerdos: boolean
-          tipo: string
-          total_acuerdos: number
           total_count: number
+          valor_uma: number
           vendedor: string
         }[]
       }
