@@ -1780,8 +1780,8 @@ export default function Pagos() {
                                    </TooltipContent>
                                  </Tooltip>
                                  )}
-                                 {/* SAT Notification Button - Only for Propiedad with estatus 9 */}
-                                 {cuenta.tipo === 'Propiedad' && cuenta.id_estatus_disponibilidad === 9 && (
+                                  {/* SAT Notification Button - For Propiedad with estatus 7, 8, or 9 */}
+                                  {cuenta.tipo === 'Propiedad' && [7, 8, 9].includes(cuenta.id_estatus_disponibilidad) && (
                                    <Tooltip>
                                      <TooltipTrigger asChild>
                                        <Button 
