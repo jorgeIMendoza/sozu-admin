@@ -1551,9 +1551,32 @@ export default function Pagos() {
                                </div> : <span className="text-muted-foreground">Sin compradores</span>}
                          </TableCell>
                          <TableCell>
-                           <span className="cursor-pointer hover:text-primary hover:underline" onClick={() => handleVendedorClick(cuenta.dueno)}>
-                             {cuenta.dueno}
-                           </span>
+                           {cuenta.es_propietario_comprador && cuenta.compradores.length > 1 ? (
+                             <CompradoresDetailDialog 
+                               compradores={cuenta.compradores} 
+                               label="propietarios"
+                               trigger={
+                                 <div className="cursor-pointer hover:bg-muted/50 p-1 rounded">
+                                   <div className="flex items-center gap-1">
+                                     <span className="font-medium">{cuenta.compradores[0].nombre_legal}</span>
+                                     <Badge variant="secondary" className="text-xs">+{cuenta.compradores.length - 1}</Badge>
+                                   </div>
+                                   <span className="text-muted-foreground text-xs">(Comprador)</span>
+                                 </div>
+                               }
+                             />
+                           ) : cuenta.es_propietario_comprador ? (
+                             <div>
+                               <span className="cursor-pointer hover:text-primary hover:underline" onClick={() => handleVendedorClick(cuenta.dueno)}>
+                                 {cuenta.dueno}
+                               </span>
+                               <div className="text-muted-foreground text-xs">(Comprador)</div>
+                             </div>
+                           ) : (
+                             <span className="cursor-pointer hover:text-primary hover:underline" onClick={() => handleVendedorClick(cuenta.dueno)}>
+                               {cuenta.dueno}
+                             </span>
+                           )}
                          </TableCell>
                           <TableCell>
                             {cuenta.clabe_stp ? <Badge variant="outline" className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => {
