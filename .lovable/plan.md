@@ -1,139 +1,146 @@
 
-# Plan: Mejorar Validación SAT para Múltiples Compradores
+# Plan: Actualizar Trigger para Detectar Actualizaciones de Documentos SAT
 
-## Problema Identificado
+## Resumen
 
-Para la cuenta de cobranza 207 (propiedad Margot 818):
-- **Estatus actual**: 8 (Entregado) - El botón SAT solo aparece cuando el estatus es 9 (Pagada completamente)
-- **Documentos disponibles**: Factura PDF, XML y Constancia de Situación Fiscal para Mario Alberto Salazar Rivas (todo verificado)
-
-La lógica actual tiene las siguientes limitaciones:
-1. Solo verifica que exista **al menos una** factura y constancia, sin validar por cada comprador
-2. No muestra un desglose de requisitos por comprador cuando hay múltiples propietarios
-3. No permite generar notificación parcial para los compradores que sí cumplen
+Actualizar el trigger de base de datos `on_document_insert_sat` para que también se ejecute cuando se actualiza un documento (cambio de comprador, verificación de estado, etc.), permitiendo que el sistema re-evalúe automáticamente las condiciones de notificación SAT.
 
 ## Cambios Propuestos
 
-### 1. Actualizar SATNotificationService
+### 1. Actualizar la Función del Trigger
 
-**Archivo**: `src/services/satNotificationService.ts`
+**Archivo**: Nueva migración SQL
 
-Modificar el servicio para:
-- Devolver un arreglo `compradoresStatus` con el estado de cada comprador:
-  ```typescript
-  interface CompradorSATStatus {
-    id_persona: number;
-    nombre_legal: string;
-    tieneFacturaPdf: boolean;
-    facturaPdfVerificada: boolean;
-    tieneFacturaXml: boolean;
-    facturaXmlVerificada: boolean;
-    tieneConstancia: boolean;
-    constanciaVerificada: boolean;
-    cumpleRequisitos: boolean;
-  }
-  ```
-- Agregar campo `compradoresStatus: CompradorSATStatus[]` al resultado
-- Actualizar la lógica de `canGenerate` para que sea `true` solo cuando **todos** los compradores cumplan
+La función `trigger_document_insert_sat` necesita manejar tanto INSERT como UPDATE. Actualmente solo revisa `NEW`, pero para UPDATE también debe considerar cambios relevantes:
 
-### 2. Actualizar SATNotificationDialog
+- Cambio de `id_persona` (reasignación de comprador)
+- Cambio de `id_estatus_verificacion` (documento verificado)
+- Cambio de `activo` (documento activado/desactivado)
 
-**Archivo**: `src/components/admin/SATNotificationDialog.tsx`
+### 2. Recrear el Trigger con INSERT OR UPDATE
 
-Modificar el diálogo para:
-- Mostrar un resumen general (estatus de la propiedad)
-- Mostrar una sección colapsable/tabla para cada comprador con sus requisitos:
-  - Nombre del comprador
-  - Factura PDF ✓/✗
-  - Factura XML ✓/✗  
-  - Constancia de Situación Fiscal ✓/✗
-- Resaltar en rojo los compradores que no cumplen todos los requisitos
-- Mostrar badge indicando cuántos compradores cumplen (ej: "2/3 listos")
-
-### 3. Agregar Modal de Detalle de Compradores (opcional)
-
-Reutilizar el patrón existente de `CompradoresDetailDialog` para mostrar el estado SAT de cada comprador cuando el usuario hace clic en el badge "+X" (si hay múltiples).
-
-## Flujo de Usuario Actualizado
-
-```text
-1. Usuario ve botón SAT (cuando estatus = 9)
-2. Abre el diálogo SAT
-3. Ve resumen general:
-   - ✓ Propiedad Pagada Completamente
-   - Compradores: 2/3 listos
-4. Expande sección de compradores para ver detalle:
-   ┌─────────────────────────────────────────────────┐
-   │ Comprador          │ PDF │ XML │ CSF │ Estado  │
-   ├─────────────────────────────────────────────────┤
-   │ Mario Alberto S.   │  ✓  │  ✓  │  ✓  │ Listo   │
-   │ Ana García López   │  ✓  │  ✗  │  ✓  │ Falta   │
-   │ Juan Pérez M.      │  ✗  │  ✗  │  ✗  │ Falta   │
-   └─────────────────────────────────────────────────┘
-5. Botón "Generar" solo habilitado cuando todos tengan ✓
+El trigger actual:
+```sql
+CREATE TRIGGER on_document_insert_sat
+  AFTER INSERT ON public.documentos
+  FOR EACH ROW
+  WHEN (NEW.id_tipo_documento IN (6, 21, 22))
+  EXECUTE FUNCTION public.trigger_document_insert_sat();
 ```
 
-## Archivos a Modificar
+Se actualizará a:
+```sql
+CREATE TRIGGER on_document_insert_or_update_sat
+  AFTER INSERT OR UPDATE ON public.documentos
+  FOR EACH ROW
+  WHEN (NEW.id_tipo_documento IN (6, 21, 22))
+  EXECUTE FUNCTION public.trigger_document_insert_sat();
+```
 
-| Archivo | Cambios |
-|---------|---------|
-| `src/services/satNotificationService.ts` | Agregar lógica de validación por comprador |
-| `src/components/admin/SATNotificationDialog.tsx` | Mostrar tabla/lista de compradores con sus requisitos |
-
-## Detalles Técnicos
-
-### Consulta de documentos por comprador
+## Migración SQL
 
 ```sql
--- Facturas por comprador (id_tipo_documento: 21=XML, 22=PDF)
-SELECT d.id_persona, d.id_tipo_documento, d.id_estatus_verificacion
-FROM documentos d
-WHERE d.id_cuenta_cobranza = :cuentaId
-  AND d.id_tipo_documento IN (21, 22)
-  AND d.activo = true
-  AND d.es_draft = false
+-- Eliminar trigger anterior
+DROP TRIGGER IF EXISTS on_document_insert_sat ON public.documentos;
 
--- Constancias por comprador (id_tipo_documento: 6)
-SELECT d.id_persona, d.id_estatus_verificacion
-FROM documentos d
-WHERE d.id_persona IN (:personaIds)
-  AND d.id_tipo_documento = 6
-  AND d.activo = true
-```
-
-### Lógica de validación
-
-```typescript
-// Para cada comprador verificar:
-const compradorStatus = compradores.map(comprador => {
-  const facturasPdf = facturas.filter(f => 
-    f.id_persona === comprador.id_persona && f.id_tipo_documento === 22
-  );
-  const facturasXml = facturas.filter(f => 
-    f.id_persona === comprador.id_persona && f.id_tipo_documento === 21
-  );
-  const constancias = constanciasData.filter(c => 
-    c.id_persona === comprador.id_persona
-  );
+-- Actualizar función para manejar INSERT y UPDATE
+CREATE OR REPLACE FUNCTION public.trigger_document_insert_sat()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_cuenta_id INTEGER;
+BEGIN
+  -- Solo procesar documentos relevantes (constancia fiscal o facturas)
+  IF NEW.id_tipo_documento NOT IN (6, 21, 22) THEN
+    RETURN NEW;
+  END IF;
   
-  return {
-    id_persona: comprador.id_persona,
-    nombre_legal: comprador.nombre_legal,
-    tieneFacturaPdf: facturasPdf.length > 0,
-    facturaPdfVerificada: facturasPdf.some(f => f.id_estatus_verificacion === 2),
-    tieneFacturaXml: facturasXml.length > 0,
-    facturaXmlVerificada: facturasXml.some(f => f.id_estatus_verificacion === 2),
-    tieneConstancia: constancias.length > 0,
-    constanciaVerificada: constancias.some(c => c.id_estatus_verificacion === 2),
-    cumpleRequisitos: // todos los campos anteriores en true
-  };
-});
+  -- Para UPDATE, solo procesar si cambió algo relevante
+  IF TG_OP = 'UPDATE' THEN
+    -- Ignorar si no cambió nada importante
+    IF OLD.id_persona = NEW.id_persona 
+       AND OLD.id_estatus_verificacion = NEW.id_estatus_verificacion 
+       AND OLD.activo = NEW.activo 
+       AND OLD.id_cuenta_cobranza = NEW.id_cuenta_cobranza THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+  
+  -- Solo procesar si el documento está activo
+  IF NEW.activo = false THEN
+    RETURN NEW;
+  END IF;
+  
+  -- Determinar la cuenta de cobranza
+  IF NEW.id_cuenta_cobranza IS NOT NULL THEN
+    v_cuenta_id := NEW.id_cuenta_cobranza;
+  ELSIF NEW.id_persona IS NOT NULL THEN
+    -- Buscar cuenta del comprador por persona
+    SELECT c.id_cuenta_cobranza INTO v_cuenta_id
+    FROM public.compradores c
+    WHERE c.id_persona = NEW.id_persona AND c.activo = true
+    LIMIT 1;
+  END IF;
+  
+  IF v_cuenta_id IS NOT NULL THEN
+    PERFORM public.check_sat_notification_conditions(v_cuenta_id);
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-// canGenerate solo si TODOS cumplen
-const canGenerate = estatusDisponibilidad === 9 && 
-  compradorStatus.every(c => c.cumpleRequisitos);
+-- Crear nuevo trigger para INSERT y UPDATE
+CREATE TRIGGER on_document_insert_or_update_sat
+  AFTER INSERT OR UPDATE ON public.documentos
+  FOR EACH ROW
+  WHEN (NEW.id_tipo_documento IN (6, 21, 22))
+  EXECUTE FUNCTION public.trigger_document_insert_sat();
 ```
 
-## Nota Importante
+## Comportamiento Esperado
 
-El botón SAT actualmente solo aparece cuando `id_estatus_disponibilidad === 9`. Para la cuenta 207, el estatus es 8 ("Entregado"), por lo que el botón no aparecerá hasta que la propiedad pase a estatus 9 ("Pagada completamente"). Esto es comportamiento esperado según las reglas de negocio.
+| Acción | Trigger se ejecuta | Resultado |
+|--------|-------------------|-----------|
+| Subir nueva factura PDF/XML | Sí | Evalúa condiciones SAT |
+| Subir nueva constancia fiscal | Sí | Evalúa condiciones SAT |
+| Verificar factura (cambio de estatus) | Sí | Evalúa condiciones SAT |
+| Verificar constancia fiscal | Sí | Evalúa condiciones SAT |
+| Reasignar factura a otro comprador | Sí | Evalúa condiciones SAT |
+| Editar descripción de documento | No | Sin cambios relevantes |
+
+## Flujo Completo
+
+```text
+Usuario actualiza documento
+         ↓
+   Trigger detecta UPDATE
+         ↓
+  ¿Cambió algo relevante?
+    (persona, verificación, activo)
+         ↓
+       [Sí]
+         ↓
+  check_sat_notification_conditions()
+         ↓
+  ¿Cumple todas las condiciones?
+  (estatus=9, facturas verificadas, 
+   constancias verificadas, sin archivo SAT previo)
+         ↓
+       [Sí]
+         ↓
+  Llama webhook N8N:
+  /webhook/generaNotificacionSAT
+```
+
+## Archivos a Crear
+
+| Archivo | Descripción |
+|---------|-------------|
+| `supabase/migrations/[timestamp]_update_sat_trigger_for_updates.sql` | Migración para actualizar el trigger |
+
+## Nota sobre el Botón UI
+
+El botón SAT en la interfaz (`Pagos.tsx`) ya se actualiza dinámicamente cada vez que se abre el diálogo, porque el servicio `satNotificationService.getStatus()` consulta el estado actual de los documentos. Por lo tanto:
+
+1. **Trigger automático**: Cuando se cumplen las condiciones, el webhook se ejecuta automáticamente
+2. **Botón visible**: Al recargar la lista o abrir el diálogo, el botón aparecerá si las condiciones se cumplen
