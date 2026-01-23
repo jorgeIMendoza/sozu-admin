@@ -630,6 +630,16 @@ export function AddManualPaymentDialog({
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validación: Si el pago existe y pertenece a OTRA cuenta, bloquear
+    if (pagoExistente && pagoExistente.id_cuenta_cobranza !== cuentaCobranzaId) {
+      toast({
+        title: "Cuenta incorrecta",
+        description: `Este pago pertenece a la cuenta ${formatCuentaLabel(pagoExistente.id_cuenta_cobranza, pagoExistente.tipo_cuenta)}. No se puede agregar a esta cuenta.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Block submission if there's an active payment with this clave
     if (pagoExistente?.activo) {
       toast({
@@ -975,10 +985,14 @@ export function AddManualPaymentDialog({
                     return false;
                   })()}
                 >
-                  {(isSubmitting || createPaymentMutation.isPending) && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {(isSubmitting || createPaymentMutation.isPending) ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    "Guardar Pago"
                   )}
-                  Guardar Pago
                 </Button>
               </div>
             </form>
