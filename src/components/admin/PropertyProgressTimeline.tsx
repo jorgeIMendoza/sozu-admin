@@ -96,7 +96,7 @@ export function PropertyProgressTimeline({
       const supabaseAny = supabase as any;
       
       const { data: rawDocs, error } = await supabaseAny
-        .from('documentos_cuenta')
+        .from('documentos')
         .select('id, id_tipo_documento, id_estatus_verificacion, id_persona')
         .eq('id_cuenta_cobranza', cuentaId)
         .eq('activo', true);
