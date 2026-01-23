@@ -189,7 +189,7 @@ interface EditCuentaCobranzaDialogProps {
 export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuentaCobranzaDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { canUpdate: canUpdateCuenta, isSuperAdmin } = usePagePermissions('/admin/detalle-cuenta-cobranza');
+  const { canUpdate: canUpdateCuenta, isSuperAdmin } = usePagePermissions('/admin/cuentas-cobranza');
   const [activeTab, setActiveTab] = useState('propiedad');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
