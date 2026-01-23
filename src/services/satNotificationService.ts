@@ -1,8 +1,20 @@
 import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL } from "@/lib/config";
 
+export interface CompradorSATStatus {
+  id_persona: number;
+  nombre_legal: string;
+  tieneFacturaPdf: boolean;
+  facturaPdfVerificada: boolean;
+  tieneFacturaXml: boolean;
+  facturaXmlVerificada: boolean;
+  tieneConstancia: boolean;
+  constanciaVerificada: boolean;
+  cumpleRequisitos: boolean;
+}
+
 export interface SATNotificationStatus {
-  canGenerate: boolean; // id_estatus_disponibilidad === 9 AND tiene factura PDF+XML verificadas AND tiene constancia
+  canGenerate: boolean;
   hasArchivoSAT: boolean;
   hasAcuseSAT: boolean;
   archivoSATUrl: string | null;
@@ -16,6 +28,9 @@ export interface SATNotificationStatus {
   facturaXmlVerificada: boolean;
   tieneConstancia: boolean;
   estatusDisponibilidad: number | null;
+  compradoresStatus: CompradorSATStatus[];
+  compradoresListos: number;
+  totalCompradores: number;
 }
 
 export const SATNotificationService = {
@@ -54,62 +69,101 @@ export const SATNotificationService = {
         facturaPdfVerificada: false,
         facturaXmlVerificada: false,
         tieneConstancia: false,
-        estatusDisponibilidad: null
+        estatusDisponibilidad: null,
+        compradoresStatus: [],
+        compradoresListos: 0,
+        totalCompradores: 0
       };
     }
 
     const estatusDisponibilidad = (cuenta.ofertas as any)?.propiedades?.id_estatus_disponibilidad || null;
 
-    // Check for factura PDF (id_tipo_documento 22) - verificada = id_estatus_verificacion 2
-    const { data: facturaPdf } = await supabase
-      .from('documentos')
-      .select('id, id_estatus_verificacion')
-      .eq('id_cuenta_cobranza', cuentaCobranzaId)
-      .eq('id_tipo_documento', 22)
-      .eq('activo', true)
-      .eq('es_draft', false)
-      .order('fecha_creacion', { ascending: false })
-      .limit(1);
-
-    const tieneFacturaPdf = (facturaPdf?.length || 0) > 0;
-    const facturaPdfVerificada = facturaPdf?.[0]?.id_estatus_verificacion === 2;
-
-    // Check for factura XML (id_tipo_documento 21) - verificada = id_estatus_verificacion 2
-    const { data: facturaXml } = await supabase
-      .from('documentos')
-      .select('id, id_estatus_verificacion')
-      .eq('id_cuenta_cobranza', cuentaCobranzaId)
-      .eq('id_tipo_documento', 21)
-      .eq('activo', true)
-      .eq('es_draft', false)
-      .order('fecha_creacion', { ascending: false })
-      .limit(1);
-
-    const tieneFacturaXml = (facturaXml?.length || 0) > 0;
-    const facturaXmlVerificada = facturaXml?.[0]?.id_estatus_verificacion === 2;
-
     // Get compradores for this cuenta
     const { data: compradores } = await supabase
       .from('compradores')
-      .select('id_persona')
+      .select(`
+        id_persona,
+        personas:id_persona(
+          nombre_legal
+        )
+      `)
       .eq('id_cuenta_cobranza', cuentaCobranzaId)
       .eq('activo', true);
 
     const personaIds = compradores?.map(c => c.id_persona) || [];
 
-    // Check for constancia de situación fiscal (id_tipo_documento 6) from compradores
-    let tieneConstancia = false;
+    // Get all facturas (PDF type 22, XML type 21) for this cuenta
+    const { data: facturas } = await supabase
+      .from('documentos')
+      .select('id, id_persona, id_tipo_documento, id_estatus_verificacion')
+      .eq('id_cuenta_cobranza', cuentaCobranzaId)
+      .in('id_tipo_documento', [21, 22])
+      .eq('activo', true)
+      .eq('es_draft', false);
+
+    // Get constancias de situación fiscal (type 6) for all compradores
+    let constancias: any[] = [];
     if (personaIds.length > 0) {
-      const { data: constancias } = await supabase
+      const { data: constanciasData } = await supabase
         .from('documentos')
-        .select('id')
+        .select('id, id_persona, id_estatus_verificacion')
         .in('id_persona', personaIds)
         .eq('id_tipo_documento', 6)
-        .eq('activo', true)
-        .limit(1);
-
-      tieneConstancia = (constancias?.length || 0) > 0;
+        .eq('activo', true);
+      
+      constancias = constanciasData || [];
     }
+
+    // Build per-comprador status
+    const compradoresStatus: CompradorSATStatus[] = (compradores || []).map(comprador => {
+      const nombreLegal = (comprador.personas as any)?.nombre_legal || 'Sin nombre';
+      
+      // Filter facturas for this comprador
+      const facturasPdf = (facturas || []).filter(f => 
+        f.id_persona === comprador.id_persona && f.id_tipo_documento === 22
+      );
+      const facturasXml = (facturas || []).filter(f => 
+        f.id_persona === comprador.id_persona && f.id_tipo_documento === 21
+      );
+      const constanciasComprador = constancias.filter(c => 
+        c.id_persona === comprador.id_persona
+      );
+
+      const tieneFacturaPdf = facturasPdf.length > 0;
+      const facturaPdfVerificada = facturasPdf.some(f => f.id_estatus_verificacion === 2);
+      const tieneFacturaXml = facturasXml.length > 0;
+      const facturaXmlVerificada = facturasXml.some(f => f.id_estatus_verificacion === 2);
+      const tieneConstancia = constanciasComprador.length > 0;
+      const constanciaVerificada = constanciasComprador.some(c => c.id_estatus_verificacion === 2);
+
+      // Comprador cumple si tiene factura PDF y XML verificadas + constancia verificada
+      const cumpleRequisitos = tieneFacturaPdf && facturaPdfVerificada && 
+        tieneFacturaXml && facturaXmlVerificada && 
+        tieneConstancia && constanciaVerificada;
+
+      return {
+        id_persona: comprador.id_persona,
+        nombre_legal: nombreLegal,
+        tieneFacturaPdf,
+        facturaPdfVerificada,
+        tieneFacturaXml,
+        facturaXmlVerificada,
+        tieneConstancia,
+        constanciaVerificada,
+        cumpleRequisitos
+      };
+    });
+
+    // Calculate totals
+    const compradoresListos = compradoresStatus.filter(c => c.cumpleRequisitos).length;
+    const totalCompradores = compradoresStatus.length;
+
+    // Global flags (at least one has each)
+    const tieneFacturaPdf = compradoresStatus.some(c => c.tieneFacturaPdf);
+    const facturaPdfVerificada = compradoresStatus.some(c => c.facturaPdfVerificada);
+    const tieneFacturaXml = compradoresStatus.some(c => c.tieneFacturaXml);
+    const facturaXmlVerificada = compradoresStatus.some(c => c.facturaXmlVerificada);
+    const tieneConstancia = compradoresStatus.some(c => c.tieneConstancia);
 
     // Check for archivo de notificación SAT (id_tipo_documento 44)
     const { data: archivoSAT } = await supabase
@@ -139,9 +193,9 @@ export const SATNotificationService = {
     const acuseSATUrl = acuseSAT?.[0]?.url || null;
     const acuseSATDocId = acuseSAT?.[0]?.id || null;
 
-    // canGenerate = estatus 9 + factura PDF y XML verificadas + constancia
-    const facturasCompletas = tieneFacturaPdf && tieneFacturaXml && facturaPdfVerificada && facturaXmlVerificada;
-    const canGenerate = estatusDisponibilidad === 9 && facturasCompletas && tieneConstancia;
+    // canGenerate = estatus 9 + TODOS los compradores cumplen
+    const todosCompradoresCumplen = totalCompradores > 0 && compradoresStatus.every(c => c.cumpleRequisitos);
+    const canGenerate = estatusDisponibilidad === 9 && todosCompradoresCumplen;
 
     return {
       canGenerate,
@@ -157,7 +211,10 @@ export const SATNotificationService = {
       facturaPdfVerificada,
       facturaXmlVerificada,
       tieneConstancia,
-      estatusDisponibilidad
+      estatusDisponibilidad,
+      compradoresStatus,
+      compradoresListos,
+      totalCompradores
     };
   },
 

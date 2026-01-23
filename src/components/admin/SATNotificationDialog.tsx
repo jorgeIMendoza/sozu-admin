@@ -9,10 +9,24 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Download, RefreshCw, Upload, FileCheck, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, Download, RefreshCw, Upload, FileCheck, AlertCircle, CheckCircle2, XCircle, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { SATNotificationService, SATNotificationStatus } from "@/services/satNotificationService";
+import { SATNotificationService, SATNotificationStatus, CompradorSATStatus } from "@/services/satNotificationService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 interface SATNotificationDialogProps {
   isOpen: boolean;
@@ -33,6 +47,7 @@ export function SATNotificationDialog({
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isCompradoresOpen, setIsCompradoresOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -47,6 +62,10 @@ export function SATNotificationDialog({
     try {
       const statusData = await SATNotificationService.getStatus(cuentaCobranzaId);
       setStatus(statusData);
+      // Auto-expand if there are issues
+      if (statusData.compradoresListos < statusData.totalCompradores) {
+        setIsCompradoresOpen(true);
+      }
     } catch (error) {
       console.error('Error loading SAT status:', error);
       toast({
@@ -162,7 +181,6 @@ export function SATNotificationDialog({
       });
     } finally {
       setIsUploading(false);
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -182,9 +200,75 @@ export function SATNotificationDialog({
     </div>
   );
 
+  const renderStatusIcon = (met: boolean) => (
+    met ? (
+      <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />
+    ) : (
+      <XCircle className="h-4 w-4 text-red-500 mx-auto" />
+    )
+  );
+
+  const renderCompradoresTable = (compradoresStatus: CompradorSATStatus[]) => {
+    if (compradoresStatus.length === 0) {
+      return (
+        <div className="text-sm text-muted-foreground text-center py-4">
+          No hay compradores registrados
+        </div>
+      );
+    }
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[200px]">Comprador</TableHead>
+            <TableHead className="text-center w-[60px]">PDF</TableHead>
+            <TableHead className="text-center w-[60px]">XML</TableHead>
+            <TableHead className="text-center w-[60px]">CSF</TableHead>
+            <TableHead className="text-center w-[80px]">Estado</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {compradoresStatus.map((comprador) => (
+            <TableRow 
+              key={comprador.id_persona}
+              className={!comprador.cumpleRequisitos ? "bg-red-50 dark:bg-red-950/20" : ""}
+            >
+              <TableCell className="font-medium text-sm">
+                {comprador.nombre_legal.length > 25 
+                  ? comprador.nombre_legal.substring(0, 25) + '...' 
+                  : comprador.nombre_legal}
+              </TableCell>
+              <TableCell className="text-center">
+                {renderStatusIcon(comprador.tieneFacturaPdf && comprador.facturaPdfVerificada)}
+              </TableCell>
+              <TableCell className="text-center">
+                {renderStatusIcon(comprador.tieneFacturaXml && comprador.facturaXmlVerificada)}
+              </TableCell>
+              <TableCell className="text-center">
+                {renderStatusIcon(comprador.tieneConstancia && comprador.constanciaVerificada)}
+              </TableCell>
+              <TableCell className="text-center">
+                {comprador.cumpleRequisitos ? (
+                  <Badge variant="outline" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs">
+                    Listo
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs">
+                    Falta
+                  </Badge>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Badge variant="outline" className="font-bold text-sm px-2 py-1">SAT</Badge>
@@ -201,23 +285,53 @@ export function SATNotificationDialog({
           </div>
         ) : status ? (
           <div className="space-y-4">
-            {/* Conditions status */}
+            {/* General status */}
             <div className="space-y-2 p-4 bg-muted/50 rounded-lg">
-              <h4 className="font-medium text-sm mb-3">Requisitos:</h4>
+              <h4 className="font-medium text-sm mb-3">Requisitos Generales:</h4>
               {renderConditionBadge(
                 `Propiedad Pagada Completamente (Estatus: ${status.estatusDisponibilidad === 9 ? 'Pagada' : status.estatusDisponibilidad || 'Desconocido'})`,
                 status.estatusDisponibilidad === 9
               )}
-              {renderConditionBadge(
-                `Factura PDF subida${status.tieneFacturaPdf ? (status.facturaPdfVerificada ? ' y verificada' : ' (pendiente verificar)') : ''}`, 
-                status.tieneFacturaPdf && status.facturaPdfVerificada
-              )}
-              {renderConditionBadge(
-                `Factura XML subida${status.tieneFacturaXml ? (status.facturaXmlVerificada ? ' y verificada' : ' (pendiente verificar)') : ''}`, 
-                status.tieneFacturaXml && status.facturaXmlVerificada
-              )}
-              {renderConditionBadge("Constancia de Situación Fiscal del comprador", status.tieneConstancia)}
+              
+              {/* Compradores summary with badge */}
+              <div className="flex items-center gap-2 mt-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Compradores con documentos completos:</span>
+                <Badge 
+                  variant={status.compradoresListos === status.totalCompradores ? "default" : "destructive"}
+                  className={status.compradoresListos === status.totalCompradores ? "bg-green-600" : ""}
+                >
+                  {status.compradoresListos}/{status.totalCompradores}
+                </Badge>
+              </div>
             </div>
+
+            {/* Collapsible compradores detail */}
+            {status.totalCompradores > 0 && (
+              <Collapsible open={isCompradoresOpen} onOpenChange={setIsCompradoresOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between p-2 h-auto">
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      <Users className="h-4 w-4" />
+                      Detalle por Comprador
+                    </span>
+                    {isCompradoresOpen ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2">
+                  <div className="border rounded-lg overflow-hidden">
+                    {renderCompradoresTable(status.compradoresStatus)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    PDF = Factura PDF verificada | XML = Factura XML verificada | CSF = Constancia de Situación Fiscal verificada
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
 
             {/* Current status */}
             <div className="space-y-2">
@@ -251,7 +365,9 @@ export function SATNotificationDialog({
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
                   No se cumplen los requisitos para generar la notificación. 
-                  Verifica que la propiedad esté pagada completamente, tenga factura PDF y XML verificadas, y el comprador tenga constancia de situación fiscal.
+                  {status.estatusDisponibilidad !== 9 && " La propiedad debe estar pagada completamente."}
+                  {status.compradoresListos < status.totalCompradores && 
+                    ` Faltan documentos verificados para ${status.totalCompradores - status.compradoresListos} comprador(es).`}
                 </AlertDescription>
               </Alert>
             )}
