@@ -289,8 +289,10 @@ export function SATNotificationDialog({
             <div className="space-y-2 p-4 bg-muted/50 rounded-lg">
               <h4 className="font-medium text-sm mb-3">Requisitos Generales:</h4>
               {renderConditionBadge(
-                `Propiedad Pagada Completamente (Estatus: ${status.estatusDisponibilidad === 9 ? 'Pagada' : status.estatusDisponibilidad || 'Desconocido'})`,
-                status.estatusDisponibilidad === 9
+                `Propiedad Pagada Completamente (${status.estaPagadaCompletamente ? 
+                  `$${status.totalPagado.toLocaleString('es-MX')} / $${status.precioFinal.toLocaleString('es-MX')}` : 
+                  `Falta: $${(status.precioFinal - status.totalPagado).toLocaleString('es-MX')}`})`,
+                status.estaPagadaCompletamente
               )}
               
               {/* Compradores summary with badge */}
@@ -365,7 +367,7 @@ export function SATNotificationDialog({
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
                   No se cumplen los requisitos para generar la notificación. 
-                  {status.estatusDisponibilidad !== 9 && " La propiedad debe estar pagada completamente."}
+                  {!status.estaPagadaCompletamente && " La propiedad debe estar pagada completamente."}
                   {status.compradoresListos < status.totalCompradores && 
                     ` Faltan documentos verificados para ${status.totalCompradores - status.compradoresListos} comprador(es).`}
                 </AlertDescription>
