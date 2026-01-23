@@ -5,17 +5,18 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Check, X, Download, FileText, FileCheck, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, Check, X, Download, FileText, FileCheck, AlertTriangle, RefreshCw, User, Building2, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadDocument } from "@/utils/googleDriveUrl";
+import * as XLSX from 'xlsx';
 import { 
   extraerDatos, 
   validarDatosFiscales, 
   prepararDatosExcelSat,
   DatosValidados,
-  ExcelSatData,
-  ComparisonResult
+  ComparisonResult,
+  ExtractionResult
 } from "@/services/validacionFiscalService";
 
 interface ValidarDatosFiscalesDialogProps {
@@ -41,6 +42,7 @@ export function ValidarDatosFiscalesDialog({
 }: ValidarDatosFiscalesDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
   const [csfUrl, setCsfUrl] = useState<string | undefined>(initialCsfUrl);
   const [datosValidados, setDatosValidados] = useState<DatosValidados | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,27 +99,31 @@ export function ValidarDatosFiscalesDialog({
     setDatosValidados(null);
 
     try {
-      const result = await extraerDatos(
+      const result: ExtractionResult = await extraerDatos(
         xmlUrl,
         csfUrl,
         cuentaCobranzaId,
         comprador.id_persona
       );
 
-      if (!result.success) {
-        throw new Error(result.error || 'Error al extraer datos');
+      // Verify the response has the expected structure
+      if (!result.documentos_procesados?.constancia_situacion_fiscal || !result.documentos_procesados?.factura_cfdi) {
+        throw new Error('La respuesta del servidor no tiene el formato esperado');
       }
 
-      const validacion = validarDatosFiscales(result.xml, result.csf);
+      const { constancia_situacion_fiscal, factura_cfdi } = result.documentos_procesados;
+      const validacion = validarDatosFiscales(constancia_situacion_fiscal, factura_cfdi);
       setDatosValidados(validacion);
 
-      const coincidencias = validacion.comparacion.filter(c => c.coincide).length;
+      const coincidenciasRequeridas = validacion.comparacion.filter(c => c.esRequerido && c.coincide).length;
+      const totalRequeridos = validacion.comparacion.filter(c => c.esRequerido).length;
+      const coincidenciasTotales = validacion.comparacion.filter(c => c.coincide).length;
       const total = validacion.comparacion.length;
 
       toast({
-        title: validacion.todoCoincide ? "Validación exitosa" : "Validación completada",
-        description: `${coincidencias} de ${total} campos coinciden`,
-        variant: validacion.todoCoincide ? "default" : "destructive"
+        title: validacion.camposRequeridosCoinciden ? "Validación exitosa" : "Validación completada",
+        description: `${coincidenciasRequeridas}/${totalRequeridos} campos requeridos coinciden (${coincidenciasTotales}/${total} total)`,
+        variant: validacion.camposRequeridosCoinciden ? "default" : "destructive"
       });
     } catch (err) {
       console.error('Error extracting data:', err);
@@ -133,33 +139,92 @@ export function ValidarDatosFiscalesDialog({
   };
 
   const handleGenerarExcel = async () => {
-    if (!datosValidados || !datosValidados.todoCoincide) {
+    if (!datosValidados || !datosValidados.camposRequeridosCoinciden) {
       toast({
         variant: "destructive",
         title: "No se puede generar",
-        description: "Todos los campos deben coincidir para generar el Excel"
+        description: "Los campos requeridos (RFC, Nombre, Código Postal) deben coincidir"
       });
       return;
     }
 
+    setIsGeneratingExcel(true);
+
     try {
       const excelData = prepararDatosExcelSat(datosValidados, cuentaCobranzaId);
-      
-      // TODO: Implement Excel generation with xlsx library
-      // For now, log the data and show a message
       console.log('Excel data prepared:', excelData);
+
+      // Fetch the template
+      const templateResponse = await fetch('/templates/template-aviso-sat-inmuebles.xlsm');
+      if (!templateResponse.ok) {
+        throw new Error('No se pudo cargar la plantilla del Excel');
+      }
+
+      const templateBuffer = await templateResponse.arrayBuffer();
+      const workbook = XLSX.read(templateBuffer, { type: 'array' });
       
+      // Get the first sheet
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+
+      // Fill in the data based on the template structure
+      // Row 3: RFC emisor
+      worksheet['C3'] = { t: 's', v: excelData.rfc_emisor };
+      // Row 4: Periodo
+      worksheet['C4'] = { t: 's', v: excelData.periodo };
+      // Row 5: Referencia
+      worksheet['C5'] = { t: 's', v: excelData.referencia };
+
+      // Persona física starts at row 18 (based on template structure)
+      // Columns: Nombre(s), Apellido Paterno, Apellido Materno, Fecha Nacimiento, RFC, CURP, País nacionalidad, Actividad económica
+      const personaRow = 18;
+      worksheet[`B${personaRow}`] = { t: 's', v: excelData.persona_fisica.nombres };
+      worksheet[`C${personaRow}`] = { t: 's', v: excelData.persona_fisica.apellido_paterno };
+      worksheet[`D${personaRow}`] = { t: 's', v: excelData.persona_fisica.apellido_materno };
+      worksheet[`E${personaRow}`] = { t: 's', v: excelData.persona_fisica.fecha_nacimiento };
+      worksheet[`F${personaRow}`] = { t: 's', v: excelData.persona_fisica.rfc };
+      worksheet[`G${personaRow}`] = { t: 's', v: excelData.persona_fisica.curp };
+      worksheet[`H${personaRow}`] = { t: 's', v: excelData.persona_fisica.pais_nacionalidad };
+      worksheet[`I${personaRow}`] = { t: 's', v: excelData.persona_fisica.actividad_economica };
+
+      // Domicilio nacional starts at row 54 (based on template structure)
+      // Columns: Código postal, Estado, Municipio, Colonia, Calle, Número exterior, Número interior
+      const domicilioRow = 54;
+      worksheet[`B${domicilioRow}`] = { t: 's', v: excelData.domicilio.codigo_postal };
+      worksheet[`C${domicilioRow}`] = { t: 's', v: excelData.domicilio.estado };
+      worksheet[`D${domicilioRow}`] = { t: 's', v: excelData.domicilio.municipio };
+      worksheet[`E${domicilioRow}`] = { t: 's', v: excelData.domicilio.colonia };
+      worksheet[`F${domicilioRow}`] = { t: 's', v: excelData.domicilio.calle };
+      worksheet[`G${domicilioRow}`] = { t: 's', v: excelData.domicilio.numero_exterior };
+      worksheet[`H${domicilioRow}`] = { t: 's', v: excelData.domicilio.numero_interior };
+
+      // Generate the file
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsm', type: 'array' });
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.ms-excel.sheet.macroEnabled.12' });
+      
+      // Download the file
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Aviso_SAT_CC-${cuentaCobranzaId}_${excelData.persona_fisica.rfc}.xlsm`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
       toast({
-        title: "Datos preparados",
-        description: "Funcionalidad de generación de Excel en desarrollo"
+        title: "Excel generado",
+        description: "El archivo se ha descargado correctamente"
       });
     } catch (err) {
       console.error('Error generating Excel:', err);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Error al generar el archivo Excel"
+        description: err instanceof Error ? err.message : "Error al generar el archivo Excel"
       });
+    } finally {
+      setIsGeneratingExcel(false);
     }
   };
 
@@ -184,37 +249,43 @@ export function ValidarDatosFiscalesDialog({
   };
 
   const getCoincidenciasCount = () => {
-    if (!datosValidados) return { count: 0, total: 0 };
-    const count = datosValidados.comparacion.filter(c => c.coincide).length;
-    return { count, total: datosValidados.comparacion.length };
+    if (!datosValidados) return { requeridos: 0, totalRequeridos: 0, total: 0, totalCampos: 0 };
+    const requeridos = datosValidados.comparacion.filter(c => c.esRequerido && c.coincide).length;
+    const totalRequeridos = datosValidados.comparacion.filter(c => c.esRequerido).length;
+    const total = datosValidados.comparacion.filter(c => c.coincide).length;
+    return { requeridos, totalRequeridos, total, totalCampos: datosValidados.comparacion.length };
   };
 
-  const { count, total } = getCoincidenciasCount();
+  const { requeridos, totalRequeridos, total, totalCampos } = getCoincidenciasCount();
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5" />
             Validar Datos Fiscales para SAT
           </DialogTitle>
           <DialogDescription>
-            Compara los datos del XML de factura con la Constancia de Situación Fiscal (CSF)
+            Compara los datos del XML de factura (CFDI) con la Constancia de Situación Fiscal (CSF)
           </DialogDescription>
         </DialogHeader>
 
         {/* Información del Comprador */}
         <Card>
           <CardContent className="pt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">Comprador</span>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-sm text-muted-foreground">Comprador:</span>
+                <span className="text-sm text-muted-foreground">Nombre:</span>
                 <p className="font-medium">{comprador.nombre_legal}</p>
               </div>
               <div>
                 <span className="text-sm text-muted-foreground">RFC:</span>
-                <p className="font-medium">{comprador.rfc || '-'}</p>
+                <p className="font-medium font-mono">{comprador.rfc || '-'}</p>
               </div>
             </div>
           </CardContent>
@@ -228,7 +299,7 @@ export function ValidarDatosFiscalesDialog({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  <span className="font-medium">Factura XML</span>
+                  <span className="font-medium">Factura XML (CFDI)</span>
                 </div>
                 {xmlUrl ? (
                   <div className="flex items-center gap-2">
@@ -249,8 +320,8 @@ export function ValidarDatosFiscalesDialog({
             <CardContent className="pt-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  <span className="font-medium">CSF</span>
+                  <Building2 className="h-4 w-4" />
+                  <span className="font-medium">CSF (Constancia SAT)</span>
                 </div>
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -325,21 +396,31 @@ export function ValidarDatosFiscalesDialog({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[150px]">Campo</TableHead>
-                    <TableHead>XML (Factura)</TableHead>
-                    <TableHead>CSF</TableHead>
-                    <TableHead className="w-[80px] text-center">Estado</TableHead>
+                    <TableHead className="w-[160px]">Campo</TableHead>
+                    <TableHead>CFDI (Factura XML)</TableHead>
+                    <TableHead>CSF (Constancia SAT)</TableHead>
+                    <TableHead className="w-[100px] text-center">Estado</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {datosValidados.comparacion.map((resultado: ComparisonResult, index: number) => (
-                    <TableRow key={index} className={!resultado.coincide ? 'bg-red-50 dark:bg-red-950/20' : ''}>
-                      <TableCell className="font-medium">{resultado.campo}</TableCell>
-                      <TableCell className="font-mono text-sm">{resultado.valorXml}</TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {resultado.valorCsf}
+                    <TableRow 
+                      key={index} 
+                      className={!resultado.coincide ? (resultado.esRequerido ? 'bg-red-50 dark:bg-red-950/20' : 'bg-yellow-50 dark:bg-yellow-950/20') : ''}
+                    >
+                      <TableCell className="font-medium">
+                        {resultado.campo}
+                        {resultado.esRequerido && (
+                          <span className="text-red-500 ml-1">*</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm max-w-[200px] truncate">
+                        {resultado.valorXml}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm max-w-[200px]">
+                        <div className="truncate">{resultado.valorCsf}</div>
                         {resultado.detalle && (
-                          <p className="text-xs text-muted-foreground mt-1">{resultado.detalle}</p>
+                          <p className="text-xs text-muted-foreground mt-1 font-sans">{resultado.detalle}</p>
                         )}
                       </TableCell>
                       <TableCell className="text-center">
@@ -351,22 +432,90 @@ export function ValidarDatosFiscalesDialog({
               </Table>
             </div>
 
+            {/* Datos Adicionales Extraídos */}
+            <div className="grid grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">Datos de la Factura</span>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">UUID:</span>
+                      <span className="font-mono text-xs">{datosValidados.cfdi.informacion_general.uuid}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Fecha:</span>
+                      <span>{datosValidados.cfdi.informacion_general.fecha}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total:</span>
+                      <span className="font-medium">${datosValidados.cfdi.totales.total?.toLocaleString('es-MX')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Emisor:</span>
+                      <span className="text-xs">{datosValidados.cfdi.emisor.nombre}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">Datos de la CSF</span>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">ID CIF:</span>
+                      <span className="font-mono">{datosValidados.csf.datos_identificacion.id_cif}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">CURP:</span>
+                      <span className="font-mono text-xs">{datosValidados.csf.datos_identificacion.curp}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Inicio Ops:</span>
+                      <span className="text-xs">{datosValidados.csf.datos_identificacion.fecha_inicio_operaciones}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Domicilio:</span>
+                      <span className="text-xs truncate max-w-[150px]">
+                        {datosValidados.csf.domicilio_fiscal.vialidad}, {datosValidados.csf.domicilio_fiscal.colonia}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             {/* Resumen */}
             <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
               <div className="flex items-center gap-2">
-                {datosValidados.todoCoincide ? (
+                {datosValidados.camposRequeridosCoinciden ? (
                   <Check className="h-5 w-5 text-green-600" />
                 ) : (
-                  <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
                 )}
-                <span className="font-medium">
-                  {count} de {total} campos coinciden
-                </span>
+                <div>
+                  <span className="font-medium">
+                    {requeridos} de {totalRequeridos} campos requeridos coinciden
+                  </span>
+                  <span className="text-muted-foreground text-sm ml-2">
+                    ({total}/{totalCampos} total)
+                  </span>
+                </div>
               </div>
-              <Badge variant={datosValidados.todoCoincide ? "default" : "secondary"}>
-                {datosValidados.todoCoincide ? "Validación exitosa" : "Hay discrepancias"}
+              <Badge variant={datosValidados.camposRequeridosCoinciden ? "default" : "destructive"}>
+                {datosValidados.camposRequeridosCoinciden ? "Puede generar Excel" : "Hay discrepancias"}
               </Badge>
             </div>
+
+            {/* Leyenda */}
+            <p className="text-xs text-muted-foreground">
+              <span className="text-red-500">*</span> Campos requeridos para la validación fiscal
+            </p>
 
             {/* Botón Generar Excel */}
             <div className="flex justify-end gap-2">
@@ -375,11 +524,20 @@ export function ValidarDatosFiscalesDialog({
               </Button>
               <Button
                 onClick={handleGenerarExcel}
-                disabled={!datosValidados.todoCoincide}
-                className={datosValidados.todoCoincide ? "bg-green-600 hover:bg-green-700" : ""}
+                disabled={!datosValidados.camposRequeridosCoinciden || isGeneratingExcel}
+                className={datosValidados.camposRequeridosCoinciden ? "bg-green-600 hover:bg-green-700" : ""}
               >
-                <Download className="h-4 w-4 mr-2" />
-                Generar Excel SAT
+                {isGeneratingExcel ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Generar Excel SAT
+                  </>
+                )}
               </Button>
             </div>
           </>

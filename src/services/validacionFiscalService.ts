@@ -5,49 +5,85 @@
 
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from '@/lib/config';
 
-// Types for the extraction response
-export interface XmlData {
-  rfc: string;
-  nombre: string;
-  codigo_postal: string;
-  regimen_fiscal: string;
-  uso_cfdi: string;
-  uuid: string;
-  fecha_emision: string;
-  total: number;
-  emisor_rfc: string;
-  emisor_nombre: string;
-}
-
-export interface RegimenInfo {
-  codigo: string;
-  nombre: string;
-}
-
-export interface CsfData {
+// Types for the NEW webhook response format
+export interface CsfDatosIdentificacion {
+  id_cif: string;
   rfc: string;
   curp: string;
   nombre: string;
-  apellido_paterno: string;
-  apellido_materno: string;
-  nombre_completo: string;
+  fecha_inicio_operaciones: string;
+  estatus: string;
+}
+
+export interface CsfDomicilioFiscal {
   codigo_postal: string;
-  calle: string;
-  numero_exterior: string;
-  numero_interior: string;
+  vialidad: string;
+  numero_exterior?: string;
+  numero_interior?: string;
   colonia: string;
   municipio: string;
-  estado: string;
-  regimenes: RegimenInfo[];
-  estatus_padron: string;
-  fecha_inicio_operaciones: string;
+  entidad: string;
+}
+
+export interface ConstanciaSituacionFiscal {
+  origen: string;
+  datos_identificacion: CsfDatosIdentificacion;
+  domicilio_fiscal: CsfDomicilioFiscal;
+  regimenes: string[];
+}
+
+export interface CfdiInformacionGeneral {
+  version: string;
+  folio: string;
+  fecha: string;
+  uuid: string;
+  tipo_comprobante: string;
+  lugar_expedicion: string;
+}
+
+export interface CfdiEmisor {
+  rfc: string;
+  nombre: string;
+  regimen_fiscal: string;
+}
+
+export interface CfdiReceptor {
+  rfc: string;
+  nombre: string;
+  uso_cfdi: string;
+  domicilio_fiscal: string;
+  regimen_fiscal: string;
+}
+
+export interface CfdiTotales {
+  moneda: string;
+  subtotal: number;
+  total: number;
+}
+
+export interface CfdiConcepto {
+  clave_prod_serv: string;
+  cantidad: number;
+  descripcion: string;
+  importe: number;
+}
+
+export interface FacturaCfdi {
+  origen: string;
+  informacion_general: CfdiInformacionGeneral;
+  emisor: CfdiEmisor;
+  receptor: CfdiReceptor;
+  totales: CfdiTotales;
+  conceptos: CfdiConcepto[];
+}
+
+export interface DocumentosProcesados {
+  constancia_situacion_fiscal: ConstanciaSituacionFiscal;
+  factura_cfdi: FacturaCfdi;
 }
 
 export interface ExtractionResult {
-  success: boolean;
-  xml: XmlData;
-  csf: CsfData;
-  error?: string;
+  documentos_procesados: DocumentosProcesados;
 }
 
 export interface ComparisonResult {
@@ -56,13 +92,15 @@ export interface ComparisonResult {
   valorCsf: string;
   coincide: boolean;
   detalle?: string;
+  esRequerido?: boolean;
 }
 
 export interface DatosValidados {
-  xml: XmlData;
-  csf: CsfData;
+  csf: ConstanciaSituacionFiscal;
+  cfdi: FacturaCfdi;
   comparacion: ComparisonResult[];
   todoCoincide: boolean;
+  camposRequeridosCoinciden: boolean;
 }
 
 /**
@@ -82,36 +120,77 @@ export function normalizarNombre(nombre: string): string {
 }
 
 /**
- * Compares RFC values
+ * Compares RFC values (case insensitive, no spaces)
  */
-function compararRfc(xmlRfc: string, csfRfc: string): boolean {
-  const normalizedXml = (xmlRfc || '').toUpperCase().replace(/\s/g, '');
-  const normalizedCsf = (csfRfc || '').toUpperCase().replace(/\s/g, '');
+function compararRfc(rfcXml: string, rfcCsf: string): boolean {
+  const normalizedXml = (rfcXml || '').toUpperCase().replace(/\s/g, '');
+  const normalizedCsf = (rfcCsf || '').toUpperCase().replace(/\s/g, '');
   return normalizedXml === normalizedCsf;
 }
 
 /**
  * Compares name values with normalization
  */
-function compararNombre(xmlNombre: string, csfNombreCompleto: string): boolean {
-  return normalizarNombre(xmlNombre) === normalizarNombre(csfNombreCompleto);
+function compararNombre(nombreXml: string, nombreCsf: string): boolean {
+  return normalizarNombre(nombreXml) === normalizarNombre(nombreCsf);
 }
 
 /**
- * Compares postal codes
+ * Compares postal codes (ignores spaces)
  */
-function compararCodigoPostal(xmlCp: string, csfCp: string): boolean {
-  const normalizedXml = (xmlCp || '').replace(/\s/g, '');
-  const normalizedCsf = (csfCp || '').replace(/\s/g, '');
+function compararCodigoPostal(cpXml: string, cpCsf: string): boolean {
+  const normalizedXml = (cpXml || '').replace(/\s/g, '');
+  const normalizedCsf = (cpCsf || '').replace(/\s/g, '');
   return normalizedXml === normalizedCsf;
 }
 
 /**
- * Validates that the XML regime exists in the CSF regimes list
+ * Validates that the CFDI receptor regime exists in the CSF regimes list
+ * The CSF contains regime names while CFDI has regime codes
  */
-function validarRegimen(xmlRegimen: string, csfRegimenes: RegimenInfo[]): boolean {
-  if (!csfRegimenes || csfRegimenes.length === 0) return false;
-  return csfRegimenes.some(r => r.codigo === xmlRegimen);
+function validarRegimen(regimenCfdi: string, regimenesCsf: string[]): boolean {
+  if (!regimenesCsf || regimenesCsf.length === 0) return false;
+  
+  // Common regime code to name mappings
+  const regimenCodeMap: Record<string, string[]> = {
+    '601': ['General de Ley Personas Morales'],
+    '603': ['Personas Morales con Fines no Lucrativos'],
+    '605': ['Sueldos y Salarios', 'Sueldos y Salarios e Ingresos Asimilados a Salarios'],
+    '606': ['Arrendamiento'],
+    '607': ['Régimen de Enajenación o Adquisición de Bienes'],
+    '608': ['Demás ingresos'],
+    '610': ['Residentes en el Extranjero sin Establecimiento Permanente en México'],
+    '611': ['Ingresos por Dividendos'],
+    '612': ['Personas Físicas con Actividades Empresariales y Profesionales'],
+    '614': ['Ingresos por intereses'],
+    '615': ['Régimen de los ingresos por obtención de premios'],
+    '616': ['Sin obligaciones fiscales'],
+    '620': ['Sociedades Cooperativas de Producción'],
+    '621': ['Incorporación Fiscal'],
+    '622': ['Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras'],
+    '623': ['Opcional para Grupos de Sociedades'],
+    '624': ['Coordinados'],
+    '625': ['Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas'],
+    '626': ['Régimen Simplificado de Confianza'],
+  };
+
+  const nombresBuscados = regimenCodeMap[regimenCfdi] || [];
+  
+  // Check if any of the CSF regimes match the CFDI regime code mapping
+  for (const regimenCsf of regimenesCsf) {
+    const normalizado = normalizarNombre(regimenCsf);
+    for (const nombreBuscado of nombresBuscados) {
+      if (normalizado.includes(normalizarNombre(nombreBuscado))) {
+        return true;
+      }
+    }
+    // Also check if the regime string contains the code directly
+    if (regimenCsf.includes(regimenCfdi)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 /**
@@ -157,50 +236,68 @@ export async function extraerDatos(
 }
 
 /**
- * Compares fields between XML and CSF data
+ * Compares fields between CFDI receptor and CSF data
  */
-export function compararCampos(xmlData: XmlData, csfData: CsfData): ComparisonResult[] {
+export function compararCampos(cfdi: FacturaCfdi, csf: ConstanciaSituacionFiscal): ComparisonResult[] {
   const resultados: ComparisonResult[] = [];
 
-  // 1. RFC
-  const rfcCoincide = compararRfc(xmlData.rfc, csfData.rfc);
+  // 1. RFC (REQUIRED)
+  const rfcCoincide = compararRfc(cfdi.receptor.rfc, csf.datos_identificacion.rfc);
   resultados.push({
     campo: 'RFC',
-    valorXml: xmlData.rfc || '-',
-    valorCsf: csfData.rfc || '-',
-    coincide: rfcCoincide
+    valorXml: cfdi.receptor.rfc || '-',
+    valorCsf: csf.datos_identificacion.rfc || '-',
+    coincide: rfcCoincide,
+    esRequerido: true
   });
 
-  // 2. Nombre
-  const nombreCoincide = compararNombre(xmlData.nombre, csfData.nombre_completo);
+  // 2. Nombre (REQUIRED)
+  const nombreCoincide = compararNombre(cfdi.receptor.nombre, csf.datos_identificacion.nombre);
   resultados.push({
     campo: 'Nombre',
-    valorXml: xmlData.nombre || '-',
-    valorCsf: csfData.nombre_completo || '-',
+    valorXml: cfdi.receptor.nombre || '-',
+    valorCsf: csf.datos_identificacion.nombre || '-',
     coincide: nombreCoincide,
-    detalle: !nombreCoincide ? `XML normalizado: "${normalizarNombre(xmlData.nombre)}" vs CSF normalizado: "${normalizarNombre(csfData.nombre_completo)}"` : undefined
+    esRequerido: true,
+    detalle: !nombreCoincide 
+      ? `XML: "${normalizarNombre(cfdi.receptor.nombre)}" vs CSF: "${normalizarNombre(csf.datos_identificacion.nombre)}"` 
+      : undefined
   });
 
-  // 3. Código Postal
-  const cpCoincide = compararCodigoPostal(xmlData.codigo_postal, csfData.codigo_postal);
+  // 3. Código Postal del Domicilio Fiscal (REQUIRED)
+  const cpCoincide = compararCodigoPostal(cfdi.receptor.domicilio_fiscal, csf.domicilio_fiscal.codigo_postal);
   resultados.push({
     campo: 'Código Postal',
-    valorXml: xmlData.codigo_postal || '-',
-    valorCsf: csfData.codigo_postal || '-',
-    coincide: cpCoincide
+    valorXml: cfdi.receptor.domicilio_fiscal || '-',
+    valorCsf: csf.domicilio_fiscal.codigo_postal || '-',
+    coincide: cpCoincide,
+    esRequerido: true
   });
 
-  // 4. Régimen Fiscal
-  const regimenesStr = csfData.regimenes?.map(r => r.codigo).join(', ') || '-';
-  const regimenCoincide = validarRegimen(xmlData.regimen_fiscal, csfData.regimenes);
+  // 4. Régimen Fiscal (optional comparison, informative)
+  const regimenesStr = csf.regimenes?.join(', ') || '-';
+  const regimenCoincide = validarRegimen(cfdi.receptor.regimen_fiscal, csf.regimenes);
   resultados.push({
     campo: 'Régimen Fiscal',
-    valorXml: xmlData.regimen_fiscal || '-',
+    valorXml: cfdi.receptor.regimen_fiscal || '-',
     valorCsf: regimenesStr,
     coincide: regimenCoincide,
+    esRequerido: false,
     detalle: regimenCoincide 
-      ? `Régimen ${xmlData.regimen_fiscal} encontrado en CSF` 
-      : `Régimen ${xmlData.regimen_fiscal} no está en la lista del CSF`
+      ? `Régimen ${cfdi.receptor.regimen_fiscal} encontrado en CSF` 
+      : `Régimen ${cfdi.receptor.regimen_fiscal} no está en la lista del CSF (puede diferir)`
+  });
+
+  // 5. Estatus en SAT (informative only)
+  resultados.push({
+    campo: 'Estatus SAT',
+    valorXml: '-',
+    valorCsf: csf.datos_identificacion.estatus || '-',
+    coincide: csf.datos_identificacion.estatus?.toUpperCase() === 'ACTIVO',
+    esRequerido: false,
+    detalle: csf.datos_identificacion.estatus?.toUpperCase() !== 'ACTIVO' 
+      ? 'El contribuyente no está activo en el SAT' 
+      : 'Contribuyente activo'
   });
 
   return resultados;
@@ -209,15 +306,19 @@ export function compararCampos(xmlData: XmlData, csfData: CsfData): ComparisonRe
 /**
  * Validates and returns the complete validation data
  */
-export function validarDatosFiscales(xmlData: XmlData, csfData: CsfData): DatosValidados {
-  const comparacion = compararCampos(xmlData, csfData);
+export function validarDatosFiscales(csf: ConstanciaSituacionFiscal, cfdi: FacturaCfdi): DatosValidados {
+  const comparacion = compararCampos(cfdi, csf);
   const todoCoincide = comparacion.every(c => c.coincide);
+  const camposRequeridosCoinciden = comparacion
+    .filter(c => c.esRequerido)
+    .every(c => c.coincide);
 
   return {
-    xml: xmlData,
-    csf: csfData,
+    csf,
+    cfdi,
     comparacion,
-    todoCoincide
+    todoCoincide,
+    camposRequeridosCoinciden
   };
 }
 
@@ -242,72 +343,137 @@ export function extraerFechaNacimientoDeCurp(curp: string): string | null {
 }
 
 /**
- * Interface for Excel SAT data
+ * Parses a name into parts (nombre, apellido paterno, apellido materno)
+ * Assumes format: "NOMBRE(S) APELLIDO_PATERNO APELLIDO_MATERNO"
  */
-export interface ExcelSatData {
-  // Datos del emisor (proyecto/desarrollador)
-  emisorRfc: string;
-  emisorNombre: string;
-  periodo: string; // AAAAMM format
-  referencia: string; // CC-{id}
+export function parsearNombreCompleto(nombreCompleto: string): { 
+  nombres: string; 
+  apellidoPaterno: string; 
+  apellidoMaterno: string 
+} {
+  if (!nombreCompleto) {
+    return { nombres: '', apellidoPaterno: '', apellidoMaterno: '' };
+  }
+
+  const partes = nombreCompleto.trim().split(/\s+/);
   
-  // Datos del comprador
-  nombre: string;
-  apellidoPaterno: string;
-  apellidoMaterno: string;
-  fechaNacimiento: string;
-  rfc: string;
-  curp: string;
-  paisNacionalidad: string;
-  actividadEconomica: string;
+  if (partes.length === 1) {
+    return { nombres: partes[0], apellidoPaterno: '', apellidoMaterno: '' };
+  }
   
-  // Domicilio
-  codigoPostal: string;
-  estado: string;
-  municipio: string;
-  colonia: string;
-  calle: string;
-  numeroExterior: string;
-  numeroInterior: string;
+  if (partes.length === 2) {
+    return { nombres: partes[0], apellidoPaterno: partes[1], apellidoMaterno: '' };
+  }
+  
+  if (partes.length === 3) {
+    return { nombres: partes[0], apellidoPaterno: partes[1], apellidoMaterno: partes[2] };
+  }
+  
+  // More than 3 parts: assume last two are apellidos
+  const apellidoMaterno = partes[partes.length - 1];
+  const apellidoPaterno = partes[partes.length - 2];
+  const nombres = partes.slice(0, partes.length - 2).join(' ');
+  
+  return { nombres, apellidoPaterno, apellidoMaterno };
 }
 
 /**
- * Prepares data for the SAT Excel file
+ * Interface for Excel SAT data matching the template structure
+ */
+export interface ExcelSatData {
+  // Datos generales
+  rfc_emisor: string;
+  periodo: string; // AAAAMM format
+  referencia: string; // CC-{id}
+  prioridad: string;
+  tipo_alerta: string;
+  
+  // Identificación persona física
+  persona_fisica: {
+    nombres: string;
+    apellido_paterno: string;
+    apellido_materno: string;
+    fecha_nacimiento: string;
+    rfc: string;
+    curp: string;
+    pais_nacionalidad: string;
+    actividad_economica: string;
+  };
+  
+  // Domicilio nacional
+  domicilio: {
+    codigo_postal: string;
+    estado: string;
+    municipio: string;
+    colonia: string;
+    calle: string;
+    numero_exterior: string;
+    numero_interior: string;
+  };
+  
+  // Datos adicionales de la factura
+  factura: {
+    uuid: string;
+    fecha: string;
+    total: number;
+    emisor_rfc: string;
+    emisor_nombre: string;
+  };
+}
+
+/**
+ * Prepares data for the SAT Excel file based on the new format
  */
 export function prepararDatosExcelSat(
   datosValidados: DatosValidados,
   cuentaId: number
 ): ExcelSatData {
-  const { xml, csf } = datosValidados;
+  const { csf, cfdi } = datosValidados;
   
   // Extract birth date from CURP
-  const fechaNacimiento = extraerFechaNacimientoDeCurp(csf.curp) || '';
+  const fechaNacimiento = extraerFechaNacimientoDeCurp(csf.datos_identificacion.curp) || '';
   
   // Get current year-month for periodo
   const now = new Date();
   const periodo = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
   
+  // Parse full name into parts
+  const nombrePartes = parsearNombreCompleto(csf.datos_identificacion.nombre);
+  
   return {
-    emisorRfc: xml.emisor_rfc || '',
-    emisorNombre: xml.emisor_nombre || '',
+    rfc_emisor: cfdi.emisor.rfc || '',
     periodo,
     referencia: `CC-${cuentaId}`,
+    prioridad: '',
+    tipo_alerta: '',
     
-    nombre: csf.nombre || '',
-    apellidoPaterno: csf.apellido_paterno || '',
-    apellidoMaterno: csf.apellido_materno || '',
-    fechaNacimiento,
-    rfc: csf.rfc || '',
-    curp: csf.curp || '',
-    paisNacionalidad: 'MEX',
-    actividadEconomica: csf.regimenes?.[0]?.nombre || '',
+    persona_fisica: {
+      nombres: nombrePartes.nombres,
+      apellido_paterno: nombrePartes.apellidoPaterno,
+      apellido_materno: nombrePartes.apellidoMaterno,
+      fecha_nacimiento: fechaNacimiento,
+      rfc: csf.datos_identificacion.rfc || '',
+      curp: csf.datos_identificacion.curp || '',
+      pais_nacionalidad: 'México',
+      actividad_economica: csf.regimenes?.[0] || ''
+    },
     
-    codigoPostal: csf.codigo_postal || '',
-    estado: csf.estado || '',
-    municipio: csf.municipio || '',
-    colonia: csf.colonia || '',
-    calle: csf.calle || '',
-    numeroExterior: csf.numero_exterior || '',
-    numeroInterior: csf.numero_interior || ''
+    domicilio: {
+      codigo_postal: csf.domicilio_fiscal.codigo_postal || '',
+      estado: csf.domicilio_fiscal.entidad || '',
+      municipio: csf.domicilio_fiscal.municipio || '',
+      colonia: csf.domicilio_fiscal.colonia || '',
+      calle: csf.domicilio_fiscal.vialidad || '',
+      numero_exterior: csf.domicilio_fiscal.numero_exterior || '',
+      numero_interior: csf.domicilio_fiscal.numero_interior || ''
+    },
+    
+    factura: {
+      uuid: cfdi.informacion_general.uuid || '',
+      fecha: cfdi.informacion_general.fecha || '',
+      total: cfdi.totales.total || 0,
+      emisor_rfc: cfdi.emisor.rfc || '',
+      emisor_nombre: cfdi.emisor.nombre || ''
+    }
   };
 }
