@@ -31,6 +31,10 @@ export interface SATNotificationStatus {
   compradoresStatus: CompradorSATStatus[];
   compradoresListos: number;
   totalCompradores: number;
+  // Payment-based "fully paid" check
+  estaPagadaCompletamente: boolean;
+  precioFinal: number;
+  totalPagado: number;
 }
 
 export const SATNotificationService = {
@@ -38,11 +42,12 @@ export const SATNotificationService = {
    * Get the current SAT notification status for a cuenta de cobranza
    */
   async getStatus(cuentaCobranzaId: number): Promise<SATNotificationStatus> {
-    // Get estatus disponibilidad from propiedad
+    // Get cuenta info including precio_final
     const { data: cuenta, error: cuentaError } = await supabase
       .from('cuentas_cobranza')
       .select(`
         id,
+        precio_final,
         ofertas:id_oferta(
           propiedades:id_propiedad(
             id_estatus_disponibilidad
@@ -72,9 +77,23 @@ export const SATNotificationService = {
         estatusDisponibilidad: null,
         compradoresStatus: [],
         compradoresListos: 0,
-        totalCompradores: 0
+        totalCompradores: 0,
+        estaPagadaCompletamente: false,
+        precioFinal: 0,
+        totalPagado: 0
       };
     }
+
+    // Get total pagado from pagos
+    const { data: pagosData } = await supabase
+      .from('pagos')
+      .select('monto')
+      .eq('id_cuenta_cobranza', cuentaCobranzaId)
+      .eq('activo', true);
+    
+    const totalPagado = (pagosData || []).reduce((sum, p) => sum + (p.monto || 0), 0);
+    const precioFinal = cuenta.precio_final || 0;
+    const estaPagadaCompletamente = totalPagado >= precioFinal;
 
     const estatusDisponibilidad = (cuenta.ofertas as any)?.propiedades?.id_estatus_disponibilidad || null;
 
@@ -193,9 +212,9 @@ export const SATNotificationService = {
     const acuseSATUrl = acuseSAT?.[0]?.url || null;
     const acuseSATDocId = acuseSAT?.[0]?.id || null;
 
-    // canGenerate = estatus 9 + TODOS los compradores cumplen
+    // canGenerate = pagada completamente (pagos >= precio_final) + TODOS los compradores cumplen
     const todosCompradoresCumplen = totalCompradores > 0 && compradoresStatus.every(c => c.cumpleRequisitos);
-    const canGenerate = estatusDisponibilidad === 9 && todosCompradoresCumplen;
+    const canGenerate = estaPagadaCompletamente && todosCompradoresCumplen;
 
     return {
       canGenerate,
@@ -214,7 +233,10 @@ export const SATNotificationService = {
       estatusDisponibilidad,
       compradoresStatus,
       compradoresListos,
-      totalCompradores
+      totalCompradores,
+      estaPagadaCompletamente,
+      precioFinal,
+      totalPagado
     };
   },
 
