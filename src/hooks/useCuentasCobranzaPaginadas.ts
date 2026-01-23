@@ -27,6 +27,7 @@ export interface CuentaCobranza {
   restante: number;
   compradores: Comprador[];
   dueno: string;
+  es_propietario_comprador: boolean;
   proyecto: string;
   edificio: string;
   numero_propiedad: string;
@@ -182,48 +183,58 @@ export function useCuentasCobranzaPaginadas({
       const result = (data as unknown as CuentaCobranzaRPCResult[]) || [];
       const totalCount = result.length > 0 ? result[0].total_count : 0;
 
-      const cuentas: CuentaCobranza[] = result.map(row => ({
-        id: row.id,
-        tipo: row.tipo as 'Propiedad' | 'Producto' | 'Servicio',
-        producto_nombre: row.producto || undefined,
-        clabe_stp: row.clabe_stp,
-        precio_final: Number(row.precio_final) || 0,
-        precio_lista: row.precio_lista ? Number(row.precio_lista) : null,
-        pagado: Number(row.pagado) || 0,
-        restante: Number(row.restante) || 0,
-        dueno: row.dueno || '',
-        proyecto: row.proyecto || '',
-        edificio: row.edificio || '',
-        numero_propiedad: row.numero_propiedad || '',
-        modelo: row.modelo || '',
-        activo: row.activo,
-        id_oferta: row.id_oferta,
-        apartado_pagado: row.apartado_pagado || false,
-        tiene_acuerdos: row.tiene_acuerdos || false,
-        id_estatus_disponibilidad: row.id_estatus_disponibilidad || undefined,
-        estatus_propiedad: row.estatus_disponibilidad_nombre || undefined,
-        metraje: row.metraje ? Number(row.metraje) : undefined,
-        precio_por_m2: row.metraje && Number(row.metraje) > 0 ? Number(row.precio_final) / Number(row.metraje) : undefined,
-        total_acuerdos: row.total_acuerdos ? Number(row.total_acuerdos) : undefined,
-        discrepancia: row.discrepancia ? Number(row.discrepancia) : undefined,
-        cash_limit: row.cash_limit ? Number(row.cash_limit) : undefined,
-        cash_paid: row.cash_paid ? Number(row.cash_paid) : undefined,
-        cash_remaining: row.cash_limit && row.cash_paid ? Number(row.cash_limit) - Number(row.cash_paid) : undefined,
-        cash_percentage: row.cash_limit && Number(row.cash_limit) > 0 && row.cash_paid ? (Number(row.cash_paid) / Number(row.cash_limit)) * 100 : undefined,
-        cash_payments: (row.cash_payments || []).map((cp: { fecha_pago: string; monto: number }) => ({
-          fecha_pago: cp.fecha_pago,
-          monto: Number(cp.monto)
-        })),
-        id_proyecto: row.id_proyecto || undefined,
-        id_entidad_relacionada_dueno: row.id_entidad_relacionada_dueno || undefined,
-        collection_id: row.collection_id || undefined,
-        compradores: (row.compradores_json || []).map(c => ({
+      const cuentas: CuentaCobranza[] = result.map(row => {
+        // El propietario es comprador cuando: tiene compradores Y el dueno coincide con algún comprador
+        const compradores = (row.compradores_json || []).map(c => ({
           nombre_legal: c.nombre_legal,
           rfc: c.rfc,
           porcentaje_copropiedad: c.porcentaje_copropiedad,
           id_persona: c.id_persona,
-        })),
-      }));
+        }));
+        
+        // Si el dueno viene de los compradores (lógica del RPC: si hay cuenta mantenimiento activa)
+        const esPropietarioComprador = compradores.length > 0 && 
+          compradores.some(c => c.nombre_legal === row.dueno);
+        
+        return {
+          id: row.id,
+          tipo: row.tipo as 'Propiedad' | 'Producto' | 'Servicio',
+          producto_nombre: row.producto || undefined,
+          clabe_stp: row.clabe_stp,
+          precio_final: Number(row.precio_final) || 0,
+          precio_lista: row.precio_lista ? Number(row.precio_lista) : null,
+          pagado: Number(row.pagado) || 0,
+          restante: Number(row.restante) || 0,
+          dueno: row.dueno || '',
+          es_propietario_comprador: esPropietarioComprador,
+          proyecto: row.proyecto || '',
+          edificio: row.edificio || '',
+          numero_propiedad: row.numero_propiedad || '',
+          modelo: row.modelo || '',
+          activo: row.activo,
+          id_oferta: row.id_oferta,
+          apartado_pagado: row.apartado_pagado || false,
+          tiene_acuerdos: row.tiene_acuerdos || false,
+          id_estatus_disponibilidad: row.id_estatus_disponibilidad || undefined,
+          estatus_propiedad: row.estatus_disponibilidad_nombre || undefined,
+          metraje: row.metraje ? Number(row.metraje) : undefined,
+          precio_por_m2: row.metraje && Number(row.metraje) > 0 ? Number(row.precio_final) / Number(row.metraje) : undefined,
+          total_acuerdos: row.total_acuerdos ? Number(row.total_acuerdos) : undefined,
+          discrepancia: row.discrepancia ? Number(row.discrepancia) : undefined,
+          cash_limit: row.cash_limit ? Number(row.cash_limit) : undefined,
+          cash_paid: row.cash_paid ? Number(row.cash_paid) : undefined,
+          cash_remaining: row.cash_limit && row.cash_paid ? Number(row.cash_limit) - Number(row.cash_paid) : undefined,
+          cash_percentage: row.cash_limit && Number(row.cash_limit) > 0 && row.cash_paid ? (Number(row.cash_paid) / Number(row.cash_limit)) * 100 : undefined,
+          cash_payments: (row.cash_payments || []).map((cp: { fecha_pago: string; monto: number }) => ({
+            fecha_pago: cp.fecha_pago,
+            monto: Number(cp.monto)
+          })),
+          id_proyecto: row.id_proyecto || undefined,
+          id_entidad_relacionada_dueno: row.id_entidad_relacionada_dueno || undefined,
+          collection_id: row.collection_id || undefined,
+          compradores,
+        };
+      });
 
       return {
         cuentas,
