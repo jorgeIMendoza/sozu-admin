@@ -67,7 +67,23 @@ interface PagoExistente {
   clave_rastreo: string;
   activo: boolean;
   url_cep: string | null;
+  tipo_cuenta?: string; // 'Propiedad', 'Producto', 'Servicio'
 }
+
+// Helper function to format account number with correct prefix
+const formatCuentaLabel = (id: number, tipoCuenta?: string): string => {
+  const paddedId = String(id).padStart(6, '0');
+  switch (tipoCuenta) {
+    case 'Producto':
+      return `CCP-${paddedId}`;
+    case 'Servicio':
+      return `CCS-${paddedId}`;
+    case 'Mantenimiento':
+      return `CCM-${paddedId}`;
+    default:
+      return `CC-${paddedId}`;
+  }
+};
 
 interface AddManualPaymentDialogProps {
   isOpen: boolean;
@@ -102,6 +118,7 @@ export function AddManualPaymentDialog({
   const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
   const [searchingClave, setSearchingClave] = useState(false);
+  const [nuevoMontoRecuperacion, setNuevoMontoRecuperacion] = useState<number>(0); // cents
 
   // Fetch payment methods (exclude STP and "Cesión de derechos" for all manual payments)
   const { data: metodosPago } = useQuery({
@@ -184,19 +201,61 @@ export function AddManualPaymentDialog({
     
     setSearchingClave(true);
     try {
-      const { data, error } = await supabase
+      // First get the payment
+      const { data: pagoData, error: pagoError } = await supabase
         .from("pagos")
         .select("id, id_cuenta_cobranza, monto, fecha_pago, clave_rastreo, activo, url_cep")
         .eq("clave_rastreo", clave)
         .maybeSingle();
       
-      if (error) {
-        console.error("Error searching for payment:", error);
+      if (pagoError) {
+        console.error("Error searching for payment:", pagoError);
         setPagoExistente(null);
         return;
       }
       
-      setPagoExistente(data as PagoExistente | null);
+      if (!pagoData) {
+        setPagoExistente(null);
+        return;
+      }
+      
+      // Get the account type by checking the account
+      let tipoCuentaValue: string | undefined = 'Propiedad'; // Default
+      
+      // First check if it's a maintenance account
+      const { data: cuentaData } = await supabase
+        .from("cuentas_cobranza")
+        .select("id_cuenta_cobranza_padre, id_oferta")
+        .eq("id", pagoData.id_cuenta_cobranza)
+        .maybeSingle();
+      
+      if (cuentaData?.id_cuenta_cobranza_padre) {
+        tipoCuentaValue = 'Mantenimiento';
+      } else if (cuentaData?.id_oferta) {
+        // Check if the offer is for a product or property
+        const { data: ofertaData } = await supabase
+          .from("ofertas")
+          .select("id_propiedad, id_producto")
+          .eq("id", cuentaData.id_oferta)
+          .maybeSingle();
+        
+        if (ofertaData?.id_producto) {
+          tipoCuentaValue = 'Producto';
+        } else if (ofertaData?.id_propiedad) {
+          tipoCuentaValue = 'Propiedad';
+        } else {
+          tipoCuentaValue = 'Servicio';
+        }
+      }
+      
+      const pagoConTipo: PagoExistente = {
+        ...pagoData,
+        tipo_cuenta: tipoCuentaValue
+      };
+      
+      setPagoExistente(pagoConTipo);
+      // Pre-populate the recovery amount with the existing payment amount
+      setNuevoMontoRecuperacion(Math.round(pagoData.monto * 100));
     } catch (err) {
       console.error("Error in searchExistingPayment:", err);
       setPagoExistente(null);
@@ -223,6 +282,16 @@ export function AddManualPaymentDialog({
   const handleRecoverPayment = async () => {
     if (!pagoExistente) return;
     
+    const nuevoMonto = nuevoMontoRecuperacion / 100; // Convert from cents
+    if (nuevoMonto <= 0) {
+      toast({
+        title: "Error",
+        description: "El monto debe ser mayor a 0",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsRecovering(true);
     try {
       // 1. Delete old inactive applications for this payment
@@ -236,10 +305,15 @@ export function AddManualPaymentDialog({
         throw new Error("No se pudieron eliminar las aplicaciones antiguas");
       }
       
-      // 2. Reactivate the payment
+      // 2. Reactivate the payment and update monto if changed
+      const updateData: { activo: boolean; monto?: number } = { activo: true };
+      if (nuevoMonto !== pagoExistente.monto) {
+        updateData.monto = nuevoMonto;
+      }
+      
       const { error: updateError } = await supabase
         .from("pagos")
-        .update({ activo: true })
+        .update(updateData)
         .eq("id", pagoExistente.id);
       
       if (updateError) {
@@ -258,16 +332,19 @@ export function AddManualPaymentDialog({
       }
       
       // 4. Register activity
+      const montoFinal = nuevoMonto !== pagoExistente.monto ? nuevoMonto : pagoExistente.monto;
       await registrarRecuperacionPago({
         id_pago: pagoExistente.id,
         id_cuenta_cobranza: pagoExistente.id_cuenta_cobranza,
-        monto: pagoExistente.monto,
+        monto_original: pagoExistente.monto,
+        monto_nuevo: montoFinal,
+        monto_modificado: nuevoMonto !== pagoExistente.monto,
         clave_rastreo: pagoExistente.clave_rastreo
       });
       
       toast({
         title: "Pago recuperado",
-        description: `El pago de $${pagoExistente.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ha sido reactivado y las aplicaciones recalculadas`,
+        description: `El pago de $${montoFinal.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ha sido reactivado y las aplicaciones recalculadas`,
       });
       
       // 5. Invalidate all related queries
@@ -677,13 +754,13 @@ export function AddManualPaymentDialog({
                     <Alert variant={pagoExistente.activo ? "default" : "destructive"}>
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>
-                        {pagoExistente.activo ? "Pago ya registrado" : "Pago inactivo encontrado"}
+                        {pagoExistente.activo ? "Pago ya registrado" : "Pago anterior encontrado"}
                       </AlertTitle>
                       <AlertDescription>
                         <div className="mt-2 space-y-1 text-sm">
                           <p><strong>Monto:</strong> ${pagoExistente.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
                           <p><strong>Fecha:</strong> {format(new Date(pagoExistente.fecha_pago), 'PPP', { locale: es })}</p>
-                          <p><strong>Cuenta:</strong> {pagoExistente.id_cuenta_cobranza}</p>
+                          <p><strong>Cuenta:</strong> {formatCuentaLabel(pagoExistente.id_cuenta_cobranza, pagoExistente.tipo_cuenta)}</p>
                           {pagoExistente.activo ? (
                             <p className="text-muted-foreground mt-2">
                               Este pago ya está aplicado. No se puede crear otro con la misma clave.
@@ -698,7 +775,7 @@ export function AddManualPaymentDialog({
                                 Reactivar y Recalcular
                               </Button>
                               <Button 
-                                type="button" 
+                                type="button"
                                 variant="outline" 
                                 size="sm"
                                 onClick={handleClearClave}
@@ -803,14 +880,32 @@ export function AddManualPaymentDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>¿Reactivar este pago?</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <p>
-                  Se reactivará el pago de <strong>${pagoExistente?.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong>
+                  Se reactivará el pago de la cuenta <strong>{pagoExistente ? formatCuentaLabel(pagoExistente.id_cuenta_cobranza, pagoExistente.tipo_cuenta) : ''}</strong>
                   {pagoExistente?.id_cuenta_cobranza === cuentaCobranzaId 
-                    ? " y se recalcularán las aplicaciones de esta cuenta."
-                    : ` de la cuenta ${pagoExistente?.id_cuenta_cobranza}. Las aplicaciones de esa cuenta serán recalculadas.`
+                    ? " y se recalcularán las aplicaciones."
+                    : ". Las aplicaciones de esa cuenta serán recalculadas."
                   }
                 </p>
+                
+                <div className="space-y-2">
+                  <label htmlFor="nuevo-monto" className="text-sm font-medium">
+                    Monto a aplicar
+                  </label>
+                  <CurrencyInput
+                    id="nuevo-monto"
+                    value={nuevoMontoRecuperacion}
+                    onChange={(value) => setNuevoMontoRecuperacion(value)}
+                    placeholder="0.00"
+                  />
+                  {pagoExistente && nuevoMontoRecuperacion !== Math.round(pagoExistente.monto * 100) && (
+                    <p className="text-xs text-muted-foreground">
+                      Monto original: ${pagoExistente.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                    </p>
+                  )}
+                </div>
+                
                 <p className="text-sm text-muted-foreground">
                   Esta acción eliminará las aplicaciones antiguas y redistribuirá los pagos en el orden correcto.
                 </p>
@@ -819,7 +914,7 @@ export function AddManualPaymentDialog({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRecovering}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRecoverPayment} disabled={isRecovering}>
+            <AlertDialogAction onClick={handleRecoverPayment} disabled={isRecovering || nuevoMontoRecuperacion <= 0}>
               {isRecovering ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
