@@ -268,6 +268,22 @@ export function useActivityLogger() {
     [usuarioId]
   );
 
+  const registrarRecuperacionPago = useCallback(
+    async (
+      datos: Record<string, unknown>,
+      estatus: 'exito' | 'error' = 'exito',
+      mensajeError?: string
+    ) => {
+      await activityLoggerService.registrarRecuperacionPago(
+        usuarioId,
+        datos,
+        estatus,
+        mensajeError
+      );
+    },
+    [usuarioId]
+  );
+
   return {
     registrarCreacion,
     registrarActualizacion,
@@ -284,5 +300,6 @@ export function useActivityLogger() {
     registrarSubidaDocumento,
     registrarPago,
     registrarCancelacion,
+    registrarRecuperacionPago,
   };
 }
