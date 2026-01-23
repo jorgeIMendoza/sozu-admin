@@ -42,6 +42,8 @@ export const SATNotificationService = {
    * Get the current SAT notification status for a cuenta de cobranza
    */
   async getStatus(cuentaCobranzaId: number): Promise<SATNotificationStatus> {
+    console.log('[SAT Service] getStatus called for cuenta:', cuentaCobranzaId);
+    
     // Get cuenta info including precio_final
     const { data: cuenta, error: cuentaError } = await supabase
       .from('cuentas_cobranza')
@@ -56,10 +58,12 @@ export const SATNotificationService = {
       `)
       .eq('id', cuentaCobranzaId)
       .eq('activo', true)
-      .single();
+      .maybeSingle();
+
+    console.log('[SAT Service] Cuenta query result:', { cuenta, cuentaError });
 
     if (cuentaError || !cuenta) {
-      console.error('Error fetching cuenta status:', cuentaError);
+      console.error('[SAT Service] Error fetching cuenta status:', cuentaError);
       return {
         canGenerate: false,
         hasArchivoSAT: false,
