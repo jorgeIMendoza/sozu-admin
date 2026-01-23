@@ -61,6 +61,17 @@ export function convertToGoogleDrivePreviewUrl(url: string): string {
 }
 
 /**
+ * Converts a Google Drive URL to a view URL
+ * From: https://drive.google.com/file/d/{ID}/preview
+ * To: https://drive.google.com/file/d/{ID}/view
+ */
+export function convertToGoogleDriveViewUrl(url: string): string {
+  const fileId = extractGoogleDriveFileId(url);
+  if (!fileId) return url;
+  return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+/**
  * Gets a downloadable URL for any document
  * - Google Drive URLs are converted to direct download URLs
  * - Other URLs (Supabase, etc.) are returned as-is
@@ -74,19 +85,19 @@ export function getDownloadableUrl(url: string): string {
 
 /**
  * Triggers a download for a document URL
- * Opens in a new tab for Google Drive files (due to their redirect behavior)
+ * Opens in Google Drive viewer for Drive files (user can download manually)
  * Uses direct download for other URLs
  */
 export function downloadDocument(url: string, filename?: string): void {
-  const downloadUrl = getDownloadableUrl(url);
-  
   if (isGoogleDriveUrl(url)) {
-    // Google Drive requires opening in a new tab due to redirects
-    window.open(downloadUrl, '_blank');
+    // Open in Google Drive viewer - user can download from there
+    // This works even for non-public files if the user has access
+    const viewUrl = convertToGoogleDriveViewUrl(url);
+    window.open(viewUrl, '_blank');
   } else {
     // For other URLs, we can do a proper download
     const link = document.createElement('a');
-    link.href = downloadUrl;
+    link.href = url;
     if (filename) {
       link.download = filename;
     }
