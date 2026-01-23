@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    const webhookUrl = `${n8nBaseUrl}/generaNotificacionSAT`
+    const webhookUrl = `${n8nBaseUrl}/extraerDatosXmlCsf`
     console.log(`Calling N8N webhook: ${webhookUrl}`)
 
     // Call the N8N webhook
