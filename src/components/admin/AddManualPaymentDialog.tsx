@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, CalendarIcon } from "lucide-react";
+import { CalendarIcon, AlertCircle, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -18,9 +18,19 @@ import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from "@/lib/config";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2 } from "lucide-react";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const formSchema = z.object({
   monto: z.string({
@@ -49,6 +59,16 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
+interface PagoExistente {
+  id: number;
+  id_cuenta_cobranza: number;
+  monto: number;
+  fecha_pago: string;
+  clave_rastreo: string;
+  activo: boolean;
+  url_cep: string | null;
+}
+
 interface AddManualPaymentDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -75,7 +95,13 @@ export function AddManualPaymentDialog({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { registrarPago } = useActivityLogger();
+  const { registrarPago, registrarRecuperacionPago } = useActivityLogger();
+  
+  // States for duplicate detection and recovery
+  const [pagoExistente, setPagoExistente] = useState<PagoExistente | null>(null);
+  const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [searchingClave, setSearchingClave] = useState(false);
 
   // Fetch payment methods (exclude STP and "Cesión de derechos" for all manual payments)
   const { data: metodosPago } = useQuery({
@@ -146,7 +172,134 @@ export function AddManualPaymentDialog({
   });
 
   const selectedPaymentMethod = form.watch("id_metodos_pago");
+  const claveRastreoValue = form.watch("clave_rastreo");
   const isStpManual = selectedPaymentMethod && metodosPago?.find(m => m.id.toString() === selectedPaymentMethod)?.nombre.toLowerCase().includes("stp-manual");
+
+  // Search for existing payment when clave_rastreo changes (debounced)
+  const searchExistingPayment = useCallback(async (clave: string) => {
+    if (!clave || clave.length < 5) {
+      setPagoExistente(null);
+      return;
+    }
+    
+    setSearchingClave(true);
+    try {
+      const { data, error } = await supabase
+        .from("pagos")
+        .select("id, id_cuenta_cobranza, monto, fecha_pago, clave_rastreo, activo, url_cep")
+        .eq("clave_rastreo", clave)
+        .maybeSingle();
+      
+      if (error) {
+        console.error("Error searching for payment:", error);
+        setPagoExistente(null);
+        return;
+      }
+      
+      setPagoExistente(data as PagoExistente | null);
+    } catch (err) {
+      console.error("Error in searchExistingPayment:", err);
+      setPagoExistente(null);
+    } finally {
+      setSearchingClave(false);
+    }
+  }, []);
+
+  // Debounced search effect
+  useEffect(() => {
+    if (!isStpManual) {
+      setPagoExistente(null);
+      return;
+    }
+    
+    const timeoutId = setTimeout(() => {
+      searchExistingPayment(claveRastreoValue || "");
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  }, [claveRastreoValue, isStpManual, searchExistingPayment]);
+
+  // Handle payment recovery
+  const handleRecoverPayment = async () => {
+    if (!pagoExistente) return;
+    
+    setIsRecovering(true);
+    try {
+      // 1. Delete old inactive applications for this payment
+      const { error: deleteError } = await supabase
+        .from("aplicaciones_pago")
+        .delete()
+        .eq("id_pago", pagoExistente.id);
+      
+      if (deleteError) {
+        console.error("Error deleting old applications:", deleteError);
+        throw new Error("No se pudieron eliminar las aplicaciones antiguas");
+      }
+      
+      // 2. Reactivate the payment
+      const { error: updateError } = await supabase
+        .from("pagos")
+        .update({ activo: true })
+        .eq("id", pagoExistente.id);
+      
+      if (updateError) {
+        console.error("Error reactivating payment:", updateError);
+        throw new Error("No se pudo reactivar el pago");
+      }
+      
+      // 3. Execute recalculation of applications
+      const { error: recalcError } = await supabase.functions.invoke('recalcular-aplicaciones', {
+        body: { id_cuenta_cobranza: pagoExistente.id_cuenta_cobranza }
+      });
+      
+      if (recalcError) {
+        console.error("Error recalculating applications:", recalcError);
+        throw new Error("No se pudieron recalcular las aplicaciones");
+      }
+      
+      // 4. Register activity
+      await registrarRecuperacionPago({
+        id_pago: pagoExistente.id,
+        id_cuenta_cobranza: pagoExistente.id_cuenta_cobranza,
+        monto: pagoExistente.monto,
+        clave_rastreo: pagoExistente.clave_rastreo
+      });
+      
+      toast({
+        title: "Pago recuperado",
+        description: `El pago de $${pagoExistente.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ha sido reactivado y las aplicaciones recalculadas`,
+      });
+      
+      // 5. Invalidate all related queries
+      queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
+      queryClient.invalidateQueries({ queryKey: ["cuentas_mantenimiento"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", pagoExistente.id_cuenta_cobranza] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", pagoExistente.id_cuenta_cobranza] });
+      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", pagoExistente.id_cuenta_cobranza] });
+      queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", pagoExistente.id_cuenta_cobranza] });
+      
+      // Also invalidate the current account if different
+      if (pagoExistente.id_cuenta_cobranza !== cuentaCobranzaId) {
+        queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaCobranzaId] });
+        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
+      }
+      
+      handleClose();
+    } catch (error) {
+      console.error("Error recovering payment:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "No se pudo recuperar el pago",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRecovering(false);
+      setShowRecoveryDialog(false);
+    }
+  };
 
   // Mutation to create payment with file uploads
   const createPaymentMutation = useMutation({
@@ -321,6 +474,16 @@ export function AddManualPaymentDialog({
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Block submission if there's an active payment with this clave
+    if (pagoExistente?.activo) {
+      toast({
+        title: "Clave de rastreo duplicada",
+        description: `Esta clave ya está registrada en la cuenta ${pagoExistente.id_cuenta_cobranza}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Clear previous errors
     form.clearErrors();
     
@@ -376,159 +539,191 @@ export function AddManualPaymentDialog({
 
   const handleClose = () => {
     form.reset();
+    setPagoExistente(null);
+    setShowRecoveryDialog(false);
     onClose();
   };
 
+  const handleClearClave = () => {
+    form.setValue("clave_rastreo", "");
+    setPagoExistente(null);
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Agregar Pago Manual</DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            {esMantenimiento ? 'Cuenta de mantenimiento' : 'Cuenta de cobranza'}: {cuentaCobranzaLabel}
-          </p>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Agregar Pago Manual</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              {esMantenimiento ? 'Cuenta de mantenimiento' : 'Cuenta de cobranza'}: {cuentaCobranzaLabel}
+            </p>
+          </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={handleFormSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="monto"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Monto *</FormLabel>
-                    <FormControl>
-                      <CurrencyInput
-                        value={field.value ? Math.round(Number(field.value) * 100) : 0}
-                        onChange={(cents) => field.onChange((cents / 100).toFixed(2))}
-                        placeholder="0.00"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="fecha_pago"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fecha de Pago *</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP", { locale: es })
-                            ) : (
-                              <span>Seleccionar fecha</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarComponent
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date > new Date()}
-                          initialFocus
-                          className="p-3 pointer-events-auto"
+          <Form {...form}>
+            <form onSubmit={handleFormSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="monto"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Monto *</FormLabel>
+                      <FormControl>
+                        <CurrencyInput
+                          value={field.value ? Math.round(Number(field.value) * 100) : 0}
+                          onChange={(cents) => field.onChange((cents / 100).toFixed(2))}
+                          placeholder="0.00"
                         />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="id_metodos_pago"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Método de Pago *</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar método de pago" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {metodosPago?.map((metodo) => (
-                        <SelectItem key={metodo.id} value={metodo.id.toString()}>
-                          {metodo.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="fecha_pago"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fecha de Pago *</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP", { locale: es })
+                              ) : (
+                                <span>Seleccionar fecha</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) => date > new Date()}
+                            initialFocus
+                            className="p-3 pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-            {isStpManual && (
               <FormField
                 control={form.control}
-                name="clave_rastreo"
+                name="id_metodos_pago"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Clave de Rastreo *</FormLabel>
-                    <FormControl>
-                      <Input 
-                        placeholder="Ingresa la clave de rastreo" 
-                        {...field} 
-                      />
-                    </FormControl>
+                    <FormLabel>Método de Pago *</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar método de pago" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {metodosPago?.map((metodo) => (
+                          <SelectItem key={metodo.id} value={metodo.id.toString()}>
+                            {metodo.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
 
-            <FormField
-              control={form.control}
-              name="evidencia_pago"
-              render={({ field: { onChange, value, ...field } }) => (
-                <FormItem>
-                  <FormLabel>Evidencia *</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) onChange(file);
-                      }}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+              {isStpManual && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="clave_rastreo"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Clave de Rastreo *</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input 
+                              placeholder="Ingresa la clave de rastreo" 
+                              {...field} 
+                            />
+                            {searchingClave && (
+                              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Alert for duplicate payment detection */}
+                  {pagoExistente && (
+                    <Alert variant={pagoExistente.activo ? "default" : "destructive"}>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>
+                        {pagoExistente.activo ? "Pago ya registrado" : "Pago inactivo encontrado"}
+                      </AlertTitle>
+                      <AlertDescription>
+                        <div className="mt-2 space-y-1 text-sm">
+                          <p><strong>Monto:</strong> ${pagoExistente.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                          <p><strong>Fecha:</strong> {format(new Date(pagoExistente.fecha_pago), 'PPP', { locale: es })}</p>
+                          <p><strong>Cuenta:</strong> {pagoExistente.id_cuenta_cobranza}</p>
+                          {pagoExistente.activo ? (
+                            <p className="text-muted-foreground mt-2">
+                              Este pago ya está aplicado. No se puede crear otro con la misma clave.
+                            </p>
+                          ) : (
+                            <div className="mt-3 flex gap-2">
+                              <Button 
+                                type="button" 
+                                size="sm"
+                                onClick={() => setShowRecoveryDialog(true)}
+                              >
+                                Reactivar y Recalcular
+                              </Button>
+                              <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="sm"
+                                onClick={handleClearClave}
+                              >
+                                Usar otra clave
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
               )}
-            />
 
-            {isStpManual && (
               <FormField
                 control={form.control}
-                name="archivo_cep"
+                name="evidencia_pago"
                 render={({ field: { onChange, value, ...field } }) => (
                   <FormItem>
-                    <FormLabel>Archivo CEP *</FormLabel>
+                    <FormLabel>Evidencia *</FormLabel>
                     <FormControl>
                       <Input
                         type="file"
-                        accept=".pdf"
+                        accept=".jpg,.jpeg,.png,.pdf"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) onChange(file);
@@ -540,40 +735,103 @@ export function AddManualPaymentDialog({
                   </FormItem>
                 )}
               />
-            )}
 
-            <FormField
-              control={form.control}
-              name="descripcion"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Descripción</FormLabel>
-                  <FormControl>
-                    <Textarea 
-                      placeholder="Añade una descripción si lo necesitas..."
-                      {...field}
-                      rows={3}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+              {isStpManual && (
+                <FormField
+                  control={form.control}
+                  name="archivo_cep"
+                  render={({ field: { onChange, value, ...field } }) => (
+                    <FormItem>
+                      <FormLabel>Archivo CEP *</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="file"
+                          accept=".pdf"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) onChange(file);
+                          }}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-            />
 
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isSubmitting || createPaymentMutation.isPending}>
-                {(isSubmitting || createPaymentMutation.isPending) && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <FormField
+                control={form.control}
+                name="descripcion"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descripción</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Añade una descripción si lo necesitas..."
+                        {...field}
+                        rows={3}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-                Guardar Pago
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+              />
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
+                  Cancelar
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={isSubmitting || createPaymentMutation.isPending || (pagoExistente?.activo === true)}
+                >
+                  {(isSubmitting || createPaymentMutation.isPending) && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Guardar Pago
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Recovery confirmation dialog */}
+      <AlertDialog open={showRecoveryDialog} onOpenChange={setShowRecoveryDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Reactivar este pago?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Se reactivará el pago de <strong>${pagoExistente?.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong>
+                  {pagoExistente?.id_cuenta_cobranza === cuentaCobranzaId 
+                    ? " y se recalcularán las aplicaciones de esta cuenta."
+                    : ` de la cuenta ${pagoExistente?.id_cuenta_cobranza}. Las aplicaciones de esa cuenta serán recalculadas.`
+                  }
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Esta acción eliminará las aplicaciones antiguas y redistribuirá los pagos en el orden correcto.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRecovering}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRecoverPayment} disabled={isRecovering}>
+              {isRecovering ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Reactivando...
+                </>
+              ) : (
+                "Reactivar y Recalcular"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

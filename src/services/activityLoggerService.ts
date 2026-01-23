@@ -389,4 +389,22 @@ export const activityLoggerService = {
       ultimoNodo: entidad,
     });
   },
+
+  registrarRecuperacionPago: async (
+    usuarioId: string,
+    datos: Record<string, unknown>,
+    estatus: 'exito' | 'error' = 'exito',
+    mensajeError?: string
+  ) => {
+    await insertarLog({
+      usuarioId,
+      actividadId: ACTIVIDADES.RESTAURAR,
+      nuevoValor: datos,
+      estatusEjecucion: estatus,
+      datosPayload: mensajeError ? { error: mensajeError } : null,
+      workflow: 'recuperar_pago_inactivo',
+      primerNodo: 'pagos',
+      ultimoNodo: 'aplicaciones_pago',
+    });
+  },
 };
