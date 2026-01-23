@@ -1,50 +1,65 @@
 
-# Plan: Corregir URL del Webhook N8N en la Función SAT
+# Plan: Corregir consulta de documentos en indicadores de progreso
 
-## Problema Identificado
+## Problema identificado
 
-La función `public.check_sat_notification_conditions` tiene una URL hardcodeada incorrecta:
+Los componentes `PropertyProgressTimeline` y `PropertyProgressBadge` consultan una tabla/vista inexistente (`documentos_cuenta`) en lugar de la tabla real (`documentos`). Esto causa que la condición "Documentos de entrega verificados" siempre muestre "Sin documentos de entrega", incluso cuando existen documentos verificados.
 
-```sql
--- Actual (incorrecto)
-v_webhook_url TEXT := 'https://n8n.sozu.mx/webhook/generaNotificacionSAT';
+### Evidencia
+La cuenta 207 tiene **8 documentos de categoría 7 (Entrega)** todos verificados:
+- Factura XML
+- Factura PDF
+- Escritura
+- Acta de entrega
+- Periodo de cobertura
+- Póliza de garantía
+- Anexo A
+- Declaración de fondos
 
--- Correcto (según configuración del proyecto)
-v_webhook_url TEXT := 'https://automatizacion-n8n.fbqqbe.easypanel.host/webhook/generaNotificacionSAT';
-```
+Sin embargo, el componente muestra "Sin documentos de entrega" porque la consulta a `documentos_cuenta` falla silenciosamente.
 
 ## Solución
 
-Crear una migración SQL para actualizar la función `check_sat_notification_conditions` con la URL correcta del webhook N8N.
+Cambiar la consulta de `documentos_cuenta` a `documentos` en ambos componentes.
 
-## Migración SQL
+## Archivos a modificar
 
-```sql
--- Actualizar función con la URL correcta del webhook
-CREATE OR REPLACE FUNCTION public.check_sat_notification_conditions(p_cuenta_cobranza_id INTEGER)
-RETURNS VOID AS $$
-DECLARE
-  v_propiedad_id INTEGER;
-  v_estatus INTEGER;
-  v_tiene_factura BOOLEAN;
-  v_tiene_constancia BOOLEAN;
-  v_tiene_archivo_sat BOOLEAN;
-  v_webhook_url TEXT := 'https://automatizacion-n8n.fbqqbe.easypanel.host/webhook/generaNotificacionSAT';
-BEGIN
-  -- [resto de la lógica existente sin cambios]
-  ...
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+| Archivo | Cambio |
+|---------|--------|
+| `src/components/admin/PropertyProgressTimeline.tsx` | Línea 99: cambiar `documentos_cuenta` → `documentos` |
+| `src/components/admin/PropertyProgressBadge.tsx` | Línea 119: cambiar `documentos_cuenta` → `documentos` |
+
+## Cambios específicos
+
+### PropertyProgressTimeline.tsx (línea 99)
+```typescript
+// Antes
+const { data: rawDocs, error } = await supabaseAny
+  .from('documentos_cuenta')  // ❌ No existe
+  .select('id, id_tipo_documento, id_estatus_verificacion, id_persona')
+
+// Después
+const { data: rawDocs, error } = await supabaseAny
+  .from('documentos')  // ✅ Tabla correcta
+  .select('id, id_tipo_documento, id_estatus_verificacion, id_persona')
 ```
 
-## Archivos a Crear
+### PropertyProgressBadge.tsx (línea 119)
+```typescript
+// Antes
+const { data: rawDocs, error } = await supabaseAny
+  .from('documentos_cuenta')  // ❌ No existe
+  .select('id, id_tipo_documento, id_estatus_verificacion, id_persona')
 
-| Archivo | Descripción |
-|---------|-------------|
-| `supabase/migrations/[timestamp]_fix_sat_webhook_url.sql` | Migración para corregir la URL del webhook |
+// Después
+const { data: rawDocs, error } = await supabaseAny
+  .from('documentos')  // ✅ Tabla correcta
+  .select('id, id_tipo_documento, id_estatus_verificacion, id_persona')
+```
 
-## Nota Técnica
+## Resultado esperado
 
-La URL correcta según la configuración del proyecto (`src/lib/config.ts`, `.env.production`, `.env.development`) es:
-- **Base**: `https://automatizacion-n8n.fbqqbe.easypanel.host/webhook`
-- **Endpoint completo**: `https://automatizacion-n8n.fbqqbe.easypanel.host/webhook/generaNotificacionSAT`
+Después del cambio:
+- La cuenta 207 mostrará **8/8 verificados** en la condición de documentos de entrega
+- La etapa "Entrega" pasará a **100%** (todos los requisitos cumplidos)
+- El indicador cambiará de azul (en progreso) a verde (completado)
