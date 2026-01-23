@@ -193,6 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true;
     let profileFetchPromise: Promise<void> | null = null;
+    let currentUserId: string | null = null;
     
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -201,11 +202,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Si es solo un refresh de token y el usuario es el mismo, solo actualizar sesión
         // Esto evita re-cargar el perfil innecesariamente al cambiar de pestaña
-        if (event === 'TOKEN_REFRESHED' && user && newSession?.user?.id === user.id) {
+        if (event === 'TOKEN_REFRESHED' && currentUserId && newSession?.user?.id === currentUserId) {
           setSession(newSession);
           return; // No disparar re-carga de perfil
         }
         
+        currentUserId = newSession?.user?.id ?? null;
         setSession(newSession);
         setUser(newSession?.user ?? null);
         
@@ -227,6 +229,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
       
+      currentUserId = session?.user?.id ?? null;
       setSession(session);
       setUser(session?.user ?? null);
       
