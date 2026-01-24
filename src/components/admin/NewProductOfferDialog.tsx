@@ -170,8 +170,9 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
   // Reset form and states when dialog opens
   useEffect(() => {
     if (open) {
-      setUseCurrentBuyer(true);
-      setShowProspectSearch(false);
+      const isDisponible = property?.disponibilidad === "Disponible";
+      setUseCurrentBuyer(!isDisponible);
+      setShowProspectSearch(isDisponible);
       setSelectedPerson(null);
       setSearchTerm("");
       setSearchOpen(false);
@@ -1080,17 +1081,19 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
               {/* Only show buyer fields after product is selected */}
               {selectedProductData && (
                 <>
-            {/* Comprador Actual Checkbox */}
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="comprador-actual"
-                checked={useCurrentBuyer}
-                onCheckedChange={handleCheckboxChange}
-              />
-              <Label htmlFor="comprador-actual" className="cursor-pointer">
-                Comprador actual
-              </Label>
-            </div>
+            {/* Comprador Actual Checkbox - Only show when property is not "Disponible" */}
+            {property?.disponibilidad !== "Disponible" && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="comprador-actual"
+                  checked={useCurrentBuyer}
+                  onCheckedChange={handleCheckboxChange}
+                />
+                <Label htmlFor="comprador-actual" className="cursor-pointer">
+                  Comprador actual
+                </Label>
+              </div>
+            )}
 
               {/* Buscar Prospecto - Only shown if useCurrentBuyer is false */}
               {showProspectSearch && (

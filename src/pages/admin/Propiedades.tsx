@@ -4678,7 +4678,8 @@ const Propiedades = () => {
                               forceManualMode={property.tipo_transaccion === "Reventa"}
                             />
                           )}
-                          {(canGenerateOffer || isSuperAdmin) && (property.disponibilidad === "Apartado" || 
+                          {(canGenerateOffer || isSuperAdmin) && (property.disponibilidad === "Disponible" ||
+                            property.disponibilidad === "Apartado" || 
                             property.disponibilidad === "Vendido" || 
                             property.disponibilidad === "Pagada completamente" ||
                             property.disponibilidad === "En escrituración" ||
