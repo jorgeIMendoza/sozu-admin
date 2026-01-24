@@ -256,9 +256,58 @@ export const SATNotificationService = {
    */
   async generate(cuentaCobranzaId: number): Promise<{ success: boolean; url?: string; error?: string }> {
     try {
+      // Get compradores for this cuenta to get the first one's documents
+      const { data: compradores, error: compradoresError } = await supabase
+        .from('compradores')
+        .select('id_persona')
+        .eq('id_cuenta_cobranza', cuentaCobranzaId)
+        .eq('activo', true)
+        .limit(1);
+
+      if (compradoresError || !compradores?.length) {
+        throw new Error('No se encontraron compradores para esta cuenta');
+      }
+
+      const idPersona = compradores[0].id_persona;
+
+      // Get the XML factura URL (type 21)
+      const { data: xmlDoc } = await supabase
+        .from('documentos')
+        .select('url')
+        .eq('id_cuenta_cobranza', cuentaCobranzaId)
+        .eq('id_persona', idPersona)
+        .eq('id_tipo_documento', 21)
+        .eq('activo', true)
+        .eq('es_draft', false)
+        .order('fecha_creacion', { ascending: false })
+        .limit(1);
+
+      // Get the CSF URL (type 6) for the persona
+      const { data: csfDoc } = await supabase
+        .from('documentos')
+        .select('url')
+        .eq('id_persona', idPersona)
+        .eq('id_tipo_documento', 6)
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false })
+        .limit(1);
+
+      if (!xmlDoc?.length || !csfDoc?.length) {
+        throw new Error('No se encontraron los documentos necesarios (XML de factura y CSF)');
+      }
+
+      const xmlUrl = xmlDoc[0].url;
+      const csfUrl = csfDoc[0].url;
+
       // Call the Edge Function proxy to avoid CORS issues
       const { data, error } = await supabase.functions.invoke('trigger-sat-notification', {
-        body: { id_cuenta_cobranza: cuentaCobranzaId }
+        body: { 
+          id_cuenta_cobranza: cuentaCobranzaId,
+          id_persona: idPersona,
+          xml_url: xmlUrl,
+          csf_url: csfUrl,
+          ambiente: 'produccion'
+        }
       });
 
       if (error) {

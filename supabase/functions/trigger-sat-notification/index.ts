@@ -12,17 +12,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { id_cuenta_cobranza } = await req.json()
+    const { id_cuenta_cobranza, id_persona, xml_url, csf_url, ambiente } = await req.json()
 
-    if (!id_cuenta_cobranza) {
-      console.error('Missing id_cuenta_cobranza parameter')
+    if (!id_cuenta_cobranza || !id_persona || !xml_url || !csf_url) {
+      console.error('Missing required parameters')
       return new Response(
-        JSON.stringify({ error: 'id_cuenta_cobranza is required' }),
+        JSON.stringify({ error: 'id_cuenta_cobranza, id_persona, xml_url, and csf_url are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log(`Processing SAT notification for cuenta_cobranza: ${id_cuenta_cobranza}`)
+    console.log(`Processing SAT notification for cuenta_cobranza: ${id_cuenta_cobranza}, persona: ${id_persona}`)
 
     // Get the N8N webhook base URL from secrets
     const n8nBaseUrl = Deno.env.get('N8N_WEBHOOK_BASE_URL')
@@ -45,7 +45,10 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         id_cuenta_cobranza,
-        timestamp: new Date().toISOString(),
+        id_persona,
+        xml_url,
+        csf_url,
+        ambiente: ambiente || 'produccion',
       }),
     })
 
