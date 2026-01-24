@@ -85,12 +85,12 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Otherwise treat as JSON
+    // Otherwise treat as JSON - return the extracted data
     const result = await response.json().catch(() => ({ success: true }))
-    console.log(`SAT notification triggered successfully for cuenta_cobranza: ${id_cuenta_cobranza}`)
+    console.log(`SAT notification data extracted for cuenta_cobranza: ${id_cuenta_cobranza}`)
 
     return new Response(
-      JSON.stringify({ success: true, result }),
+      JSON.stringify({ success: true, result: { documentos_procesados: result.documentos_procesados || result } }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
