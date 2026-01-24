@@ -382,34 +382,36 @@ export function SATNotificationDialog({
         cell.value = value ?? '';
       };
 
-      // Identification data
-      setCellValue('B2', csf.datos_identificacion.rfc);
-      setCellValue('B3', csf.datos_identificacion.curp);
-      setCellValue('B4', apellidoPaterno);
-      setCellValue('B5', apellidoMaterno);
-      setCellValue('B6', nombres);
-      setCellValue('B7', fechaNacimiento);
+      // Generate period in AAAAMM format (current month)
+      const now = new Date();
+      const periodo = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      // === DATOS GENERALES (filas 3-12) ===
+      setCellValue('B3', cfdi.emisor.rfc);                    // RFC del emisor (inmobiliaria)
+      setCellValue('B4', periodo);                            // Periodo AAAAMM
+      setCellValue('B5', `CC-${cuentaCobranzaId}`);           // Referencia
       
-      // Address
-      setCellValue('B10', csf.domicilio_fiscal.vialidad);
-      setCellValue('B11', csf.domicilio_fiscal.colonia);
-      setCellValue('B12', csf.domicilio_fiscal.municipio);
-      setCellValue('B13', csf.domicilio_fiscal.entidad);
-      setCellValue('B14', csf.domicilio_fiscal.codigo_postal);
+      // === PERSONA FÍSICA - Fila 17 (primera persona) ===
+      setCellValue('B17', nombres);                           // Nombre(s)
+      setCellValue('C17', apellidoPaterno);                   // Apellido Paterno
+      setCellValue('D17', apellidoMaterno);                   // Apellido Materno
+      setCellValue('E17', fechaNacimiento);                   // Fecha Nacimiento (DD/MM/YYYY)
+      setCellValue('F17', csf.datos_identificacion.rfc);      // RFC
+      setCellValue('G17', csf.datos_identificacion.curp);     // CURP
+      setCellValue('H17', 'México');                          // País de nacionalidad
+      setCellValue('I17', csf.regimenes?.[0] || '');         // Actividad económica (primer régimen)
       
-      // CFDI data
-      setCellValue('B17', cfdi.informacion_general.uuid);
-      setCellValue('B18', cfdi.informacion_general.fecha);
-      setCellValue('B19', cfdi.totales.total);
-      
-      // Emisor
-      setCellValue('B22', cfdi.emisor.rfc);
-      setCellValue('B23', cfdi.emisor.nombre);
-      
-      // Concepto (first one)
-      if (cfdi.conceptos && cfdi.conceptos.length > 0) {
-        setCellValue('B26', cfdi.conceptos[0].descripcion.substring(0, 500));
-      }
+      // === DOMICILIO NACIONAL - Fila 48 ===
+      setCellValue('B48', csf.domicilio_fiscal.codigo_postal);
+      setCellValue('C48', csf.domicilio_fiscal.entidad);
+      setCellValue('D48', csf.domicilio_fiscal.municipio);
+      setCellValue('E48', csf.domicilio_fiscal.colonia);
+      setCellValue('F48', csf.domicilio_fiscal.vialidad);
+      // Número exterior e interior - intentar extraer de la vialidad si contiene "No." o "#"
+      const vialidad = csf.domicilio_fiscal.vialidad || '';
+      const numExtMatch = vialidad.match(/(?:No\.?|#)\s*(\d+)/i);
+      setCellValue('G48', numExtMatch ? numExtMatch[1] : '');  // Número exterior
+      setCellValue('H48', '');                                  // Número interior (opcional)
 
       // Generate the file as xlsx
       const excelBuffer = await workbook.xlsx.writeBuffer();
