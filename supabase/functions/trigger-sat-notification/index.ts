@@ -86,13 +86,42 @@ Deno.serve(async (req) => {
     }
 
     // Otherwise treat as JSON - return the extracted data
-    const result = await response.json().catch(() => ({ success: true }))
+    const responseText = await response.text()
+    console.log(`Raw N8N response (first 2000 chars): ${responseText.substring(0, 2000)}`)
+    
+    let result
+    try {
+      result = JSON.parse(responseText)
+    } catch (parseError) {
+      console.error('Failed to parse N8N response as JSON:', parseError)
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON from N8N', rawResponse: responseText.substring(0, 500) }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
     console.log(`SAT notification data extracted for cuenta_cobranza: ${id_cuenta_cobranza}`)
     console.log(`Response structure keys: ${JSON.stringify(Object.keys(result))}`)
     
+    // Check if n8n returned an error message
+    if (result.message && Object.keys(result).length === 1) {
+      console.error('N8N returned only a message:', result.message)
+      return new Response(
+        JSON.stringify({ error: 'N8N processing error', message: result.message }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
     // Handle both wrapped and unwrapped responses
-    const documentos = result.documentos_procesados || result
-    console.log(`Documentos keys: ${JSON.stringify(Object.keys(documentos))}`)
+    // n8n may return the data directly or wrapped in documentos_procesados
+    let documentos = result.documentos_procesados || result
+    
+    // If n8n returns an array, take the first element
+    if (Array.isArray(documentos)) {
+      documentos = documentos[0]
+    }
+    
+    console.log(`Documentos structure: ${JSON.stringify(documentos).substring(0, 1000)}`)
 
     return new Response(
       JSON.stringify({ success: true, result: { documentos_procesados: documentos } }),
