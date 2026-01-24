@@ -88,9 +88,14 @@ Deno.serve(async (req) => {
     // Otherwise treat as JSON - return the extracted data
     const result = await response.json().catch(() => ({ success: true }))
     console.log(`SAT notification data extracted for cuenta_cobranza: ${id_cuenta_cobranza}`)
+    console.log(`Response structure keys: ${JSON.stringify(Object.keys(result))}`)
+    
+    // Handle both wrapped and unwrapped responses
+    const documentos = result.documentos_procesados || result
+    console.log(`Documentos keys: ${JSON.stringify(Object.keys(documentos))}`)
 
     return new Response(
-      JSON.stringify({ success: true, result: { documentos_procesados: result.documentos_procesados || result } }),
+      JSON.stringify({ success: true, result: { documentos_procesados: documentos } }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {

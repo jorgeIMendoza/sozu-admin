@@ -217,15 +217,37 @@ export function SATNotificationDialog({
 
       if (error) throw error;
 
+      console.log('SAT extraction response:', JSON.stringify(data, null, 2));
+
       if (data.success && data.result?.documentos_procesados) {
         const docs = data.result.documentos_procesados;
         
-        // Validate that required data exists
+        // Get CSF and CFDI with flexible structure handling
         const csf = docs.constancia_situacion_fiscal;
         const cfdi = docs.factura_cfdi;
         
-        if (!csf?.datos_identificacion || !csf?.domicilio_fiscal || !cfdi?.receptor) {
-          throw new Error('Los datos extraídos están incompletos. Verifica los documentos.');
+        console.log('CSF data:', csf);
+        console.log('CFDI data:', cfdi);
+        
+        // Build comparison results even with partial data - show what we have
+        const csfRfc = csf?.datos_identificacion?.rfc || '';
+        const csfNombre = csf?.datos_identificacion?.nombre || '';
+        const csfCp = csf?.domicilio_fiscal?.codigo_postal || '';
+        const cfdiRfc = cfdi?.receptor?.rfc || '';
+        const cfdiNombre = cfdi?.receptor?.nombre || '';
+        const cfdiCp = cfdi?.receptor?.domicilio_fiscal || '';
+        
+        // Check if we have minimum required data
+        const hasMinimumData = csfRfc || cfdiRfc || csfNombre || cfdiNombre;
+        
+        if (!hasMinimumData) {
+          // Show detailed error about what's missing
+          const missingParts = [];
+          if (!csf) missingParts.push('CSF');
+          if (!cfdi) missingParts.push('CFDI');
+          if (csf && !csf.datos_identificacion) missingParts.push('datos_identificacion');
+          if (cfdi && !cfdi.receptor) missingParts.push('receptor');
+          throw new Error(`Datos incompletos. Faltan: ${missingParts.join(', ')}. Estructura recibida: ${JSON.stringify(Object.keys(docs))}`);
         }
         
         setExtractedData(docs);
@@ -234,23 +256,23 @@ export function SATNotificationDialog({
         const results: ComparisonResult[] = [
           {
             campo: 'RFC',
-            valorCsf: csf.datos_identificacion.rfc || '',
-            valorCfdi: cfdi.receptor.rfc || '',
-            coincide: (csf.datos_identificacion.rfc || '') === (cfdi.receptor.rfc || ''),
+            valorCsf: csfRfc,
+            valorCfdi: cfdiRfc,
+            coincide: csfRfc !== '' && cfdiRfc !== '' && csfRfc === cfdiRfc,
             requerido: true
           },
           {
             campo: 'Nombre',
-            valorCsf: csf.datos_identificacion.nombre || '',
-            valorCfdi: cfdi.receptor.nombre || '',
-            coincide: normalizeText(csf.datos_identificacion.nombre || '') === normalizeText(cfdi.receptor.nombre || ''),
+            valorCsf: csfNombre,
+            valorCfdi: cfdiNombre,
+            coincide: csfNombre !== '' && cfdiNombre !== '' && normalizeText(csfNombre) === normalizeText(cfdiNombre),
             requerido: true
           },
           {
             campo: 'Código Postal',
-            valorCsf: csf.domicilio_fiscal.codigo_postal || '',
-            valorCfdi: cfdi.receptor.domicilio_fiscal || '',
-            coincide: (csf.domicilio_fiscal.codigo_postal || '') === (cfdi.receptor.domicilio_fiscal || ''),
+            valorCsf: csfCp,
+            valorCfdi: cfdiCp,
+            coincide: csfCp !== '' && cfdiCp !== '' && csfCp === cfdiCp,
             requerido: true
           }
         ];
@@ -260,10 +282,10 @@ export function SATNotificationDialog({
 
         toast({
           title: "Datos extraídos",
-          description: "Los datos han sido extraídos correctamente"
+          description: "Los datos han sido extraídos. Verifica la comparación."
         });
       } else {
-        throw new Error(data.error || 'Error al extraer datos');
+        throw new Error(data.error || `Error al extraer datos. Respuesta: ${JSON.stringify(data).substring(0, 200)}`);
       }
     } catch (error: any) {
       console.error('Error extracting data:', error);
