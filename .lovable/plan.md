@@ -1,74 +1,105 @@
 
-# Plan: Corregir Descarga de XML de Google Drive (Error 403)
+# Plan: Habilitar ofertas de productos para propiedades "Disponible" sin opción de comprador actual
 
-## Diagnóstico del Problema
-El error 403 ocurre porque los archivos en Google Drive **no son públicos**. La URL de descarga directa (`/uc?export=download`) solo funciona con archivos que tienen permisos de "Cualquiera con el enlace".
+## Resumen
 
-**URL actual del XML:**
-`https://drive.google.com/file/d/136-8u5gsILS30EX2B3ZAfwP3kGEl8a_d/preview`
-
-**URL convertida que da error:**
-`https://drive.google.com/uc?export=download&id=136-8u5gsILS30EX2B3ZAfwP3kGEl8a_d` → **403 Forbidden**
+Se habilitará el botón "Generar oferta de productos/servicios" para propiedades con estatus **"Disponible"**, pero ocultando automáticamente la opción "Comprador actual" ya que no existe un comprador asociado a la propiedad en ese estado.
 
 ---
 
-## Solución Propuesta
-Cambiar el comportamiento del badge XML para **abrir el archivo en una nueva pestaña** usando la URL de vista (`/view`), donde el usuario puede descargarlo manualmente desde la interfaz de Google Drive.
+## Cambios a Realizar
 
-**Nuevo comportamiento:**
-- Clic en badge XML → Abre nueva pestaña con Google Drive viewer
-- El usuario puede descargar desde el botón de descarga de Google Drive (que sí tiene acceso si está logueado)
+### 1. Habilitar el botón para estatus "Disponible"
+**Archivo**: `src/pages/admin/Propiedades.tsx`
 
----
-
-## Cambios Técnicos
-
-### Archivo: `src/utils/googleDriveUrl.ts`
-Agregar nueva función que convierte a URL de vista:
+Agregar `"Disponible"` a la condición que controla la visibilidad del botón:
 
 ```typescript
-export function convertToGoogleDriveViewUrl(url: string): string {
-  const fileId = extractGoogleDriveFileId(url);
-  if (!fileId) return url;
-  return `https://drive.google.com/file/d/${fileId}/view`;
-}
+// Líneas ~4681-4685: Agregar "Disponible" a la lista
+(property.disponibilidad === "Disponible" ||
+ property.disponibilidad === "Apartado" || 
+ property.disponibilidad === "Vendido" || 
+ property.disponibilidad === "Pagada completamente" ||
+ property.disponibilidad === "En escrituración" ||
+ property.disponibilidad === "Entregado")
 ```
 
-Modificar `downloadDocument()` para usar `/view` en lugar de `/uc?export=download`:
+---
+
+### 2. Ocultar checkbox "Comprador actual" cuando es "Disponible"
+**Archivo**: `src/components/admin/NewProductOfferDialog.tsx`
+
+**Cambio A - Inicializar estado correctamente:**
+Cuando el dialog se abre, si la propiedad está en "Disponible", establecer `useCurrentBuyer` en `false` y `showProspectSearch` en `true` automáticamente:
 
 ```typescript
-export function downloadDocument(url: string, filename?: string): void {
-  if (isGoogleDriveUrl(url)) {
-    // Abrir en Google Drive viewer (permite descarga manual)
-    const viewUrl = convertToGoogleDriveViewUrl(url);
-    window.open(viewUrl, '_blank');
-  } else {
-    // Para otras URLs, descarga directa
-    const link = document.createElement('a');
-    link.href = url;
-    if (filename) link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+// useEffect de reset (~líneas 171-198)
+useEffect(() => {
+  if (open) {
+    const isDisponible = property?.disponibilidad === "Disponible";
+    setUseCurrentBuyer(!isDisponible); // false si es Disponible
+    setShowProspectSearch(isDisponible); // true si es Disponible
+    // ... resto del reset
   }
-}
+}, [open, form, property?.disponibilidad]);
 ```
 
-### Archivo: `src/components/admin/FacturasTab.tsx`
-No requiere cambios adicionales - ya usa la función `downloadDocument()`.
+**Cambio B - Ocultar el checkbox en el UI:**
+Solo mostrar el checkbox cuando la propiedad NO está en "Disponible":
+
+```typescript
+// Líneas ~1084-1093: Agregar condición
+{property?.disponibilidad !== "Disponible" && (
+  <div className="flex items-center space-x-2">
+    <Checkbox
+      id="comprador-actual"
+      checked={useCurrentBuyer}
+      onCheckedChange={handleCheckboxChange}
+    />
+    <Label htmlFor="comprador-actual" className="cursor-pointer">
+      Comprador actual
+    </Label>
+  </div>
+)}
+```
 
 ---
 
-## Alternativa para Futuro
-Si se requiere descarga directa sin intervención del usuario:
-1. **Hacer los archivos públicos** en Google Drive ("Cualquiera con el enlace")
-2. **Integrar Google Drive API** con OAuth para acceso autenticado
-3. **Migrar archivos a Supabase Storage** donde no hay restricciones de acceso
+## Flujo Resultante
+
+```text
+┌─────────────────────────────────────────────────────┐
+│           Propiedad con estatus                     │
+└───────────────────────┬─────────────────────────────┘
+                        │
+          ┌─────────────┴─────────────┐
+          │                           │
+   ┌──────▼──────┐           ┌────────▼────────┐
+   │ "Disponible" │           │  Otros estatus  │
+   └──────┬──────┘           │  (Apartado, etc) │
+          │                   └────────┬────────┘
+          │                            │
+┌─────────▼─────────┐      ┌───────────▼───────────┐
+│ Sin checkbox de   │      │ Checkbox "Comprador   │
+│ "Comprador actual"│      │ actual" visible       │
+│ Inicia en búsqueda│      │ Puede elegir entre    │
+│ de prospecto      │      │ actual o buscar       │
+└───────────────────┘      └───────────────────────┘
+```
 
 ---
 
-## Resumen de Archivos
+## Archivos Afectados
 
-| Archivo | Acción |
+| Archivo | Cambio |
 |---------|--------|
-| `src/utils/googleDriveUrl.ts` | Modificar función `downloadDocument()` para usar `/view` |
+| `src/pages/admin/Propiedades.tsx` | Agregar "Disponible" a condición de visibilidad del botón |
+| `src/components/admin/NewProductOfferDialog.tsx` | Inicializar estado sin comprador actual + ocultar checkbox |
+
+---
+
+## Detalles Técnicos
+
+- El query `currentBuyerData` no se ejecutará cuando no hay `cuenta_cobranza_id` (lo cual es normal para propiedades "Disponible")
+- El formulario funcionará correctamente con búsqueda de prospecto o ingreso manual de datos
+- No se requieren cambios en la base de datos ni en Edge Functions
