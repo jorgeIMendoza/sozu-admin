@@ -1,152 +1,126 @@
 
-# Plan: Corregir Mapeo de Celdas para Plantilla SAT Oficial
+
+# Plan: Cambiar Filtro de Comisionistas a `es_rol_interno`
 
 ## Resumen
 
-El código actual está escribiendo en celdas incorrectas (B2-B26) que no corresponden a la estructura real del template oficial `Presentacion_de_Aviso_al_SAT_Inmuebles_v4_5-3.xlsm`. Se corregirá el mapeo para usar las celdas correctas según la plantilla oficial.
+Reemplazar el filtro hardcodeado de roles específicos por una consulta que use `es_rol_interno = true`. Esto hace el sistema más flexible y mantenible.
 
 ---
 
-## Estructura del Template Oficial
-
-Basado en el análisis del archivo subido:
-
-### Datos Generales (filas 3-11)
-| Celda | Campo |
-|-------|-------|
-| B3 | RFC |
-| B4 | Periodo (AAAAMM) |
-| D4 | ¿Artículo 27 Bis? |
-| B5 | Referencia |
-| D5 | Prioridad |
-| B6 | Tipo de alerta |
-| D6 | Descripción de alerta |
-| B8 | RFC Entidad colegiada |
-| B10 | ¿El aviso es modificatorio? |
-| B11 | Folio del aviso previo |
-| B12 | Descripción de la modificación |
-
-### Persona Física (fila 17 en adelante, primera persona en fila 17)
-| Columna | Campo |
-|---------|-------|
-| B17 | Nombre(s) |
-| C17 | Apellido Paterno |
-| D17 | Apellido Materno |
-| E17 | Fecha Nacimiento |
-| F17 | RFC |
-| G17 | CURP |
-| H17 | País de nacionalidad |
-| I17 | Actividad económica |
-
-### Domicilio Nacional (fila 48 en adelante, primer domicilio en fila 48)
-| Columna | Campo |
-|---------|-------|
-| B48 | Código postal |
-| C48 | Estado |
-| D48 | Municipio/Delegación |
-| E48 | Colonia |
-| F48 | Calle, avenida o vía |
-| G48 | Número exterior |
-| H48 | Número interior |
-
-### Contacto (fila 72 en adelante)
-| Columna | Campo |
-|---------|-------|
-| B72 | Clave de país |
-| C72 | Número de teléfono |
-| D72 | Correo electrónico |
-
----
-
-## Cambios a Realizar
-
-### 1. Actualizar plantilla en public/templates
-**Archivo**: Copiar el template subido a `public/templates/template-aviso-sat-inmuebles.xlsm`
-
-### 2. Modificar función handleGenerateExcel
-**Archivo**: `src/components/admin/SATNotificationDialog.tsx`
-
-Reemplazar el mapeo de celdas actual con el mapeo correcto:
+## Problema Actual
 
 ```typescript
-// Datos generales
-setCellValue('B3', cfdi.emisor.rfc);                    // RFC del emisor (inmobiliaria)
-setCellValue('B4', periodo);                             // Periodo AAAAMM
-setCellValue('B5', `CC-${cuentaCobranzaId}`);           // Referencia
+// Línea 1580 - Hardcoded roles
+.in('rol_id', [1, 2, 3, 9, 10])
+```
 
-// Persona física - Fila 17 (primera persona)
-setCellValue('B17', nombres);                           // Nombre(s)
-setCellValue('C17', apellidoPaterno);                   // Apellido Paterno
-setCellValue('D17', apellidoMaterno);                   // Apellido Materno
-setCellValue('E17', fechaNacimiento);                   // Fecha Nacimiento (DD/MM/YYYY)
-setCellValue('F17', csf.datos_identificacion.rfc);      // RFC
-setCellValue('G17', csf.datos_identificacion.curp);     // CURP
-setCellValue('H17', 'México');                          // País de nacionalidad
-setCellValue('I17', csf.regimenes?.[0] || '');         // Actividad económica
+Cada vez que se crea un nuevo rol interno, hay que recordar agregarlo manualmente a esta lista.
 
-// Domicilio nacional - Fila 48
-setCellValue('B48', csf.domicilio_fiscal.codigo_postal);
-setCellValue('C48', csf.domicilio_fiscal.entidad);
-setCellValue('D48', csf.domicilio_fiscal.municipio);
-setCellValue('E48', csf.domicilio_fiscal.colonia);
-setCellValue('F48', csf.domicilio_fiscal.vialidad);
-setCellValue('G48', csf.domicilio_fiscal.numero_exterior || '');
-setCellValue('H48', csf.domicilio_fiscal.numero_interior || '');
+---
+
+## Solución Propuesta
+
+Hacer un JOIN con la tabla `roles` para filtrar por `es_rol_interno = true`.
+
+---
+
+## Cambios Requeridos
+
+### Archivo: `src/components/admin/EditCuentaCobranzaDialog.tsx`
+
+**Ubicación**: Líneas 1577-1585
+
+**Cambio**: Reemplazar la consulta actual por una que haga JOIN con roles:
+
+```typescript
+// ANTES:
+const { data } = await supabase
+  .from('usuarios')
+  .select('email, nombre')
+  .in('rol_id', [1, 2, 3, 9, 10])
+  .or(`email.ilike.%${searchUsuario}%,nombre.ilike.%${searchUsuario}%`)
+  .not('email', 'in', existingEmails.length > 0 ? `(${existingEmails.map(e => `"${e}"`).join(',')})` : '("")')
+  .limit(10);
+
+// DESPUÉS:
+const { data } = await supabase
+  .from('usuarios')
+  .select('email, nombre, roles!inner(es_rol_interno)')
+  .eq('roles.es_rol_interno', true)
+  .or(`email.ilike.%${searchUsuario}%,nombre.ilike.%${searchUsuario}%`)
+  .not('email', 'in', existingEmails.length > 0 ? `(${existingEmails.map(e => `"${e}"`).join(',')})` : '("")')
+  .limit(10);
 ```
 
 ---
 
-## Consideraciones Técnicas
+## Beneficios
 
-1. **Formato de fecha**: El template espera fecha en formato DD/MM/YYYY, ya implementado correctamente
-2. **Múltiples compradores**: El template soporta hasta 10 personas físicas (filas 17-26), pero por ahora solo poblamos la primera
-3. **Preservación de estilos**: Mantener el helper `setCellValue` que solo modifica el valor sin alterar estilos
-4. **ExcelJS y .xlsm**: ExcelJS tiene soporte limitado para macros, pero preserva el contenido básico
-
----
-
-## Archivos Afectados
-
-| Archivo | Cambio |
-|---------|--------|
-| `public/templates/template-aviso-sat-inmuebles.xlsm` | Reemplazar con el archivo oficial subido |
-| `src/components/admin/SATNotificationDialog.tsx` | Actualizar mapeo de celdas según estructura del template |
+| Aspecto | Antes | Después |
+|---------|-------|---------|
+| Mantenibilidad | Actualizar lista manualmente | Automático basado en flag |
+| Nuevos roles | Requiere cambio de código | Solo configurar `es_rol_interno` |
+| Exclusión de externos | Manual | Automática (Directores, Cliente) |
 
 ---
 
-## Flujo de Generación
+## Usuarios Ahora Incluidos
+
+Con este cambio, todos los usuarios con roles internos podrán ser comisionistas:
+
+- Super Administrador (1)
+- Administrador de Proyecto (2)
+- Agente Inmobiliario (3)
+- Inmobiliaria (4)
+- Vendedor (5)
+- Agente Interno (9)
+- Administrador de data (10)
+- Administrador de finanzas (21) ← **Alma Castellón**
+- Administracion de pagos interna (22)
+- Y todos los demás roles internos...
+
+---
+
+## Usuarios Excluidos Automáticamente
+
+- Directores (19) - `es_rol_interno = false`
+- Cliente (23) - `es_rol_interno = false`
+
+---
+
+## Nota sobre Inmobiliarias
+
+La búsqueda de Inmobiliarias (personas morales en tabla `personas`) **se mantiene igual**. Estas ya se buscan por separado en las líneas 1591-1618 y se combinan con los usuarios internos.
+
+---
+
+## Flujo Final de Búsqueda
 
 ```text
-┌────────────────────────────────────────┐
-│      Datos Extraídos (CSF + CFDI)      │
-└───────────────────┬────────────────────┘
-                    │
-                    ▼
-┌────────────────────────────────────────┐
-│      Mapeo a Celdas del Template       │
-│                                        │
-│  RFC Emisor      → B3                  │
-│  Periodo         → B4                  │
-│  Referencia      → B5                  │
-│  Nombre(s)       → B17                 │
-│  Apellido Pat.   → C17                 │
-│  Apellido Mat.   → D17                 │
-│  Fecha Nac.      → E17                 │
-│  RFC             → F17                 │
-│  CURP            → G17                 │
-│  País            → H17                 │
-│  Actividad       → I17                 │
-│  Código Postal   → B48                 │
-│  Estado          → C48                 │
-│  Municipio       → D48                 │
-│  Colonia         → E48                 │
-│  Calle           → F48                 │
-│  Núm. Ext.       → G48                 │
-│  Núm. Int.       → H48                 │
-└───────────────────┬────────────────────┘
-                    │
-                    ▼
-┌────────────────────────────────────────┐
-│    Guardar y Descargar Excel (.xlsx)   │
-└────────────────────────────────────────┘
+Usuario escribe en búsqueda
+         │
+         ▼
+┌────────────────────────────────┐
+│ Búsqueda en paralelo          │
+├────────────────────────────────┤
+│ 1. usuarios                    │
+│    WHERE roles.es_rol_interno  │
+│    = true                      │
+├────────────────────────────────┤
+│ 2. personas                    │
+│    WHERE tipo_persona = 'pm'   │
+│    (Inmobiliarias)             │
+└────────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────────┐
+│ Combinar resultados            │
+│ - Usuarios internos            │
+│ - Inmobiliarias (badge)        │
+└────────────────────────────────┘
+         │
+         ▼
+    Mostrar dropdown
 ```
+
