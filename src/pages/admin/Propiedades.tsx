@@ -4067,12 +4067,16 @@ const Propiedades = () => {
                         return <TableCell key={column.key} className="font-medium">{property.proyecto}</TableCell>;
                       
                       case 'propietario':
+                        // Solo mostrar comprador si el estatus es: 9 (Pagada completamente), 7 (Escrituración), 8 (Entregado), 10 (Asignado)
+                        const estatusParaMostrarComprador = [9, 7, 8, 10];
+                        const mostrarComoComprador = property.tiene_cuenta_pagada && 
+                          estatusParaMostrarComprador.includes(property.id_estatus_disponibilidad);
                         return (
                           <TableCell key={column.key}>
                             <div className="flex items-center gap-2">
                               <div className="flex flex-col">
-                                {/* Si tiene cuenta de mantenimiento (entregada), mostrar nombre del comprador */}
-                                {property.tiene_cuenta_pagada ? (
+                                {/* Si tiene cuenta de mantenimiento Y estatus apropiado, mostrar nombre del comprador */}
+                                {mostrarComoComprador ? (
                                   <>
                                     <span className="font-medium">{property.propietario_actual}</span>
                                     <span className="text-muted-foreground text-xs">(Comprador)</span>
@@ -4087,12 +4091,12 @@ const Propiedades = () => {
                                   </>
                                 )}
                               </div>
-                              {property.tiene_cuenta_pagada && (
+                              {mostrarComoComprador && (
                                 <OwnerHistoryDialog
                                   propertyId={property.id}
                                   numeroPropiedad={property.numero_propiedad}
                                   propietarioOriginal={property.propietario_original}
-                                  esPropietarioActualComprador={property.tiene_cuenta_pagada}
+                                  esPropietarioActualComprador={mostrarComoComprador}
                                 />
                               )}
                             </div>
