@@ -28,6 +28,7 @@ type Servicio = {
   precio_lista: number;
   categoria_nombre?: string;
   dueno_nombre?: string;
+  dueno_cuenta_madre?: string;
   unidad_sat_descripcion?: string;
 };
 
@@ -142,6 +143,7 @@ export default function Servicios() {
           *,
           categorias_producto!productos_servicios_id_categoria_fkey (nombre),
           entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
+            cuenta_madre_stp,
             personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
           ),
           unidades_sat (descripcion)
@@ -171,6 +173,7 @@ export default function Servicios() {
         precio_lista: item.precio_lista || 0,
         categoria_nombre: item.categorias_producto?.nombre,
         dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
+        dueno_cuenta_madre: item.entidades_relacionadas?.cuenta_madre_stp,
         unidad_sat_descripcion: item.unidades_sat?.descripcion,
       })) as Servicio[];
 
@@ -494,7 +497,19 @@ export default function Servicios() {
                 </TableCell>
                 <TableCell className="font-mono text-sm">{servicio.sat_id || '-'}</TableCell>
                 <TableCell>{servicio.unidad_sat_descripcion || '-'}</TableCell>
-                <TableCell>{servicio.dueno_nombre || '-'}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span>{servicio.dueno_nombre || '-'}</span>
+                    {servicio.dueno_cuenta_madre && (
+                      <span className="text-muted-foreground font-mono text-xs">
+                        {servicio.dueno_cuenta_madre.slice(0, -4)}
+                        <span className="font-bold text-primary">
+                          {servicio.dueno_cuenta_madre.slice(-4)}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end space-x-2">
                     {servicio.activo ? (
