@@ -6379,6 +6379,47 @@ export type Database = {
           vendedor: string
         }[]
       }
+      get_cuentas_cobranza_paginadas_backup_20260127: {
+        Args: never
+        Returns: {
+          activo: boolean
+          apartado_pagado: boolean
+          cash_limit: number
+          cash_paid: number
+          cash_payments: Json
+          clabe_stp: string
+          collection_id: number
+          comprador: string
+          compradores_json: Json
+          discrepancia: number
+          dueno: string
+          edificio: string
+          estatus_disponibilidad_nombre: string
+          fecha_compra: string
+          id: number
+          id_cuenta_cobranza_padre: number
+          id_entidad_relacionada_dueno: number
+          id_estatus_disponibilidad: number
+          id_oferta: number
+          id_producto: number
+          id_propiedad: number
+          id_proyecto: number
+          metraje: number
+          modelo: string
+          numero_propiedad: string
+          pagado: number
+          precio_final: number
+          precio_lista: number
+          producto: string
+          proyecto: string
+          restante: number
+          tiene_acuerdos: boolean
+          tipo: string
+          total_acuerdos: number
+          total_count: number
+          vendedor: string
+        }[]
+      }
       get_cuentas_cobranza_stats: {
         Args: { p_dueno_entity_ids?: number[]; p_proyecto_ids?: number[] }
         Returns: {

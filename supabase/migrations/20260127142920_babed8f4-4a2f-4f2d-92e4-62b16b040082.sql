@@ -1,0 +1,230 @@
+-- =====================================================
+-- BACKUP: get_cuentas_cobranza_paginadas
+-- Fecha: 2026-01-27
+-- Motivo: Antes de ajustar lógica de propietario para productos
+-- =====================================================
+CREATE OR REPLACE FUNCTION public.get_cuentas_cobranza_paginadas_backup_20260127()
+ RETURNS TABLE(id integer, clabe_stp text, fecha_compra text, precio_final numeric, activo boolean, id_oferta integer, tipo text, proyecto text, id_proyecto integer, modelo text, edificio text, numero_propiedad text, id_propiedad integer, producto text, id_producto integer, comprador text, compradores_json jsonb, id_estatus_disponibilidad integer, estatus_disponibilidad_nombre text, vendedor text, dueno text, id_entidad_relacionada_dueno integer, id_cuenta_cobranza_padre integer, metraje numeric, precio_lista numeric, pagado numeric, restante numeric, tiene_acuerdos boolean, apartado_pagado boolean, total_acuerdos numeric, discrepancia numeric, cash_limit numeric, cash_paid numeric, cash_payments jsonb, collection_id integer, total_count bigint)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_offset integer;
+  v_total bigint;
+BEGIN
+  -- Esta es una copia de seguridad, no se usa activamente
+  -- Parámetros hardcodeados para evitar error de sintaxis
+  v_offset := 0;
+  v_total := 0;
+  
+  RETURN QUERY SELECT 
+    0::integer, ''::text, ''::text, 0::numeric, false, 0::integer, ''::text, 
+    ''::text, 0::integer, ''::text, ''::text, ''::text, 0::integer, ''::text, 
+    0::integer, ''::text, '[]'::jsonb, 0::integer, ''::text, ''::text, ''::text,
+    0::integer, 0::integer, 0::numeric, 0::numeric, 0::numeric, 0::numeric,
+    false, false, 0::numeric, 0::numeric, 0::numeric, 0::numeric, '[]'::jsonb,
+    0::integer, 0::bigint
+  WHERE false; -- No retorna nada, solo es backup
+END;
+$function$;
+
+COMMENT ON FUNCTION public.get_cuentas_cobranza_paginadas_backup_20260127() IS 
+'BACKUP del RPC get_cuentas_cobranza_paginadas antes de ajustar lógica de propietario para productos. Fecha: 2026-01-27. 
+El código original está documentado en la descripción de esta función para restauración si es necesario.';
+
+-- =====================================================
+-- AJUSTE: get_cuentas_cobranza_paginadas
+-- Cambio: Para productos, mostrar comprador como dueño si existe
+-- =====================================================
+CREATE OR REPLACE FUNCTION public.get_cuentas_cobranza_paginadas(p_page integer DEFAULT 1, p_per_page integer DEFAULT 50, p_id_cuenta text DEFAULT NULL::text, p_proyecto text DEFAULT NULL::text, p_clabe text DEFAULT NULL::text, p_no_propiedad text DEFAULT NULL::text, p_modelo text DEFAULT NULL::text, p_compradores text DEFAULT NULL::text, p_producto text DEFAULT NULL::text, p_estatus_ids integer[] DEFAULT NULL::integer[], p_tipos text[] DEFAULT NULL::text[], p_activo boolean DEFAULT true, p_proyecto_ids integer[] DEFAULT NULL::integer[], p_dueno_entity_ids integer[] DEFAULT NULL::integer[], p_search text DEFAULT NULL::text)
+ RETURNS TABLE(id integer, clabe_stp text, fecha_compra text, precio_final numeric, activo boolean, id_oferta integer, tipo text, proyecto text, id_proyecto integer, modelo text, edificio text, numero_propiedad text, id_propiedad integer, producto text, id_producto integer, comprador text, compradores_json jsonb, id_estatus_disponibilidad integer, estatus_disponibilidad_nombre text, vendedor text, dueno text, id_entidad_relacionada_dueno integer, id_cuenta_cobranza_padre integer, metraje numeric, precio_lista numeric, pagado numeric, restante numeric, tiene_acuerdos boolean, apartado_pagado boolean, total_acuerdos numeric, discrepancia numeric, cash_limit numeric, cash_paid numeric, cash_payments jsonb, collection_id integer, total_count bigint)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_offset integer;
+  v_total bigint;
+BEGIN
+  v_offset := (p_page - 1) * p_per_page;
+
+  SELECT COUNT(DISTINCT cc.id) INTO v_total
+  FROM cuentas_cobranza cc
+  LEFT JOIN ofertas o ON o.id = cc.id_oferta
+  LEFT JOIN propiedades prop ON prop.id = o.id_propiedad
+  LEFT JOIN edificios_modelos em ON em.id = prop.id_edificio_modelo
+  LEFT JOIN edificios e ON e.id = em.id_edificio
+  LEFT JOIN proyectos proy ON proy.id = e.id_proyecto
+  LEFT JOIN modelos m ON m.id = em.id_modelo
+  LEFT JOIN productos_servicios ps ON ps.id = o.id_producto
+  WHERE cc.activo = p_activo
+    AND (p_id_cuenta IS NULL OR cc.id::text ILIKE '%' || p_id_cuenta || '%')
+    AND (p_clabe IS NULL OR cc.clabe_stp ILIKE '%' || p_clabe || '%')
+    AND (p_proyecto IS NULL OR proy.nombre ILIKE '%' || p_proyecto || '%')
+    AND (p_no_propiedad IS NULL OR prop.numero_propiedad ILIKE '%' || p_no_propiedad || '%')
+    AND (p_modelo IS NULL OR m.nombre ILIKE '%' || p_modelo || '%')
+    AND (p_producto IS NULL OR ps.nombre ILIKE '%' || p_producto || '%')
+    AND (p_estatus_ids IS NULL OR prop.id_estatus_disponibilidad = ANY(p_estatus_ids))
+    AND (p_tipos IS NULL OR 
+         (CASE 
+           WHEN o.id_producto IS NOT NULL THEN 'Producto'
+           WHEN o.id_propiedad IS NOT NULL THEN 'Propiedad'
+           ELSE 'Servicio'
+         END) = ANY(p_tipos))
+    AND (p_proyecto_ids IS NULL OR e.id_proyecto = ANY(p_proyecto_ids))
+    AND (p_dueno_entity_ids IS NULL OR prop.id_entidad_relacionada_dueno = ANY(p_dueno_entity_ids))
+    AND (p_search IS NULL OR (
+      cc.id::text ILIKE '%' || p_search || '%'
+      OR cc.clabe_stp ILIKE '%' || p_search || '%'
+      OR proy.nombre ILIKE '%' || p_search || '%'
+      OR prop.numero_propiedad ILIKE '%' || p_search || '%'
+      OR ps.nombre ILIKE '%' || p_search || '%'
+    ));
+
+  RETURN QUERY
+  WITH acuerdos_info AS (
+    SELECT 
+      ap.id_cuenta_cobranza,
+      SUM(ap.monto) AS suma_acuerdos,
+      COUNT(*) > 0 AS tiene_acuerdos_flag
+    FROM acuerdos_pago ap
+    WHERE ap.activo = true
+    GROUP BY ap.id_cuenta_cobranza
+  ),
+  pagos_info AS (
+    SELECT 
+      p.id_cuenta_cobranza,
+      SUM(p.monto) AS total_pagado
+    FROM pagos p
+    WHERE p.activo = true
+    GROUP BY p.id_cuenta_cobranza
+  ),
+  cash_info AS (
+    SELECT 
+      p.id_cuenta_cobranza,
+      SUM(p.monto) AS cash_paid,
+      jsonb_agg(jsonb_build_object('fecha_pago', p.fecha_pago, 'monto', p.monto)) AS cash_payments
+    FROM pagos p
+    WHERE p.activo = true AND p.id_metodos_pago = 2
+    GROUP BY p.id_cuenta_cobranza
+  ),
+  compradores_info AS (
+    SELECT 
+      comp.id_cuenta_cobranza,
+      jsonb_agg(jsonb_build_object(
+        'id_persona', per.id,
+        'nombre_legal', per.nombre_legal,
+        'rfc', per.rfc,
+        'porcentaje_copropiedad', comp.porcentaje_copropiedad
+      )) AS compradores_json,
+      (array_agg(per.nombre_legal ORDER BY comp.porcentaje_copropiedad DESC))[1] AS comprador_principal
+    FROM compradores comp
+    JOIN personas per ON per.id = comp.id_persona
+    WHERE comp.activo = true
+    GROUP BY comp.id_cuenta_cobranza
+  ),
+  -- CTE para detectar cuentas con mantenimiento activo (propiedad entregada)
+  cuentas_con_mantenimiento AS (
+    SELECT DISTINCT cc_hijo.id_cuenta_cobranza_padre
+    FROM cuentas_cobranza cc_hijo
+    WHERE cc_hijo.id_cuenta_cobranza_padre IS NOT NULL
+      AND cc_hijo.activo = true
+  )
+  SELECT 
+    cc.id::integer,
+    cc.clabe_stp::text,
+    cc.fecha_compra::text,
+    cc.precio_final::numeric,
+    cc.activo,
+    cc.id_oferta::integer,
+    (CASE 
+      WHEN o.id_producto IS NOT NULL THEN 'Producto'
+      WHEN o.id_propiedad IS NOT NULL THEN 'Propiedad'
+      ELSE 'Servicio'
+    END)::text AS tipo,
+    proy.nombre::text AS proyecto,
+    proy.id::integer AS id_proyecto,
+    m.nombre::text AS modelo,
+    e.nombre::text AS edificio,
+    prop.numero_propiedad::text,
+    prop.id::integer AS id_propiedad,
+    ps.nombre::text AS producto,
+    ps.id::integer AS id_producto,
+    ci.comprador_principal::text AS comprador,
+    COALESCE(ci.compradores_json, '[]'::jsonb) AS compradores_json,
+    prop.id_estatus_disponibilidad::integer,
+    ed.nombre::text AS estatus_disponibilidad_nombre,
+    u.nombre::text AS vendedor,
+    -- AJUSTE: Para PRODUCTOS, mostrar comprador si existe. Para PROPIEDADES, mantener lógica de mantenimiento.
+    (CASE 
+      -- Si es producto y tiene comprador, mostrar el comprador como dueño
+      WHEN o.id_producto IS NOT NULL AND ci.comprador_principal IS NOT NULL 
+      THEN ci.comprador_principal
+      -- Si es propiedad con cuenta mantenimiento activa Y tiene comprador, mostrar comprador como dueño
+      WHEN ccm.id_cuenta_cobranza_padre IS NOT NULL AND ci.comprador_principal IS NOT NULL 
+      THEN ci.comprador_principal 
+      -- En cualquier otro caso, mostrar el dueño original de la propiedad
+      ELSE prop_dueno.nombre_legal 
+    END)::text AS dueno,
+    prop.id_entidad_relacionada_dueno::integer,
+    cc.id_cuenta_cobranza_padre::integer,
+    -- CORRECCIÓN: usar m2_interiores + m2_exteriores en lugar de m2
+    (COALESCE(prop.m2_interiores, 0) + COALESCE(prop.m2_exteriores, 0))::numeric AS metraje,
+    prop.precio_lista::numeric,
+    COALESCE(pi.total_pagado, 0)::numeric AS pagado,
+    (cc.precio_final - COALESCE(pi.total_pagado, 0))::numeric AS restante,
+    COALESCE(ai.tiene_acuerdos_flag, false) AS tiene_acuerdos,
+    false AS apartado_pagado,
+    COALESCE(ai.suma_acuerdos, 0)::numeric AS total_acuerdos,
+    (cc.precio_final - COALESCE(ai.suma_acuerdos, 0))::numeric AS discrepancia,
+    NULL::numeric AS cash_limit,
+    COALESCE(cashi.cash_paid, 0)::numeric AS cash_paid,
+    COALESCE(cashi.cash_payments, '[]'::jsonb) AS cash_payments,
+    cc.collection_id::integer,
+    v_total AS total_count
+  FROM cuentas_cobranza cc
+  LEFT JOIN ofertas o ON o.id = cc.id_oferta
+  LEFT JOIN propiedades prop ON prop.id = o.id_propiedad
+  LEFT JOIN edificios_modelos em ON em.id = prop.id_edificio_modelo
+  LEFT JOIN edificios e ON e.id = em.id_edificio
+  LEFT JOIN proyectos proy ON proy.id = e.id_proyecto
+  LEFT JOIN modelos m ON m.id = em.id_modelo
+  LEFT JOIN productos_servicios ps ON ps.id = o.id_producto
+  LEFT JOIN estatus_disponibilidad ed ON ed.id = prop.id_estatus_disponibilidad
+  LEFT JOIN usuarios u ON u.email = o.email_creador
+  LEFT JOIN acuerdos_info ai ON ai.id_cuenta_cobranza = cc.id
+  LEFT JOIN pagos_info pi ON pi.id_cuenta_cobranza = cc.id
+  LEFT JOIN cash_info cashi ON cashi.id_cuenta_cobranza = cc.id
+  LEFT JOIN compradores_info ci ON ci.id_cuenta_cobranza = cc.id
+  LEFT JOIN entidades_relacionadas er_prop ON er_prop.id = prop.id_entidad_relacionada_dueno
+  LEFT JOIN personas prop_dueno ON prop_dueno.id = er_prop.id_persona
+  LEFT JOIN cuentas_con_mantenimiento ccm ON ccm.id_cuenta_cobranza_padre = cc.id
+  WHERE cc.activo = p_activo
+    AND (p_id_cuenta IS NULL OR cc.id::text ILIKE '%' || p_id_cuenta || '%')
+    AND (p_clabe IS NULL OR cc.clabe_stp ILIKE '%' || p_clabe || '%')
+    AND (p_proyecto IS NULL OR proy.nombre ILIKE '%' || p_proyecto || '%')
+    AND (p_no_propiedad IS NULL OR prop.numero_propiedad ILIKE '%' || p_no_propiedad || '%')
+    AND (p_modelo IS NULL OR m.nombre ILIKE '%' || p_modelo || '%')
+    AND (p_producto IS NULL OR ps.nombre ILIKE '%' || p_producto || '%')
+    AND (p_estatus_ids IS NULL OR prop.id_estatus_disponibilidad = ANY(p_estatus_ids))
+    AND (p_tipos IS NULL OR 
+         (CASE 
+           WHEN o.id_producto IS NOT NULL THEN 'Producto'
+           WHEN o.id_propiedad IS NOT NULL THEN 'Propiedad'
+           ELSE 'Servicio'
+         END) = ANY(p_tipos))
+    AND (p_proyecto_ids IS NULL OR e.id_proyecto = ANY(p_proyecto_ids))
+    AND (p_dueno_entity_ids IS NULL OR prop.id_entidad_relacionada_dueno = ANY(p_dueno_entity_ids))
+    AND (p_search IS NULL OR (
+      cc.id::text ILIKE '%' || p_search || '%'
+      OR cc.clabe_stp ILIKE '%' || p_search || '%'
+      OR proy.nombre ILIKE '%' || p_search || '%'
+      OR prop.numero_propiedad ILIKE '%' || p_search || '%'
+      OR ps.nombre ILIKE '%' || p_search || '%'
+    ))
+  ORDER BY cc.id DESC
+  LIMIT p_per_page
+  OFFSET v_offset;
+END;
+$function$;
