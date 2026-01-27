@@ -1,71 +1,122 @@
 
-
-# Plan: Corregir Filtro de "Comisiones Externas" para Mostrar Cuentas con Comisión Pagada a Sozu
+# Plan: Corregir función check_sat_notification_conditions
 
 ## Problema Identificado
+La función `check_sat_notification_conditions` hace referencia a una tabla llamada `compradores_cuenta_cobranza` que **no existe** en la base de datos. La tabla correcta es simplemente `compradores`.
 
-La cuenta 1671 no aparece en la vista de "Comisiones externas" a pesar de que:
-1. El rollback se ejecutó correctamente (`comisionistas.pagada = false`, `comisionistas.aprobada = false`)
-2. Los datos están correctos en la base de datos
-3. La oferta y propiedades existen y están vinculadas
+## Causa
+Parece que en algún momento se creó esta función usando un nombre de tabla incorrecto. La tabla real que relaciona compradores con cuentas de cobranza se llama `compradores` (no `compradores_cuenta_cobranza`).
 
-**Causa Raíz**: La vista "Comisiones externas" actualmente muestra TODAS las comisiones de agentes externos sin importar si la comisión general de la cuenta ya fue pagada a Sozu (`es_pagada_comision_venta`). Sin embargo, según el flujo de negocio establecido en la documentación:
+## Solución
+Ejecutar una migración para corregir la función, reemplazando `compradores_cuenta_cobranza` por `compradores`.
 
-> Las comisiones externas solo deben entrar en este flujo después de que la comisión de venta haya sido pagada (a Sozu)
+## Cambio a Realizar
 
-Esto significa que la vista **debería filtrar** únicamente las cuentas donde `cuentas_cobranza.es_pagada_comision_venta = true`.
+### Migración SQL
 
-## Solución Propuesta
+```sql
+-- Fix: Replace incorrect table name 'compradores_cuenta_cobranza' with 'compradores'
+CREATE OR REPLACE FUNCTION public.check_sat_notification_conditions(p_cuenta_cobranza_id integer)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_propiedad_id INTEGER;
+  v_estatus INTEGER;
+  v_tiene_factura BOOLEAN;
+  v_tiene_constancia BOOLEAN;
+  v_tiene_archivo_sat BOOLEAN;
+  v_supabase_url TEXT;
+  v_service_role_key TEXT;
+  v_edge_function_url TEXT;
+BEGIN
+  -- Get the property and its status through the offer
+  SELECT o.id_propiedad, p.id_estatus_disponibilidad
+  INTO v_propiedad_id, v_estatus
+  FROM cuentas_cobranza cc
+  JOIN ofertas o ON cc.id_oferta = o.id
+  JOIN propiedades p ON o.id_propiedad = p.id
+  WHERE cc.id = p_cuenta_cobranza_id
+    AND cc.activo = true;
 
-Modificar la query en `fetchExternalAgentCommissions()` para incluir un filtro adicional que solo traiga comisionistas de cuentas donde la comisión de venta ya fue pagada.
+  -- If property not found or not in "Pagada completamente" status (9), exit
+  IF v_propiedad_id IS NULL OR v_estatus != 9 THEN
+    RETURN FALSE;
+  END IF;
 
-### Cambio 1: Agregar campo `es_pagada_comision_venta` a la query
+  -- Check if there's an active verified invoice (type 21 or 22)
+  SELECT EXISTS (
+    SELECT 1 FROM documentos
+    WHERE id_cuenta_cobranza = p_cuenta_cobranza_id
+      AND id_tipo_documento IN (21, 22)
+      AND activo = true
+      AND id_estatus_verificacion = 2
+      AND es_draft = false
+  ) INTO v_tiene_factura;
 
-Modificar la query de Supabase (líneas 70-113) para incluir el campo `es_pagada_comision_venta`:
+  -- Check if there's an active verified constancia fiscal (type 6)
+  -- FIX: Changed 'compradores_cuenta_cobranza' to 'compradores'
+  SELECT EXISTS (
+    SELECT 1 FROM documentos d
+    JOIN compradores ccc ON d.id_persona = ccc.id_persona
+    WHERE ccc.id_cuenta_cobranza = p_cuenta_cobranza_id
+      AND ccc.activo = true
+      AND d.id_tipo_documento = 6
+      AND d.activo = true
+      AND d.id_estatus_verificacion = 2
+  ) INTO v_tiene_constancia;
 
-```typescript
-cuentas_cobranza!comisionistas_id_cuenta_cobranza_fkey(
-  id,
-  precio_final,
-  es_pagada_comision_venta,  // <- NUEVO
-  acuerdos_pago!fk_acpago_cuenta(
-    ...
-  ),
-  ...
-)
+  -- Check if SAT notification file already exists (type 44)
+  SELECT EXISTS (
+    SELECT 1 FROM documentos
+    WHERE id_cuenta_cobranza = p_cuenta_cobranza_id
+      AND id_tipo_documento = 44
+      AND activo = true
+  ) INTO v_tiene_archivo_sat;
+
+  -- If all conditions met and no SAT file exists, call the Edge Function
+  IF v_tiene_factura AND v_tiene_constancia AND NOT v_tiene_archivo_sat THEN
+    -- Get Supabase URL from environment (available in database functions)
+    v_supabase_url := current_setting('app.settings.supabase_url', true);
+    v_service_role_key := current_setting('app.settings.service_role_key', true);
+    
+    -- Fallback to direct URL if settings not available
+    IF v_supabase_url IS NULL OR v_supabase_url = '' THEN
+      v_supabase_url := 'https://tzmhgfjmddkfyffkkmto.supabase.co';
+    END IF;
+    
+    v_edge_function_url := v_supabase_url || '/functions/v1/trigger-sat-notification';
+    
+    -- Call the Edge Function using http extension
+    PERFORM extensions.http_post(
+      url := v_edge_function_url,
+      body := json_build_object('id_cuenta_cobranza', p_cuenta_cobranza_id)::jsonb,
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || COALESCE(v_service_role_key, current_setting('request.jwt', true))
+      )
+    );
+    
+    RETURN TRUE;
+  END IF;
+
+  RETURN FALSE;
+END;
+$function$;
 ```
 
-### Cambio 2: Filtrar en el procesamiento de datos
+## Resumen de Cambios
+| Archivo/Objeto | Cambio |
+|----------------|--------|
+| Función `check_sat_notification_conditions` | Reemplazar `compradores_cuenta_cobranza` por `compradores` en el JOIN de la consulta de constancia fiscal |
 
-En el `reduce` de agrupación (líneas 238-288), agregar una condición para solo incluir cuentas donde `es_pagada_comision_venta = true`:
-
-```typescript
-const grouped = comisionistas.reduce((acc: any, com: any) => {
-  const cuenta = com.cuentas_cobranza;
-  
-  // Solo incluir cuentas donde la comisión de venta ya fue pagada
-  if (!cuenta.es_pagada_comision_venta) return acc;
-  
-  // ... resto del código
-}, {});
-```
-
-## Archivos a Modificar
-
-| Archivo | Cambio |
-|---------|--------|
-| `src/pages/admin/ComisionesExternas.tsx` | Agregar `es_pagada_comision_venta` a la query y filtrar solo cuentas pagadas |
+## Detalles Técnicos
+- **Tabla incorrecta**: `compradores_cuenta_cobranza` (no existe)
+- **Tabla correcta**: `compradores`
+- **Columnas utilizadas**: `id_persona`, `id_cuenta_cobranza`, `activo` (todas existen en la tabla `compradores`)
+- **Trigger afectado**: `trigger_property_status_sat` que llama a esta función
 
 ## Resultado Esperado
-
-Después de implementar estos cambios:
-1. Solo aparecerán en "Comisiones externas" las cuentas donde `es_pagada_comision_venta = true`
-2. La cuenta 1671 aparecerá porque `es_pagada_comision_venta = true` (fue simulado anteriormente)
-3. El flujo será consistente: primero se paga la comisión general a Sozu, luego se gestionan las comisiones individuales a agentes externos
-
-## Notas Técnicas
-
-- Este cambio alinea la implementación con el flujo de negocio documentado
-- Las cuentas con `es_pagada_comision_venta = false` seguirán apareciendo en las vistas generales de "Comisiones" y "Aprobación de comisiones"
-- El filtro de "Pagar comisiones" general continuará funcionando de forma independiente
-
+Después de aplicar esta corrección, el UPDATE de las propiedades debería ejecutarse sin errores, ya que el trigger podrá verificar correctamente las condiciones de notificación SAT.
