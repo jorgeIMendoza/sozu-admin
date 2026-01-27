@@ -949,11 +949,11 @@ export default function ComisionesExternas() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="factura">Archivo de Factura (PDF, imagen)</Label>
+              <Label htmlFor="factura">Archivo de Factura (PDF)</Label>
               <Input
                 id="factura"
                 type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
+                accept=".pdf"
                 onChange={(e) => setFacturaFile(e.target.files?.[0] || null)}
               />
             </div>
