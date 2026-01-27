@@ -6504,8 +6504,8 @@ export type Database = {
           p_modelo_ids?: number[]
           p_orden_precio?: string
           p_ownership_entity_ids?: number[]
-          p_page?: number
-          p_per_page?: number
+          p_page: number
+          p_per_page: number
           p_precio_max?: number
           p_precio_min?: number
           p_proyecto_ids?: number[]
