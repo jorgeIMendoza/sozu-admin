@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 
-interface Prospecto {
+interface Candidato {
   id: number;
   nombre_legal: string;
   email: string;
@@ -19,6 +19,7 @@ interface Prospecto {
   rfc?: string;
   curp?: string;
   tipo_persona: string;
+  origen: 'Prospecto' | 'Entidad Legal';
 }
 
 interface ConvertirProspectoDialogProps {
@@ -28,20 +29,24 @@ interface ConvertirProspectoDialogProps {
 
 export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspectoDialogProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedProspecto, setSelectedProspecto] = useState<Prospecto | null>(null);
+  const [selectedCandidato, setSelectedCandidato] = useState<Candidato | null>(null);
   const queryClient = useQueryClient();
   const { registrarCreacion } = useActivityLogger();
 
-  // Buscar prospectos (id_tipo_entidad = 7)
-  const { data: prospectos, isLoading } = useQuery({
-    queryKey: ['prospectos-para-convertir', searchTerm],
+  // Buscar prospectos (id_tipo_entidad = 7) Y entidades legales (personas morales activas)
+  const { data: candidatos, isLoading } = useQuery({
+    queryKey: ['candidatos-para-comprador', searchTerm],
     queryFn: async () => {
       if (!searchTerm || searchTerm.length < 2) return [];
 
-      const { data, error } = await supabase
+      const searchLower = searchTerm.toLowerCase();
+
+      // Buscar en prospectos (tipo_entidad = 7)
+      const { data: prospectos, error: errorProspectos } = await supabase
         .from('entidades_relacionadas')
         .select(`
           id_persona,
+          id_tipo_entidad,
           personas!entidades_relacionadas_id_persona_fkey(
             id,
             nombre_legal,
@@ -53,13 +58,23 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
             activo
           )
         `)
-        .eq('id_tipo_entidad', 7) // Prospectos
+        .eq('id_tipo_entidad', 7)
         .eq('activo', true);
 
-      if (error) throw error;
+      if (errorProspectos) throw errorProspectos;
 
-      // Filtrar personas activas y que coincidan con la búsqueda
-      const prospectosFiltrados = (data || [])
+      // Buscar en personas morales (entidades legales) directamente
+      const { data: entidadesLegales, error: errorEntidades } = await supabase
+        .from('personas')
+        .select('id, nombre_legal, email, telefono, rfc, curp, tipo_persona, activo')
+        .eq('tipo_persona', 'pm')
+        .eq('activo', true)
+        .or(`nombre_legal.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,rfc.ilike.%${searchTerm}%`);
+
+      if (errorEntidades) throw errorEntidades;
+
+      // Mapear prospectos
+      const prospectosMap = (prospectos || [])
         .filter((er: any) => er.personas?.activo === true)
         .map((er: any) => ({
           id: er.personas.id,
@@ -68,33 +83,47 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
           telefono: er.personas.telefono,
           rfc: er.personas.rfc,
           curp: er.personas.curp,
-          tipo_persona: er.personas.tipo_persona
+          tipo_persona: er.personas.tipo_persona,
+          origen: 'Prospecto' as const
         }))
-        .filter((p: Prospecto) => 
-          p.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          p.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          p.rfc?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          p.curp?.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-        // Eliminar duplicados
-        .filter((v: Prospecto, i: number, a: Prospecto[]) => a.findIndex(t => t.id === v.id) === i)
-        .sort((a: Prospecto, b: Prospecto) => a.nombre_legal.localeCompare(b.nombre_legal));
+        .filter((p: any) => 
+          p.nombre_legal?.toLowerCase().includes(searchLower) ||
+          p.email?.toLowerCase().includes(searchLower) ||
+          p.rfc?.toLowerCase().includes(searchLower) ||
+          p.curp?.toLowerCase().includes(searchLower)
+        );
 
-      return prospectosFiltrados as Prospecto[];
+      // Mapear entidades legales
+      const entidadesMap = (entidadesLegales || []).map((e: any) => ({
+        id: e.id,
+        nombre_legal: e.nombre_legal,
+        email: e.email,
+        telefono: e.telefono,
+        rfc: e.rfc,
+        curp: e.curp,
+        tipo_persona: e.tipo_persona,
+        origen: 'Entidad Legal' as const
+      }));
+
+      // Combinar y eliminar duplicados por id
+      const combinados = [...prospectosMap, ...entidadesMap];
+      const unicos = combinados.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+      
+      return unicos.sort((a, b) => a.nombre_legal.localeCompare(b.nombre_legal));
     },
     enabled: open && searchTerm.length >= 2,
   });
 
   // Verificar si ya es comprador
   const { data: yaEsComprador, isLoading: verificando } = useQuery({
-    queryKey: ['verificar-comprador', selectedProspecto?.id],
+    queryKey: ['verificar-comprador', selectedCandidato?.id],
     queryFn: async () => {
-      if (!selectedProspecto) return false;
+      if (!selectedCandidato) return false;
 
       const { data, error } = await supabase
         .from('entidades_relacionadas')
         .select('id')
-        .eq('id_persona', selectedProspecto.id)
+        .eq('id_persona', selectedCandidato.id)
         .eq('id_tipo_entidad', 2) // Comprador
         .eq('activo', true)
         .is('id_proyecto', null)
@@ -103,16 +132,16 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
       if (error) throw error;
       return !!data;
     },
-    enabled: !!selectedProspecto,
+    enabled: !!selectedCandidato,
   });
 
   const convertirMutation = useMutation({
-    mutationFn: async (prospectoId: number) => {
+    mutationFn: async (candidatoId: number) => {
       // Crear registro en entidades_relacionadas como comprador
       const { error } = await supabase
         .from('entidades_relacionadas')
         .insert([{
-          id_persona: prospectoId,
+          id_persona: candidatoId,
           id_tipo_entidad: 2, // Comprador
           id_proyecto: null,
           activo: true
@@ -124,27 +153,27 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
       await registrarCreacion(
         'entidad_relacionada',
         {
-          id_persona: selectedProspecto?.id,
-          nombre: selectedProspecto?.nombre_legal,
-          email: selectedProspecto?.email,
-          tipo_conversion: 'prospecto_a_comprador',
-          id_tipo_entidad_anterior: 7,
+          id_persona: selectedCandidato?.id,
+          nombre: selectedCandidato?.nombre_legal,
+          email: selectedCandidato?.email,
+          tipo_conversion: 'persona_a_comprador',
+          origen: selectedCandidato?.origen,
           id_tipo_entidad_nuevo: 2,
         },
-        'convertir_prospecto_a_comprador'
+        'convertir_a_comprador'
       );
       queryClient.invalidateQueries({ queryKey: ['compradores'] });
-      toast.success(`${selectedProspecto?.nombre_legal} convertido a comprador exitosamente`);
+      toast.success(`${selectedCandidato?.nombre_legal} convertido a comprador exitosamente`);
       handleClose();
     },
     onError: async (error: any) => {
       await registrarCreacion(
         'entidad_relacionada',
         {
-          id_persona: selectedProspecto?.id,
-          nombre: selectedProspecto?.nombre_legal,
+          id_persona: selectedCandidato?.id,
+          nombre: selectedCandidato?.nombre_legal,
         },
-        'convertir_prospecto_a_comprador',
+        'convertir_a_comprador',
         'error',
         error.message
       );
@@ -154,13 +183,13 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
 
   const handleClose = () => {
     setSearchTerm("");
-    setSelectedProspecto(null);
+    setSelectedCandidato(null);
     onOpenChange(false);
   };
 
   const handleConfirm = () => {
-    if (selectedProspecto) {
-      convertirMutation.mutate(selectedProspecto.id);
+    if (selectedCandidato) {
+      convertirMutation.mutate(selectedCandidato.id);
     }
   };
 
@@ -170,10 +199,10 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
-            Convertir Prospecto a Comprador
+            Convertir a Comprador
           </DialogTitle>
           <DialogDescription>
-            Busca un prospecto existente y conviértelo en comprador para poder asignarle propiedades.
+            Busca un prospecto o entidad legal existente y conviértelo en comprador para poder asignarle propiedades.
           </DialogDescription>
         </DialogHeader>
 
@@ -186,48 +215,53 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setSelectedProspecto(null);
+                setSelectedCandidato(null);
               }}
               className="pl-10"
             />
           </div>
 
           {/* Lista de resultados */}
-          {searchTerm.length >= 2 && !selectedProspecto && (
+          {searchTerm.length >= 2 && !selectedCandidato && (
             <ScrollArea className="h-[250px] rounded-md border">
               {isLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <p className="text-muted-foreground">Buscando...</p>
                 </div>
-              ) : prospectos && prospectos.length > 0 ? (
+              ) : candidatos && candidatos.length > 0 ? (
                 <div className="p-2 space-y-2">
-                  {prospectos.map((prospecto) => (
+                  {candidatos.map((candidato) => (
                     <Card
-                      key={prospecto.id}
+                      key={candidato.id}
                       className="cursor-pointer hover:bg-accent transition-colors"
-                      onClick={() => setSelectedProspecto(prospecto)}
+                      onClick={() => setSelectedCandidato(candidato)}
                     >
                       <CardContent className="p-3">
                         <div className="flex items-start justify-between">
                           <div className="space-y-1">
-                            <p className="font-medium">{prospecto.nombre_legal}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{candidato.nombre_legal}</p>
+                              <Badge variant={candidato.origen === 'Prospecto' ? 'secondary' : 'outline'} className="text-xs">
+                                {candidato.origen}
+                              </Badge>
+                            </div>
                             <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                              {prospecto.email && (
+                              {candidato.email && (
                                 <span className="flex items-center gap-1">
                                   <Mail className="h-3 w-3" />
-                                  {prospecto.email}
+                                  {candidato.email}
                                 </span>
                               )}
-                              {prospecto.telefono && (
+                              {candidato.telefono && (
                                 <span className="flex items-center gap-1">
                                   <Phone className="h-3 w-3" />
-                                  {prospecto.telefono}
+                                  {candidato.telefono}
                                 </span>
                               )}
                             </div>
                           </div>
                           <Badge variant="outline">
-                            {prospecto.tipo_persona?.toLowerCase() === 'pf' || prospecto.tipo_persona === 'Física' ? 'Persona Física' : 'Persona Moral'}
+                            {candidato.tipo_persona?.toLowerCase() === 'pf' || candidato.tipo_persona === 'Física' ? 'Persona Física' : 'Persona Moral'}
                           </Badge>
                         </div>
                       </CardContent>
@@ -236,25 +270,25 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full">
-                  <p className="text-muted-foreground">No se encontraron prospectos</p>
+                  <p className="text-muted-foreground">No se encontraron resultados</p>
                 </div>
               )}
             </ScrollArea>
           )}
 
-          {/* Prospecto seleccionado - Confirmación */}
-          {selectedProspecto && (
+          {/* Candidato seleccionado - Confirmación */}
+          {selectedCandidato && (
             <Card className="border-primary">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold flex items-center gap-2">
                     <User className="h-4 w-4" />
-                    Prospecto Seleccionado
+                    {selectedCandidato.origen} Seleccionado
                   </h4>
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    onClick={() => setSelectedProspecto(null)}
+                    onClick={() => setSelectedCandidato(null)}
                   >
                     Cambiar
                   </Button>
@@ -263,31 +297,31 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <span className="text-muted-foreground">Nombre:</span>
-                    <p className="font-medium">{selectedProspecto.nombre_legal}</p>
+                    <p className="font-medium">{selectedCandidato.nombre_legal}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Tipo:</span>
                     <p className="font-medium">
-                      {selectedProspecto.tipo_persona?.toLowerCase() === 'pf' || selectedProspecto.tipo_persona === 'Física' 
+                      {selectedCandidato.tipo_persona?.toLowerCase() === 'pf' || selectedCandidato.tipo_persona === 'Física' 
                         ? 'Persona Física' 
                         : 'Persona Moral'}
                     </p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Email:</span>
-                    <p className="font-medium">{selectedProspecto.email || '-'}</p>
+                    <p className="font-medium">{selectedCandidato.email || '-'}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Teléfono:</span>
-                    <p className="font-medium">{selectedProspecto.telefono || '-'}</p>
+                    <p className="font-medium">{selectedCandidato.telefono || '-'}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">RFC:</span>
-                    <p className="font-medium">{selectedProspecto.rfc || '-'}</p>
+                    <p className="font-medium">{selectedCandidato.rfc || '-'}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">CURP:</span>
-                    <p className="font-medium">{selectedProspecto.curp || '-'}</p>
+                    <p className="font-medium">{selectedCandidato.curp || '-'}</p>
                   </div>
                 </div>
 
@@ -318,7 +352,7 @@ export function ConvertirProspectoDialog({ open, onOpenChange }: ConvertirProspe
           </Button>
           <Button 
             onClick={handleConfirm}
-            disabled={!selectedProspecto || yaEsComprador || convertirMutation.isPending}
+            disabled={!selectedCandidato || yaEsComprador || convertirMutation.isPending}
           >
             {convertirMutation.isPending ? 'Convirtiendo...' : 'Confirmar Conversión'}
           </Button>
