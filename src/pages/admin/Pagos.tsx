@@ -1482,7 +1482,7 @@ export default function Pagos() {
                                 </Tooltip>
                               </TooltipProvider>
                             )}
-                            {!cuenta.tiene_acuerdos ? <TooltipProvider>
+                            {!cuenta.tiene_acuerdos && cuenta.precio_final > 0 ? <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
                                     <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 h-6 w-6 p-0 flex items-center justify-center">
@@ -1494,7 +1494,7 @@ export default function Pagos() {
                                     <p className="text-sm">La cuenta de cobranza fue generada pero falta seleccionar el esquema de pago para generar los acuerdos</p>
                                   </TooltipContent>
                                 </Tooltip>
-                              </TooltipProvider> : !cuenta.apartado_pagado && cuenta.restante > 0.01 && cuenta.id_estatus_disponibilidad !== 10 ? <TooltipProvider>
+                              </TooltipProvider> : !cuenta.apartado_pagado && cuenta.restante > 0.01 && cuenta.id_estatus_disponibilidad !== 10 && cuenta.precio_final > 0 ? <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
                                     <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 h-6 w-6 p-0 flex items-center justify-center">
@@ -1683,7 +1683,7 @@ export default function Pagos() {
                          <TableCell className={`font-semibold ${cuenta.restante <= 0 ? 'text-green-600' : 'text-orange-600'}`}>
                            <div className="flex items-center gap-2">
                              {formatCurrency(cuenta.restante)}
-                             {cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && cuenta.tiene_acuerdos && !cuenta.tiene_multas_pendientes && cuenta.precio_final > 0 && (
+                              {cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && !cuenta.tiene_multas_pendientes && (cuenta.tiene_acuerdos || cuenta.precio_final === 0) && (
                                <TooltipProvider>
                                  <Tooltip>
                                    <TooltipTrigger>

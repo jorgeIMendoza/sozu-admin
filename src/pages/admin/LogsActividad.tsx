@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Activity, Search, RefreshCw, Filter, Eye, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { Activity, Search, RefreshCw, Filter, Eye, ChevronLeft, ChevronRight, Calendar, User, Layers, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 
 const ALLOWED_EMAIL = 'jorge.mendoza@sozu.com';
 const PAGE_SIZE = 50;
@@ -74,6 +75,13 @@ export default function LogsActividad() {
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin] = useState<Date | undefined>(undefined);
 
+  // New filter states
+  const [selectedUsuarios, setSelectedUsuarios] = useState<string[]>([]);
+  const [selectedWorkflows, setSelectedWorkflows] = useState<string[]>([]);
+  const [selectedEstatus, setSelectedEstatus] = useState<string>('all');
+  const [availableUsuarios, setAvailableUsuarios] = useState<string[]>([]);
+  const [availableWorkflows, setAvailableWorkflows] = useState<string[]>([]);
+
   // Check authorization
   useEffect(() => {
     if (!isAuthLoading) {
@@ -83,6 +91,32 @@ export default function LogsActividad() {
       }
     }
   }, [profile, user, isAuthLoading, navigate]);
+
+  // Fetch filter options
+  const fetchFilterOptions = async () => {
+    try {
+      // Get unique usuarios
+      const { data: usuariosData } = await supabase
+        .from('logs_actividad')
+        .select('usuario_id')
+        .order('usuario_id');
+      
+      const uniqueUsuarios = [...new Set(usuariosData?.map(u => u.usuario_id).filter(Boolean) || [])];
+      setAvailableUsuarios(uniqueUsuarios as string[]);
+
+      // Get unique workflows
+      const { data: workflowsData } = await supabase
+        .from('logs_actividad')
+        .select('workflow')
+        .not('workflow', 'is', null)
+        .order('workflow');
+      
+      const uniqueWorkflows = [...new Set(workflowsData?.map(w => w.workflow).filter(Boolean) || [])];
+      setAvailableWorkflows(uniqueWorkflows as string[]);
+    } catch (err) {
+      console.error('Error fetching filter options:', err);
+    }
+  };
 
   const fetchLogs = async () => {
     setIsLoading(true);
@@ -108,6 +142,19 @@ export default function LogsActividad() {
         const endDate = new Date(fechaFin);
         endDate.setDate(endDate.getDate() + 1);
         countQuery = countQuery.lt('fecha_creacion', format(endDate, 'yyyy-MM-dd'));
+      }
+
+      // Apply new filters to count query
+      if (selectedUsuarios.length > 0) {
+        countQuery = countQuery.in('usuario_id', selectedUsuarios);
+      }
+
+      if (selectedWorkflows.length > 0) {
+        countQuery = countQuery.in('workflow', selectedWorkflows);
+      }
+
+      if (selectedEstatus !== 'all') {
+        countQuery = countQuery.eq('estatus_ejecucion', selectedEstatus);
       }
 
       const { count } = await countQuery;
@@ -144,6 +191,19 @@ export default function LogsActividad() {
         query = query.lt('fecha_creacion', format(endDate, 'yyyy-MM-dd'));
       }
 
+      // Apply new filters to main query
+      if (selectedUsuarios.length > 0) {
+        query = query.in('usuario_id', selectedUsuarios);
+      }
+
+      if (selectedWorkflows.length > 0) {
+        query = query.in('workflow', selectedWorkflows);
+      }
+
+      if (selectedEstatus !== 'all') {
+        query = query.eq('estatus_ejecucion', selectedEstatus);
+      }
+
       const { data, error } = await query;
 
       if (error) {
@@ -173,6 +233,7 @@ export default function LogsActividad() {
     const userEmail = profile?.email || user?.email;
     if (userEmail === ALLOWED_EMAIL) {
       fetchActividades();
+      fetchFilterOptions();
     }
   }, [profile, user]);
 
@@ -181,12 +242,12 @@ export default function LogsActividad() {
     if (userEmail === ALLOWED_EMAIL) {
       fetchLogs();
     }
-  }, [profile, user, selectedActividad, selectedAmbiente, currentPage, fechaInicio, fechaFin]);
+  }, [profile, user, selectedActividad, selectedAmbiente, currentPage, fechaInicio, fechaFin, selectedUsuarios, selectedWorkflows, selectedEstatus]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedActividad, selectedAmbiente, fechaInicio, fechaFin]);
+  }, [selectedActividad, selectedAmbiente, fechaInicio, fechaFin, selectedUsuarios, selectedWorkflows, selectedEstatus]);
 
   const filteredLogs = logs.filter(log => {
     if (!searchTerm) return true;
@@ -325,6 +386,41 @@ export default function LogsActividad() {
                   <SelectItem value="production">Production</SelectItem>
                   <SelectItem value="staging">Staging</SelectItem>
                   <SelectItem value="development">Development</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* New Advanced Filters */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <MultiSelectFilter
+                values={selectedUsuarios}
+                onValuesChange={setSelectedUsuarios}
+                options={availableUsuarios}
+                placeholder="Usuario"
+                searchPlaceholder="Buscar usuario..."
+                emptyText="No se encontraron usuarios"
+                className="w-full sm:w-[220px]"
+                icon={<User className="h-4 w-4" />}
+              />
+              <MultiSelectFilter
+                values={selectedWorkflows}
+                onValuesChange={setSelectedWorkflows}
+                options={availableWorkflows}
+                placeholder="Entidad/Menú"
+                searchPlaceholder="Buscar entidad..."
+                emptyText="No se encontraron entidades"
+                className="w-full sm:w-[220px]"
+                icon={<Layers className="h-4 w-4" />}
+              />
+              <Select value={selectedEstatus} onValueChange={setSelectedEstatus}>
+                <SelectTrigger className="w-full sm:w-[160px]">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Estatus" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los estatus</SelectItem>
+                  <SelectItem value="exito">Éxito</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
                 </SelectContent>
               </Select>
             </div>
