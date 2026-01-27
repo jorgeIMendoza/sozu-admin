@@ -32,6 +32,7 @@ type Producto = {
   precio_lista: number;
   categoria_nombre?: string;
   dueno_nombre?: string;
+  dueno_cuenta_madre?: string;
   proyecto_nombre?: string;
   unidad_sat_descripcion?: string;
   tiene_metraje?: boolean;
@@ -183,6 +184,7 @@ export default function Productos() {
           *,
           categorias_producto!productos_servicios_id_categoria_fkey (nombre, tiene_metraje),
           entidades_relacionadas!productos_servicios_id_entidad_relacionada_dueno_fkey (
+            cuenta_madre_stp,
             personas!entidades_relacionadas_id_persona_fkey (nombre_legal)
           ),
           unidades_sat (descripcion),
@@ -215,6 +217,7 @@ export default function Productos() {
         precio_lista: item.precio_lista || 0,
         categoria_nombre: item.categorias_producto?.nombre,
         dueno_nombre: item.entidades_relacionadas?.personas?.nombre_legal,
+        dueno_cuenta_madre: item.entidades_relacionadas?.cuenta_madre_stp,
         proyecto_nombre: item.proyectos?.nombre,
         unidad_sat_descripcion: item.unidades_sat?.descripcion,
         tiene_metraje: item.categorias_producto?.tiene_metraje || false,
@@ -584,7 +587,19 @@ export default function Productos() {
                 </TableCell>
                 <TableCell className="font-mono text-sm">{producto.sat_id || '-'}</TableCell>
                 <TableCell>{producto.unidad_sat_descripcion || '-'}</TableCell>
-                <TableCell>{producto.dueno_nombre || '-'}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span>{producto.dueno_nombre || '-'}</span>
+                    {producto.dueno_cuenta_madre && (
+                      <span className="text-muted-foreground font-mono text-xs">
+                        {producto.dueno_cuenta_madre.slice(0, -4)}
+                        <span className="font-bold text-primary">
+                          {producto.dueno_cuenta_madre.slice(-4)}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="text-center">
                   <ProductPaymentSchemeManagement 
                     productId={producto.id} 
