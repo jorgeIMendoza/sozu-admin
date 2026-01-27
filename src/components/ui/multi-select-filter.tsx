@@ -38,13 +38,13 @@ export function MultiSelectFilter({
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
 
-  // Filter options based on search
+  // Filter options based on search - only show when searching
   const filteredOptions = React.useMemo(() => {
-    if (search.length < 2) return options.slice(0, 50); // Show first 50 by default
+    if (search.length < 2) return []; // Don't show options until user types at least 2 chars
     const searchLower = search.toLowerCase().trim();
     return options.filter(option => 
       option.toLowerCase().includes(searchLower)
-    );
+    ).slice(0, 100); // Limit results for performance
   }, [options, search]);
 
   const handleToggle = (option: string) => {
