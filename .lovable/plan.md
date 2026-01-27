@@ -1,171 +1,138 @@
 
 
-# Plan: Corregir Estatus Incorrectos de Propiedades (Con Rollback)
+# Plan: Corregir Estatus de Propiedades con Fórmula Correcta
 
-## Resumen
-Corregir el estatus de propiedades con inconsistencias entre su estatus actual y su saldo pendiente real, incluyendo scripts de rollback para revertir los cambios si es necesario.
+## Problema Identificado
 
-## Casos a Corregir
+La migración anterior usó una fórmula incorrecta para calcular el saldo restante:
 
-### Caso 1: Propiedades marcadas "Pagada completamente" con saldo pendiente
-| Métrica | Valor |
-|---------|-------|
-| Estatus actual | 9 (Pagada completamente) |
-| Estatus correcto | 5 (Vendido) |
-| Condición | restante > $0 |
+| Aspecto | Migración Anterior (Incorrecta) | Fórmula Correcta (RPC) |
+|---------|--------------------------------|------------------------|
+| Cálculo | `SUM(acuerdos_pago) - SUM(aplicaciones_pago)` | `precio_final - SUM(pagos)` |
+| Resultado | Incluía discrepancias entre acuerdos y aplicaciones | Refleja el balance real de pagos |
 
-### Caso 2: Propiedades marcadas "Vendido" pero ya pagadas
-| Métrica | Valor |
-|---------|-------|
-| Estatus actual | 5 (Vendido) |
-| Estatus correcto | 9 (Pagada completamente) |
-| Condición | restante <= $0 |
+## Propiedades a Corregir
 
-## Paso 0: Capturar Estado Actual (Ejecutar ANTES de los cambios)
+### Caso 1: De "Vendido" (5) a "Pagada completamente" (9)
+**18 propiedades** con restante <= 0:
 
-Ejecutar estas queries para obtener los IDs de las propiedades que serán afectadas:
+| Proyecto | Propiedades |
+|----------|-------------|
+| Margot | 602, 603, 701, 808, 816, 819, 1013, 1302, 1311, 1316, 1407, 1414, 1415, 1416, 1420, 1510, 1516, 1612 |
 
-```sql
--- Guardar IDs de propiedades que cambiarán de 9 a 5
-SELECT p.id, pr.nombre as proyecto, p.nombre as propiedad
-FROM propiedades p
-JOIN proyectos pr ON p.id_proyecto = pr.id
-WHERE p.id_estatus_disponibilidad = 9 
-AND p.activo = true
-AND (
-    COALESCE(
-        (SELECT SUM(ap.monto) FROM acuerdos_pago ap 
-         JOIN cuentas_cobranza cc ON ap.id_cuenta_cobranza = cc.id 
-         WHERE cc.id_propiedad = p.id AND ap.activo = true AND cc.activo = true),
-        0
-    ) - COALESCE(
-        (SELECT SUM(apl.monto) FROM aplicaciones_pago apl 
-         JOIN acuerdos_pago ap ON apl.id_acuerdo_pago = ap.id 
-         JOIN cuentas_cobranza cc ON ap.id_cuenta_cobranza = cc.id 
-         WHERE cc.id_propiedad = p.id AND apl.activo = true AND ap.activo = true AND cc.activo = true),
-        0
-    )
-) > 0;
-```
+**Incluye las mencionadas:** 603, 1416, 1420
 
-```sql
--- Guardar IDs de propiedades que cambiarán de 5 a 9
-SELECT p.id, pr.nombre as proyecto, p.nombre as propiedad
-FROM propiedades p
-JOIN proyectos pr ON p.id_proyecto = pr.id
-WHERE p.id_estatus_disponibilidad = 5 
-AND p.activo = true
-AND (
-    COALESCE(
-        (SELECT SUM(ap.monto) FROM acuerdos_pago ap 
-         JOIN cuentas_cobranza cc ON ap.id_cuenta_cobranza = cc.id 
-         WHERE cc.id_propiedad = p.id AND ap.activo = true AND cc.activo = true),
-        0
-    ) - COALESCE(
-        (SELECT SUM(apl.monto) FROM aplicaciones_pago apl 
-         JOIN acuerdos_pago ap ON apl.id_acuerdo_pago = ap.id 
-         JOIN cuentas_cobranza cc ON ap.id_cuenta_cobranza = cc.id 
-         WHERE cc.id_propiedad = p.id AND apl.activo = true AND ap.activo = true AND cc.activo = true),
-        0
-    )
-) <= 0;
-```
+### Caso 2: De "Pagada completamente" (9) a "Vendido" (5)  
+**8 propiedades** con restante > 0 (centavos de diferencia):
 
-## Paso 1: Corrección Caso 1 - De "Pagada completamente" a "Vendido"
+| Proyecto | Propiedades | Restante |
+|----------|-------------|----------|
+| Margot | 501, 519, 804, 1008, 1009, 1117, 1304, 1710 | $0.02 - $0.17 |
 
-```sql
-UPDATE propiedades p
-SET id_estatus_disponibilidad = 5
-FROM (
-    SELECT 
-        p.id,
-        COALESCE(
-            (SELECT SUM(ap.monto) FROM acuerdos_pago ap 
-             JOIN cuentas_cobranza cc ON ap.id_cuenta_cobranza = cc.id 
-             WHERE cc.id_propiedad = p.id AND ap.activo = true AND cc.activo = true),
-            0
-        ) - COALESCE(
-            (SELECT SUM(apl.monto) FROM aplicaciones_pago apl 
-             JOIN acuerdos_pago ap ON apl.id_acuerdo_pago = ap.id 
-             JOIN cuentas_cobranza cc ON ap.id_cuenta_cobranza = cc.id 
-             WHERE cc.id_propiedad = p.id AND apl.activo = true AND ap.activo = true AND cc.activo = true),
-            0
-        ) as restante
-    FROM propiedades p
-    WHERE p.id_estatus_disponibilidad = 9 
-    AND p.activo = true
-) calc
-WHERE p.id = calc.id
-AND calc.restante > 0;
-```
+Nota: Estas tienen diferencias de centavos que son discrepancias de redondeo, técnicamente siguen sin estar completamente pagadas.
 
-## Paso 2: Corrección Caso 2 - De "Vendido" a "Pagada completamente"
+## SQL a Ejecutar
+
+### Paso 1: Corrección 5 → 9 (18 propiedades)
 
 ```sql
 UPDATE propiedades p
 SET id_estatus_disponibilidad = 9
 FROM (
+    WITH cuenta_activa AS (
+        SELECT DISTINCT ON (o.id_propiedad)
+          o.id_propiedad,
+          cc.id as cuenta_id,
+          cc.precio_final
+        FROM ofertas o
+        JOIN cuentas_cobranza cc ON cc.id_oferta = o.id AND cc.activo = true
+        WHERE o.activo = true AND o.id_producto IS NULL
+        ORDER BY o.id_propiedad, cc.fecha_creacion DESC
+    ),
+    pagos_info AS (
+        SELECT 
+          cc.id as cuenta_id,
+          COALESCE(SUM(CASE WHEN pg.activo = true THEN pg.monto ELSE 0 END), 0) as total_pagado
+        FROM cuentas_cobranza cc
+        LEFT JOIN pagos pg ON pg.id_cuenta_cobranza = cc.id
+        WHERE cc.activo = true
+        GROUP BY cc.id
+    )
     SELECT 
-        p.id,
-        COALESCE(
-            (SELECT SUM(ap.monto) FROM acuerdos_pago ap 
-             JOIN cuentas_cobranza cc ON ap.id_cuenta_cobranza = cc.id 
-             WHERE cc.id_propiedad = p.id AND ap.activo = true AND cc.activo = true),
-            0
-        ) - COALESCE(
-            (SELECT SUM(apl.monto) FROM aplicaciones_pago apl 
-             JOIN acuerdos_pago ap ON apl.id_acuerdo_pago = ap.id 
-             JOIN cuentas_cobranza cc ON ap.id_cuenta_cobranza = cc.id 
-             WHERE cc.id_propiedad = p.id AND apl.activo = true AND ap.activo = true AND cc.activo = true),
-            0
-        ) as restante
-    FROM propiedades p
-    WHERE p.id_estatus_disponibilidad = 5 
-    AND p.activo = true
+        prop.id,
+        (COALESCE(ca.precio_final, 0) - COALESCE(pi.total_pagado, 0)) as restante
+    FROM propiedades prop
+    LEFT JOIN cuenta_activa ca ON ca.id_propiedad = prop.id
+    LEFT JOIN pagos_info pi ON pi.cuenta_id = ca.cuenta_id
+    WHERE prop.activo = true
+    AND prop.id_estatus_disponibilidad = 5
+    AND ca.cuenta_id IS NOT NULL
 ) calc
 WHERE p.id = calc.id
 AND calc.restante <= 0;
 ```
 
-## Scripts de Rollback
-
-### Rollback Caso 1: Revertir de "Vendido" a "Pagada completamente"
-Usar los IDs obtenidos en el Paso 0:
+### Paso 2: Corrección 9 → 5 (8 propiedades con centavos)
 
 ```sql
--- Reemplazar (id1, id2, id3, ...) con los IDs reales del Paso 0
-UPDATE propiedades
-SET id_estatus_disponibilidad = 9
-WHERE id IN (
-    -- Pegar aquí los IDs de la primera query del Paso 0
-    -- Ejemplo: 'uuid1', 'uuid2', 'uuid3'
-);
-```
-
-### Rollback Caso 2: Revertir de "Pagada completamente" a "Vendido"
-Usar los IDs obtenidos en el Paso 0:
-
-```sql
--- Reemplazar (id1, id2, id3, ...) con los IDs reales del Paso 0
-UPDATE propiedades
+UPDATE propiedades p
 SET id_estatus_disponibilidad = 5
-WHERE id IN (
-    -- Pegar aquí los IDs de la segunda query del Paso 0
-    -- Ejemplo: 'uuid1', 'uuid2', 'uuid3'
-);
+FROM (
+    WITH cuenta_activa AS (
+        SELECT DISTINCT ON (o.id_propiedad)
+          o.id_propiedad,
+          cc.id as cuenta_id,
+          cc.precio_final
+        FROM ofertas o
+        JOIN cuentas_cobranza cc ON cc.id_oferta = o.id AND cc.activo = true
+        WHERE o.activo = true AND o.id_producto IS NULL
+        ORDER BY o.id_propiedad, cc.fecha_creacion DESC
+    ),
+    pagos_info AS (
+        SELECT 
+          cc.id as cuenta_id,
+          COALESCE(SUM(CASE WHEN pg.activo = true THEN pg.monto ELSE 0 END), 0) as total_pagado
+        FROM cuentas_cobranza cc
+        LEFT JOIN pagos pg ON pg.id_cuenta_cobranza = cc.id
+        WHERE cc.activo = true
+        GROUP BY cc.id
+    )
+    SELECT 
+        prop.id,
+        (COALESCE(ca.precio_final, 0) - COALESCE(pi.total_pagado, 0)) as restante
+    FROM propiedades prop
+    LEFT JOIN cuenta_activa ca ON ca.id_propiedad = prop.id
+    LEFT JOIN pagos_info pi ON pi.cuenta_id = ca.cuenta_id
+    WHERE prop.activo = true
+    AND prop.id_estatus_disponibilidad = 9
+    AND ca.cuenta_id IS NOT NULL
+) calc
+WHERE p.id = calc.id
+AND calc.restante > 0;
 ```
 
-## Orden de Ejecución
+## Rollback
 
-1. **Ejecutar Paso 0** - Guardar los resultados (IDs) en un archivo o documento
-2. **Ejecutar Paso 1** - Corregir propiedades 9 → 5
-3. **Ejecutar Paso 2** - Corregir propiedades 5 → 9
-4. **Verificar** - Revisar que los cambios sean correctos en la interfaz
-5. **Si hay problemas** - Usar los scripts de Rollback con los IDs guardados
+### IDs para Caso 1 (5 → 9):
+```sql
+-- Propiedades que cambiarán de 5 a 9:
+-- 5044, 4982, 4994, 4999, 5013, 5027, 5030, 5032, 5151, 5060, 5072, 5086, 4914, 4915, 4931, 4977, 5011, 5018
+UPDATE propiedades SET id_estatus_disponibilidad = 5
+WHERE id IN (5044, 4982, 4994, 4999, 5013, 5027, 5030, 5032, 5151, 5060, 5072, 5086, 4914, 4915, 4931, 4977, 5011, 5018);
+```
 
-## Consideraciones
+### IDs para Caso 2 (9 → 5):
+```sql
+-- Propiedades que cambiarán de 9 a 5:
+-- 5034, 5037, 4945, 4984, 5114, 4895, 4912, 4968
+UPDATE propiedades SET id_estatus_disponibilidad = 9
+WHERE id IN (5034, 5037, 4945, 4984, 5114, 4895, 4912, 4968);
+```
 
-- Los triggers de SAT están deshabilitados, por lo que no se generarán notificaciones automáticas
-- Es importante guardar los IDs del Paso 0 antes de ejecutar los cambios
-- Los rollbacks restaurarán el estado exacto anterior de cada propiedad afectada
+## Resultado Esperado
+
+Después de aplicar:
+- **18 propiedades** pasarán de "Vendido" a "Pagada completamente" (incluyendo 603, 1416, 1420)
+- **8 propiedades** con centavos pendientes pasarán de "Pagada completamente" a "Vendido"
+- La interfaz mostrará información coherente con los balances reales
 
