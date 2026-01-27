@@ -95,24 +95,32 @@ export default function LogsActividad() {
   // Fetch filter options
   const fetchFilterOptions = async () => {
     try {
-      // Get unique usuarios
+      // Get unique usuarios using RPC or aggregate - limit increased
       const { data: usuariosData } = await supabase
         .from('logs_actividad')
         .select('usuario_id')
-        .order('usuario_id');
+        .not('usuario_id', 'is', null)
+        .limit(5000);
       
-      const uniqueUsuarios = [...new Set(usuariosData?.map(u => u.usuario_id).filter(Boolean) || [])];
+      const uniqueUsuarios = [...new Set(usuariosData?.map(u => u.usuario_id).filter(Boolean) || [])].sort();
       setAvailableUsuarios(uniqueUsuarios as string[]);
 
-      // Get unique workflows
-      const { data: workflowsData } = await supabase
-        .from('logs_actividad')
-        .select('workflow')
-        .not('workflow', 'is', null)
-        .order('workflow');
+      // Get unique workflows - use raw SQL via RPC for distinct values
+      const { data: workflowsData } = await supabase.rpc('execute_safe_query', {
+        query_text: `SELECT DISTINCT workflow FROM logs_actividad WHERE workflow IS NOT NULL ORDER BY workflow`,
+        max_rows: 500
+      });
       
-      const uniqueWorkflows = [...new Set(workflowsData?.map(w => w.workflow).filter(Boolean) || [])];
-      setAvailableWorkflows(uniqueWorkflows as string[]);
+      const uniqueWorkflows: string[] = [];
+      if (Array.isArray(workflowsData)) {
+        for (const row of workflowsData) {
+          if (typeof row === 'object' && row !== null && 'workflow' in row) {
+            const workflow = (row as { workflow: string }).workflow;
+            if (workflow) uniqueWorkflows.push(workflow);
+          }
+        }
+      }
+      setAvailableWorkflows(uniqueWorkflows);
     } catch (err) {
       console.error('Error fetching filter options:', err);
     }
@@ -354,15 +362,6 @@ export default function LogsActividad() {
           {/* Filters */}
           <div className="flex flex-col gap-4 mb-6">
             <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por usuario, workflow, entidad..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
               <Select value={selectedActividad} onValueChange={setSelectedActividad}>
                 <SelectTrigger className="w-full sm:w-[200px]">
                   <Filter className="h-4 w-4 mr-2" />
