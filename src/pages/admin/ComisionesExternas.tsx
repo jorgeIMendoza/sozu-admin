@@ -79,6 +79,7 @@ async function fetchExternalAgentCommissions() {
         cuentas_cobranza!comisionistas_id_cuenta_cobranza_fkey(
           id,
           precio_final,
+          es_pagada_comision_venta,
           acuerdos_pago!fk_acpago_cuenta(
             id_concepto,
             pago_completado,
@@ -234,8 +235,13 @@ export default function ComisionesExternas() {
         });
       }
 
-      // Agrupar por comisionista
+      // Agrupar por comisionista - Solo cuentas donde la comisión de venta ya fue pagada a Sozu
       const grouped = comisionistas.reduce((acc: any, com: any) => {
+        const cuenta = com.cuentas_cobranza;
+        
+        // Solo incluir cuentas donde la comisión de venta ya fue pagada a Sozu
+        if (!cuenta.es_pagada_comision_venta) return acc;
+        
         if (!acc[com.email_usuario]) {
           const userData = usuariosMap.get(com.email_usuario);
           acc[com.email_usuario] = {
@@ -247,8 +253,6 @@ export default function ComisionesExternas() {
             cuentas: []
           };
         }
-
-        const cuenta = com.cuentas_cobranza;
         const oferta = cuenta.ofertas;
         const propiedad = oferta?.propiedades;
         const producto = oferta?.productos_servicios;
