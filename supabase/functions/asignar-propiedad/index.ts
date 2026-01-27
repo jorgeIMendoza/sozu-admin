@@ -116,12 +116,12 @@ serve(async (req) => {
 
     console.log('📍 Proyecto encontrado:', proyecto.id, proyecto.nombre);
 
-    // Validar que la propiedad esté en estatus "Disponible" (2) o "Listo" (3)
-    if (propiedad.id_estatus_disponibilidad !== 2 && propiedad.id_estatus_disponibilidad !== 3) {
+    // Validar que la propiedad esté en estatus "Inventario" (1)
+    if (propiedad.id_estatus_disponibilidad !== 1) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'Solo se pueden asignar propiedades en estatus "Disponible" o "Listo"' 
+          message: 'Solo se pueden asignar propiedades en estatus "Inventario"' 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
