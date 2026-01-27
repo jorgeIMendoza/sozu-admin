@@ -166,24 +166,13 @@ export function SATNotificationDialog({
       if (data.success && data.type === 'file' && data.url) {
         // Clear any previous validation errors
         setValidationErrors(null);
-        
-        const filename = data.filename || `notificacion_sat_${cuentaCobranzaId}_${Date.now()}.xlsm`;
-        
-        // Download the file for the user
-        const a = document.createElement('a');
-        a.href = data.url;
-        a.download = filename;
-        a.target = '_blank';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
 
         toast({
           title: "Éxito",
-          description: "Archivo de notificación SAT generado y descargado"
+          description: "Archivo de notificación SAT generado correctamente"
         });
 
-        // Reload status to show the new document
+        // Reload status to show the new document and enable download button
         await loadStatus();
         onSuccess?.();
       } else if (data.success) {
