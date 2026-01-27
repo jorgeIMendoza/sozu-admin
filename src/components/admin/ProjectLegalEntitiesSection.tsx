@@ -250,15 +250,16 @@ export const ProjectLegalEntitiesSection = ({
   });
 
   // availableLegalEntities is already filtered by selected type from the query
-  // Just filter out entities already assigned to this project
+  // For Productos/Servicios/Mantenimientos projects, allow adding the same persona multiple times
+  // (to support different cuenta_madre_stp values). For other projects, filter out already assigned entities.
   const usedEntityIds = new Set(
     projectLegalEntities.map(entity => entity.personas?.id)
   );
 
-  // Filter out already selected entities
-  const availableFilteredEntities = availableLegalEntities.filter(
-    entity => !usedEntityIds.has(entity.id)
-  );
+  // Filter out already selected entities (only for non-Productos/Servicios projects)
+  const availableFilteredEntities = isProductosOrServicios 
+    ? availableLegalEntities // Allow adding same persona multiple times
+    : availableLegalEntities.filter(entity => !usedEntityIds.has(entity.id));
 
   // Get used entity types for this specific project (for reference/display)
   const usedEntityTypes = new Set(
