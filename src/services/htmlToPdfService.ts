@@ -310,8 +310,10 @@ class HTMLToPDFService {
 
     // Use native PDF generation for faster, text-selectable PDFs
     const { ofertaPdfNativeService } = await import('./ofertaPdfNativeService');
+    const { ofertaPdfStorageService } = await import('./ofertaPdfStorageService');
     
-    await ofertaPdfNativeService.generateOfferPDF({
+    // Generate PDF (now returns blob)
+    const { blob, filename } = await ofertaPdfNativeService.generateOfferPDF({
       offerData,
       propertyDetails: finalPropertyDetails,
       paymentSchemes,
@@ -321,7 +323,13 @@ class HTMLToPDFService {
       bodegas,
     });
     
-    console.log('Native Sozu PDF generated successfully');
+    // Upload to storage and save URL in DB
+    await ofertaPdfStorageService.uploadAndSave(offerData.id, blob, filename, false);
+    
+    // Download locally
+    ofertaPdfStorageService.downloadBlob(blob, filename);
+    
+    console.log('Native Sozu PDF generated and stored successfully');
   }
 
   private async generateCoverPage(
@@ -1312,8 +1320,10 @@ class HTMLToPDFService {
   ): Promise<void> {
     // Use native PDF generation for faster, text-selectable PDFs
     const { ofertaProductoPdfNativeService } = await import('./ofertaProductoPdfNativeService');
+    const { ofertaPdfStorageService } = await import('./ofertaPdfStorageService');
     
-    await ofertaProductoPdfNativeService.generateOfferPDF({
+    // Generate PDF (now returns blob)
+    const { blob, filename } = await ofertaProductoPdfNativeService.generateOfferPDF({
       offerData,
       propertyDetails,
       productDetails,
@@ -1323,7 +1333,13 @@ class HTMLToPDFService {
       legalNotices,
     });
     
-    console.log('Native Product PDF generated successfully');
+    // Upload to storage and save URL in DB
+    await ofertaPdfStorageService.uploadAndSave(offerData.id, blob, filename, true);
+    
+    // Download locally
+    ofertaPdfStorageService.downloadBlob(blob, filename);
+    
+    console.log('Native Product PDF generated and stored successfully');
   }
 
   private formatOfferNumber(offerId: number): string {

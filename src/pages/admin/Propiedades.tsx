@@ -1010,42 +1010,65 @@ const Propiedades = () => {
     try {
       setDownloadingOfferId(offer.id);
       
-      toast({
-        title: "Generando PDF",
-        description: "Preparando la descarga del PDF de la oferta...",
-      });
+      // Import storage service
+      const { ofertaPdfStorageService } = await import('@/services/ofertaPdfStorageService');
+      
+      // Check if URL already exists
+      const existingUrl = await ofertaPdfStorageService.getExistingUrl(offer.id);
+      
+      if (existingUrl) {
+        // URL exists, just download
+        toast({
+          title: "Descargando PDF",
+          description: "Descargando el PDF de la oferta...",
+        });
+        
+        const filename = existingUrl.split('/').pop() || `oferta-${offer.id}.pdf`;
+        await ofertaPdfStorageService.downloadFromUrl(existingUrl, filename);
+        
+        toast({
+          title: "PDF descargado",
+          description: "El PDF se ha descargado exitosamente.",
+        });
+      } else {
+        // No URL, generate new PDF
+        toast({
+          title: "Generando PDF",
+          description: "Preparando la descarga del PDF de la oferta...",
+        });
 
-      // Usar el propertyId guardado cuando se abrió el dialog
-      const propertyIdToUse = selectedPropertyId;
+        // Usar el propertyId guardado cuando se abrió el dialog
+        const propertyIdToUse = selectedPropertyId;
 
-      if (!propertyIdToUse) {
-        throw new Error("No se pudo determinar el ID de la propiedad");
-      }
-
-      await generateOfferPDF({
-        propertyId: propertyIdToUse,
-        offerId: offer.id,
-        propertyNumber: offer.numero_propiedad || "N/A",
-        leadName: offer.lead_name || "N/A",
-        leadEmail: offer.lead_email || "N/A", 
-        leadPhone: offer.lead_telefono || "N/A",
-        creatorEmail: offer.agent_name?.includes('@') ? offer.agent_name : "jorge.mendoza@sozu.com",
-        offerOptions: {
-          mostrar_piso_en_oferta: offer.mostrar_piso_en_oferta,
-          mostrar_precio_m2_en_oferta: offer.mostrar_precio_m2_en_oferta,
-          mostrar_seccion_efectivo_en_oferta: offer.mostrar_seccion_efectivo_en_oferta,
+        if (!propertyIdToUse) {
+          throw new Error("No se pudo determinar el ID de la propiedad");
         }
-      });
 
-      toast({
-        title: "PDF generado",
-        description: "El PDF se ha descargado exitosamente.",
-      });
+        await generateOfferPDF({
+          propertyId: propertyIdToUse,
+          offerId: offer.id,
+          propertyNumber: offer.numero_propiedad || "N/A",
+          leadName: offer.lead_name || "N/A",
+          leadEmail: offer.lead_email || "N/A", 
+          leadPhone: offer.lead_telefono || "N/A",
+          creatorEmail: offer.agent_name?.includes('@') ? offer.agent_name : "jorge.mendoza@sozu.com",
+          offerOptions: {
+            mostrar_piso_en_oferta: offer.mostrar_piso_en_oferta,
+            mostrar_precio_m2_en_oferta: offer.mostrar_precio_m2_en_oferta,
+            mostrar_seccion_efectivo_en_oferta: offer.mostrar_seccion_efectivo_en_oferta,
+          }
+        });
+
+        toast({
+          title: "PDF generado",
+          description: "El PDF se ha generado y descargado exitosamente.",
+        });
+      }
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      console.error('Error generating/downloading PDF:', error);
       toast({
-        title: "Error al generar PDF",
-        description: "Hubo un problema al generar el PDF. Intente nuevamente.",
+        title: "Error al descargar PDF",
+        description: "Hubo un problema al descargar el PDF. Intente nuevamente.",
         variant: "destructive",
       });
     } finally {

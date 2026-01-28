@@ -2891,18 +2891,6 @@ export type Database = {
           },
         ]
       }
-      es_propiedad_demandada: {
-        Row: {
-          "?column?": boolean | null
-        }
-        Insert: {
-          "?column?"?: boolean | null
-        }
-        Update: {
-          "?column?"?: boolean | null
-        }
-        Relationships: []
-      }
       espacios_reservables_edificio: {
         Row: {
           activo: boolean
@@ -3224,6 +3212,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      estatus_aprobacion: {
+        Row: {
+          activo: boolean | null
+          fecha_actualizacion: string | null
+          fecha_creacion: string | null
+          id: number
+          nombre: string | null
+        }
+        Insert: {
+          activo?: boolean | null
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
+          id?: number
+          nombre?: string | null
+        }
+        Update: {
+          activo?: boolean | null
+          fecha_actualizacion?: string | null
+          fecha_creacion?: string | null
+          id?: number
+          nombre?: string | null
+        }
+        Relationships: []
       }
       estatus_disponibilidad: {
         Row: {
@@ -3892,53 +3904,59 @@ export type Database = {
         Row: {
           activo: boolean
           clabe_stp_tmp_producto: string | null
+          comentario_justificacion: string | null
           email_creador: string
-          es_aprobada: boolean | null
           fecha_actualizacion: string
           fecha_creacion: string
           fecha_generacion: string
           id: number
           id_esquema_pago_seleccionado: number | null
+          id_estatus_aprobacion: number | null
           id_persona_lead: number
           id_producto: number | null
           id_propiedad: number
           mostrar_piso_en_oferta: boolean | null
           mostrar_precio_m2_en_oferta: boolean | null
           mostrar_seccion_efectivo_en_oferta: boolean | null
+          url: string | null
         }
         Insert: {
           activo?: boolean
           clabe_stp_tmp_producto?: string | null
+          comentario_justificacion?: string | null
           email_creador: string
-          es_aprobada?: boolean | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_generacion?: string
           id?: number
           id_esquema_pago_seleccionado?: number | null
+          id_estatus_aprobacion?: number | null
           id_persona_lead: number
           id_producto?: number | null
           id_propiedad: number
           mostrar_piso_en_oferta?: boolean | null
           mostrar_precio_m2_en_oferta?: boolean | null
           mostrar_seccion_efectivo_en_oferta?: boolean | null
+          url?: string | null
         }
         Update: {
           activo?: boolean
           clabe_stp_tmp_producto?: string | null
+          comentario_justificacion?: string | null
           email_creador?: string
-          es_aprobada?: boolean | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_generacion?: string
           id?: number
           id_esquema_pago_seleccionado?: number | null
+          id_estatus_aprobacion?: number | null
           id_persona_lead?: number
           id_producto?: number | null
           id_propiedad?: number
           mostrar_piso_en_oferta?: boolean | null
           mostrar_precio_m2_en_oferta?: boolean | null
           mostrar_seccion_efectivo_en_oferta?: boolean | null
+          url?: string | null
         }
         Relationships: [
           {
@@ -3981,6 +3999,13 @@ export type Database = {
             columns: ["id_esquema_pago_seleccionado"]
             isOneToOne: false
             referencedRelation: "esquemas_pago"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_id_estatus_aprobacion_fkey"
+            columns: ["id_estatus_aprobacion"]
+            isOneToOne: false
+            referencedRelation: "estatus_aprobacion"
             referencedColumns: ["id"]
           },
           {
