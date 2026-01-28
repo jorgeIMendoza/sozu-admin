@@ -242,7 +242,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         .select("id, nombre")
         .ilike("nombre", values.nombre.trim())
         .eq("activo", true)
-        .single();
+        .maybeSingle();
 
       if (existingProject) {
         toast({
