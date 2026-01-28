@@ -70,6 +70,7 @@ const ConfiguracionReportes = lazy(() => import("./pages/admin/ConfiguracionRepo
 const ReportesInventarios = lazy(() => import("./pages/admin/reportes/Inventarios"));
 const ReportesFinanzas = lazy(() => import("./pages/admin/reportes/Finanzas"));
 const ReporteViewer = lazy(() => import("./pages/admin/reportes/ReporteViewer"));
+const DescargarPaquetePDF = lazy(() => import("./pages/admin/DescargarPaquetePDF"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -169,6 +170,7 @@ const App = () => (
                   <Route path="reportes/inventarios" element={<ReportesInventarios />} />
                   <Route path="reportes/finanzas" element={<ReportesFinanzas />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
+                  <Route path="descargar-paquete-pdf" element={<DescargarPaquetePDF />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
