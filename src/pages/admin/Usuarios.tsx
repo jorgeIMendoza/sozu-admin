@@ -33,6 +33,7 @@ type Usuario = {
   debe_cambiar_password: boolean;
   roles?: { nombre: string } | null;
   personas?: { nombre_legal: string } | null;
+  inmobiliaria_nombre?: string | null; // Nombre de la inmobiliaria basado en el dominio del email
 };
 
 type Role = {
@@ -122,7 +123,11 @@ function UsersTable({
                           </Badge>
                         )}
                       </p>
-                      {usuario.personas?.nombre_legal && (
+                      {usuario.inmobiliaria_nombre ? (
+                        <p className="text-xs text-muted-foreground">
+                          Inmobiliaria: {usuario.inmobiliaria_nombre}
+                        </p>
+                      ) : usuario.personas?.nombre_legal && (
                         <p className="text-xs text-muted-foreground">
                           Persona: {usuario.personas.nombre_legal}
                         </p>
@@ -269,9 +274,29 @@ export default function Usuarios() {
   // Current user's email for highlighting
   const currentUserEmail = profile?.email || session?.user?.email;
 
+  // Fetch inmobiliarias for domain matching
+  const { data: inmobiliarias = [] } = useQuery({
+    queryKey: ['inmobiliarias_dominios'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('personas')
+        .select('id, nombre_legal, nombre_comercial, email')
+        .eq('tipo_persona', 'pm')
+        .eq('activo', true)
+        .not('email', 'is', null);
+      
+      if (error) throw error;
+      return (data || []).map(item => ({
+        id: item.id,
+        nombre: item.nombre_comercial || item.nombre_legal,
+        dominio: item.email?.toLowerCase().split('@')[1] || ''
+      })).filter(item => item.dominio);
+    },
+  });
+
   // Fetch users
   const { data: usuarios = [], isLoading: isLoadingUsuarios } = useQuery({
-    queryKey: ['usuarios'],
+    queryKey: ['usuarios', inmobiliarias],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('usuarios')
@@ -289,10 +314,27 @@ export default function Usuarios() {
         .order('nombre', { ascending: true });
       
       if (error) throw error;
-      // Filter to show only users with internal roles
+      
+      // Build domain to inmobiliaria map
+      const domainToInmobiliaria = new Map<string, string>();
+      inmobiliarias.forEach(inmob => {
+        if (inmob.dominio) {
+          domainToInmobiliaria.set(inmob.dominio, inmob.nombre);
+        }
+      });
+      
+      // Filter to show only users with internal roles and add inmobiliaria info
       return ((data || []) as (Usuario & { roles: { nombre: string; es_rol_interno: boolean } | null })[])
-        .filter(u => u.roles?.es_rol_interno === true);
+        .filter(u => u.roles?.es_rol_interno === true)
+        .map(u => {
+          const userDomain = u.email?.toLowerCase().split('@')[1] || '';
+          return {
+            ...u,
+            inmobiliaria_nombre: domainToInmobiliaria.get(userDomain) || null
+          };
+        });
     },
+    enabled: inmobiliarias.length >= 0, // Run once inmobiliarias query completes
   });
 
   // Fetch roles (only internal roles)

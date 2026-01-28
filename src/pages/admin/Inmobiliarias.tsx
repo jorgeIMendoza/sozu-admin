@@ -104,45 +104,56 @@ export default function Inmobiliarias() {
     
     if (error) throw error;
     
-    // Get project counts for each inmobiliaria
-    const inmobiliariaIds = (data || []).map(item => item.entidades_relacionadas[0]?.id).filter(Boolean);
-    // Get persona IDs for agent count query (id_persona_duena_lead references personas.id)
+    // Get email domains for each inmobiliaria to count projects
     const inmobiliariaPersonaIds = (data || []).map(item => item.id).filter(Boolean);
     let projectCounts: { [key: number]: number } = {};
     let agentCounts: { [key: number]: number } = {};
     
-    if (inmobiliariaIds.length > 0) {
-      const { data: projectData, error: projectError } = await supabase
-        .from('entidades_relacionadas')
-        .select('id, id_proyecto')
-        .in('id', inmobiliariaIds)
-        .not('id_proyecto', 'is', null)
-        .eq('activo', true);
-      
-      if (!projectError && projectData) {
-        projectCounts = projectData.reduce((acc, item) => {
-          acc[item.id] = (acc[item.id] || 0) + 1;
-          return acc;
-        }, {} as { [key: number]: number });
+    if (inmobiliariaPersonaIds.length > 0) {
+      // For each inmobiliaria, get the domain and count projects via usuarios with that domain
+      for (const item of data || []) {
+        const domain = item.email?.toLowerCase().split('@')[1];
+        if (!domain) continue;
+        
+        // Get users with Inmobiliaria role (4) whose email domain matches
+        const { data: usersWithDomain, error: usersError } = await supabase
+          .from('usuarios')
+          .select('email, auth_user_id')
+          .eq('rol_id', 4)
+          .eq('activo', true)
+          .ilike('email', `%@${domain}`);
+        
+        if (!usersError && usersWithDomain && usersWithDomain.length > 0) {
+          // Count distinct projects assigned to these users
+          const userEmails = usersWithDomain.map(u => u.email);
+          const { data: projectAccessData, error: projectAccessError } = await supabase
+            .from('proyectos_acceso')
+            .select('proyecto_id, usuario_id')
+            .in('usuario_id', userEmails)
+            .eq('activo', true);
+          
+          if (!projectAccessError && projectAccessData) {
+            const uniqueProjects = new Set(projectAccessData.map(pa => pa.proyecto_id));
+            projectCounts[item.id] = uniqueProjects.size;
+          }
+        }
       }
 
       // Get agent counts for each inmobiliaria (agents are linked via id_persona_duena_lead which references personas.id)
-      if (inmobiliariaPersonaIds.length > 0) {
-        const { data: agentData, error: agentError } = await supabase
-          .from('entidades_relacionadas')
-          .select('id_persona_duena_lead')
-          .in('id_persona_duena_lead', inmobiliariaPersonaIds)
-          .eq('id_tipo_entidad', 19) // Agentes (tipo_entidad 19)
-          .eq('activo', true);
-        
-        if (!agentError && agentData) {
-          agentCounts = agentData.reduce((acc, item) => {
-            if (item.id_persona_duena_lead) {
-              acc[item.id_persona_duena_lead] = (acc[item.id_persona_duena_lead] || 0) + 1;
-            }
-            return acc;
-          }, {} as { [key: number]: number });
-        }
+      const { data: agentData, error: agentError } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_persona_duena_lead')
+        .in('id_persona_duena_lead', inmobiliariaPersonaIds)
+        .eq('id_tipo_entidad', 19) // Agentes (tipo_entidad 19)
+        .eq('activo', true);
+      
+      if (!agentError && agentData) {
+        agentCounts = agentData.reduce((acc, item) => {
+          if (item.id_persona_duena_lead) {
+            acc[item.id_persona_duena_lead] = (acc[item.id_persona_duena_lead] || 0) + 1;
+          }
+          return acc;
+        }, {} as { [key: number]: number });
       }
     }
     
@@ -160,7 +171,7 @@ export default function Inmobiliarias() {
       id_entidad_relacionada_rep_com: item.id_entidad_relacionada_rep_com,
       representante_legal_nombre: item.representante_legal?.personas?.nombre_legal,
       representante_comercial_nombre: item.representante_comercial?.personas?.nombre_legal,
-      numero_proyectos: projectCounts[item.entidades_relacionadas[0]?.id] || 0,
+      numero_proyectos: projectCounts[item.id] || 0,
       numero_agentes: agentCounts[item.id] || 0, // Use persona id since id_persona_duena_lead references personas.id
       url_logo: item.url_logo,
     })) as Inmobiliaria[];
