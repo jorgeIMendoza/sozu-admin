@@ -87,7 +87,7 @@ interface GenerateProductPDFData {
 }
 
 export class OfertaProductoPdfNativeService {
-  async generateOfferPDF(data: GenerateProductPDFData): Promise<void> {
+  async generateOfferPDF(data: GenerateProductPDFData): Promise<{ blob: Blob; filename: string }> {
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -585,9 +585,10 @@ export class OfertaProductoPdfNativeService {
 
     const filename = `OP_${offerNumber}_${cleanPropertyNumber}_${cleanProductName}_${cleanProjectName}.pdf`;
 
-    // Save PDF
-    pdf.save(filename);
+    // Return blob and filename instead of saving directly
+    const blob = pdf.output('blob');
     console.log("Native Product PDF generated successfully:", filename);
+    return { blob, filename };
   }
 }
 

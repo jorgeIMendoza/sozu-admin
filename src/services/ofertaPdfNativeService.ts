@@ -119,7 +119,7 @@ interface GeneratePDFData {
 export class OfertaPdfNativeService {
   private iconCache: Map<string, string> = new Map();
 
-  async generateOfferPDF(data: GeneratePDFData): Promise<void> {
+  async generateOfferPDF(data: GeneratePDFData): Promise<{ blob: Blob; filename: string }> {
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -932,9 +932,10 @@ export class OfertaPdfNativeService {
 
     const filename = `O_${offerNumber}_${cleanPropertyNumber}_${cleanProjectName}.pdf`;
 
-    // Save PDF
-    pdf.save(filename);
+    // Return blob and filename instead of saving directly
+    const blob = pdf.output('blob');
     console.log("Native PDF generated successfully:", filename);
+    return { blob, filename };
   }
 
   private async preloadIcons(): Promise<void> {
