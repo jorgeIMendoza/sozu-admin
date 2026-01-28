@@ -72,6 +72,66 @@ function isValidRFC(rfc: string | null | undefined): boolean {
   return rfcPattern.test(rfc.trim());
 }
 
+// Helper: Fetch image with timeout and size limit (returns null on failure)
+async function fetchImageWithTimeout(url: string, timeoutMs: number = 3000, maxSizeKB: number = 150): Promise<Uint8Array | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      console.warn(`Image fetch failed with status ${response.status}: ${url}`);
+      return null;
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const sizeKB = arrayBuffer.byteLength / 1024;
+    
+    if (sizeKB > maxSizeKB) {
+      console.warn(`Image too large (${sizeKB.toFixed(1)}KB > ${maxSizeKB}KB): ${url}`);
+      return null;
+    }
+    
+    console.log(`Image loaded successfully: ${sizeKB.toFixed(1)}KB from ${url.substring(0, 60)}...`);
+    return new Uint8Array(arrayBuffer);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      console.warn(`Image fetch timed out after ${timeoutMs}ms: ${url}`);
+    } else {
+      console.warn(`Image fetch error: ${error.message}`);
+    }
+    return null;
+  }
+}
+
+// Helper: Detect image type from bytes
+function detectImageType(bytes: Uint8Array): 'png' | 'jpg' | null {
+  if (bytes.length < 8) return null;
+  
+  // PNG magic number: 137 80 78 71 13 10 26 10
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+    return 'png';
+  }
+  
+  // JPEG magic number: 255 216 255
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+    return 'jpg';
+  }
+  
+  return null;
+}
+
+// Helper: Number to Spanish text
+function numberToSpanishText(num: number): string {
+  const textMap: { [key: number]: string } = {
+    0: 'Cero', 1: 'Una', 2: 'Dos', 3: 'Tres', 4: 'Cuatro',
+    5: 'Cinco', 6: 'Seis', 7: 'Siete', 8: 'Ocho', 9: 'Nueve', 10: 'Diez',
+  };
+  return textMap[num] || num.toString();
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -257,6 +317,18 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
     vista: vista?.nombre
   });
 
+  // Fetch model images
+  let modelImages: any[] = [];
+  if (modelo?.id) {
+    const { data: images } = await supabase
+      .from('multimedia_modelo')
+      .select('url, ver_como_ubicacion_en_oferta')
+      .eq('id_modelo', modelo.id)
+      .eq('activo', true)
+      .limit(5);
+    modelImages = images || [];
+  }
+
   // Fetch owner data from project
   let ownerData: any = null;
   let ownerBankAccount: any = null;
@@ -367,7 +439,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
     .eq('id_propiedad', propiedad.id)
     .eq('activo', true);
 
-  // Check if property has balcony
+  // Check if property has balcony (id_caracteristica = 1 is typically balcón)
   const { data: caracteristicaBalcon } = await supabase
     .from('propiedades_caracteristicas')
     .select('id')
@@ -424,18 +496,88 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
     };
   }
 
-  // ========== HEADER (TEXT ONLY - NO IMAGE LOADING) ==========
-  currentPage.drawText(proyecto?.nombre || 'Proyecto', {
-    x: margin,
-    y: y - 10,
-    size: 16,
-    font: helveticaBold,
-    color: black,
-  });
+  // ========== LOAD IMAGES (with timeout protection) ==========
+  let logoImage: any = null;
+  let modelImage: any = null;
+
+  // Load project logo
+  if (proyecto?.url_logo) {
+    console.log('Loading project logo...');
+    const logoBytes = await fetchImageWithTimeout(proyecto.url_logo, 2500, 100);
+    if (logoBytes) {
+      const imageType = detectImageType(logoBytes);
+      try {
+        if (imageType === 'png') {
+          logoImage = await pdfDoc.embedPng(logoBytes);
+        } else if (imageType === 'jpg') {
+          logoImage = await pdfDoc.embedJpg(logoBytes);
+        }
+        console.log('Project logo embedded successfully');
+      } catch (e) {
+        console.warn('Failed to embed logo:', e.message);
+      }
+    }
+  }
+
+  // Load model image (prefer one marked for offer, or first available)
+  const modelImageUrl = modelImages.find((img: any) => img.ver_como_ubicacion_en_oferta)?.url || modelImages[0]?.url;
+  if (modelImageUrl) {
+    console.log('Loading model image...');
+    const modelBytes = await fetchImageWithTimeout(modelImageUrl, 2500, 150);
+    if (modelBytes) {
+      const imageType = detectImageType(modelBytes);
+      try {
+        if (imageType === 'png') {
+          modelImage = await pdfDoc.embedPng(modelBytes);
+        } else if (imageType === 'jpg') {
+          modelImage = await pdfDoc.embedJpg(modelBytes);
+        }
+        console.log('Model image embedded successfully');
+      } catch (e) {
+        console.warn('Failed to embed model image:', e.message);
+      }
+    }
+  }
+
+  // ========== HEADER ==========
+  const headerStartY = y;
+
+  // Project logo (left side)
+  if (logoImage) {
+    try {
+      const logoMaxHeight = 42;
+      const logoMaxWidth = 113;
+      const dims = logoImage.scale(1);
+      const scale = Math.min(logoMaxWidth / dims.width, logoMaxHeight / dims.height);
+      currentPage.drawImage(logoImage, {
+        x: margin,
+        y: y - logoMaxHeight,
+        width: dims.width * scale,
+        height: dims.height * scale,
+      });
+    } catch (e) {
+      console.warn('Error drawing logo:', e);
+      currentPage.drawText(proyecto?.nombre || 'Proyecto', {
+        x: margin,
+        y: y - 10,
+        size: 16,
+        font: helveticaBold,
+        color: black,
+      });
+    }
+  } else {
+    currentPage.drawText(proyecto?.nombre || 'Proyecto', {
+      x: margin,
+      y: y - 10,
+      size: 16,
+      font: helveticaBold,
+      color: black,
+    });
+  }
 
   // Offer info on right side
   const rightX = width - margin;
-  let rightY = y - 4;
+  let rightY = headerStartY - 4;
 
   currentPage.drawText('ID Oferta:', {
     x: rightX - 90,
@@ -453,7 +595,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
   });
   rightY -= 14;
 
-  currentPage.drawText('Expedición:', {
+  currentPage.drawText('Expedicion:', {
     x: rightX - 90,
     y: rightY,
     size: 10,
@@ -505,18 +647,25 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
   });
   y -= 20;
 
-  // Property info - left column
-  const propColWidth = contentWidth * 0.5;
-  const charColWidth = contentWidth * 0.5;
+  // Calculate column widths based on whether we have a model image
+  const hasModelImage = !!modelImage;
+  const propColWidth = hasModelImage ? contentWidth * 0.35 : contentWidth * 0.5;
+  const charColWidth = hasModelImage ? contentWidth * 0.2 : contentWidth * 0.5;
+  const imageColWidth = hasModelImage ? contentWidth * 0.45 : 0;
   const propStartY = y;
 
   // Property items
   const propItems: { label: string; value: string }[] = [
     { label: 'Proyecto:', value: proyecto?.nombre || 'N/A' },
-    { label: 'Edificio:', value: edificio?.nombre || 'N/A' },
-    { label: 'Modelo:', value: modelo?.nombre || 'N/A' },
-    { label: 'Número de propiedad:', value: propiedad.numero_propiedad || 'N/A' },
   ];
+
+  if (edificio?.nombre) {
+    propItems.push({ label: 'Edificio:', value: edificio.nombre });
+  }
+  if (modelo?.nombre) {
+    propItems.push({ label: 'Modelo:', value: modelo.nombre });
+  }
+  propItems.push({ label: 'Numero de propiedad:', value: propiedad.numero_propiedad || 'N/A' });
 
   if (proyecto?.mostrar_piso_en_oferta && propiedad.numero_piso) {
     propItems.push({ label: 'Nivel:', value: propiedad.numero_piso });
@@ -527,11 +676,11 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
   }
 
   const totalArea = (Number(propiedad.m2_interiores) || 0) + (Number(propiedad.m2_exteriores) || 0);
-  propItems.push({ label: 'Área:', value: `${totalArea.toFixed(2)} m²` });
+  propItems.push({ label: 'Area:', value: `${totalArea.toFixed(2)} m2` });
   propItems.push({ label: 'Precio de lista:', value: formatCurrency(propiedad.precio_lista) });
 
   if (proyecto?.mostrar_precio_m2_en_oferta && totalArea > 0) {
-    propItems.push({ label: 'Precio por m²:', value: formatCurrency(propiedad.precio_lista / totalArea) });
+    propItems.push({ label: 'Precio por m2:', value: formatCurrency(propiedad.precio_lista / totalArea) });
   }
 
   for (const item of propItems) {
@@ -543,7 +692,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
       color: gray,
     });
     currentPage.drawText(item.value, {
-      x: margin + 110,
+      x: margin + 100,
       y,
       size: 9,
       font: helveticaBold,
@@ -552,30 +701,21 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
     y -= 14;
   }
 
-  // Characteristics column (TEXT ONLY - NO ICONS)
-  const charX = margin + propColWidth + 10;
+  // Characteristics column with text symbols
+  const charX = margin + propColWidth + 5;
   let charY = propStartY;
 
-  currentPage.drawText('Características:', {
-    x: charX,
-    y: charY,
-    size: 10,
-    font: helveticaBold,
-    color: black,
-  });
-  charY -= 16;
-
-  // Build characteristics list as text
-  const characteristics: string[] = [];
+  // Build characteristics list
+  const iconItems: { symbol: string; value: string }[] = [];
   
   if (modelo?.numero_recamaras && modelo.numero_recamaras > 0) {
-    characteristics.push(`• ${modelo.numero_recamaras} Recámara${modelo.numero_recamaras > 1 ? 's' : ''}`);
+    iconItems.push({ symbol: '[R]', value: numberToSpanishText(modelo.numero_recamaras) + ' Recamara' + (modelo.numero_recamaras > 1 ? 's' : '') });
   }
   if (modelo?.numero_completo_banos && modelo.numero_completo_banos > 0) {
-    characteristics.push(`• ${modelo.numero_completo_banos} Baño${modelo.numero_completo_banos > 1 ? 's' : ''} completo${modelo.numero_completo_banos > 1 ? 's' : ''}`);
+    iconItems.push({ symbol: '[B]', value: numberToSpanishText(modelo.numero_completo_banos) + ' Bano' + (modelo.numero_completo_banos > 1 ? 's' : '') });
   }
   if ((modelo?.numero_medio_bano ?? 0) > 0) {
-    characteristics.push(`• ${modelo.numero_medio_bano} Medio baño${modelo.numero_medio_bano > 1 ? 's' : ''}`);
+    iconItems.push({ symbol: '[1/2]', value: numberToSpanishText(modelo.numero_medio_bano) + ' Medio bano' });
   }
   if (estacionamientos && estacionamientos.length > 0) {
     const estResumen = estacionamientos.reduce((acc: any, est: any) => {
@@ -586,24 +726,52 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
     const estTexto = Object.entries(estResumen)
       .map(([tipo, cantidad]) => `${cantidad} ${tipo}`)
       .join(', ');
-    characteristics.push(`• Estacionamiento: ${estTexto}`);
+    iconItems.push({ symbol: '[E]', value: estTexto });
   }
   if (bodegas && bodegas.length > 0) {
-    characteristics.push(`• ${bodegas.length} Bodega${bodegas.length > 1 ? 's' : ''}`);
+    iconItems.push({ symbol: '[Bo]', value: `${bodegas.length} Bodega${bodegas.length > 1 ? 's' : ''}` });
   }
   if (tieneBalcon) {
-    characteristics.push('• Balcón');
+    iconItems.push({ symbol: '[Bc]', value: 'Balcon' });
   }
 
-  for (const char of characteristics) {
-    currentPage.drawText(char, {
+  // Render characteristics
+  for (const item of iconItems) {
+    currentPage.drawText(item.symbol, {
       x: charX,
       y: charY,
-      size: 9,
+      size: 8,
+      font: helveticaBold,
+      color: gray,
+    });
+    currentPage.drawText(item.value, {
+      x: charX + 25,
+      y: charY,
+      size: 8,
       font: helvetica,
       color: black,
     });
-    charY -= 14;
+    charY -= 12;
+  }
+
+  // Model image (right column)
+  if (modelImage && hasModelImage) {
+    const imageX = margin + propColWidth + charColWidth + 10;
+    const imageMaxWidth = imageColWidth - 20;
+    const imageMaxHeight = 100;
+    
+    try {
+      const dims = modelImage.scale(1);
+      const scale = Math.min(imageMaxWidth / dims.width, imageMaxHeight / dims.height);
+      currentPage.drawImage(modelImage, {
+        x: imageX,
+        y: propStartY - dims.height * scale,
+        width: dims.width * scale,
+        height: dims.height * scale,
+      });
+    } catch (e) {
+      console.warn('Error drawing model image:', e);
+    }
   }
 
   y = Math.min(y, charY) - 10;
@@ -1010,12 +1178,12 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
 
   const agentName = creatorInfo?.nombre_legal || creatorInfo?.nombre || oferta.email_creador;
   currentPage.drawText('Nombre:', { x: margin, y, size: 8, font: helveticaBold, color: black });
-  currentPage.drawText(agentName, { x: margin + 50, y, size: 8, font: helvetica, color: black });
+  currentPage.drawText(agentName || 'N/A', { x: margin + 50, y, size: 8, font: helvetica, color: black });
   y -= 11;
   currentPage.drawText('Email:', { x: margin, y, size: 8, font: helveticaBold, color: black });
-  currentPage.drawText(creatorInfo?.email || oferta.email_creador, { x: margin + 50, y, size: 8, font: helvetica, color: black });
+  currentPage.drawText(creatorInfo?.email || oferta.email_creador || 'N/A', { x: margin + 50, y, size: 8, font: helvetica, color: black });
   y -= 11;
-  currentPage.drawText('Teléfono:', { x: margin, y, size: 8, font: helveticaBold, color: black });
+  currentPage.drawText('Telefono:', { x: margin, y, size: 8, font: helveticaBold, color: black });
   currentPage.drawText(creatorInfo?.telefono || 'N/A', { x: margin + 50, y, size: 8, font: helvetica, color: black });
 
   // Buyer column (on same row, right side)
@@ -1033,7 +1201,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any): Promise<{ p
   currentPage.drawText(leadInfo?.email || 'N/A', { x: buyerX + 50, y: buyerY, size: 8, font: helvetica, color: black });
   buyerY -= 11;
   if (leadInfo?.telefono) {
-    currentPage.drawText('Teléfono:', { x: buyerX, y: buyerY, size: 8, font: helveticaBold, color: black });
+    currentPage.drawText('Telefono:', { x: buyerX, y: buyerY, size: 8, font: helveticaBold, color: black });
     currentPage.drawText(leadInfo.telefono, { x: buyerX + 50, y: buyerY, size: 8, font: helvetica, color: black });
     buyerY -= 11;
   }
@@ -1242,18 +1410,64 @@ async function generateProductOfferPdf(supabase: any, oferta: any): Promise<{ pd
     };
   }
 
-  // ========== HEADER (TEXT ONLY) ==========
-  currentPage.drawText(proyecto?.nombre || 'Proyecto', {
-    x: margin,
-    y: y - 10,
-    size: 16,
-    font: helveticaBold,
-    color: black,
-  });
+  // ========== LOAD LOGO ==========
+  let logoImage: any = null;
+  if (proyecto?.url_logo) {
+    console.log('Loading project logo for product offer...');
+    const logoBytes = await fetchImageWithTimeout(proyecto.url_logo, 2500, 100);
+    if (logoBytes) {
+      const imageType = detectImageType(logoBytes);
+      try {
+        if (imageType === 'png') {
+          logoImage = await pdfDoc.embedPng(logoBytes);
+        } else if (imageType === 'jpg') {
+          logoImage = await pdfDoc.embedJpg(logoBytes);
+        }
+        console.log('Project logo embedded successfully for product offer');
+      } catch (e) {
+        console.warn('Failed to embed logo:', e.message);
+      }
+    }
+  }
+
+  // ========== HEADER ==========
+  const headerStartY = y;
+
+  if (logoImage) {
+    try {
+      const logoMaxHeight = 42;
+      const logoMaxWidth = 113;
+      const dims = logoImage.scale(1);
+      const scale = Math.min(logoMaxWidth / dims.width, logoMaxHeight / dims.height);
+      currentPage.drawImage(logoImage, {
+        x: margin,
+        y: y - logoMaxHeight,
+        width: dims.width * scale,
+        height: dims.height * scale,
+      });
+    } catch (e) {
+      console.warn('Error drawing logo:', e);
+      currentPage.drawText(proyecto?.nombre || 'Proyecto', {
+        x: margin,
+        y: y - 10,
+        size: 16,
+        font: helveticaBold,
+        color: black,
+      });
+    }
+  } else {
+    currentPage.drawText(proyecto?.nombre || 'Proyecto', {
+      x: margin,
+      y: y - 10,
+      size: 16,
+      font: helveticaBold,
+      color: black,
+    });
+  }
 
   // Offer info on right side
   const rightX = width - margin;
-  let rightY = y - 4;
+  let rightY = headerStartY - 4;
 
   currentPage.drawText('ID Oferta:', {
     x: rightX - 90,
@@ -1271,7 +1485,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any): Promise<{ pd
   });
   rightY -= 14;
 
-  currentPage.drawText('Expedición:', {
+  currentPage.drawText('Expedicion:', {
     x: rightX - 90,
     y: rightY,
     size: 10,
@@ -1363,7 +1577,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any): Promise<{ pd
     currentPage.drawText(edificioModelo.edificios.nombre, { x: margin + 60, y: propY, size: 9, font: helveticaBold, color: black });
     propY -= 14;
   }
-  currentPage.drawText('No° de propiedad:', { x: margin + 10, y: propY, size: 9, font: helvetica, color: gray });
+  currentPage.drawText('No. de propiedad:', { x: margin + 10, y: propY, size: 9, font: helvetica, color: gray });
   currentPage.drawText(propiedad?.numero_propiedad || 'N/A', { x: margin + 90, y: propY, size: 9, font: helveticaBold, color: black });
 
   // Product Card
@@ -1379,7 +1593,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any): Promise<{ pd
   });
 
   let prodY = y - 15;
-  currentPage.drawText('Categoría:', { x: prodCardX + 10, y: prodY, size: 9, font: helvetica, color: gray });
+  currentPage.drawText('Categoria:', { x: prodCardX + 10, y: prodY, size: 9, font: helvetica, color: gray });
   currentPage.drawText(categoria?.nombre || 'N/A', { x: prodCardX + 60, y: prodY, size: 9, font: helveticaBold, color: black });
   prodY -= 14;
 
@@ -1391,7 +1605,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any): Promise<{ pd
   // Show m2 if applicable
   if (producto.m2 && producto.m2 > 0) {
     currentPage.drawText('Metraje:', { x: prodCardX + 10, y: prodY, size: 9, font: helvetica, color: gray });
-    currentPage.drawText(`${producto.m2.toFixed(2)} m²`, { x: prodCardX + 60, y: prodY, size: 9, font: helveticaBold, color: black });
+    currentPage.drawText(`${producto.m2.toFixed(2)} m2`, { x: prodCardX + 60, y: prodY, size: 9, font: helveticaBold, color: black });
     prodY -= 14;
   }
 
@@ -1401,7 +1615,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any): Promise<{ pd
 
   // Show price per m2 if applicable
   if (proyecto?.mostrar_precio_m2_en_oferta && producto.m2 && producto.m2 > 0) {
-    currentPage.drawText('Precio por m²:', { x: prodCardX + 10, y: prodY, size: 9, font: helvetica, color: gray });
+    currentPage.drawText('Precio por m2:', { x: prodCardX + 10, y: prodY, size: 9, font: helvetica, color: gray });
     currentPage.drawText(formatCurrency(producto.precio_lista / producto.m2), { x: prodCardX + 80, y: prodY, size: 9, font: helveticaBold, color: black });
   }
 
@@ -1720,7 +1934,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any): Promise<{ pd
   currentPage.drawText('Email:', { x: margin, y, size: 8, font: helveticaBold, color: black });
   currentPage.drawText(creatorInfo?.email || oferta.email_creador || 'N/A', { x: margin + 50, y, size: 8, font: helvetica, color: black });
   y -= 11;
-  currentPage.drawText('Teléfono:', { x: margin, y, size: 8, font: helveticaBold, color: black });
+  currentPage.drawText('Telefono:', { x: margin, y, size: 8, font: helveticaBold, color: black });
   currentPage.drawText(creatorInfo?.telefono || 'N/A', { x: margin + 50, y, size: 8, font: helvetica, color: black });
 
   // Buyer column
@@ -1737,7 +1951,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any): Promise<{ pd
   currentPage.drawText(leadInfo?.email || 'N/A', { x: buyerX + 50, y: buyerY, size: 8, font: helvetica, color: black });
   buyerY -= 11;
   if (leadInfo?.telefono) {
-    currentPage.drawText('Teléfono:', { x: buyerX, y: buyerY, size: 8, font: helveticaBold, color: black });
+    currentPage.drawText('Telefono:', { x: buyerX, y: buyerY, size: 8, font: helveticaBold, color: black });
     currentPage.drawText(leadInfo.telefono, { x: buyerX + 50, y: buyerY, size: 8, font: helvetica, color: black });
     buyerY -= 11;
   }
