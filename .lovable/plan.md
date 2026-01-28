@@ -1,298 +1,65 @@
 
+# Plan: Corregir actualización de email de usuario
 
-# Plan: PDFs de Ofertas con Storage Persistente
+## Problema Identificado
 
-## Resumen
+El error ocurre porque:
+- La tabla `logs_actividad` tiene una llave foránea `logs_actividad_usuario_id_fkey` que referencia `usuarios.email`
+- La tabla `proyectos_acceso` tiene una llave foránea `fk_proyectos_acceso_usuarios` que referencia `usuarios.email`
+- Ambas tienen la regla `ON UPDATE NO ACTION`, lo que **bloquea** cualquier cambio al email si hay registros relacionados
 
-Modificar los servicios existentes de generación de PDF para que:
-1. Suban el PDF generado al bucket `ofertas` de Supabase Storage
-2. Guarden la URL pública en el campo `url` de la tabla `ofertas`
-3. Descarguen automáticamente sin abrir nueva ventana
-4. Reutilicen PDFs existentes cuando ya tienen URL guardada
+Cuando intentas cambiar el email de `margot.lasrosas1297@gmail.com` a `margot.lasrosas1297x@gmail.com`, PostgreSQL rechaza la operación porque hay logs de actividad registrados con ese email.
 
-## Arquitectura Actual vs Propuesta
+## Solución Propuesta
 
-```text
-ACTUAL:
-┌──────────────┐     ┌────────────────────┐     ┌──────────────┐
-│ Componente   │────▶│ htmlToPdfService   │────▶│ Native       │
-│ (Dialog/Page)│     │ generateOfferPDF() │     │ Service      │
-└──────────────┘     └────────────────────┘     │ pdf.save()   │
-                                                └──────────────┘
-                                                       │
-                                                       ▼
-                                                ┌──────────────┐
-                                                │  Descarga    │
-                                                │  directa     │
-                                                └──────────────┘
+Modificar las llaves foráneas para usar `ON UPDATE CASCADE`, lo que automáticamente actualizará el email en las tablas relacionadas cuando cambie en `usuarios`.
 
-PROPUESTO:
-┌──────────────┐     ┌────────────────────┐     ┌──────────────┐
-│ Componente   │────▶│ htmlToPdfService   │────▶│ Native       │
-│ (Dialog/Page)│     │ generateOfferPDF() │     │ Service      │
-└──────────────┘     └────────────────────┘     │ output.blob()│
-                                                └──────────────┘
-                                                       │
-                                                       ▼
-                                                ┌──────────────┐
-                                                │ Storage      │
-                                                │ Service      │
-                                                │ (nuevo)      │
-                                                └──────────────┘
-                                                   │   │   │
-                                        ┌──────────┘   │   └──────────┐
-                                        ▼             ▼               ▼
-                                 ┌──────────┐  ┌──────────┐  ┌──────────┐
-                                 │  Subir   │  │ Guardar  │  │ Descargar│
-                                 │  bucket  │  │ URL en   │  │ archivo  │
-                                 │ "ofertas"│  │   BD     │  │ directo  │
-                                 └──────────┘  └──────────┘  └──────────┘
+### Migración SQL
+
+```sql
+-- 1. Modificar logs_actividad para usar CASCADE en updates
+ALTER TABLE logs_actividad 
+DROP CONSTRAINT logs_actividad_usuario_id_fkey;
+
+ALTER TABLE logs_actividad 
+ADD CONSTRAINT logs_actividad_usuario_id_fkey 
+FOREIGN KEY (usuario_id) REFERENCES usuarios(email) 
+ON UPDATE CASCADE ON DELETE NO ACTION;
+
+-- 2. Modificar proyectos_acceso para usar CASCADE en updates
+ALTER TABLE proyectos_acceso 
+DROP CONSTRAINT fk_proyectos_acceso_usuarios;
+
+ALTER TABLE proyectos_acceso 
+ADD CONSTRAINT fk_proyectos_acceso_usuarios 
+FOREIGN KEY (usuario_id) REFERENCES usuarios(email) 
+ON UPDATE CASCADE ON DELETE NO ACTION;
 ```
 
-## Cambios Técnicos
+### Comportamiento Después del Cambio
 
-### 1. Modificar `ofertaPdfNativeService.ts`
+Cuando actualices el email de un usuario:
+1. ✅ Se actualizará en `auth.users` (vía edge function)
+2. ✅ Se actualizará en `usuarios` (vía edge function)
+3. ✅ Se propagará automáticamente a `logs_actividad.usuario_id`
+4. ✅ Se propagará automáticamente a `proyectos_acceso.usuario_id`
+5. ✅ Se propagará automáticamente a `ofertas.email_creador` (ya tenía CASCADE)
 
-Cambiar el método para retornar un Blob en lugar de descargar directamente:
+---
 
-**Antes (línea 936):**
-```typescript
-pdf.save(filename);
-```
+## Detalles Técnicos
 
-**Después:**
-```typescript
-// Retornar blob y filename
-const blob = pdf.output('blob');
-return { blob, filename };
-```
+### Archivos a Modificar
+| Archivo | Cambio |
+|---------|--------|
+| Nueva migración SQL | Alterar las constraints de FK para usar `ON UPDATE CASCADE` |
 
-Cambiar firma del método:
-```typescript
-// De:
-async generateOfferPDF(data: GeneratePDFData): Promise<void>
+### Riesgos y Mitigaciones
+- **Riesgo**: Ninguno significativo. `ON UPDATE CASCADE` es la práctica estándar para este tipo de relaciones
+- **Impacto**: Cero downtime, la migración es instantánea
 
-// A:
-async generateOfferPDF(data: GeneratePDFData): Promise<{ blob: Blob; filename: string }>
-```
+### Orden de Ejecución
+1. Ejecutar migración SQL para modificar las constraints
+2. Probar actualización de email del usuario
 
-### 2. Modificar `ofertaProductoPdfNativeService.ts`
-
-Mismo cambio que el servicio de propiedades:
-```typescript
-// Línea 589 - Cambiar de:
-pdf.save(filename);
-
-// A:
-const blob = pdf.output('blob');
-return { blob, filename };
-```
-
-### 3. Crear `ofertaPdfStorageService.ts` (NUEVO)
-
-```typescript
-import { supabase } from "@/integrations/supabase/client";
-
-interface UploadAndSaveResult {
-  url: string;
-  filename: string;
-}
-
-export class OfertaPdfStorageService {
-  
-  // Verificar si ya existe URL para una oferta
-  async getExistingUrl(offerId: number): Promise<string | null> {
-    const { data } = await supabase
-      .from('ofertas')
-      .select('url')
-      .eq('id', offerId)
-      .single();
-    
-    return data?.url || null;
-  }
-
-  // Subir blob al bucket y guardar URL en BD
-  async uploadAndSave(
-    offerId: number, 
-    blob: Blob, 
-    filename: string,
-    isProduct: boolean = false
-  ): Promise<UploadAndSaveResult> {
-    // Crear path: ofertas/propiedades/O-000123.pdf o ofertas/productos/OP-000123.pdf
-    const folder = isProduct ? 'productos' : 'propiedades';
-    const path = `${folder}/${filename}`;
-
-    // Subir al bucket
-    const { error: uploadError } = await supabase.storage
-      .from('ofertas')
-      .upload(path, blob, { 
-        contentType: 'application/pdf',
-        upsert: true 
-      });
-
-    if (uploadError) throw uploadError;
-
-    // Obtener URL pública
-    const { data: urlData } = supabase.storage
-      .from('ofertas')
-      .getPublicUrl(path);
-
-    const publicUrl = urlData.publicUrl;
-
-    // Guardar URL en BD
-    const { error: updateError } = await supabase
-      .from('ofertas')
-      .update({ url: publicUrl })
-      .eq('id', offerId);
-
-    if (updateError) throw updateError;
-
-    return { url: publicUrl, filename };
-  }
-
-  // Descargar archivo desde URL sin abrir nueva pestaña
-  async downloadFromUrl(url: string, filename: string): Promise<void> {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }
-
-  // Descargar blob directamente
-  downloadBlob(blob: Blob, filename: string): void {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }
-}
-
-export const ofertaPdfStorageService = new OfertaPdfStorageService();
-```
-
-### 4. Modificar `htmlToPdfService.ts`
-
-En el método `generateSozuPDF` (línea ~311-324), cambiar para subir y guardar:
-
-```typescript
-private async generateSozuPDF(...): Promise<void> {
-  // ... código existente para preparar datos ...
-
-  const { ofertaPdfNativeService } = await import('./ofertaPdfNativeService');
-  const { ofertaPdfStorageService } = await import('./ofertaPdfStorageService');
-  
-  // Generar PDF (ahora retorna blob)
-  const { blob, filename } = await ofertaPdfNativeService.generateOfferPDF({
-    offerData,
-    propertyDetails: finalPropertyDetails,
-    paymentSchemes,
-    creatorInfo,
-    leadInfo,
-    estacionamientos,
-    bodegas,
-  });
-  
-  // Subir a storage y guardar URL
-  await ofertaPdfStorageService.uploadAndSave(offerData.id, blob, filename, false);
-  
-  // Descargar localmente
-  ofertaPdfStorageService.downloadBlob(blob, filename);
-}
-```
-
-Lo mismo para `generateProductPDFFromHTML`.
-
-### 5. Modificar `Propiedades.tsx` - `handleDownloadOffer`
-
-```typescript
-const handleDownloadOffer = async (offer: any) => {
-  try {
-    setDownloadingOfferId(offer.id);
-    
-    const { ofertaPdfStorageService } = await import('@/services/ofertaPdfStorageService');
-    
-    // Verificar si ya existe URL
-    const existingUrl = await ofertaPdfStorageService.getExistingUrl(offer.id);
-    
-    if (existingUrl) {
-      // Ya tiene PDF, solo descargar
-      const filename = existingUrl.split('/').pop() || `oferta-${offer.id}.pdf`;
-      await ofertaPdfStorageService.downloadFromUrl(existingUrl, filename);
-      
-      toast({
-        title: "PDF descargado",
-        description: "El PDF se ha descargado exitosamente.",
-      });
-    } else {
-      // No tiene PDF, generar nuevo
-      toast({
-        title: "Generando PDF",
-        description: "Preparando la descarga del PDF de la oferta...",
-      });
-      
-      await generateOfferPDF({...});
-      
-      toast({
-        title: "PDF generado",
-        description: "El PDF se ha generado y descargado exitosamente.",
-      });
-    }
-  } finally {
-    setDownloadingOfferId(null);
-  }
-};
-```
-
-### 6. Modificar `Pagos.tsx` - `handleDownloadOffer`
-
-Misma lógica que Propiedades.tsx.
-
-### 7. Modificar `NewOfferDialog.tsx` y `NewProductOfferDialog.tsx`
-
-Los dialogs no necesitan cambios significativos porque ya llaman a `generateOfferPDF` que internamente ahora manejará el upload y guardado de URL.
-
-## Archivos a Crear/Modificar
-
-| Archivo | Acción | Descripción |
-|---------|--------|-------------|
-| `src/services/ofertaPdfStorageService.ts` | **Crear** | Nuevo servicio para gestión de storage |
-| `src/services/ofertaPdfNativeService.ts` | **Modificar** | Retornar blob en lugar de pdf.save() |
-| `src/services/ofertaProductoPdfNativeService.ts` | **Modificar** | Retornar blob en lugar de pdf.save() |
-| `src/services/htmlToPdfService.ts` | **Modificar** | Integrar upload y guardado de URL |
-| `src/pages/admin/Propiedades.tsx` | **Modificar** | Verificar URL existente antes de regenerar |
-| `src/pages/admin/Pagos.tsx` | **Modificar** | Verificar URL existente antes de regenerar |
-
-## Estructura en Storage
-
-```text
-ofertas/
-├── propiedades/
-│   ├── O_000001_A101_Proyecto_Uno.pdf
-│   ├── O_000002_B205_Proyecto_Dos.pdf
-│   └── ...
-└── productos/
-    ├── OP_000001_A101_Bodega_Proyecto.pdf
-    ├── OP_000002_B205_Estac_Proyecto.pdf
-    └── ...
-```
-
-## Beneficios
-
-1. **URL permanente** - Cada oferta tiene una URL accesible desde cualquier sistema
-2. **Sin regeneración innecesaria** - PDFs existentes se reutilizan
-3. **Descargas instantáneas** - Las descargas subsecuentes no requieren regeneración
-4. **Mantenimiento único** - La lógica de generación sigue en los servicios nativos existentes
-5. **Compatible con externos** - La URL puede usarse en n8n, emails, etc.
-
-## Consideraciones
-
-- Los PDFs existentes (sin URL) se generarán al primer download y se guardarán
-- El bucket `ofertas` ya existe y es público
-- Las URLs serán permanentes a menos que se elimine el archivo del bucket
-- Si se necesita regenerar un PDF (por cambios), se puede hacer upsert sobre el archivo existente
-
+¿Apruebas este plan para implementarlo?
