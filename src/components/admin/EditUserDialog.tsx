@@ -371,6 +371,16 @@ export function EditUserDialog({
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Cargando...
                 </div>
+              ) : userRoleId === ROLE_AGENTE_INTERNO ? (
+                // Agente Interno: inmobiliaria locked to Sozu
+                <div className="flex items-center gap-2">
+                  <Input
+                    value="Real Estate Ventures (Sozu)"
+                    disabled
+                    className="bg-muted"
+                  />
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">(Bloqueado)</span>
+                </div>
               ) : (
                 <Popover>
                   <PopoverTrigger asChild>
