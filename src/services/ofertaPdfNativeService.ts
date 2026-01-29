@@ -951,7 +951,8 @@ export class OfertaPdfNativeService {
     await Promise.all(
       icons.map(async (icon) => {
         try {
-          const base64 = await this.loadImageAsBase64(icon.src);
+          // Use PNG loading for icons to preserve quality and transparency handling
+          const base64 = await this.loadIconAsPng(icon.src);
           this.iconCache.set(icon.name, base64);
         } catch (e) {
           console.warn(`Failed to load icon ${icon.name}:`, e);
@@ -960,10 +961,60 @@ export class OfertaPdfNativeService {
     );
   }
 
+  // Special method for loading small icons - keeps them as PNG with white background
+  private async loadIconAsPng(url: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Could not get canvas context"));
+          return;
+        }
+
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        // Fill with white background to handle transparency
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw the icon on top
+        ctx.drawImage(img, 0, 0);
+        
+        // Export as PNG to maintain quality for small icons
+        const dataUrl = canvas.toDataURL("image/png");
+        resolve(dataUrl);
+      };
+
+      img.onerror = () => {
+        reject(new Error(`Failed to load icon: ${url}`));
+      };
+
+      img.src = url;
+    });
+  }
+
+  private isExternalUrl(url: string): boolean {
+    if (url.startsWith("data:") || url.startsWith("blob:")) return false;
+    try {
+      return new URL(url).origin !== window.location.origin;
+    } catch {
+      // If URL parsing fails, check if it looks like an absolute URL
+      return url.startsWith("http://") || url.startsWith("https://");
+    }
+  }
+
   private async loadImageAsBase64(url: string, maxSizeKB: number = 300): Promise<string> {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.crossOrigin = "anonymous";
+      
+      // CRITICAL: Only set crossOrigin for external URLs, and set it BEFORE src
+      if (this.isExternalUrl(url)) {
+        img.crossOrigin = "anonymous";
+      }
 
       img.onload = () => {
         const canvas = document.createElement("canvas");
