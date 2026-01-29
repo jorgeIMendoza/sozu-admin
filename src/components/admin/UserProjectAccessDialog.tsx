@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,15 @@ import { Badge } from '@/components/ui/badge';
 import { Toggle } from '@/components/ui/toggle';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+interface LinkedAgent {
+  id: number;
+  persona: {
+    id: number;
+    nombre_legal: string;
+    email: string | null;
+  } | null;
+}
 
 interface UserProjectAccessDialogProps {
   userId: string;
@@ -55,6 +64,7 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
   const [ownerSelections, setOwnerSelections] = useState<Record<number, number | null>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [agentsModalOpen, setAgentsModalOpen] = useState(false);
   const queryClient = useQueryClient();
 
   // Check if user is Super Admin
@@ -81,6 +91,26 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
       return count || 0;
     },
     enabled: open && isInmobiliaria && !!userPersonaId,
+  });
+
+  // Query to get agent list for this inmobiliaria (only when modal is open)
+  const { data: agentsList, isLoading: loadingAgents } = useQuery({
+    queryKey: ['inmobiliaria-agents-list', userPersonaId],
+    queryFn: async () => {
+      if (!userPersonaId) return [];
+      const { data, error } = await supabase
+        .from('entidades_relacionadas')
+        .select(`
+          id,
+          persona:personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal, email)
+        `)
+        .eq('id_persona_duena_lead', userPersonaId)
+        .eq('id_tipo_entidad', 19) // Agente
+        .eq('activo', true);
+      if (error) return [];
+      return data as unknown as LinkedAgent[];
+    },
+    enabled: agentsModalOpen && isInmobiliaria && !!userPersonaId,
   });
 
   // Fetch role configuration to check if ver_todos_proyectos_propiedades and ver_todos_duenos are enabled
@@ -512,10 +542,66 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
                 <Users className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-800 dark:text-green-200 text-sm">
                   Los cambios de acceso se propagarán automáticamente a los{' '}
-                  <strong>{agentCount} agente{agentCount !== 1 ? 's' : ''}</strong> de esta inmobiliaria.
+                  <button
+                    type="button"
+                    onClick={() => setAgentsModalOpen(true)}
+                    className="font-bold underline hover:no-underline cursor-pointer"
+                  >
+                    {agentCount} agente{agentCount !== 1 ? 's' : ''}
+                  </button>{' '}
+                  de esta inmobiliaria.
                 </AlertDescription>
               </Alert>
             )}
+
+            {/* Modal to show agents list */}
+            <Dialog open={agentsModalOpen} onOpenChange={setAgentsModalOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Agentes de {userName}
+                  </DialogTitle>
+                  <DialogDescription>
+                    Lista de agentes vinculados a esta inmobiliaria
+                  </DialogDescription>
+                </DialogHeader>
+                
+                {loadingAgents ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : agentsList && agentsList.length > 0 ? (
+                  <ScrollArea className="max-h-[300px]">
+                    <div className="space-y-2">
+                      {agentsList.map((agent) => (
+                        <div 
+                          key={agent.id} 
+                          className="flex flex-col p-3 rounded-md bg-muted/50 border"
+                        >
+                          <span className="font-medium text-sm">
+                            {agent.persona?.nombre_legal || 'Sin nombre'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {agent.persona?.email || 'Sin correo'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No hay agentes vinculados
+                  </p>
+                )}
+                
+                <div className="flex justify-end">
+                  <Button variant="outline" onClick={() => setAgentsModalOpen(false)}>
+                    Cerrar
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             {/* Info alert when role requires owner selection */}
             {!hasVerTodosDuenos && (
