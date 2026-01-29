@@ -143,6 +143,32 @@ serve(async (req) => {
       authUserId = authData.user!.id;
     }
 
+    // For Inmobiliaria role (rol_id 4), if no id_persona is provided, try to find or create it
+    const ROLE_INMOBILIARIA = 4;
+    let finalIdPersona = id_persona || null;
+    
+    if (rol_id === ROLE_INMOBILIARIA && !finalIdPersona) {
+      console.log("Inmobiliaria role detected without id_persona, searching for existing persona by email...");
+      
+      // Try to find an existing inmobiliaria persona with this email
+      const { data: existingInmobiliariaPersonas } = await supabaseAdmin
+        .from('entidades_relacionadas')
+        .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(id, email, nombre_legal)')
+        .eq('id_tipo_entidad', 5) // Inmobiliaria
+        .eq('activo', true);
+      
+      const matchingInmobiliaria = (existingInmobiliariaPersonas || []).find((er: any) => 
+        er.personas?.email?.toLowerCase() === email.toLowerCase()
+      );
+      
+      if (matchingInmobiliaria?.id_persona) {
+        finalIdPersona = matchingInmobiliaria.id_persona;
+        console.log(`Found existing inmobiliaria persona: ${finalIdPersona}`);
+      } else {
+        console.log("No existing inmobiliaria persona found with this email");
+      }
+    }
+
     // Create entry in usuarios table
     const { data: usuarioData, error: usuarioError } = await supabaseAdmin
       .from("usuarios")
@@ -150,7 +176,7 @@ serve(async (req) => {
         email,
         nombre,
         rol_id,
-        id_persona: id_persona || null,
+        id_persona: finalIdPersona,
         auth_user_id: authUserId,
         debe_cambiar_password: true,
         activo: true,
@@ -180,7 +206,7 @@ serve(async (req) => {
     
     if ((rol_id === ROLE_AGENTE_INMOBILIARIO || rol_id === ROLE_AGENTE_INTERNO) && id_inmobiliaria) {
       try {
-        let personaIdToUse = id_persona;
+        let personaIdToUse = finalIdPersona;
         
         // If no id_persona was provided, create a new persona record
         if (!personaIdToUse) {
@@ -291,13 +317,13 @@ serve(async (req) => {
         console.error("Error in agent-inmobiliaria linking process:", agentLinkError);
         // Don't fail user creation if linking fails
       }
-    } else if (rol_id === ROLE_AGENTE_INMOBILIARIO && id_persona && !id_inmobiliaria) {
+    } else if (rol_id === ROLE_AGENTE_INMOBILIARIO && finalIdPersona && !id_inmobiliaria) {
       // Legacy: If agent has id_persona but no id_inmobiliaria, try to get inmobiliaria from entidades_relacionadas
       try {
         const { data: agenteEntidad } = await supabaseAdmin
           .from("entidades_relacionadas")
           .select("id_persona_duena_lead")
-          .eq("id_persona", id_persona)
+          .eq("id_persona", finalIdPersona)
           .eq("id_tipo_entidad", 19)
           .eq("activo", true)
           .maybeSingle();
