@@ -1013,44 +1013,16 @@ export default function Usuarios() {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {/* 1. Vincular a Persona (opcional) - para prellenar datos */}
+            {/* 1. Rol */}
             <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                Vincular a Persona (opcional)
-              </Label>
-              <Combobox
-                value={newUserForm.id_persona}
-                onValueChange={handlePersonaSelect}
-                options={personaOptions}
-                placeholder="Seleccionar agente o inmobiliaria..."
-                searchPlaceholder="Buscar..."
-                emptyText="No se encontraron resultados"
-              />
-              {selectedPersonaTipo && (
-                <p className="text-xs text-muted-foreground">
-                  Tipo seleccionado: <span className="font-medium">{selectedPersonaTipo}</span>
-                  {selectedPersonaTipo === 'Agente' && newUserForm.email?.toLowerCase().endsWith('@sozu.com') && (
-                    <span className="text-cyan-600 ml-1">(Agente Interno)</span>
-                  )}
-                </p>
-              )}
-            </div>
-
-            {/* 2. Rol */}
-            <div className="space-y-2">
-              <Label htmlFor="rol" className="flex items-center gap-2">
-                Rol *
-                {isFieldsLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-              </Label>
+              <Label htmlFor="rol">Rol *</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     role="combobox"
-                    disabled={isFieldsLocked}
                     className={cn(
                       "w-full justify-between",
-                      isFieldsLocked && "bg-muted",
                       !newUserForm.rol_id && "text-muted-foreground"
                     )}
                   >
@@ -1090,14 +1062,9 @@ export default function Usuarios() {
                   </Command>
                 </PopoverContent>
               </Popover>
-              {isFieldsLocked && (
-                <p className="text-xs text-muted-foreground">
-                  El rol se asigna automáticamente según el tipo de persona seleccionada.
-                </p>
-              )}
             </div>
 
-            {/* 3. Inmobiliaria - SOLO visible para Agente Interno (9) o Agente Inmobiliario (3) */}
+            {/* 2. Inmobiliaria - SOLO visible para Agente Interno (9) o Agente Inmobiliario (3) */}
             {(parseInt(newUserForm.rol_id || '0') === ROLE_AGENTE_INTERNO || parseInt(newUserForm.rol_id || '0') === ROLE_AGENTE_INMOBILIARIO) && (
               <div className="space-y-2">
                 <Label htmlFor="inmobiliaria" className="flex items-center gap-2">
@@ -1161,36 +1128,26 @@ export default function Usuarios() {
               </div>
             )}
             
-            {/* 4. Nombre */}
+            {/* 3. Nombre */}
             <div className="space-y-2">
-              <Label htmlFor="nombre" className="flex items-center gap-2">
-                Nombre *
-                {isFieldsLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-              </Label>
+              <Label htmlFor="nombre">Nombre *</Label>
               <Input
                 id="nombre"
                 value={newUserForm.nombre}
                 onChange={(e) => setNewUserForm(prev => ({ ...prev, nombre: e.target.value }))}
                 placeholder="Nombre completo"
-                disabled={isFieldsLocked}
-                className={isFieldsLocked ? "bg-muted" : ""}
               />
             </div>
             
-            {/* 5. Email */}
+            {/* 4. Email */}
             <div className="space-y-2">
-              <Label htmlFor="email" className="flex items-center gap-2">
-                Email *
-                {isFieldsLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-              </Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 type="email"
                 value={newUserForm.email}
                 onChange={(e) => setNewUserForm(prev => ({ ...prev, email: e.target.value }))}
                 placeholder="usuario@email.com"
-                disabled={isFieldsLocked}
-                className={isFieldsLocked ? "bg-muted" : ""}
               />
             </div>
           </div>
