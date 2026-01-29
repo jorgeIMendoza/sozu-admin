@@ -1185,7 +1185,83 @@ const Propiedades = () => {
       ofertas: ofertasMap[property.id] || []
     }));
     
-    // Get active cuentas_cobranza ONLY for properties on the current page
+    // Identify Reventa properties to get their previous buyer info
+    const reventaPropertyIds = enrichedData
+      .filter((p: any) => p.tipos_transaccion?.nombre === "Reventa")
+      .map((p: any) => p.id);
+    
+    // Get inactive ofertas for Reventa properties to find previous buyers
+    let reventaOfertasMap: Record<number, any> = {};
+    let reventaCuentasMap: Record<number, any> = {};
+    let reventaCompradoresMap: Record<number, { nombre: string; porcentaje: number }[]> = {};
+    
+    if (reventaPropertyIds.length > 0) {
+      // Get the most recent inactive offer for each Reventa property
+      const { data: reventaOfertas } = await supabase
+        .from('ofertas')
+        .select('id, id_propiedad, fecha_creacion')
+        .in('id_propiedad', reventaPropertyIds)
+        .eq('activo', false)
+        .is('id_producto', null)
+        .order('fecha_creacion', { ascending: false });
+      
+      // Group by property and get the most recent
+      (reventaOfertas || []).forEach((oferta: any) => {
+        if (!reventaOfertasMap[oferta.id_propiedad]) {
+          reventaOfertasMap[oferta.id_propiedad] = oferta;
+        }
+      });
+      
+      // Get cuentas_cobranza for these ofertas
+      const reventaOfertaIds = Object.values(reventaOfertasMap).map((o: any) => o.id);
+      if (reventaOfertaIds.length > 0) {
+        const { data: reventaCuentas } = await supabase
+          .from('cuentas_cobranza')
+          .select('id, id_oferta')
+          .in('id_oferta', reventaOfertaIds);
+        
+        (reventaCuentas || []).forEach((cuenta: any) => {
+          reventaCuentasMap[cuenta.id_oferta] = cuenta;
+        });
+        
+        // Get compradores for these cuentas
+        const reventaCuentaIds = (reventaCuentas || []).map((c: any) => c.id);
+        if (reventaCuentaIds.length > 0) {
+          const { data: reventaCompradores } = await supabase
+            .from('compradores')
+            .select('id_cuenta_cobranza, id_persona, porcentaje_copropiedad')
+            .in('id_cuenta_cobranza', reventaCuentaIds)
+            .eq('activo', true)
+            .order('porcentaje_copropiedad', { ascending: false });
+          
+          // Get persona names
+          const reventaPersonaIds = (reventaCompradores || []).map((c: any) => c.id_persona);
+          let reventaPersonasMap: Record<number, string> = {};
+          if (reventaPersonaIds.length > 0) {
+            const { data: personasData } = await supabase
+              .from('personas')
+              .select('id, nombre_legal')
+              .in('id', reventaPersonaIds);
+            (personasData || []).forEach((p: any) => {
+              reventaPersonasMap[p.id] = p.nombre_legal || 'Sin nombre';
+            });
+          }
+          
+          // Build compradores map by cuenta_cobranza_id
+          (reventaCompradores || []).forEach((c: any) => {
+            if (!reventaCompradoresMap[c.id_cuenta_cobranza]) {
+              reventaCompradoresMap[c.id_cuenta_cobranza] = [];
+            }
+            reventaCompradoresMap[c.id_cuenta_cobranza].push({
+              nombre: reventaPersonasMap[c.id_persona] || 'Sin nombre',
+              porcentaje: Number(c.porcentaje_copropiedad) || 0
+            });
+          });
+        }
+      }
+    }
+    
+    // Get active cuentas_cobranza ONLY for properties on the current page (excluding Reventa)
     const ofertaIdsCurrentPage = enrichedData.flatMap((property: any) => 
       (property.ofertas || [])
         .filter((o: any) => o.activo && o.id_producto === null)
@@ -1560,9 +1636,25 @@ const Propiedades = () => {
         cuenta_sin_esquema: cuentaSinEsquema,
         // Determinar propietario actual basado en estatus (9, 7, 8, 10 muestran comprador) o cuenta de mantenimiento
         propietario: (() => {
+          const esReventa = property.tipos_transaccion?.nombre === "Reventa";
           const estatusId = property.estatus_disponibilidad?.id || property.id_estatus_disponibilidad;
           // Estatus que muestran al comprador: Pagada completamente(9), Escrituración(7), Entregado(8), Asignado(10)
           const estatusQueMuestranComprador = [9, 7, 8, 10];
+          
+          // Para Reventa, obtener el comprador de la última oferta inactiva
+          if (esReventa) {
+            const reventaOferta = reventaOfertasMap[property.id];
+            if (reventaOferta) {
+              const reventaCuenta = reventaCuentasMap[reventaOferta.id];
+              if (reventaCuenta) {
+                const compradores = reventaCompradoresMap[reventaCuenta.id];
+                if (compradores && compradores.length > 0) {
+                  return compradores[0].nombre + (compradores.length > 1 ? ` (+${compradores.length - 1})` : '');
+                }
+              }
+            }
+            return propietarioDisplay;
+          }
           
           if (estatusQueMuestranComprador.includes(estatusId) && cuentaCobranzaData?.id && compradoresPorCuenta[cuentaCobranzaData.id]?.length > 0) {
             const compradores = compradoresPorCuenta[cuentaCobranzaData.id];
@@ -1575,6 +1667,23 @@ const Propiedades = () => {
         })(),
         propietario_original: propietarioDisplay,
         propietario_actual: (() => {
+          const esReventa = property.tipos_transaccion?.nombre === "Reventa";
+          
+          // Para Reventa, obtener el comprador de la última oferta inactiva
+          if (esReventa) {
+            const reventaOferta = reventaOfertasMap[property.id];
+            if (reventaOferta) {
+              const reventaCuenta = reventaCuentasMap[reventaOferta.id];
+              if (reventaCuenta) {
+                const compradores = reventaCompradoresMap[reventaCuenta.id];
+                if (compradores && compradores.length > 0) {
+                  return compradores[0].nombre + (compradores.length > 1 ? ` (+${compradores.length - 1})` : '');
+                }
+              }
+            }
+            return propietarioDisplay;
+          }
+          
           // Si la cuenta tiene cuenta de mantenimiento asociada, el propietario actual son los compradores
           const tieneCuentaMantenimiento = cuentaCobranzaData?.id && cuentasConMantenimiento.has(cuentaCobranzaData.id);
           const estatusId = property.estatus_disponibilidad?.id || property.id_estatus_disponibilidad;
@@ -1601,8 +1710,9 @@ const Propiedades = () => {
         tipo_transaccion: property.tipos_transaccion?.nombre || '-',
         disponibilidad: property.estatus_disponibilidad?.nombre || property.disponibilidad || 'Sin estatus',
         id_estatus_disponibilidad: property.estatus_disponibilidad?.id || property.id_estatus_disponibilidad || 0,
-        tieneOfertas: property.ofertas && property.ofertas.some((o: any) => o.activo && o.id_producto === null),
-        tieneOfertasProductos: property.ofertas && property.ofertas.some((o: any) => o.activo && o.id_producto !== null),
+        // Para Reventa, no mostrar ofertas activas (ya fueron desactivadas)
+        tieneOfertas: property.tipos_transaccion?.nombre === "Reventa" ? false : (property.ofertas && property.ofertas.some((o: any) => o.activo && o.id_producto === null)),
+        tieneOfertasProductos: property.tipos_transaccion?.nombre === "Reventa" ? false : (property.ofertas && property.ofertas.some((o: any) => o.activo && o.id_producto !== null)),
         estacionamientos_count: estacionamientosCounts[property.id] || 0,
         bodegas_count: bodegasCounts[property.id] || 0,
         payment_status: paymentStatus,
@@ -4096,8 +4206,9 @@ const Propiedades = () => {
                         const esReventa = property.tipo_transaccion === "Reventa";
                         // Solo mostrar comprador si el estatus es: 9 (Pagada completamente), 7 (Escrituración), 8 (Entregado), 10 (Asignado)
                         const estatusParaMostrarComprador = [9, 7, 8, 10];
-                        // Mostrar comprador si es Reventa O tiene cuenta de mantenimiento O si está en estatus Asignado (10)
-                        const mostrarComoComprador = esReventa || 
+                        // Para Reventa, siempre mostrar propietario_actual (comprador anterior) si existe y es diferente al desarrollador
+                        // Mostrar comprador si es Reventa (con comprador anterior) O tiene cuenta de mantenimiento O si está en estatus Asignado (10)
+                        const mostrarComoComprador = (esReventa && property.propietario_actual && property.propietario_actual !== property.propietario_original) || 
                           ((property.tiene_cuenta_pagada || property.id_estatus_disponibilidad === 10) && 
                           estatusParaMostrarComprador.includes(property.id_estatus_disponibilidad) &&
                           property.propietario_actual && property.propietario_actual !== property.propietario_original);
