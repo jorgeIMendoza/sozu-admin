@@ -1,65 +1,80 @@
 
-# Plan: Corregir actualización de email de usuario
+# Plan: Edge Function de Migración Única para Usuarios Inmobiliaria
 
-## Problema Identificado
+## Resumen
 
-El error ocurre porque:
-- La tabla `logs_actividad` tiene una llave foránea `logs_actividad_usuario_id_fkey` que referencia `usuarios.email`
-- La tabla `proyectos_acceso` tiene una llave foránea `fk_proyectos_acceso_usuarios` que referencia `usuarios.email`
-- Ambas tienen la regla `ON UPDATE NO ACTION`, lo que **bloquea** cualquier cambio al email si hay registros relacionados
+Crear una Edge Function `migrate-inmobiliaria-users` que se ejecutará una sola vez para:
+1. Crear cuentas de autenticación para 3 inmobiliarias (DAC, INTERAMERICAN, KRE)
+2. Crear registros en tabla `usuarios` para 5 inmobiliarias (excluyendo Sozu que ya es Super Admin)
+3. Opcionalmente asignar proyectos y propagar acceso a agentes
 
-Cuando intentas cambiar el email de `margot.lasrosas1297@gmail.com` a `margot.lasrosas1297x@gmail.com`, PostgreSQL rechaza la operación porque hay logs de actividad registrados con ese email.
+## Situación Actual
 
-## Solución Propuesta
+| Inmobiliaria | Email | Persona ID | auth.users | usuarios |
+|--------------|-------|------------|------------|----------|
+| DAC | dac@gmail.com | 2265 | ❌ No existe | ❌ No existe |
+| INTERAMERICAN | atencion@interamerican.com.mx | 1882 | ❌ No existe | ❌ No existe |
+| KRE | contacto@krinmobiliaria.com | 1880 | ❌ No existe | ❌ No existe |
+| TRUST | bb@trustreal.mx | 1874 | ✅ Existe | ❌ No existe |
+| VIVALTA | contacto@vivaltainmobiliaria.com | 1876 | ✅ Existe | ❌ No existe |
+| Sozu | joseramon.escobar@sozu.com | 186 | ✅ Existe | ✅ Ya tiene usuario (Super Admin) |
 
-Modificar las llaves foráneas para usar `ON UPDATE CASCADE`, lo que automáticamente actualizará el email en las tablas relacionadas cuando cambie en `usuarios`.
+## Implementación
 
-### Migración SQL
+### Archivo a Crear
 
-```sql
--- 1. Modificar logs_actividad para usar CASCADE en updates
-ALTER TABLE logs_actividad 
-DROP CONSTRAINT logs_actividad_usuario_id_fkey;
-
-ALTER TABLE logs_actividad 
-ADD CONSTRAINT logs_actividad_usuario_id_fkey 
-FOREIGN KEY (usuario_id) REFERENCES usuarios(email) 
-ON UPDATE CASCADE ON DELETE NO ACTION;
-
--- 2. Modificar proyectos_acceso para usar CASCADE en updates
-ALTER TABLE proyectos_acceso 
-DROP CONSTRAINT fk_proyectos_acceso_usuarios;
-
-ALTER TABLE proyectos_acceso 
-ADD CONSTRAINT fk_proyectos_acceso_usuarios 
-FOREIGN KEY (usuario_id) REFERENCES usuarios(email) 
-ON UPDATE CASCADE ON DELETE NO ACTION;
+```
+supabase/functions/migrate-inmobiliaria-users/index.ts
 ```
 
-### Comportamiento Después del Cambio
+### Lógica de la Edge Function
 
-Cuando actualices el email de un usuario:
-1. ✅ Se actualizará en `auth.users` (vía edge function)
-2. ✅ Se actualizará en `usuarios` (vía edge function)
-3. ✅ Se propagará automáticamente a `logs_actividad.usuario_id`
-4. ✅ Se propagará automáticamente a `proyectos_acceso.usuario_id`
-5. ✅ Se propagará automáticamente a `ofertas.email_creador` (ya tenía CASCADE)
+1. Verificar que el solicitante sea Super Admin
+2. Obtener las 5 inmobiliarias candidatas (excluyendo Sozu)
+3. Para cada una:
+   - Si no existe auth.user: crear con contraseña temporal
+   - Si ya existe auth.user: obtener su ID
+   - Crear registro en `usuarios` con rol_id = 4
+4. Retornar resumen de operaciones
 
----
+### Configuración
 
-## Detalles Técnicos
+Agregar en `supabase/config.toml`:
+```toml
+[functions.migrate-inmobiliaria-users]
+verify_jwt = false
+```
 
-### Archivos a Modificar
-| Archivo | Cambio |
-|---------|--------|
-| Nueva migración SQL | Alterar las constraints de FK para usar `ON UPDATE CASCADE` |
+### Request/Response
 
-### Riesgos y Mitigaciones
-- **Riesgo**: Ninguno significativo. `ON UPDATE CASCADE` es la práctica estándar para este tipo de relaciones
-- **Impacto**: Cero downtime, la migración es instantánea
+**Request:**
+```json
+{}  // Sin parámetros, detecta automáticamente
+```
 
-### Orden de Ejecución
-1. Ejecutar migración SQL para modificar las constraints
-2. Probar actualización de email del usuario
+**Response:**
+```json
+{
+  "success": true,
+  "created": [
+    { "email": "dac@gmail.com", "authCreated": true, "usuarioCreated": true },
+    { "email": "atencion@interamerican.com.mx", "authCreated": true, "usuarioCreated": true },
+    { "email": "contacto@krinmobiliaria.com", "authCreated": true, "usuarioCreated": true },
+    { "email": "bb@trustreal.mx", "authCreated": false, "usuarioCreated": true },
+    { "email": "contacto@vivaltainmobiliaria.com", "authCreated": false, "usuarioCreated": true }
+  ],
+  "message": "Migración completada. Contraseña temporal: Temporal123!"
+}
+```
 
-¿Apruebas este plan para implementarlo?
+## Uso
+
+1. Ejecutar la Edge Function una vez desde el frontend o curl
+2. Verificar que los usuarios se crearon correctamente
+3. Eliminar la Edge Function ya que no se usará de nuevo
+
+## Consideraciones
+
+- **Contraseña temporal**: `Temporal123!` - todos deben cambiarla
+- **Email confirmado**: Se marcarán como confirmados automáticamente
+- **Trigger existente**: Una vez creados los usuarios, cuando les asignes proyectos el trigger `sync_inmobiliaria_project_access` propagará el acceso a sus agentes automáticamente
