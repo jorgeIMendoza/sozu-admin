@@ -556,9 +556,21 @@ export default function Inmobiliarias() {
         <CardContent className="p-6">
           <Tabs defaultValue="active" value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className={`grid w-full mb-6 ${(canDelete || isSuperAdmin) ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              <TabsTrigger value="active">Activos ({activeInmobiliarias.length})</TabsTrigger>
+              <TabsTrigger value="active">
+                Activos ({searchTerm ? `${activeInmobiliarias.filter(inmob => 
+                  inmob.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  inmob.nombre_comercial?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  inmob.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
+                ).length} de ${activeInmobiliarias.length}` : activeInmobiliarias.length})
+              </TabsTrigger>
               {(canDelete || isSuperAdmin) && (
-                <TabsTrigger value="deleted">Eliminados ({deletedInmobiliarias.length})</TabsTrigger>
+                <TabsTrigger value="deleted">
+                  Eliminados ({searchTerm ? `${deletedInmobiliarias.filter(inmob => 
+                    inmob.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    inmob.nombre_comercial?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    inmob.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
+                  ).length} de ${deletedInmobiliarias.length}` : deletedInmobiliarias.length})
+                </TabsTrigger>
               )}
             </TabsList>
             
