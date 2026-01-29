@@ -1198,12 +1198,12 @@ const Propiedades = () => {
     let reventaCompradoresMap: Record<number, { nombre: string; porcentaje: number }[]> = {};
     
     if (reventaPropertyIds.length > 0) {
-      // Get the most recent inactive offer for each Reventa property
+      // Get the most recent offer for each Reventa property (regardless of active status)
+      // For Re-venta, we need to show the buyer from the previous transaction
       const { data: reventaOfertas } = await supabase
         .from('ofertas')
-        .select('id, id_propiedad, fecha_creacion')
+        .select('id, id_propiedad, fecha_creacion, activo')
         .in('id_propiedad', reventaPropertyIds)
-        .eq('activo', false)
         .is('id_producto', null)
         .order('fecha_creacion', { ascending: false });
       
