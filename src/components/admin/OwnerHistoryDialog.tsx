@@ -372,21 +372,24 @@ export function OwnerHistoryDialog({
                             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                               {getEntryLabel()}
                             </span>
-                            {isCurrentOwnerInResale ? (
-                              <Badge className="bg-orange-600 hover:bg-orange-700 text-white">
-                                {getBadgeContent()}
-                              </Badge>
-                            ) : isDelivered ? (
+                            {/* Status badge (Entregada, En Proceso, Fideicomiso) */}
+                            {isDelivered ? (
                               <Badge className="bg-green-600 hover:bg-green-700 text-white">
-                                {getBadgeContent()}
+                                Entregada
                               </Badge>
                             ) : isEntryFideicomiso ? (
                               <Badge className="bg-blue-600 hover:bg-blue-700 text-white">
-                                {getBadgeContent()}
+                                Fideicomiso
                               </Badge>
                             ) : (
                               <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100">
-                                {getBadgeContent()}
+                                En Proceso
+                              </Badge>
+                            )}
+                            {/* Transaction type badge (Re-venta) - only for last entry in resale */}
+                            {isCurrentOwnerInResale && nombreTipoTransaccion && (
+                              <Badge className="bg-orange-600 hover:bg-orange-700 text-white">
+                                {nombreTipoTransaccion}
                               </Badge>
                             )}
                             {isEntryFideicomiso && isLast && (
