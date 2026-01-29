@@ -1013,9 +1013,11 @@ export default function Usuarios() {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {/* 1. Vincular a Persona (opcional) */}
+            {/* 1. Vincular a Persona (opcional) - para prellenar datos */}
             <div className="space-y-2">
-              <Label htmlFor="persona">Vincular a Persona (opcional)</Label>
+              <Label className="flex items-center gap-2">
+                Vincular a Persona (opcional)
+              </Label>
               <Combobox
                 value={newUserForm.id_persona}
                 onValueChange={handlePersonaSelect}
@@ -1095,7 +1097,7 @@ export default function Usuarios() {
               )}
             </div>
 
-            {/* 3. Inmobiliaria selector - only show for Agente Interno or Agente Inmobiliario */}
+            {/* 3. Inmobiliaria - only show for Agente Interno or Agente Inmobiliario */}
             {(newUserForm.rol_id === ROLE_AGENTE_INTERNO.toString() || newUserForm.rol_id === ROLE_AGENTE_INMOBILIARIO.toString()) && (
               <div className="space-y-2">
                 <Label htmlFor="inmobiliaria" className="flex items-center gap-2">
