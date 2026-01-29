@@ -4092,21 +4092,26 @@ const Propiedades = () => {
                         return <TableCell key={column.key} className="font-medium">{property.proyecto}</TableCell>;
                       
                       case 'propietario':
+                        // Check if property is Reventa, has maintenance account (has been transferred to buyer) OR specific status
+                        const esReventa = property.tipo_transaccion === "Reventa";
                         // Solo mostrar comprador si el estatus es: 9 (Pagada completamente), 7 (Escrituración), 8 (Entregado), 10 (Asignado)
                         const estatusParaMostrarComprador = [9, 7, 8, 10];
-                        // Mostrar comprador si tiene cuenta de mantenimiento O si está en estatus Asignado (10)
-                        const mostrarComoComprador = (property.tiene_cuenta_pagada || property.id_estatus_disponibilidad === 10) && 
+                        // Mostrar comprador si es Reventa O tiene cuenta de mantenimiento O si está en estatus Asignado (10)
+                        const mostrarComoComprador = esReventa || 
+                          ((property.tiene_cuenta_pagada || property.id_estatus_disponibilidad === 10) && 
                           estatusParaMostrarComprador.includes(property.id_estatus_disponibilidad) &&
-                          property.propietario_actual && property.propietario_actual !== property.propietario_original;
+                          property.propietario_actual && property.propietario_actual !== property.propietario_original);
                         return (
                           <TableCell key={column.key}>
                             <div className="flex items-center gap-2">
                               <div className="flex flex-col">
-                                {/* Si tiene cuenta de mantenimiento O estatus Asignado, mostrar nombre del comprador */}
+                                {/* Si es Reventa O tiene cuenta de mantenimiento O estatus Asignado, mostrar nombre del comprador */}
                                 {mostrarComoComprador ? (
                                   <>
-                                    <span className="font-medium">{property.propietario_actual}</span>
-                                    <span className="text-muted-foreground text-xs">(Comprador)</span>
+                                    <span className="font-medium">{property.propietario_actual || property.propietario}</span>
+                                    <span className="text-muted-foreground text-xs">
+                                      {esReventa ? "(Propietario anterior)" : "(Comprador)"}
+                                    </span>
                                   </>
                                 ) : (
                                   <>
@@ -4118,7 +4123,7 @@ const Propiedades = () => {
                                   </>
                                 )}
                               </div>
-                              {mostrarComoComprador && (
+                              {mostrarComoComprador && !esReventa && (
                                 <OwnerHistoryDialog
                                   propertyId={property.id}
                                   numeroPropiedad={property.numero_propiedad}
@@ -4186,19 +4191,23 @@ const Propiedades = () => {
                         );
                       
                       case 'precio':
+                        // Para Reventa, siempre mostrar precio_lista
+                        const precioReventa = property.tipo_transaccion === "Reventa";
                         return (
                           <TableCell key={column.key}>
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
-                            {property.precio_final ? (
+                            {precioReventa ? (
+                              <span>{formatCurrency(property.precio_lista)}</span>
+                            ) : property.precio_final ? (
                               <span>{formatCurrency(property.precio_final)}</span>
                             ) : (
                               <span>{formatCurrency(property.precio_lista)}</span>
                             )}
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>{property.precio_final ? 'Precio final' : 'Precio de lista'}</p>
+                            <p>{precioReventa ? 'Precio de lista (Reventa)' : property.precio_final ? 'Precio final' : 'Precio de lista'}</p>
                           </TooltipContent>
                         </Tooltip>
                             </TooltipProvider>
@@ -4422,9 +4431,11 @@ const Propiedades = () => {
                         );
                       
                       case 'precio_final':
+                        // Para Reventa, no mostrar precio_final de cuenta de cobranza
+                        const esPropiedadReventa = property.tipo_transaccion === "Reventa";
                         return (
                           <TableCell key={column.key} className="text-right font-semibold">
-                     {property.precio_final ? (
+                     {esPropiedadReventa ? '-' : property.precio_final ? (
                        <div className="flex items-center justify-end gap-2">
                          <span>{formatCurrency(property.precio_final)}</span>
                           {(() => {
@@ -4496,16 +4507,18 @@ const Propiedades = () => {
                         );
                       
                       case 'pagado':
+                        // Para Reventa, no mostrar pagado de cuenta de cobranza anterior
                         return (
                           <TableCell key={column.key} className="text-right">
-                            {property.cuenta_cobranza_id ? formatCurrency(property.total_pagado) : '-'}
+                            {property.tipo_transaccion === "Reventa" ? '-' : property.cuenta_cobranza_id ? formatCurrency(property.total_pagado) : '-'}
                           </TableCell>
                         );
                       
                       case 'restante':
+                        // Para Reventa, no mostrar restante de cuenta de cobranza anterior
                         return (
                           <TableCell key={column.key} className="text-right">
-                      {property.cuenta_cobranza_id ? (
+                      {property.tipo_transaccion === "Reventa" ? '-' : property.cuenta_cobranza_id ? (
                         <span className={property.restante > 0 ? 'text-orange-600 font-semibold' : 'text-green-600 font-semibold'}>
                           {formatCurrency(property.restante)}
                             </span>
@@ -4514,9 +4527,12 @@ const Propiedades = () => {
                         );
                       
                       case 'estado_pagos':
+                        // Para Reventa, no mostrar estado de pagos de cuenta de cobranza anterior
                         return (
                           <TableCell key={column.key}>
-                       {property.payment_status ? (
+                       {property.tipo_transaccion === "Reventa" ? (
+                         <Badge variant="outline" className="text-xs">N/A</Badge>
+                       ) : property.payment_status ? (
                          <div className="flex gap-1 items-center">
                            {/* Sort payment icons by date */}
                            {(() => {
@@ -4710,7 +4726,8 @@ const Propiedades = () => {
                               forceManualMode={property.tipo_transaccion === "Reventa"}
                             />
                           )}
-                          {(canGenerateOffer || isSuperAdmin) && (property.disponibilidad === "Disponible" ||
+                          {/* No mostrar botón de generar oferta de productos para propiedades en Reventa */}
+                          {(canGenerateOffer || isSuperAdmin) && property.tipo_transaccion !== "Reventa" && (property.disponibilidad === "Disponible" ||
                             property.disponibilidad === "Apartado" || 
                             property.disponibilidad === "Vendido" || 
                             property.disponibilidad === "Pagada completamente" ||
