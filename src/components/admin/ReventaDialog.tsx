@@ -103,7 +103,7 @@ export const ReventaDialog = ({
         }
       }
 
-      // 2. Update property: status to Disponible (2), transaction type to Re-venta (2), clear CLABE
+      // 2. Update property: status to Disponible (2), transaction type to Re-venta (2), clear CLABE, and set to Draft
       const { error: updateError } = await supabase
         .from('propiedades')
         .update({
@@ -112,6 +112,7 @@ export const ReventaDialog = ({
           precio_lista: nuevoPrecioLista / 100, // Convert from cents
           monto_apartado: nuevoMontoApartado / 100, // Convert from cents
           clabe_stp_tmp_apartado: null, // Clear temporary CLABE
+          es_aprobado: false, // Set to Draft
           fecha_actualizacion: new Date().toISOString(),
         })
         .eq('id', propertyId);
@@ -143,6 +144,8 @@ export const ReventaDialog = ({
 
       queryClient.invalidateQueries({ queryKey: ['properties'] });
       queryClient.invalidateQueries({ queryKey: ['propiedades'] });
+      queryClient.invalidateQueries({ queryKey: ['properties-activos'] });
+      queryClient.invalidateQueries({ queryKey: ['properties-draft'] });
       queryClient.invalidateQueries({ queryKey: ['cuentas_cobranza_paginadas'] });
       queryClient.invalidateQueries({ queryKey: ['cuentas_cobranza_stats'] });
       queryClient.invalidateQueries({ queryKey: ['ofertas'] });
