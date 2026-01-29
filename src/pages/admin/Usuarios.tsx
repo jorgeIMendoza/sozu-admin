@@ -157,12 +157,20 @@ function UsersTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge 
-                    variant="outline" 
-                    className={getRoleBadgeColor(usuario.roles?.nombre)}
-                  >
-                    {usuario.roles?.nombre || 'Sin rol'}
-                  </Badge>
+                  <div className="flex flex-col gap-0.5">
+                    <Badge 
+                      variant="outline" 
+                      className={getRoleBadgeColor(usuario.roles?.nombre)}
+                    >
+                      {usuario.roles?.nombre || 'Sin rol'}
+                    </Badge>
+                    {/* Show inmobiliaria below role for agents */}
+                    {(usuario.rol_id === ROLE_AGENTE_INMOBILIARIO || usuario.rol_id === ROLE_AGENTE_INTERNO) && usuario.inmobiliaria_nombre && (
+                      <span className="text-xs text-muted-foreground">
+                        de {usuario.inmobiliaria_nombre}
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 {!isInactiveTab && (
                   <TableCell>
