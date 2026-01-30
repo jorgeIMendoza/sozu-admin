@@ -11,32 +11,43 @@ import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
+import { InmobiliariaHeader } from "@/components/admin/InmobiliariaHeader";
 
 const ITEMS_PER_PAGE = 50;
 
 export default function MisPropiedades() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedInmobiliariaId, setSelectedInmobiliariaId] = useState<number | null>(null);
   const { canExport, canGenerateOffer } = usePagePermissions('/admin/inmobiliarias/mis-propiedades');
   const { exportToExcel, isExporting } = useExportToExcel();
   const { profile } = useAuth();
 
-  // Get the projects the user has access to
+  // Get the projects the inmobiliaria has access to
   const { data: projectIds = [], isLoading: loadingProjects } = useQuery({
-    queryKey: ['user-project-access', profile?.email],
+    queryKey: ['inmobiliaria-project-access', selectedInmobiliariaId],
     queryFn: async () => {
-      if (!profile?.email) return [];
+      if (!selectedInmobiliariaId) return [];
+
+      // Get the email associated with the inmobiliaria persona
+      const { data: personaData } = await (supabase as any)
+        .from('personas')
+        .select('email')
+        .eq('id', selectedInmobiliariaId)
+        .single();
+
+      if (!personaData?.email) return [];
 
       const { data, error } = await (supabase as any)
         .from('proyectos_acceso')
         .select('proyecto_id')
-        .eq('email', profile.email)
+        .eq('email', personaData.email)
         .eq('activo', true);
 
       if (error) throw error;
       return (data || []).map((p: any) => p.proyecto_id);
     },
-    enabled: !!profile?.email,
+    enabled: !!selectedInmobiliariaId,
   });
 
   // Fetch properties using direct query since RPC has different signature
@@ -198,16 +209,27 @@ export default function MisPropiedades() {
 
   const isLoading = loadingProjects || loadingProps;
 
-  if (isLoading) {
+  if (isLoading && !selectedInmobiliariaId) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="space-y-6">
+        <InmobiliariaHeader
+          selectedInmobiliariaId={selectedInmobiliariaId}
+          onInmobiliariaChange={setSelectedInmobiliariaId}
+        />
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      <InmobiliariaHeader
+        selectedInmobiliariaId={selectedInmobiliariaId}
+        onInmobiliariaChange={setSelectedInmobiliariaId}
+      />
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Mis Propiedades</h1>

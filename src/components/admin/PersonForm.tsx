@@ -35,9 +35,10 @@ interface PersonFormProps {
   entityType?: 'legal' | 'client' | 'representative' | 'user' | 'desarrollador' | 'inmobiliaria' | 'administradora' | 'banco' | 'buyer' | 'seller' | 'owner' | 'resident' | 'agent' | 'administrator' | 'vendedor' | 'comprador' | 'dueno' | 'residente' | 'agente' | 'administrador' | 'representante_legal';
   fixedEntityType?: boolean;
   restrictToBasicTab?: boolean;
+  hideEmailField?: boolean;
 }
 
-export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityType = 'user', fixedEntityType = false, restrictToBasicTab = false }: PersonFormProps) {
+export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityType = 'user', fixedEntityType = false, restrictToBasicTab = false, hideEmailField = false }: PersonFormProps) {
   // Basic info
   const [nombre, setNombre] = useState(initialData?.nombre || initialData?.nombre_legal || '');
   const [nombreComercial, setNombreComercial] = useState(initialData?.nombre_comercial || '');
@@ -937,16 +938,18 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     </div>
                   )}
 
-                  <div>
-                    <Label htmlFor="email">Email *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Ingresa el email"
-                    />
-                  </div>
+                  {!hideEmailField && (
+                    <div>
+                      <Label htmlFor="email">Email *</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Ingresa el email"
+                      />
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-2">
                     <Label htmlFor="telefono">Teléfono *</Label>
@@ -1217,16 +1220,18 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                   </div>
                 )}
 
-                <div>
-                  <Label htmlFor="email">Email *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Ingresa el email"
-                  />
-                </div>
+                {!hideEmailField && (
+                  <div>
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Ingresa el email"
+                    />
+                  </div>
+                )}
 
                 {(entityType === 'desarrollador' || entityType === 'inmobiliaria') && (
                   <div className="col-span-1 md:col-span-2">
@@ -1992,16 +1997,18 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
               />
             </div>
 
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Ingresa el email"
-              />
-            </div>
+            {!hideEmailField && (
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Ingresa el email"
+                />
+              </div>
+            )}
 
             <div>
               <Label htmlFor="telefono">Teléfono</Label>
