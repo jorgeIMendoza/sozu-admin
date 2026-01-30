@@ -388,23 +388,64 @@ export default function Inmobiliarias() {
         const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/manda_notificacion1`;
         console.log('Enviando notificación de nueva inmobiliaria a:', webhookUrl);
         
+        // Obtener usuarios con rol Super Administrador (rol_id = 1)
+        const { data: superAdmins } = await supabase
+          .from('usuarios')
+          .select('email, telefono, clave_pais_telefono, roles(nombre)')
+          .eq('rol_id', 1)
+          .eq('activo', true);
+        
+        // Obtener usuarios con rol Administrador de Proyecto (rol_id = 2)
+        const { data: adminProyecto } = await supabase
+          .from('usuarios')
+          .select('email, telefono, clave_pais_telefono, roles(nombre)')
+          .eq('rol_id', 2)
+          .eq('activo', true);
+        
+        // Formatear correos de super admins
+        const correosSuperAdmin = (superAdmins || [])
+          .map(u => u.email)
+          .filter(Boolean)
+          .join(',');
+        
+        // Formatear correos de admin proyecto
+        const correosAdminProy = (adminProyecto || [])
+          .map(u => u.email)
+          .filter(Boolean)
+          .join(',');
+        
+        // Formatear teléfonos de admin proyecto (clave_pais + telefono)
+        const numerosAdminProy = (adminProyecto || [])
+          .filter(u => u.telefono)
+          .map(u => {
+            const clavePais = u.clave_pais_telefono || 'MX';
+            const codigoPais = clavePais === 'MX' ? '+52' : clavePais === 'US' ? '+1' : `+${clavePais}`;
+            return `${codigoPais}${u.telefono}`;
+          })
+          .join(',');
+        
+        // Obtener el rol del usuario actual (primer super admin o admin proyecto encontrado)
+        const rolUsuario = (superAdmins?.[0]?.roles as any)?.nombre || 
+                          (adminProyecto?.[0]?.roles as any)?.nombre || 
+                          'Administrador';
+        
         const notificationPayload = {
           tipo: "ambos",
           from: "Notificaciones Sozu <notificaciones@sozu.com>",
-          email: "jorge.mendoza@sozu.com",
-          cc: "mencor.corp@gmail.com",
-          telefono: "+5217221514185,+5217221514185",
+          email: correosAdminProy || correosSuperAdmin,
+          cc: correosSuperAdmin,
+          telefono: numerosAdminProy,
           mensajeWA: `Se ha creado la Inmobiliaria *${cleanPersonData.nombre_legal}*, con el usuario: *${cleanPersonData.email}*`,
           asunto: "Alta de Inmobiliaria",
           mensaje: {
-            nombre: cleanPersonData.nombre_legal,
+            nombre: rolUsuario,
             actividad: "Alta de inmobiliaria",
             detalles: `<tr><td class='label'>Nombre:</td> <td class='value'>${cleanPersonData.nombre_legal}</td> </tr><tr><td class='label'>Usuario:</td><td class='value'>${cleanPersonData.email}</td></tr>`
           },
-          templateId: 41353048,
-          nombre_archivo_adjunto: "",
-          tipo_mime: ""
+          templateId: 41353048
         };
+
+        console.log('Payload de notificación:', notificationPayload);
 
         const notificationResponse = await fetch(webhookUrl, {
           method: 'POST',
