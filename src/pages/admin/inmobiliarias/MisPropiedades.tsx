@@ -89,20 +89,8 @@ export default function MisPropiedades() {
           id_edificio_modelo,
           edificios_modelos!fk_propiedades_edificio_modelo (
             id,
-            edificios!fk_edificios_modelos_edificio (
-              id,
-              nombre,
-              proyectos (
-                id,
-                nombre
-              )
-            ),
-            modelos!fk_edificios_modelos_modelo (
-              id,
-              nombre,
-              numero_recamaras,
-              numero_completo_banos
-            )
+            id_edificio,
+            id_modelo
           ),
           estatus_disponibilidad (
             id,
@@ -133,7 +121,40 @@ export default function MisPropiedades() {
         .eq('activo', true)
         .in('id_edificio_modelo', edificioModeloIds)
         .order('numero_propiedad', { ascending: true });
-      if (error) throw error;
+
+      if (error) {
+        console.error('Error fetching propiedades:', error);
+        throw error;
+      }
+
+      // Step 4: Get additional data for edificios and modelos separately
+      const edificioModeloIdsFromProps = [...new Set((data || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))];
+      
+      // Fetch edificios info
+      const edificioIdsForDetails = [...new Set((data || []).map((p: any) => p.edificios_modelos?.id_edificio).filter(Boolean))];
+      const { data: edificiosDetails } = await supabase
+        .from('edificios')
+        .select('id, nombre, id_proyecto')
+        .in('id', edificioIdsForDetails);
+
+      // Fetch proyectos info  
+      const proyectoIdsForDetails = [...new Set((edificiosDetails || []).map((e: any) => e.id_proyecto).filter(Boolean))];
+      const { data: proyectosDetails } = await supabase
+        .from('proyectos')
+        .select('id, nombre')
+        .in('id', proyectoIdsForDetails);
+
+      // Fetch modelos info
+      const modeloIdsForDetails = [...new Set((data || []).map((p: any) => p.edificios_modelos?.id_modelo).filter(Boolean))];
+      const { data: modelosDetails } = await supabase
+        .from('modelos')
+        .select('id, nombre, numero_recamaras, numero_completo_banos')
+        .in('id', modeloIdsForDetails);
+
+      // Create lookup maps
+      const edificiosMap = new Map((edificiosDetails || []).map((e: any) => [e.id, e]));
+      const proyectosMap = new Map((proyectosDetails || []).map((p: any) => [p.id, p]));
+      const modelosMap = new Map((modelosDetails || []).map((m: any) => [m.id, m]));
 
       return (data || []).map((p: any) => {
         const cuentaCobranza = p.cuentas_cobranza?.[0];
@@ -143,15 +164,22 @@ export default function MisPropiedades() {
 
         const areaTotal = (Number(p.m2_interiores) || 0) + (Number(p.m2_exteriores) || 0);
 
+        // Get edificio and proyecto from lookups
+        const edificioId = p.edificios_modelos?.id_edificio;
+        const modeloId = p.edificios_modelos?.id_modelo;
+        const edificio = edificiosMap.get(edificioId);
+        const proyecto = edificio ? proyectosMap.get(edificio.id_proyecto) : null;
+        const modelo = modelosMap.get(modeloId);
+
         return {
           id: p.id,
-          proyecto_nombre: p.edificios_modelos?.edificios?.proyectos?.nombre,
-          edificio_nombre: p.edificios_modelos?.edificios?.nombre,
-          modelo_nombre: p.edificios_modelos?.modelos?.nombre,
+          proyecto_nombre: proyecto?.nombre,
+          edificio_nombre: edificio?.nombre,
+          modelo_nombre: modelo?.nombre,
           numero_departamento: p.numero_propiedad,
           area_total: areaTotal > 0 ? areaTotal : null,
-          recamaras: p.edificios_modelos?.modelos?.numero_recamaras,
-          banos: p.edificios_modelos?.modelos?.numero_completo_banos,
+          recamaras: modelo?.numero_recamaras,
+          banos: modelo?.numero_completo_banos,
           precio_lista: p.precio_lista,
           estatus_disponibilidad_nombre: p.estatus_disponibilidad?.nombre,
           propietario_nombre: p.entidades_relacionadas?.personas?.nombre_legal,
