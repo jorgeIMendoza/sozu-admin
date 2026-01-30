@@ -429,10 +429,8 @@ export default function Inmobiliarias() {
         // Formatear teléfonos de admin proyecto, con fallback a super admins
         const numerosAdminProy = formatearTelefonos(adminProyecto) || formatearTelefonos(superAdmins);
         
-        // Obtener el rol del usuario actual (primer super admin o admin proyecto encontrado)
-        const rolUsuario = (superAdmins?.[0]?.roles as any)?.nombre || 
-                          (adminProyecto?.[0]?.roles as any)?.nombre || 
-                          'Administrador';
+        // Nombre fijo para el payload de notificación
+        const rolUsuario = 'Administrador';
         
         const notificationPayload = {
           tipo: "ambos",
