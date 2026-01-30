@@ -18,6 +18,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Role {
   id: number;
@@ -506,7 +507,7 @@ export default function RolesPermisos() {
   const [roleTab, setRoleTab] = useState<"activos" | "eliminados">("activos");
   
   const queryClient = useQueryClient();
-
+  const { triggerPermissionRefresh } = useAuth();
   const isSuperAdminSelected = selectedRoleId === SUPER_ADMIN_ROLE_ID;
 
   // Fetch roles (only internal roles)
@@ -745,6 +746,7 @@ export default function RolesPermisos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      triggerPermissionRefresh();
       toast.success('Configuración actualizada');
     },
     onError: (error) => {
@@ -767,6 +769,7 @@ export default function RolesPermisos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      triggerPermissionRefresh();
       toast.success('Configuración actualizada');
     },
     onError: (error) => {
@@ -789,6 +792,7 @@ export default function RolesPermisos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      triggerPermissionRefresh();
       toast.success('Configuración actualizada');
     },
     onError: (error) => {
@@ -811,6 +815,7 @@ export default function RolesPermisos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      triggerPermissionRefresh();
       toast.success('Configuración actualizada');
     },
     onError: (error) => {
@@ -850,7 +855,14 @@ export default function RolesPermisos() {
       }
     },
     onSuccess: () => {
+      // Invalidar permisos del rol actual
       queryClient.invalidateQueries({ queryKey: ['role-permisos', selectedRoleId] });
+      // Invalidar queries de permisos de usuario para que se reflejen los cambios inmediatamente
+      queryClient.invalidateQueries({ queryKey: ['user-permissions'] });
+      queryClient.invalidateQueries({ queryKey: ['allowed-menus'] });
+      queryClient.invalidateQueries({ queryKey: ['page-permissions'] });
+      // Trigger refresh de permisos en el contexto de autenticación
+      triggerPermissionRefresh();
       toast.success('Permisos guardados correctamente');
       setPendingChanges(new Map());
     },

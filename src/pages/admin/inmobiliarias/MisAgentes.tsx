@@ -193,7 +193,8 @@ export default function MisAgentes() {
       if (updateError) throw updateError;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mis-agentes'] });
+      queryClient.invalidateQueries({ queryKey: ['mis-agentes-activos'] });
+      queryClient.invalidateQueries({ queryKey: ['mis-agentes-eliminados'] });
       setIsEditDialogOpen(false);
       setEditingAgente(null);
       toast({
