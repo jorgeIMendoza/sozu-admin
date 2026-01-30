@@ -47,7 +47,7 @@ export default function MisAgentes() {
   const [selectedInmobiliariaId, setSelectedInmobiliariaId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { canCreate, canUpdate, canDelete, canExport } = usePagePermissions('/admin/inmobiliarias/mis-agentes');
+  const { canCreate, canUpdate, canDelete, canExport, canApprove } = usePagePermissions('/admin/inmobiliarias/mis-agentes');
   const { exportToExcel, isExporting } = useExportToExcel();
   const { profile } = useAuth();
 
@@ -612,16 +612,18 @@ export default function MisAgentes() {
                           </TableCell>
                           <TableCell>{agente.rfc || '-'}</TableCell>
                             <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setAgenteToRestore(agente);
-                                  setRestoreDialogOpen(true);
-                                }}
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                              </Button>
+                              {canApprove && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setAgenteToRestore(agente);
+                                    setRestoreDialogOpen(true);
+                                  }}
+                                >
+                                  <RotateCcw className="h-4 w-4" />
+                                </Button>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))

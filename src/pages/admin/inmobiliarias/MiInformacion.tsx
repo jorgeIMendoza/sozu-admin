@@ -156,17 +156,23 @@ export default function MiInformacion() {
         </CardHeader>
         <CardContent>
           {inmobiliariaData ? (
-            <PersonForm
-              initialData={{
-                ...inmobiliariaData,
-                id_tipo_entidad: 5, // Inmobiliaria
-              }}
-              onSubmit={(data) => updateMutation.mutate(data)}
-              isLoading={updateMutation.isPending}
-              onCancel={() => {}}
-              entityType="inmobiliaria"
-              fixedEntityType={true}
-            />
+            canUpdate ? (
+              <PersonForm
+                initialData={{
+                  ...inmobiliariaData,
+                  id_tipo_entidad: 5, // Inmobiliaria
+                }}
+                onSubmit={(data) => updateMutation.mutate(data)}
+                isLoading={updateMutation.isPending}
+                onCancel={() => {}}
+                entityType="inmobiliaria"
+                fixedEntityType={true}
+              />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No tienes permiso para editar esta información.
+              </div>
+            )
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               No se encontró información de la inmobiliaria.
