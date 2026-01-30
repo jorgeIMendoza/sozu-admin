@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Edit, Trash2, FileSpreadsheet } from "lucide-react";
+import { Search, Edit, Trash2, FileSpreadsheet, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -36,8 +37,11 @@ export default function MisAgentes() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingAgente, setEditingAgente] = useState<Agente | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [agenteToDelete, setAgenteToDelete] = useState<Agente | null>(null);
+  const [agenteToRestore, setAgenteToRestore] = useState<Agente | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState("activos");
   const [selectedInmobiliariaId, setSelectedInmobiliariaId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -45,11 +49,11 @@ export default function MisAgentes() {
   const { exportToExcel, isExporting } = useExportToExcel();
   const { profile } = useAuth();
 
-  // Use the selected inmobiliaria from header
   const inmobiliariaId = selectedInmobiliariaId;
 
-  const { data: agentes = [], isLoading: loadingAgentes } = useQuery({
-    queryKey: ['mis-agentes', inmobiliariaId],
+  // Query for active agents
+  const { data: agentesActivos = [], isLoading: loadingActivos } = useQuery({
+    queryKey: ['mis-agentes-activos', inmobiliariaId],
     queryFn: async () => {
       if (!inmobiliariaId) return [];
 
@@ -92,6 +96,50 @@ export default function MisAgentes() {
     enabled: !!inmobiliariaId,
   });
 
+  // Query for inactive (deleted) agents
+  const { data: agentesEliminados = [], isLoading: loadingEliminados } = useQuery({
+    queryKey: ['mis-agentes-eliminados', inmobiliariaId],
+    queryFn: async () => {
+      if (!inmobiliariaId) return [];
+
+      const { data, error } = await supabase
+        .from('personas')
+        .select(`
+          id,
+          nombre_legal,
+          email,
+          telefono,
+          clave_pais_telefono,
+          rfc,
+          activo,
+          entidades_relacionadas!entidades_relacionadas_id_persona_fkey!inner (
+            id,
+            id_tipo_entidad,
+            id_persona_duena_lead
+          )
+        `)
+        .eq('activo', false)
+        .eq('entidades_relacionadas.id_tipo_entidad', 19)
+        .eq('entidades_relacionadas.id_persona_duena_lead', inmobiliariaId)
+        .is('entidades_relacionadas.id_proyecto', null)
+        .order('nombre_legal', { ascending: true });
+
+      if (error) throw error;
+
+      return (data || []).map((item: any) => ({
+        id: item.id,
+        entidad_relacionada_id: item.entidades_relacionadas[0]?.id,
+        nombre_legal: item.nombre_legal,
+        email: item.email,
+        telefono: item.telefono,
+        clave_pais_telefono: item.clave_pais_telefono,
+        rfc: item.rfc,
+        activo: item.activo,
+      })) as Agente[];
+    },
+    enabled: !!inmobiliariaId && canDelete,
+  });
+
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
       const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId: _, ...cleanPersonData } = personData;
@@ -123,18 +171,23 @@ export default function MisAgentes() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
+      // Deactivate the persona
       const { error } = await supabase
         .from('personas')
         .update({ activo: false })
         .eq('id', id);
       
       if (error) throw error;
+      // Note: User deactivation is handled by database trigger
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mis-agentes'] });
+      queryClient.invalidateQueries({ queryKey: ['mis-agentes-activos'] });
+      queryClient.invalidateQueries({ queryKey: ['mis-agentes-eliminados'] });
+      setDeleteDialogOpen(false);
+      setAgenteToDelete(null);
       toast({
         title: "Éxito",
-        description: "Agente eliminado correctamente.",
+        description: "Agente eliminado y usuario desactivado correctamente.",
       });
     },
     onError: (error: any) => {
@@ -146,20 +199,80 @@ export default function MisAgentes() {
     },
   });
 
+  const restoreMutation = useMutation({
+    mutationFn: async (agente: Agente) => {
+      // Reactivate the persona
+      const { error: personaError } = await supabase
+        .from('personas')
+        .update({ activo: true })
+        .eq('id', agente.id);
+      
+      if (personaError) throw personaError;
+
+      // Reactivate the user if exists
+      const { error: userError } = await supabase
+        .from('usuarios')
+        .update({ activo: true })
+        .eq('id_persona', agente.id);
+      
+      if (userError) throw userError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mis-agentes-activos'] });
+      queryClient.invalidateQueries({ queryKey: ['mis-agentes-eliminados'] });
+      setRestoreDialogOpen(false);
+      setAgenteToRestore(null);
+      toast({
+        title: "Éxito",
+        description: "Agente restaurado y usuario reactivado correctamente.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: `Error al restaurar el agente: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const currentAgentes = activeTab === "activos" ? agentesActivos : agentesEliminados;
+
   const filteredAgentes = useMemo(() => {
-    return agentes.filter(agente =>
+    return currentAgentes.filter(agente =>
       agente.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       agente.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       agente.telefono?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       agente.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [agentes, searchTerm]);
+  }, [currentAgentes, searchTerm]);
 
   const totalPages = Math.ceil(filteredAgentes.length / ITEMS_PER_PAGE);
   const paginatedAgentes = filteredAgentes.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
+
+  // Count helpers for tab display
+  const filteredActivosCount = useMemo(() => {
+    if (!searchTerm) return agentesActivos.length;
+    return agentesActivos.filter(a =>
+      a.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.telefono?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
+    ).length;
+  }, [agentesActivos, searchTerm]);
+
+  const filteredEliminadosCount = useMemo(() => {
+    if (!searchTerm) return agentesEliminados.length;
+    return agentesEliminados.filter(a =>
+      a.nombre_legal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.telefono?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.rfc?.toLowerCase().includes(searchTerm.toLowerCase())
+    ).length;
+  }, [agentesEliminados, searchTerm]);
 
   const handleExport = async () => {
     const exportData = filteredAgentes.map(agente => ({
@@ -172,7 +285,7 @@ export default function MisAgentes() {
     await exportToExcel({ data: exportData, filename: 'Mis_Agentes' });
   };
 
-  const isLoading = loadingAgentes;
+  const isLoading = loadingActivos || loadingEliminados;
 
   if (isLoading && !selectedInmobiliariaId) {
     return (
@@ -216,7 +329,7 @@ export default function MisAgentes() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Agentes ({filteredAgentes.length})</CardTitle>
+          <CardTitle>Agentes</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 mb-6">
@@ -234,70 +347,138 @@ export default function MisAgentes() {
             </div>
           </div>
 
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Teléfono</TableHead>
-                  <TableHead>RFC</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedAgentes.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No se encontraron agentes
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedAgentes.map((agente) => (
-                    <TableRow key={agente.id}>
-                      <TableCell className="font-medium">{agente.nombre_legal}</TableCell>
-                      <TableCell>{agente.email}</TableCell>
-                      <TableCell>
-                        <PhoneDisplay
-                          clavePaisTelefono={agente.clave_pais_telefono}
-                          telefono={agente.telefono}
-                        />
-                      </TableCell>
-                      <TableCell>{agente.rfc || '-'}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {canUpdate && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setEditingAgente(agente);
-                                setIsEditDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {canDelete && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setAgenteToDelete(agente);
-                                setDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setCurrentPage(1); }}>
+            <TabsList>
+              <TabsTrigger value="activos">
+                Activos {searchTerm ? `(${filteredActivosCount} de ${agentesActivos.length})` : `(${agentesActivos.length})`}
+              </TabsTrigger>
+              {canDelete && (
+                <TabsTrigger value="eliminados">
+                  Eliminados {searchTerm ? `(${filteredEliminadosCount} de ${agentesEliminados.length})` : `(${agentesEliminados.length})`}
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            <TabsContent value="activos" className="mt-4">
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Teléfono</TableHead>
+                      <TableHead>RFC</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedAgentes.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          No se encontraron agentes
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedAgentes.map((agente) => (
+                        <TableRow key={agente.id}>
+                          <TableCell className="font-medium">{agente.nombre_legal}</TableCell>
+                          <TableCell>{agente.email}</TableCell>
+                          <TableCell>
+                            <PhoneDisplay
+                              clavePaisTelefono={agente.clave_pais_telefono}
+                              telefono={agente.telefono}
+                            />
+                          </TableCell>
+                          <TableCell>{agente.rfc || '-'}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {canUpdate && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setEditingAgente(agente);
+                                    setIsEditDialogOpen(true);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {canDelete && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setAgenteToDelete(agente);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+
+            {canDelete && (
+              <TabsContent value="eliminados" className="mt-4">
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Teléfono</TableHead>
+                        <TableHead>RFC</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedAgentes.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            No se encontraron agentes eliminados
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        paginatedAgentes.map((agente) => (
+                          <TableRow key={agente.id}>
+                            <TableCell className="font-medium">{agente.nombre_legal}</TableCell>
+                            <TableCell>{agente.email}</TableCell>
+                            <TableCell>
+                              <PhoneDisplay
+                                clavePaisTelefono={agente.clave_pais_telefono}
+                                telefono={agente.telefono}
+                              />
+                            </TableCell>
+                            <TableCell>{agente.rfc || '-'}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setAgenteToRestore(agente);
+                                  setRestoreDialogOpen(true);
+                                }}
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+            )}
+          </Tabs>
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
@@ -354,12 +535,28 @@ export default function MisAgentes() {
         onConfirm={() => {
           if (agenteToDelete) {
             deleteMutation.mutate(agenteToDelete.id);
-            setDeleteDialogOpen(false);
-            setAgenteToDelete(null);
           }
         }}
+        isLoading={deleteMutation.isPending}
         title="Eliminar Agente"
-        description={`¿Estás seguro de que deseas eliminar al agente "${agenteToDelete?.nombre_legal}"? Esta acción también desactivará su usuario del sistema.`}
+        description={`¿Estás seguro de que deseas eliminar al agente "${agenteToDelete?.nombre_legal}"?`}
+        warningMessage="Esta acción también desactivará el acceso del usuario asociado al sistema."
+      />
+
+      {/* Restore Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={restoreDialogOpen}
+        onOpenChange={setRestoreDialogOpen}
+        onConfirm={() => {
+          if (agenteToRestore) {
+            restoreMutation.mutate(agenteToRestore);
+          }
+        }}
+        isLoading={restoreMutation.isPending}
+        title="Restaurar Agente"
+        description={`¿Estás seguro de que deseas restaurar al agente "${agenteToRestore?.nombre_legal}"?`}
+        warningMessage="Esta acción también reactivará el acceso del usuario asociado al sistema."
+        actionType="restore"
       />
     </div>
   );
