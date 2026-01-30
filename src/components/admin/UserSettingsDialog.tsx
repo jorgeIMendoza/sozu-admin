@@ -35,6 +35,8 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
 
   // Check if user is super admin (rol_id 1 or 2)
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  // Check if user is Inmobiliaria role (rol_id 4)
+  const isInmobiliariaRole = profile?.rol_id === 4;
 
   // Query for user's project access
   const { data: userProjects, isLoading: projectsLoading } = useQuery({
@@ -405,29 +407,33 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
 
           <Separator />
 
-          {/* Edit Profile Section - Always visible */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <UserCog className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">Mis datos personales</span>
+          {/* Edit Profile Section - Hidden for Inmobiliaria role */}
+          {!isInmobiliariaRole && (
+            <>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UserCog className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Mis datos personales</span>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleCreateAndEditProfile}
+                    disabled={personaLoading || isCreatingPersona}
+                  >
+                    {isCreatingPersona ? "Creando perfil..." : personaLoading ? "Cargando..." : "Editar"}
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {effectiveIdPersona 
+                    ? "Actualiza tu información personal, dirección, datos fiscales y documentos."
+                    : "Completa tu información personal para acceder a todas las funcionalidades."}
+                </p>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleCreateAndEditProfile}
-                disabled={personaLoading || isCreatingPersona}
-              >
-                {isCreatingPersona ? "Creando perfil..." : personaLoading ? "Cargando..." : "Editar"}
-              </Button>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {effectiveIdPersona 
-                ? "Actualiza tu información personal, dirección, datos fiscales y documentos."
-                : "Completa tu información personal para acceder a todas las funcionalidades."}
-            </p>
-          </div>
-          <Separator />
+              <Separator />
+            </>
+          )}
 
           {/* Change Password Section */}
           <div className="space-y-4">
