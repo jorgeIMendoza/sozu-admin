@@ -1,130 +1,154 @@
 
-## Plan de Implementación
+# Ajuste de Branding para Rol Inmobiliaria
 
-### Resumen
-Implementar dos funcionalidades:
-1. **Copia de email al portapapeles** en la vista de Inmobiliarias
-2. **Corrección del diálogo de acceso a proyectos** para usuarios con rol Inmobiliaria (4)
+## Resumen
+Cambios en la interfaz para usuarios con rol Inmobiliaria para corregir la ubicacion del nombre de la inmobiliaria y mejorar el texto del Dashboard.
+
+## Cambios a Realizar
+
+### 1. Sidebar Header (AdminSidebar.tsx)
+**Antes:** Muestra el nombre de la inmobiliaria + "By Sozu"
+**Despues:** Mostrar solo "By Sozu" con el logo de Sozu (igual que otros roles pero con texto "By Sozu")
+
+```text
++------------------+
+| [S] By Sozu      |
+|     Admin Panel  |
++------------------+
+```
+
+### 2. Dashboard Header (Dashboard.tsx)
+**Antes:** Solo muestra el titulo "Proyectos gestionados por Sozu"
+**Despues:** Para rol Inmobiliaria, mostrar un header con el logo y nombre de la inmobiliaria (similar al componente InmobiliariaHeader existente)
+
+```text
++------------------------------------------+
+| [Logo]  Nombre de la Inmobiliaria        |
+|         Nombre Legal (si es diferente)   |
++------------------------------------------+
+```
+
+### 3. Titulo del Dashboard (Dashboard.tsx)
+**Antes:** "Proyectos gestionados por Sozu"
+**Despues:** Para rol Inmobiliaria: "Proyectos Comercializados por {nombre_inmobiliaria}"
 
 ---
 
-### Parte 1: Copiar email al hacer clic en la columna Usuario
+## Detalles Tecnicos
 
-**Archivo a modificar:** `src/pages/admin/Inmobiliarias.tsx`
+### Archivo: src/components/admin/AdminSidebar.tsx (lineas 361-395)
 
-**Cambios:**
-- Agregar función `handleCopyEmail` que use `navigator.clipboard.writeText()`
-- Mostrar un toast de confirmación cuando se copie
-- Hacer el email clickeable con estilo de cursor pointer
-- Agregar icono de copiar (Copy de lucide-react) para indicar la acción
+Modificar el header del sidebar para rol Inmobiliaria:
+- Remover la visualizacion del nombre/logo de la inmobiliaria
+- Mostrar "By Sozu" con el icono/logo de Sozu
+- Mantener el subtitulo "Admin Panel"
 
-**Código del cambio en la celda de Usuario (línea ~1017-1019):**
+Codigo propuesto:
 ```tsx
-<TableCell className="text-muted-foreground">
-  {inmobiliaria.usuario_email ? (
-    <button
-      onClick={() => {
-        navigator.clipboard.writeText(inmobiliaria.usuario_email!);
-        toast({
-          title: "Copiado",
-          description: "Email copiado al portapapeles",
-        });
-      }}
-      className="flex items-center gap-1 hover:text-primary cursor-pointer transition-colors"
-      title="Clic para copiar"
-    >
-      {inmobiliaria.usuario_email}
-      <Copy className="h-3 w-3 opacity-50" />
-    </button>
-  ) : (
-    <span className="text-muted-foreground/50">Sin usuario</span>
-  )}
-</TableCell>
-```
-
-- Agregar `Copy` a los imports de lucide-react
-
----
-
-### Parte 2: Diálogo de Acceso para Usuarios Inmobiliaria
-
-**Archivo a modificar:** `src/components/admin/UserProjectAccessDialog.tsx`
-
-**Problema identificado:**
-El diálogo tiene manejo especial para Agentes Inmobiliarios (rol 3), mostrando que heredan accesos de su Inmobiliaria padre. Sin embargo, falta el manejo inverso: mostrar a los usuarios con rol Inmobiliaria (4) que sus cambios propagarán a todos sus agentes.
-
-**Cambios:**
-1. Agregar verificación para `isInmobiliaria` (rol 4)
-2. Agregar alerta informativa indicando que los cambios se propagarán a los agentes
-3. Mostrar contador de agentes afectados
-
-**Agregar constante y query (después de línea ~64):**
-```tsx
-// Check if user is Inmobiliaria (role 4)
-const isInmobiliaria = userRoleId === 4;
-
-// Query to get agent count for this inmobiliaria
-const { data: agentCount } = useQuery({
-  queryKey: ['inmobiliaria-agent-count', userPersonaId],
-  queryFn: async () => {
-    if (!userPersonaId) return 0;
-    const { count, error } = await supabase
-      .from('entidades_relacionadas')
-      .select('*', { count: 'exact', head: true })
-      .eq('id_persona_duena_lead', userPersonaId)
-      .eq('id_tipo_entidad', 19) // Agente
-      .eq('activo', true);
-    if (error) return 0;
-    return count || 0;
-  },
-  enabled: open && isInmobiliaria && !!userPersonaId,
-});
-```
-
-**Agregar alerta informativa en el UI (en la sección de proyectos, antes del search input):**
-```tsx
-{isInmobiliaria && agentCount > 0 && (
-  <Alert variant="default" className="border-green-500 bg-green-50 dark:bg-green-950/20">
-    <Users className="h-4 w-4 text-green-600" />
-    <AlertDescription className="text-green-800 dark:text-green-200 text-sm">
-      Los cambios de acceso se propagarán automáticamente a los 
-      <strong> {agentCount} agente{agentCount !== 1 ? 's' : ''}</strong> de esta inmobiliaria.
-    </AlertDescription>
-  </Alert>
+// Para Inmobiliaria role - mostrar "By Sozu" en lugar del nombre de la inmobiliaria
+{isInmobiliariaRole ? (
+  <div className="flex items-center space-x-3">
+    <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
+      <span className="text-primary-foreground font-bold text-sm">S</span>
+    </div>
+    <div>
+      <h1 className="font-bold text-lg">By Sozu</h1>
+      <p className="text-xs text-muted-foreground">Admin Panel</p>
+    </div>
+  </div>
+) : (
+  // Default header for other roles...
 )}
 ```
 
+### Archivo: src/pages/admin/Dashboard.tsx (lineas 1-290)
+
+1. Importar useAuth y useQuery para obtener datos de la inmobiliaria
+2. Agregar query para obtener nombre y logo de la inmobiliaria del usuario
+3. Agregar header visual con logo y nombre para usuarios Inmobiliaria
+4. Cambiar titulo dinamicamente segun el rol:
+   - Rol Inmobiliaria: "Proyectos Comercializados por {nombre}"
+   - Otros roles: "Proyectos gestionados por Sozu"
+
+Codigo propuesto:
+```tsx
+import { useAuth } from "@/contexts/AuthContext";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+// Dentro del componente Dashboard:
+const { profile } = useAuth();
+const isInmobiliariaRole = profile?.rol_id === 4;
+
+// Query para obtener datos de la inmobiliaria
+const { data: inmobiliariaData } = useQuery({
+  queryKey: ['dashboard-inmobiliaria-data', profile?.id_persona],
+  queryFn: async () => {
+    const { data } = await supabase
+      .from('personas')
+      .select('nombre_legal, nombre_comercial, url_logo')
+      .eq('id', profile.id_persona)
+      .single();
+    return data;
+  },
+  enabled: isInmobiliariaRole && !!profile?.id_persona,
+});
+
+// En el JSX:
+{isInmobiliariaRole && inmobiliariaData && (
+  <Card className="mb-6 border-0 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent shadow-md">
+    <CardContent className="py-6">
+      <div className="flex items-center gap-4">
+        <Avatar className="h-16 w-16 ring-2 ring-primary/20">
+          {inmobiliariaData.url_logo && (
+            <AvatarImage src={inmobiliariaData.url_logo} />
+          )}
+          <AvatarFallback>
+            {inmobiliariaData.nombre_legal?.substring(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <div>
+          <h2 className="text-2xl font-bold">
+            {inmobiliariaData.nombre_comercial || inmobiliariaData.nombre_legal}
+          </h2>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+)}
+
+<h1 className="text-3xl font-bold text-foreground">
+  {isInmobiliariaRole && inmobiliariaData
+    ? `Proyectos Comercializados por ${inmobiliariaData.nombre_comercial || inmobiliariaData.nombre_legal}`
+    : 'Proyectos gestionados por Sozu'}
+</h1>
+```
+
 ---
 
-### Verificación del Trigger Existente
-
-El trigger `sync_inmobiliaria_project_access` ya está implementado y debería propagar automáticamente los cambios. El trigger:
-- Detecta cuando el usuario que modifica accesos tiene rol 4 (Inmobiliaria)
-- Encuentra todos los agentes vinculados a esa inmobiliaria
-- Propaga INSERT/UPDATE/DELETE de accesos a todos los agentes
-
-**Nota:** El trigger ya está configurado correctamente. Si hay errores al guardar, podrían ser de RLS o de la lógica del componente. La propagación a agentes funcionará automáticamente una vez que el guardado sea exitoso.
-
----
-
-### Archivos a Modificar
+## Archivos a Modificar
 
 | Archivo | Cambios |
 |---------|---------|
-| `src/pages/admin/Inmobiliarias.tsx` | Agregar funcionalidad de copiar email + import `Copy` |
-| `src/components/admin/UserProjectAccessDialog.tsx` | Agregar alerta informativa para rol Inmobiliaria con conteo de agentes |
+| `src/components/admin/AdminSidebar.tsx` | Simplificar header para mostrar "By Sozu" en lugar del nombre de inmobiliaria |
+| `src/pages/admin/Dashboard.tsx` | Agregar header con logo/nombre y cambiar titulo dinamico |
 
----
+## Resultado Visual Esperado
 
-### Detalles Técnicos Adicionales
+Para usuario con rol Inmobiliaria:
 
-**Flujo de propagación de accesos:**
-1. Usuario con rol Inmobiliaria (4) selecciona proyectos en el diálogo
-2. Al guardar, se insertan/actualizan registros en `proyectos_acceso`
-3. El trigger `sync_inmobiliaria_project_access` se dispara automáticamente
-4. El trigger encuentra agentes vinculados via `entidades_relacionadas` (tipo 19)
-5. Los mismos accesos se replican a cada agente
+**Sidebar:**
+```text
+[S] By Sozu
+    Admin Panel
+```
 
-**Constraint de la tabla proyectos_acceso:**
-- Primary key compuesta: `(usuario_id, proyecto_id)`
-- El trigger usa `ON CONFLICT` para manejar duplicados
+**Dashboard:**
+```text
++------------------------------------------+
+| [Logo]  Inmobiliaria Prueba              |
++------------------------------------------+
+
+Proyectos Comercializados por Inmobiliaria Prueba
+
+[Cards de proyectos...]
+```
