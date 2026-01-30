@@ -561,6 +561,7 @@ export default function Agentes() {
             <TableRow className="bg-muted/30 hover:bg-muted/30">
               <TableHead className="font-semibold text-foreground">Nombre</TableHead>
               <TableHead className="font-semibold text-foreground">Tipo Agente</TableHead>
+              <TableHead className="font-semibold text-foreground">Estado Usuario</TableHead>
               <TableHead className="font-semibold text-foreground">Email</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
               <TableHead className="font-semibold text-foreground">Tipo persona</TableHead>
@@ -577,27 +578,33 @@ export default function Agentes() {
                   {agente.nombre_legal}
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-col gap-1">
-                    {agente.usuario_rol_id === ROLE_AGENTE_INTERNO ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300 w-fit">
-                        <User className="h-3 w-3" />
-                        Interno
-                      </span>
-                    ) : agente.usuario_rol_id === ROLE_AGENTE_INMOBILIARIO ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 w-fit">
-                        <User className="h-3 w-3" />
-                        Inmobiliario
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Sin usuario</span>
-                    )}
-                    {agente.usuario_rol_id && agente.usuario_activo === false && (
+                  {agente.usuario_rol_id === ROLE_AGENTE_INTERNO ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300 w-fit">
+                      <User className="h-3 w-3" />
+                      Interno
+                    </span>
+                  ) : agente.usuario_rol_id === ROLE_AGENTE_INMOBILIARIO ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 w-fit">
+                      <User className="h-3 w-3" />
+                      Inmobiliario
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sin usuario</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {agente.usuario_rol_id ? (
+                    agente.usuario_activo === false ? (
                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 w-fit">
                         <UserX className="h-3 w-3" />
-                        Usuario desactivado
+                        Desactivado
                       </span>
-                    )}
-                  </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Activo</span>
+                    )
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {agente.email}
