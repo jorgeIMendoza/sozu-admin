@@ -30,7 +30,7 @@ export default function MisPropiedades() {
       if (!selectedInmobiliariaId) return [];
 
       // Get the email associated with the inmobiliaria persona
-      const { data: personaData } = await (supabase as any)
+      const { data: personaData } = await supabase
         .from('personas')
         .select('email')
         .eq('id', selectedInmobiliariaId)
@@ -38,10 +38,21 @@ export default function MisPropiedades() {
 
       if (!personaData?.email) return [];
 
-      const { data, error } = await (supabase as any)
+      // Get the auth_user_id from the usuarios table
+      const { data: usuarioData } = await supabase
+        .from('usuarios')
+        .select('auth_user_id')
+        .eq('email', personaData.email)
+        .eq('activo', true)
+        .single();
+
+      if (!usuarioData?.auth_user_id) return [];
+
+      // Query proyectos_acceso using usuario_id
+      const { data, error } = await supabase
         .from('proyectos_acceso')
         .select('proyecto_id')
-        .eq('email', personaData.email)
+        .eq('usuario_id', usuarioData.auth_user_id)
         .eq('activo', true);
 
       if (error) throw error;
