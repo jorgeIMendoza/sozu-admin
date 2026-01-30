@@ -4,6 +4,9 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const LOGS_ALLOWED_EMAIL = 'jorge.mendoza@sozu.com';
 import { Loader2 } from "lucide-react";
@@ -206,6 +209,32 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
   const navigate = useNavigate();
   const { isPathAllowed, isLoading: isLoadingPermissions, isSuperAdmin } = useAllowedMenus();
 
+  // Check if user is Inmobiliaria role (rol_id 4)
+  const isInmobiliariaRole = profile?.rol_id === 4;
+
+  // Fetch inmobiliaria data for Inmobiliaria role users
+  const { data: inmobiliariaData } = useQuery({
+    queryKey: ['sidebar-inmobiliaria-data', profile?.id_persona],
+    queryFn: async () => {
+      if (!profile?.id_persona) return null;
+
+      const { data, error } = await supabase
+        .from('personas')
+        .select('id, nombre_legal, nombre_comercial, url_logo')
+        .eq('id', profile.id_persona)
+        .single();
+
+      if (error) return null;
+
+      return {
+        nombre_legal: data.nombre_legal,
+        nombre_comercial: data.nombre_comercial,
+        logo_url: data.url_logo,
+      };
+    },
+    enabled: isInmobiliariaRole && !!profile?.id_persona,
+  });
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/auth/login");
@@ -330,15 +359,40 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
       )}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">S</span>
+          {isInmobiliariaRole && inmobiliariaData ? (
+            // White-label header for Inmobiliaria role
+            <div className="flex items-center space-x-3 flex-1 min-w-0">
+              <Avatar className="h-10 w-10 ring-1 ring-border bg-muted shrink-0">
+                {inmobiliariaData.logo_url ? (
+                  <AvatarImage 
+                    src={inmobiliariaData.logo_url} 
+                    alt={inmobiliariaData.nombre_legal}
+                    className="object-contain p-0.5"
+                  />
+                ) : null}
+                <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
+                  {inmobiliariaData.nombre_legal?.substring(0, 2).toUpperCase() || 'IN'}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <h1 className="font-bold text-sm truncate">
+                  {inmobiliariaData.nombre_comercial || inmobiliariaData.nombre_legal}
+                </h1>
+                <p className="text-xs text-muted-foreground">By Sozu</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-bold text-lg">SOZU</h1>
-              <p className="text-xs text-muted-foreground">Admin Panel</p>
+          ) : (
+            // Default header for other roles
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
+                <span className="text-primary-foreground font-bold text-sm">S</span>
+              </div>
+              <div>
+                <h1 className="font-bold text-lg">SOZU</h1>
+                <p className="text-xs text-muted-foreground">Admin Panel</p>
+              </div>
             </div>
-          </div>
+          )}
           
           <button
             onClick={onClose}
