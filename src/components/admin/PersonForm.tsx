@@ -883,7 +883,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="tipoPersona">Tipo de Persona *</Label>
-                    {entityType === 'representante_legal' ? (
+                    {entityType === 'representante_legal' || entityType === 'agente' ? (
                       <Input
                         id="tipoPersona"
                         type="text"
@@ -1173,7 +1173,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       disabled
                       className="bg-muted"
                     />
-                  ) : entityType === 'representative' || entityType === 'representante_legal' ? (
+                  ) : entityType === 'representative' || entityType === 'representante_legal' || entityType === 'agente' ? (
                     <Input
                       id="tipoPersona"
                       type="text"
