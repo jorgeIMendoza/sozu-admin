@@ -437,8 +437,9 @@ export default function Usuarios() {
   });
 
   // Fetch inmobiliarias for the selector
+  // Fetch inmobiliarias with info about whether they have a principal user
   const { data: inmobiliariasOptions = [] } = useQuery({
-    queryKey: ['inmobiliarias_options'],
+    queryKey: ['inmobiliarias_options_with_principal'],
     queryFn: async () => {
       const { data: entidadesData, error: entidadesError } = await supabase
         .from('entidades_relacionadas')
@@ -454,17 +455,37 @@ export default function Usuarios() {
       
       const { data, error } = await supabase
         .from('personas')
-        .select('id, nombre_legal, nombre_comercial')
+        .select('id, nombre_legal, nombre_comercial, email')
         .in('id', personaIds)
         .eq('activo', true)
         .order('nombre_legal', { ascending: true });
       
       if (error) throw error;
+
+      // Get all users with Inmobiliaria role (4) to check for principal users
+      const { data: usuariosInmobiliaria, error: usuariosError } = await supabase
+        .from('usuarios')
+        .select('email, id_persona, personas!inner(email)')
+        .eq('rol_id', 4)
+        .eq('activo', true);
+
+      if (usuariosError) throw usuariosError;
+
+      // Create a set of persona IDs that have a principal user
+      const personasConPrincipal = new Set<number>();
+      (usuariosInmobiliaria || []).forEach((u: any) => {
+        // Usuario principal = email matches persona email
+        if (u.id_persona && u.personas?.email && u.email.toLowerCase() === u.personas.email.toLowerCase()) {
+          personasConPrincipal.add(u.id_persona);
+        }
+      });
       
       return (data || []).map(item => ({
         id: item.id,
-        nombre: item.nombre_comercial || item.nombre_legal
-      })) as InmobiliariaOption[];
+        nombre: item.nombre_comercial || item.nombre_legal,
+        tiene_usuario_principal: personasConPrincipal.has(item.id),
+        email: item.email,
+      })) as (InmobiliariaOption & { tiene_usuario_principal: boolean; email?: string })[];
     },
   });
   const deactivateMutation = useMutation({
@@ -624,6 +645,32 @@ export default function Usuarios() {
         variant: "destructive",
       });
       return;
+    }
+
+    // Validate Inmobiliaria role requires a principal user
+    if (rolId === ROLE_INMOBILIARIA && newUserForm.id_inmobiliaria) {
+      const selectedInmob = inmobiliariasOptions.find(
+        i => i.id.toString() === newUserForm.id_inmobiliaria
+      ) as (InmobiliariaOption & { tiene_usuario_principal?: boolean; email?: string }) | undefined;
+      
+      // If the inmobiliaria has a principal, check if this new user is not the principal
+      if (selectedInmob?.tiene_usuario_principal) {
+        // Allow creating non-principal users for inmobiliarias that already have a principal
+        // No extra validation needed
+      } else if (selectedInmob) {
+        // No principal exists - check if this user will be the principal (email matches persona email)
+        const inmobEmail = selectedInmob.email?.toLowerCase();
+        const userEmail = newUserForm.email.toLowerCase().trim();
+        
+        if (inmobEmail && inmobEmail !== userEmail) {
+          toast({
+            title: "Error",
+            description: `Para crear usuarios de la inmobiliaria "${selectedInmob.nombre}", primero debes crear el usuario principal usando el email: ${inmobEmail}`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
     }
 
     setIsCreatingUser(true);
@@ -1074,25 +1121,36 @@ export default function Usuarios() {
                       <CommandList>
                         <CommandEmpty>No se encontró la inmobiliaria.</CommandEmpty>
                         <CommandGroup>
-                          {inmobiliariasOptions.map((inmob) => (
-                            <CommandItem
-                              key={inmob.id}
-                              value={inmob.nombre}
-                              onSelect={() => {
-                                setNewUserForm(prev => ({ ...prev, id_inmobiliaria: inmob.id.toString() }));
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  newUserForm.id_inmobiliaria === inmob.id.toString()
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              {inmob.nombre}
-                            </CommandItem>
-                          ))}
+                          {inmobiliariasOptions.map((inmob) => {
+                            const inmobWithPrincipal = inmob as InmobiliariaOption & { tiene_usuario_principal?: boolean };
+                            return (
+                              <CommandItem
+                                key={inmob.id}
+                                value={inmob.nombre}
+                                onSelect={() => {
+                                  setNewUserForm(prev => ({ ...prev, id_inmobiliaria: inmob.id.toString() }));
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    newUserForm.id_inmobiliaria === inmob.id.toString()
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                <span className="flex items-center gap-2">
+                                  {inmob.nombre}
+                                  {inmobWithPrincipal.tiene_usuario_principal && (
+                                    <span 
+                                      className="inline-block w-0 h-0 border-l-[5px] border-l-transparent border-b-[8px] border-b-green-500 border-r-[5px] border-r-transparent" 
+                                      title="Tiene usuario principal"
+                                    />
+                                  )}
+                                </span>
+                              </CommandItem>
+                            );
+                          })}
                         </CommandGroup>
                       </CommandList>
                     </Command>
