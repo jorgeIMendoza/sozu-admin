@@ -414,15 +414,20 @@ export default function Inmobiliarias() {
           .filter(Boolean)
           .join(',');
         
-        // Formatear teléfonos de admin proyecto (clave_pais + telefono)
-        const numerosAdminProy = (adminProyecto || [])
-          .filter(u => u.telefono)
-          .map(u => {
-            const clavePais = u.clave_pais_telefono || 'MX';
-            const codigoPais = clavePais === 'MX' ? '+52' : clavePais === 'US' ? '+1' : `+${clavePais}`;
-            return `${codigoPais}${u.telefono}`;
-          })
-          .join(',');
+        // Helper para formatear teléfonos con código de país
+        const formatearTelefonos = (usuarios: any[]) => {
+          return (usuarios || [])
+            .filter(u => u.telefono)
+            .map(u => {
+              const clavePais = (u.clave_pais_telefono || 'MX').trim();
+              const codigoPais = clavePais === 'MX' ? '+52' : clavePais === 'US' || clavePais === 'CA' ? '+1' : `+${clavePais}`;
+              return `${codigoPais}${u.telefono}`;
+            })
+            .join(',');
+        };
+        
+        // Formatear teléfonos de admin proyecto, con fallback a super admins
+        const numerosAdminProy = formatearTelefonos(adminProyecto) || formatearTelefonos(superAdmins);
         
         // Obtener el rol del usuario actual (primer super admin o admin proyecto encontrado)
         const rolUsuario = (superAdmins?.[0]?.roles as any)?.nombre || 
