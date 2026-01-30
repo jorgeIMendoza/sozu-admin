@@ -1,29 +1,56 @@
 
 
-## Cambio Requerido
+## Problema Identificado
 
-Modificar el campo `nombre` en el payload de notificación para que siempre sea "Administrador" en lugar de obtenerlo dinámicamente de los roles.
+El código actual en `Inmobiliarias.tsx` línea 423 tiene hardcodeado el código de país para México como `+52`, pero según la base de datos (tabla `paises`), el código correcto para México (MX) es **`+521`**.
 
----
-
-## Cambio Técnico
-
-**Archivo:** `src/pages/admin/Inmobiliarias.tsx`
-
-Cambiar las líneas 432-435:
 ```typescript
-// ANTES:
-const rolUsuario = (superAdmins?.[0]?.roles as any)?.nombre || 
-                  (adminProyecto?.[0]?.roles as any)?.nombre || 
-                  'Administrador';
-
-// DESPUÉS:
-const rolUsuario = 'Administrador';
+// Código actual INCORRECTO (línea 423):
+const codigoPais = clavePais === 'MX' ? '+52' : clavePais === 'US' || clavePais === 'CA' ? '+1' : `+${clavePais}`;
 ```
 
 ---
 
-## Payload Resultante para "tercera prueba"
+## Solución Propuesta
+
+Modificar la función `formatearTelefonos` para consultar la tabla `paises` y obtener el código telefónico correcto (`clave_pais_telefono`) en lugar de usar valores hardcodeados.
+
+### Cambio Técnico
+
+**Archivo:** `src/pages/admin/Inmobiliarias.tsx`
+
+1. **Agregar consulta a la tabla de países** antes del formateo de teléfonos
+2. **Usar el código real de la BD** en la función `formatearTelefonos`
+
+```typescript
+// Obtener códigos telefónicos de países
+const { data: paises } = await supabase
+  .from('paises')
+  .select('id, clave_pais_telefono')
+  .eq('activo', true);
+
+const codigosPorPais = new Map(
+  (paises || []).map(p => [p.id.trim(), p.clave_pais_telefono?.trim()])
+);
+
+// Helper para formatear teléfonos con código de país desde BD
+const formatearTelefonos = (usuarios: any[]) => {
+  return (usuarios || [])
+    .filter(u => u.telefono)
+    .map(u => {
+      const clavePais = (u.clave_pais_telefono || 'MX').trim();
+      const codigoPais = codigosPorPais.get(clavePais) || '+52';
+      return `${codigoPais}${u.telefono}`;
+    })
+    .join(',');
+};
+```
+
+---
+
+## Payload Corregido para "tercera prueba"
+
+Con esta corrección, el teléfono usará **+521** (de la BD) en lugar de +52:
 
 ```json
 {
@@ -31,7 +58,7 @@ const rolUsuario = 'Administrador';
     "from": "Notificaciones Sozu <notificaciones@sozu.com>",
     "email": "abel.salazar@sozu.com,jorge.admin.proy@yopmail.com",
     "cc": "joseramon.escobar@sozu.com,jorge.mendoza@sozu.com,rodrigo.terveen@sozu.com",
-    "telefono": "+527225458999,+528899556633",
+    "telefono": "+5217225458999,+5218899556633",
     "mensajeWA": "Se ha creado la Inmobiliaria *tercera prueba*, con el usuario: *terceraprueba@test.com*",
     "asunto": "Alta de Inmobiliaria",
     "mensaje": {
@@ -42,4 +69,10 @@ const rolUsuario = 'Administrador';
     "templateId": 41353048
 }
 ```
+
+---
+
+## Nota Adicional
+
+El componente `PhoneDisplay.tsx` también tiene el mismo problema con códigos hardcodeados. Se recomienda crear un servicio/hook compartido para obtener los códigos de países de la BD y reutilizarlo en toda la aplicación.
 
