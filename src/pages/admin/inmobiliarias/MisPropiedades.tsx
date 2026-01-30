@@ -69,7 +69,7 @@ export default function MisPropiedades() {
           clabe_stp_tmp_apartado,
           edificios_modelos!fk_propiedades_edificio_modelo (
             id,
-            edificios!inner (
+            edificios!fk_edificios_modelos_edificio (
               id,
               nombre,
               proyectos!inner (
