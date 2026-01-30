@@ -1,78 +1,106 @@
 
+## Plan: Sincronizar Teléfono entre Tablas `usuarios` y `personas`
 
-## Problema Identificado
+### Problema Identificado
 
-El código actual en `Inmobiliarias.tsx` línea 423 tiene hardcodeado el código de país para México como `+52`, pero según la base de datos (tabla `paises`), el código correcto para México (MX) es **`+521`**.
+El usuario `jorge.mendoza@sozu.com` tiene teléfonos diferentes en cada tabla:
+- **`usuarios.telefono`**: `7225458999` (incorrecto)
+- **`personas.telefono`**: `7221514185` (correcto)
+- **`personas.clave_pais_telefono`**: `NULL` (falta el código de país)
 
-```typescript
-// Código actual INCORRECTO (línea 423):
-const codigoPais = clavePais === 'MX' ? '+52' : clavePais === 'US' || clavePais === 'CA' ? '+1' : `+${clavePais}`;
-```
+El diálogo "Editar mis datos" (`UserSettingsDialog.tsx`) actualiza solo la tabla `personas`, pero el webhook de notificaciones lee de `usuarios`. Esto causa la discrepancia.
 
 ---
 
-## Solución Propuesta
+### Cambios Propuestos
 
-Modificar la función `formatearTelefonos` para consultar la tabla `paises` y obtener el código telefónico correcto (`clave_pais_telefono`) en lugar de usar valores hardcodeados.
+#### 1. Corrección Inmediata de Datos
 
-### Cambio Técnico
+Ejecutar update en la BD para corregir los datos de `jorge.mendoza@sozu.com`:
 
-**Archivo:** `src/pages/admin/Inmobiliarias.tsx`
+```sql
+-- Actualizar usuarios con el teléfono correcto
+UPDATE usuarios 
+SET telefono = '7221514185', 
+    clave_pais_telefono = 'MX'
+WHERE email = 'jorge.mendoza@sozu.com';
 
-1. **Agregar consulta a la tabla de países** antes del formateo de teléfonos
-2. **Usar el código real de la BD** en la función `formatearTelefonos`
+-- Actualizar personas con el código de país
+UPDATE personas 
+SET clave_pais_telefono = 'MX'
+WHERE id = 1113;
+```
+
+#### 2. Sincronización Automática en `UserSettingsDialog.tsx`
+
+Modificar la función `handleProfileUpdate` (líneas 205-273) para que también actualice la tabla `usuarios` cuando se modifique el teléfono o código de país:
+
+**Archivo**: `src/components/admin/UserSettingsDialog.tsx`
 
 ```typescript
-// Obtener códigos telefónicos de países
-const { data: paises } = await supabase
-  .from('paises')
-  .select('id, clave_pais_telefono')
-  .eq('activo', true);
-
-const codigosPorPais = new Map(
-  (paises || []).map(p => [p.id.trim(), p.clave_pais_telefono?.trim()])
-);
-
-// Helper para formatear teléfonos con código de país desde BD
-const formatearTelefonos = (usuarios: any[]) => {
-  return (usuarios || [])
-    .filter(u => u.telefono)
-    .map(u => {
-      const clavePais = (u.clave_pais_telefono || 'MX').trim();
-      const codigoPais = codigosPorPais.get(clavePais) || '+52';
-      return `${codigoPais}${u.telefono}`;
+// Después de actualizar personas (línea 253):
+// Sincronizar teléfono con tabla usuarios
+if (data.telefono !== undefined || data.clave_pais_telefono !== undefined) {
+  await supabase
+    .from('usuarios')
+    .update({ 
+      telefono: data.telefono,
+      clave_pais_telefono: data.clave_pais_telefono,
+      fecha_actualizacion: new Date().toISOString()
     })
-    .join(',');
-};
+    .eq('email', profile.email);
+}
 ```
 
----
+#### 3. Sincronización en `MiInformacion.tsx` (Inmobiliarias)
 
-## Payload Corregido para "tercera prueba"
+Modificar el mutation para que también actualice `usuarios` cuando la inmobiliaria edite su teléfono:
 
-Con esta corrección, el teléfono usará **+521** (de la BD) en lugar de +52:
+**Archivo**: `src/pages/admin/inmobiliarias/MiInformacion.tsx`
 
-```json
-{
-    "tipo": "ambos",
-    "from": "Notificaciones Sozu <notificaciones@sozu.com>",
-    "email": "abel.salazar@sozu.com,jorge.admin.proy@yopmail.com",
-    "cc": "joseramon.escobar@sozu.com,jorge.mendoza@sozu.com,rodrigo.terveen@sozu.com",
-    "telefono": "+5217225458999,+5218899556633",
-    "mensajeWA": "Se ha creado la Inmobiliaria *tercera prueba*, con el usuario: *terceraprueba@test.com*",
-    "asunto": "Alta de Inmobiliaria",
-    "mensaje": {
-        "nombre": "Administrador",
-        "actividad": "Alta de inmobiliaria",
-        "detalles": "<tr><td class='label'>Nombre:</td> <td class='value'>tercera prueba</td> </tr><tr><td class='label'>Usuario:</td><td class='value'>terceraprueba@test.com</td></tr>"
-    },
-    "templateId": 41353048
+```typescript
+// En updateMutation, después de actualizar personas:
+// Sincronizar teléfono con usuarios si la inmobiliaria tiene usuario asociado
+if (cleanPersonData.telefono !== undefined || cleanPersonData.clave_pais_telefono !== undefined) {
+  const { data: usuarioData } = await supabase
+    .from('usuarios')
+    .select('email')
+    .eq('id_persona', inmobiliariaId)
+    .maybeSingle();
+    
+  if (usuarioData?.email) {
+    await supabase
+      .from('usuarios')
+      .update({ 
+        telefono: cleanPersonData.telefono,
+        clave_pais_telefono: cleanPersonData.clave_pais_telefono
+      })
+      .eq('email', usuarioData.email);
+  }
 }
 ```
 
 ---
 
-## Nota Adicional
+### Archivos a Modificar
 
-El componente `PhoneDisplay.tsx` también tiene el mismo problema con códigos hardcodeados. Se recomienda crear un servicio/hook compartido para obtener los códigos de países de la BD y reutilizarlo en toda la aplicación.
+| Archivo | Cambio |
+|---------|--------|
+| `src/components/admin/UserSettingsDialog.tsx` | Sincronizar teléfono con `usuarios` al guardar |
+| `src/pages/admin/inmobiliarias/MiInformacion.tsx` | Sincronizar teléfono con `usuarios` al guardar |
 
+### Corrección de Datos (Manual)
+
+Actualizar en BD:
+- `usuarios.telefono` = `7221514185` para `jorge.mendoza@sozu.com`
+- `usuarios.clave_pais_telefono` = `MX`
+- `personas.clave_pais_telefono` = `MX` para persona ID 1113
+
+---
+
+### Resultado Esperado
+
+Cuando cualquier usuario edite su teléfono desde "Editar mis datos":
+1. Se actualiza en tabla `personas`
+2. Se sincroniza automáticamente en tabla `usuarios`
+3. El webhook de notificaciones usará el teléfono correcto
