@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,15 @@ import { toast } from "sonner";
 import { Shield, Check, ChevronsUpDown } from "lucide-react";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+
+// Role IDs
+const ROLE_ADMINISTRADOR_PROYECTO = 2;
+const ROLE_AGENTE_INMOBILIARIO = 3;
+const ROLE_INMOBILIARIA = 4;
+
+// Roles that Administrador de Proyecto can assign
+const ROLES_ADMINISTRADOR_PROYECTO_PUEDE_ASIGNAR = [ROLE_AGENTE_INMOBILIARIO, ROLE_INMOBILIARIA];
 
 interface ChangeUserRoleDialogProps {
   open: boolean;
@@ -34,6 +43,10 @@ export function ChangeUserRoleDialog({
   const [selectedRoleId, setSelectedRoleId] = useState<string>(currentRoleId?.toString() || "");
   const queryClient = useQueryClient();
   const { registrarActualizacion } = useActivityLogger();
+  const { profile } = useAuth();
+
+  // Check if current user is Administrador de Proyecto
+  const isAdministradorProyecto = profile?.rol_id === ROLE_ADMINISTRADOR_PROYECTO;
 
   // Fetch roles (only internal roles)
   const { data: roles = [] } = useQuery({
@@ -50,6 +63,14 @@ export function ChangeUserRoleDialog({
       return (data || []) as Role[];
     },
   });
+
+  // Filter roles based on current user's role
+  const availableRoles = useMemo(() => {
+    if (isAdministradorProyecto) {
+      return roles.filter(rol => ROLES_ADMINISTRADOR_PROYECTO_PUEDE_ASIGNAR.includes(rol.id));
+    }
+    return roles;
+  }, [roles, isAdministradorProyecto]);
 
   // Update role mutation
   const updateRoleMutation = useMutation({
@@ -122,7 +143,7 @@ export function ChangeUserRoleDialog({
                   )}
                 >
                   {selectedRoleId
-                    ? roles.find((role) => role.id.toString() === selectedRoleId)?.nombre
+                    ? availableRoles.find((role) => role.id.toString() === selectedRoleId)?.nombre
                     : "Selecciona un rol"}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -133,7 +154,7 @@ export function ChangeUserRoleDialog({
                   <CommandList>
                     <CommandEmpty>No se encontró el rol.</CommandEmpty>
                     <CommandGroup>
-                      {roles.map((role) => (
+                      {availableRoles.map((role) => (
                         <CommandItem
                           key={role.id}
                           value={role.nombre}

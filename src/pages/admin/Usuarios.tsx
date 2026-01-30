@@ -55,9 +55,13 @@ type InmobiliariaOption = {
 };
 
 // Role IDs
+const ROLE_ADMINISTRADOR_PROYECTO = 2;
 const ROLE_AGENTE_INTERNO = 9;
 const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_INMOBILIARIA = 4;
+
+// Roles that Administrador de Proyecto can manage
+const ROLES_ADMINISTRADOR_PROYECTO_PUEDE_VER = [ROLE_AGENTE_INMOBILIARIO, ROLE_INMOBILIARIA];
 
 // Sozu inmobiliaria ID (Real Estate Ventures)
 const SOZU_INMOBILIARIA_ID = 186;
@@ -293,8 +297,12 @@ export default function Usuarios() {
   const { session, profile } = useAuth();
   const { registrarCreacion, registrarActualizacion, registrarRestauracion } = useActivityLogger();
 
-  // Current user's email for highlighting
+  // Current user's email and role for highlighting and filtering
   const currentUserEmail = profile?.email || session?.user?.email;
+  const currentUserRoleId = profile?.rol_id;
+  
+  // Check if current user is Administrador de Proyecto
+  const isAdministradorProyecto = currentUserRoleId === ROLE_ADMINISTRADOR_PROYECTO;
 
   // Fetch users with their inmobiliaria info from entidades_relacionadas
   const { data: usuarios = [], isLoading: isLoadingUsuarios } = useQuery({
@@ -373,13 +381,21 @@ export default function Usuarios() {
     },
   });
 
+  // Filter roles based on current user's role
+  const availableRoles = useMemo(() => {
+    if (isAdministradorProyecto) {
+      return roles.filter(rol => ROLES_ADMINISTRADOR_PROYECTO_PUEDE_VER.includes(rol.id));
+    }
+    return roles;
+  }, [roles, isAdministradorProyecto]);
+
   // Convert roles to combobox options
   const roleOptions = useMemo(() => 
-    roles.map(rol => ({
+    availableRoles.map(rol => ({
       value: rol.id.toString(),
       label: rol.nombre
     })),
-    [roles]
+    [availableRoles]
   );
 
   // Fetch agents and inmobiliarias for combobox
@@ -612,6 +628,11 @@ export default function Usuarios() {
   });
 
   const filteredUsuarios = usuarios.filter(usuario => {
+    // If current user is Administrador de Proyecto, only show Agente Inmobiliario and Inmobiliaria roles
+    if (isAdministradorProyecto && !ROLES_ADMINISTRADOR_PROYECTO_PUEDE_VER.includes(usuario.rol_id || 0)) {
+      return false;
+    }
+    
     const matchesSearch = 
       usuario.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       usuario.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -906,7 +927,7 @@ export default function Usuarios() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los roles</SelectItem>
-                  {roles.map((rol) => (
+                  {availableRoles.map((rol) => (
                     <SelectItem key={rol.id} value={rol.id.toString()}>
                       {rol.nombre}
                     </SelectItem>
@@ -1052,7 +1073,7 @@ export default function Usuarios() {
                     )}
                   >
                     {newUserForm.rol_id
-                      ? roles.find((role) => role.id.toString() === newUserForm.rol_id)?.nombre
+                      ? availableRoles.find((role) => role.id.toString() === newUserForm.rol_id)?.nombre
                       : "Seleccionar rol..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -1063,7 +1084,7 @@ export default function Usuarios() {
                     <CommandList>
                       <CommandEmpty>No se encontró el rol.</CommandEmpty>
                       <CommandGroup>
-                        {roles.map((role) => (
+                        {availableRoles.map((role) => (
                           <CommandItem
                             key={role.id}
                             value={role.nombre}
