@@ -16,6 +16,7 @@ import { PhoneDisplay } from "@/components/admin/PhoneDisplay";
 import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
+import { InmobiliariaHeader } from "@/components/admin/InmobiliariaHeader";
 
 type Agente = {
   id: number;
@@ -39,36 +40,15 @@ export default function MisAgentes() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [agenteToDelete, setAgenteToDelete] = useState<Agente | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedInmobiliariaId, setSelectedInmobiliariaId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canUpdate, canDelete, canExport } = usePagePermissions('/admin/inmobiliarias/mis-agentes');
   const { exportToExcel, isExporting } = useExportToExcel();
   const { profile } = useAuth();
 
-  // Get the inmobiliaria ID for the current user
-  const { data: inmobiliariaId, isLoading: loadingInmobiliaria } = useQuery({
-    queryKey: ['current-user-inmobiliaria', profile?.id_persona],
-    queryFn: async () => {
-      if (!profile?.id_persona) return null;
-      
-      // Get the entidades_relacionadas for type 5 (Inmobiliaria) where id_persona matches
-      const { data, error } = await supabase
-        .from('entidades_relacionadas')
-        .select('id_persona')
-        .eq('id_persona', profile.id_persona)
-        .eq('id_tipo_entidad', 5)
-        .eq('activo', true)
-        .single();
-      
-      if (error || !data) {
-        // If not found directly, the user might be linked to a persona that is the inmobiliaria
-        return profile.id_persona;
-      }
-      
-      return data.id_persona;
-    },
-    enabled: !!profile?.id_persona,
-  });
+  // Use the selected inmobiliaria from header
+  const inmobiliariaId = selectedInmobiliariaId;
 
   const { data: agentes = [], isLoading: loadingAgentes } = useQuery({
     queryKey: ['mis-agentes', inmobiliariaId],
@@ -194,18 +174,29 @@ export default function MisAgentes() {
     await exportToExcel({ data: exportData, filename: 'Mis_Agentes' });
   };
 
-  const isLoading = loadingInmobiliaria || loadingAgentes;
+  const isLoading = loadingAgentes;
 
-  if (isLoading) {
+  if (isLoading && !selectedInmobiliariaId) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="space-y-6">
+        <InmobiliariaHeader
+          selectedInmobiliariaId={selectedInmobiliariaId}
+          onInmobiliariaChange={setSelectedInmobiliariaId}
+        />
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      <InmobiliariaHeader
+        selectedInmobiliariaId={selectedInmobiliariaId}
+        onInmobiliariaChange={setSelectedInmobiliariaId}
+      />
+      
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Mis Agentes</h1>

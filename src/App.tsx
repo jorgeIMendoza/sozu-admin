@@ -70,6 +70,9 @@ const ConfiguracionReportes = lazy(() => import("./pages/admin/ConfiguracionRepo
 const ReportesInventarios = lazy(() => import("./pages/admin/reportes/Inventarios"));
 const ReportesFinanzas = lazy(() => import("./pages/admin/reportes/Finanzas"));
 const ReporteViewer = lazy(() => import("./pages/admin/reportes/ReporteViewer"));
+const MisAgentes = lazy(() => import("./pages/admin/inmobiliarias/MisAgentes"));
+const MisPropiedades = lazy(() => import("./pages/admin/inmobiliarias/MisPropiedades"));
+const MisVentas = lazy(() => import("./pages/admin/inmobiliarias/MisVentas"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -169,6 +172,9 @@ const App = () => (
                   <Route path="reportes/inventarios" element={<ReportesInventarios />} />
                   <Route path="reportes/finanzas" element={<ReportesFinanzas />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
+                  <Route path="inmobiliarias/mis-agentes" element={<MisAgentes />} />
+                  <Route path="inmobiliarias/mis-propiedades" element={<MisPropiedades />} />
+                  <Route path="inmobiliarias/mis-ventas" element={<MisVentas />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

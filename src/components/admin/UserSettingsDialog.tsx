@@ -316,6 +316,7 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
             isLoading={isSavingProfile}
             entityType="user"
             fixedEntityType={true}
+            hideEmailField={true}
           />
         </DialogContent>
       </Dialog>
