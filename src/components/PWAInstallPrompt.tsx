@@ -21,18 +21,10 @@ export function PWAInstallPrompt() {
     },
   });
 
-  // Show toast when update is available
+  // Auto-update when new version is available (no toast)
   useEffect(() => {
     if (needRefresh) {
-      toast.info('Nueva versión disponible', {
-        description: 'Hay una actualización disponible para la aplicación',
-        action: {
-          label: 'Actualizar',
-          onClick: () => updateServiceWorker(true),
-        },
-        duration: 60000, // 1 minuto
-        icon: <RefreshCw className="w-4 h-4" />,
-      });
+      updateServiceWorker(true);
     }
   }, [needRefresh, updateServiceWorker]);
 
