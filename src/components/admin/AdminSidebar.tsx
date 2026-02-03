@@ -183,7 +183,7 @@ const navigationItems: NavigationItem[] = [
 
 // Menú de Inmobiliarias
 const inmobiliariasMenuItem: NavigationItem = {
-  title: "Inmobiliarias",
+  title: "Información Inmobiliaria",
   icon: KeyRound,
   children: [
     { title: "Mi información", href: "/admin/inmobiliarias/mi-informacion", icon: User },
