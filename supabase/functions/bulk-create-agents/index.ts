@@ -35,22 +35,92 @@ interface CreatedRecord {
   proyectoId?: number;
 }
 
-// Mapeo de inmobiliarias por nombre
-const inmobiliariaMap: Record<string, number> = {
-  'TRUST': 1874,
-  'VIVALTA': 1876,
-  'KRE': 1880,
-  'INTERAMERICAN': 1882,
-};
+// Función para normalizar nombres (quitar acentos, espacios extra, convertir a minúsculas)
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remove accents
+    .replace(/[_\s]+/g, " ") // Normalize whitespace
+    .trim();
+}
 
-// Mapeo de proyectos por nombre
-const proyectoMap: Record<string, number> = {
-  'VIVE DAIKU': 1453,
-  'DAIKU': 1453,
-};
+// Función para encontrar una inmobiliaria por nombre con matching flexible
+async function findInmobiliariaByName(
+  supabaseAdmin: any, 
+  inputName: string
+): Promise<{ id: number; nombre: string } | null> {
+  const normalizedInput = normalizeName(inputName);
+  
+  // Obtener todas las inmobiliarias activas (entidades tipo 5)
+  const { data: inmobiliarias, error } = await supabaseAdmin
+    .from('entidades_relacionadas')
+    .select('id, id_persona, personas!inner(id, nombre_legal, nombre_comercial)')
+    .eq('id_tipo_entidad', 5) // Tipo Inmobiliaria
+    .eq('activo', true);
 
-// IDs de personas que son inmobiliarias (no deben ser agentes)
-const inmobiliariaPersonaIds = Object.values(inmobiliariaMap);
+  if (error || !inmobiliarias) {
+    console.error('[bulk-create-agents] Error fetching inmobiliarias:', error);
+    return null;
+  }
+
+  // Buscar con matching flexible
+  for (const inmo of inmobiliarias) {
+    const persona = inmo.personas as { id: number; nombre_legal: string; nombre_comercial: string | null };
+    const nombreLegal = persona?.nombre_legal || '';
+    const nombreComercial = persona?.nombre_comercial || '';
+    
+    const normalizedLegal = normalizeName(nombreLegal);
+    const normalizedComercial = normalizeName(nombreComercial);
+    
+    // Priority 1: Exact match
+    if (normalizedLegal === normalizedInput || normalizedComercial === normalizedInput) {
+      return { id: persona.id, nombre: nombreLegal };
+    }
+    
+    // Priority 2: Contains match (para casos como "Brokers and Brothers" vs "Brokers and Brothers Inmobiliaria")
+    if (normalizedLegal.includes(normalizedInput) || normalizedInput.includes(normalizedLegal) ||
+        normalizedComercial.includes(normalizedInput) || normalizedInput.includes(normalizedComercial)) {
+      return { id: persona.id, nombre: nombreLegal };
+    }
+  }
+
+  return null;
+}
+
+// Función para encontrar un proyecto por nombre con matching flexible
+async function findProyectoByName(
+  supabaseAdmin: any, 
+  inputName: string
+): Promise<number | null> {
+  const normalizedInput = normalizeName(inputName);
+  
+  const { data: proyectos, error } = await supabaseAdmin
+    .from('proyectos')
+    .select('id, nombre')
+    .eq('activo', true);
+
+  if (error || !proyectos) {
+    console.error('[bulk-create-agents] Error fetching proyectos:', error);
+    return null;
+  }
+
+  for (const proyecto of proyectos) {
+    const normalizedNombre = normalizeName(proyecto.nombre || '');
+    
+    // Exact match
+    if (normalizedNombre === normalizedInput) {
+      return proyecto.id;
+    }
+    
+    // Contains match
+    if (normalizedNombre.includes(normalizedInput) || normalizedInput.includes(normalizedNombre)) {
+      return proyecto.id;
+    }
+  }
+
+  return null;
+}
 
 function getErrorMessage(technicalError: string): string {
   if (technicalError.includes('personas_clave_pais_telefono_fkey')) {
@@ -107,8 +177,8 @@ Deno.serve(async (req) => {
     for (const agent of agents) {
       const email = agent.email?.trim().toLowerCase();
       const nombre = agent.nombre?.trim();
-      const inmobiliariaNombre = agent.inmobiliaria?.trim().toUpperCase();
-      const proyectoNombre = agent.proyecto?.trim().toUpperCase();
+      const inmobiliariaNombre = agent.inmobiliaria?.trim();
+      const proyectoNombre = agent.proyecto?.trim();
 
       const validation: ValidationResult = { email: email || 'N/A', isValid: true };
 
@@ -121,19 +191,20 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Validación 2: Inmobiliaria reconocida
-      const inmobiliariaPersonaId = inmobiliariaMap[inmobiliariaNombre];
-      if (!inmobiliariaPersonaId) {
+      // Validación 2: Inmobiliaria reconocida (búsqueda dinámica en BD)
+      const inmobiliariaResult = await findInmobiliariaByName(supabaseAdmin, inmobiliariaNombre);
+      if (!inmobiliariaResult) {
         validation.isValid = false;
         validation.error = `Inmobiliaria no reconocida: ${inmobiliariaNombre}`;
         validationErrors.push(`${email}: Inmobiliaria no reconocida: ${inmobiliariaNombre}`);
         validationResults.push(validation);
         continue;
       }
-      validation.inmobiliariaId = inmobiliariaPersonaId;
+      validation.inmobiliariaId = inmobiliariaResult.id;
+      console.log(`[bulk-create-agents] Inmobiliaria encontrada: "${inmobiliariaNombre}" -> ${inmobiliariaResult.nombre} (ID: ${inmobiliariaResult.id})`);
 
-      // Validación 3: Proyecto reconocido
-      const proyectoId = proyectoMap[proyectoNombre] || proyectoMap['VIVE DAIKU'];
+      // Validación 3: Proyecto reconocido (búsqueda dinámica en BD)
+      const proyectoId = await findProyectoByName(supabaseAdmin, proyectoNombre);
       if (!proyectoId) {
         validation.isValid = false;
         validation.error = `Proyecto no reconocido: ${proyectoNombre}`;
@@ -142,6 +213,7 @@ Deno.serve(async (req) => {
         continue;
       }
       validation.proyectoId = proyectoId;
+      console.log(`[bulk-create-agents] Proyecto encontrado: "${proyectoNombre}" -> ID: ${proyectoId}`);
 
       // Validación 4: Verificar que el email NO pertenece a una inmobiliaria
       const { data: existingPersona } = await supabaseAdmin
@@ -167,15 +239,6 @@ Deno.serve(async (req) => {
           validation.isValid = false;
           validation.error = `Este correo pertenece a una inmobiliaria (${existingPersona.nombre_legal}), no puede ser un agente`;
           validationErrors.push(`${email}: Este correo pertenece a una inmobiliaria, no puede ser un agente`);
-          validationResults.push(validation);
-          continue;
-        }
-
-        // Verificar si ya es persona dueña de lead (inmobiliaria)
-        if (inmobiliariaPersonaIds.includes(existingPersona.id)) {
-          validation.isValid = false;
-          validation.error = `Este correo pertenece a una inmobiliaria registrada, no puede ser un agente`;
-          validationErrors.push(`${email}: Este correo pertenece a una inmobiliaria registrada, no puede ser un agente`);
           validationResults.push(validation);
           continue;
         }
