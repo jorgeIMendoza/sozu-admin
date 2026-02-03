@@ -230,7 +230,8 @@ export default function MisAgentes() {
             id_persona: personResult.id,
             telefono: cleanPersonData.telefono || null,
             clave_pais_telefono: cleanPersonData.clave_pais_telefono || null,
-            id_inmobiliaria: inmobiliariaId
+            id_inmobiliaria: inmobiliariaId,
+            auto_create: true // Required to bypass Super Admin check for automated agent creation
           }
         });
         
