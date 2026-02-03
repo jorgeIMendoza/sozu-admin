@@ -1,74 +1,75 @@
 
-# Plan: Eliminar Límite de 1000 Registros en Vista de Usuarios del Sistema
+# Plan: Sistema de Versionado Automático por Build
 
-## Problema Identificado
+## Problema
+La versión actual es estática (`v2.4.0`) y requiere actualización manual antes de cada deploy a producción, lo cual es fácil de olvidar.
 
-La vista de "Usuarios del Sistema" no muestra todos los usuarios debido al **límite por defecto de 1000 registros de Supabase**.
+## Solución Recomendada
 
-**Análisis de datos:**
-- Total de usuarios en la tabla: **1,469**
-- Usuarios con roles internos: **915**
-- Usuarios con roles externos: **554**
+Implementar un sistema de versionado automático basado en **fecha y hora del build**. Cada vez que se publique a producción, Vite generará un identificador único de versión en tiempo de compilación.
 
-**Causa raíz:** 
-La consulta actual trae TODOS los usuarios (1,469) sin filtrar en la base de datos, pero Supabase solo retorna los primeros 1,000. Después se filtra en JavaScript por `es_rol_interno === true`, pero para entonces ya se perdieron 469 usuarios.
+### Formato de Versión Propuesto
+```
+v2.4.0-250203.1542
+```
+Donde:
+- `v2.4.0` = Versión semántica (se actualiza manualmente para cambios mayores)
+- `250203` = Fecha del build (YYMMDD)
+- `1542` = Hora del build (HHMM)
 
-VIVALTA está en la **posición 1,449** (ordenado alfabéticamente), por lo que nunca llega al frontend.
-
-## Solución
-
-Mover el filtro de `es_rol_interno` **a la consulta SQL** para que solo traiga los 915 usuarios internos desde la base de datos (evitando el límite de 1000).
+Esto permite:
+1. **Saber la versión base** (2.4.0)
+2. **Identificar exactamente cuándo se publicó** (3 Feb 2025 a las 15:42)
+3. **Comparar versiones fácilmente** (250203.1542 es posterior a 250202.0900)
 
 ## Cambios Técnicos
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/pages/admin/Usuarios.tsx` | Agregar filtro `.eq('roles.es_rol_interno', true)` en la consulta de Supabase para traer solo usuarios internos desde la BD |
+| `vite.config.ts` | Agregar `define` para inyectar `__APP_VERSION__` y `__BUILD_TIMESTAMP__` en tiempo de build |
+| `src/vite-env.d.ts` | Declarar tipos TypeScript para las variables globales |
+| `src/lib/config.ts` | Agregar constante `APP_VERSION` que combina versión + timestamp |
+| `src/components/admin/AdminSidebar.tsx` | Usar `APP_VERSION` de config en lugar de string hardcodeado |
+| `package.json` | Actualizar `version` a `2.4.0` para usar como versión base |
 
-### Código Actual (líneas 314-327)
+### Implementación en vite.config.ts
 ```typescript
-const { data, error } = await supabase
-  .from('usuarios')
-  .select(`
-    email,
-    nombre,
-    rol_id,
-    activo,
-    auth_user_id,
-    id_persona,
-    debe_cambiar_password,
-    roles (nombre, es_rol_interno),
-    personas (nombre_legal, email)
-  `)
-  .order('nombre', { ascending: true });
+export default defineConfig(({ mode }) => {
+  const buildTimestamp = new Date().toISOString();
+  const buildDate = buildTimestamp.slice(2, 10).replace(/-/g, ''); // YYMMDD
+  const buildTime = buildTimestamp.slice(11, 16).replace(':', ''); // HHMM
+  
+  return {
+    define: {
+      __APP_VERSION__: JSON.stringify('2.4.0'),
+      __BUILD_TIMESTAMP__: JSON.stringify(`${buildDate}.${buildTime}`),
+    },
+    // ... resto de config
+  };
+});
 ```
 
-### Código Propuesto
+### Uso en AdminSidebar.tsx
 ```typescript
-const { data, error } = await supabase
-  .from('usuarios')
-  .select(`
-    email,
-    nombre,
-    rol_id,
-    activo,
-    auth_user_id,
-    id_persona,
-    debe_cambiar_password,
-    roles!inner (nombre, es_rol_interno),
-    personas (nombre_legal, email)
-  `)
-  .eq('roles.es_rol_interno', true)
-  .order('nombre', { ascending: true });
+import { APP_VERSION } from "@/lib/config";
+
+// En el JSX:
+<p className="text-[10px] text-muted-foreground/60">{APP_VERSION}</p>
 ```
 
-El cambio clave es:
-1. Cambiar `roles (...)` a `roles!inner (...)` para hacer un INNER JOIN
-2. Agregar `.eq('roles.es_rol_interno', true)` para filtrar en la BD
-3. Eliminar el filtro JavaScript redundante en línea 354-355
+## Flujo de Trabajo
+
+1. **Cambios menores** (bug fixes, mejoras pequeñas): 
+   - No hacer nada, la fecha/hora cambiará automáticamente
+
+2. **Cambios mayores** (nuevas funcionalidades importantes):
+   - Actualizar `version` en `package.json` (ej: `2.4.0` → `2.5.0`)
+   - El build tomará la nueva versión automáticamente
 
 ## Resultado Esperado
 
-- La consulta solo traerá **915 usuarios** (todos internos)
-- VIVALTA y todos los demás usuarios con roles internos serán visibles
-- Mejor rendimiento al traer menos datos desde la BD
+| Antes | Después |
+|-------|---------|
+| `v2.4.0` (estático, sin saber cuándo se publicó) | `v2.4.0-250203.1542` (versión + fecha/hora exacta del build) |
+
+Cada deploy a producción tendrá una versión única sin intervención manual.
