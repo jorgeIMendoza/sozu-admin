@@ -38,7 +38,7 @@ serve(async (req) => {
 
     // Verify the request is from an authenticated user
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return new Response(
         JSON.stringify({ error: "No authorization header" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -54,22 +54,26 @@ serve(async (req) => {
       },
     });
 
-    // Get the user from the token using the user client
-    const { data: { user: requestingUser }, error: authError } = await supabaseUserClient.auth.getUser();
+    // Validate the token using getClaims
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabaseUserClient.auth.getClaims(token);
     
-    if (authError || !requestingUser) {
-      console.error("Auth error:", authError);
+    if (claimsError || !claimsData?.claims) {
+      console.error("Auth error:", claimsError);
       return new Response(
         JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const requestingUserId = claimsData.claims.sub;
+    console.log("Authenticated user ID:", requestingUserId);
+
     // Check if requesting user is a Super Admin
     const { data: adminCheck, error: adminCheckError } = await supabaseAdmin
       .from("usuarios")
       .select("rol_id, roles!inner(nombre)")
-      .eq("auth_user_id", requestingUser.id)
+      .eq("auth_user_id", requestingUserId)
       .single();
 
     if (adminCheckError || !adminCheck) {
