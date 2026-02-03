@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, RotateCcw, Building, Users, Copy } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RotateCcw, Building, Users, Copy, UserPlus } from "lucide-react";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +74,10 @@ export default function Inmobiliarias() {
   const [showUserConfirmationDialog, setShowUserConfirmationDialog] = useState(false);
   const [pendingInmobiliariaData, setPendingInmobiliariaData] = useState<any>(null);
   const [usersToCreate, setUsersToCreate] = useState<UserToCreate[]>([]);
+  // Migration states
+  const [isMigrationLoading, setIsMigrationLoading] = useState(false);
+  const [migrationResult, setMigrationResult] = useState<any>(null);
+  const [showMigrationDialog, setShowMigrationDialog] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
@@ -983,6 +987,36 @@ export default function Inmobiliarias() {
     }
   };
 
+  // Migration function for missing users
+  const handleMigrateMissingUsers = async (dryRun: boolean) => {
+    setIsMigrationLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('migrate-missing-users', {
+        body: { dry_run: dryRun }
+      });
+      
+      if (error) throw error;
+      
+      setMigrationResult(data);
+      
+      if (!dryRun && data.summary) {
+        toast({
+          title: "Migración completada",
+          description: `${data.summary.created} usuarios creados, ${data.summary.failed} fallidos.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ['inmobiliarias'] });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error en migración",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsMigrationLoading(false);
+    }
+  };
+
   return (
     <div className="container mx-auto py-6 px-4">
       <Card className="border-border shadow-lg">
@@ -996,13 +1030,28 @@ export default function Inmobiliarias() {
                 Gestiona la información de las inmobiliarias
               </p>
             </div>
-            <Button 
-              onClick={() => setIsNewDialogOpen(true)}
-              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Nueva Inmobiliaria
-            </Button>
+            <div className="flex gap-2">
+              {isSuperAdmin && (
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setShowMigrationDialog(true);
+                    handleMigrateMissingUsers(true);
+                  }}
+                  disabled={isMigrationLoading}
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Migrar Usuarios Faltantes
+                </Button>
+              )}
+              <Button 
+                onClick={() => setIsNewDialogOpen(true)}
+                className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary shadow-elegant transition-all duration-300 hover:scale-105 font-semibold px-6"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Nueva Inmobiliaria
+              </Button>
+            </div>
           </div>
         </CardHeader>
         
@@ -1163,6 +1212,121 @@ export default function Inmobiliarias() {
                 </TableBody>
               </Table>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Migration Dialog */}
+      <Dialog open={showMigrationDialog} onOpenChange={setShowMigrationDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Migrar Usuarios Faltantes
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="mt-4 space-y-4">
+            {isMigrationLoading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Analizando usuarios faltantes...
+              </div>
+            ) : migrationResult?.dry_run ? (
+              <>
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <p className="font-medium mb-2">
+                    Se encontraron {migrationResult.total} usuarios faltantes:
+                  </p>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {migrationResult.users_to_create?.map((user: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between bg-background p-3 rounded border">
+                        <div>
+                          <p className="font-medium">{user.nombre}</p>
+                          <p className="text-sm text-muted-foreground">{user.email}</p>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant={user.tipo === 'inmobiliaria' ? 'default' : 'secondary'}>
+                            {user.rol}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {user.tipo === 'inmobiliaria' ? 'Inmobiliaria' : 
+                             user.tipo === 'rep_legal' ? 'Rep. Legal' : 'Rep. Comercial'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {migrationResult.total === 0 && (
+                    <p className="text-center text-muted-foreground py-4">
+                      No hay usuarios faltantes. ¡Todo está sincronizado!
+                    </p>
+                  )}
+                </div>
+                
+                {migrationResult.total > 0 && (
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
+                      <strong>Contraseña temporal:</strong> Temporal123!
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Los usuarios deberán cambiar su contraseña en el primer inicio de sesión.
+                    </p>
+                  </div>
+                )}
+                
+                <div className="flex gap-3 justify-end pt-4">
+                  <Button variant="outline" onClick={() => setShowMigrationDialog(false)}>
+                    Cancelar
+                  </Button>
+                  {migrationResult.total > 0 && (
+                    <Button 
+                      onClick={() => handleMigrateMissingUsers(false)}
+                      disabled={isMigrationLoading}
+                      className="bg-primary"
+                    >
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Crear {migrationResult.total} Usuarios
+                    </Button>
+                  )}
+                </div>
+              </>
+            ) : migrationResult?.summary ? (
+              <>
+                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                  <p className="font-medium text-green-600 dark:text-green-400">
+                    Migración completada
+                  </p>
+                  <p className="text-sm mt-1">
+                    {migrationResult.summary.created} usuarios creados, {migrationResult.summary.failed} fallidos
+                  </p>
+                </div>
+                
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {migrationResult.results?.map((result: any, idx: number) => (
+                    <div key={idx} className={`flex items-center justify-between p-3 rounded border ${
+                      result.success ? 'bg-green-500/5 border-green-500/30' : 'bg-red-500/5 border-red-500/30'
+                    }`}>
+                      <div>
+                        <p className="font-medium">{result.nombre}</p>
+                        <p className="text-sm text-muted-foreground">{result.email}</p>
+                      </div>
+                      <Badge variant={result.success ? 'default' : 'destructive'}>
+                        {result.success ? 'Creado' : 'Error'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="flex justify-end pt-4">
+                  <Button onClick={() => {
+                    setShowMigrationDialog(false);
+                    setMigrationResult(null);
+                  }}>
+                    Cerrar
+                  </Button>
+                </div>
+              </>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>
