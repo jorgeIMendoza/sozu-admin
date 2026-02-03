@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, RotateCcw, Building, Users, Copy } from "lucide-react";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
@@ -17,6 +17,14 @@ import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
 import { Badge } from "@/components/ui/badge";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { N8N_WEBHOOK_BASE_URL } from "@/lib/config";
+import { UserConfirmationDialog } from "@/components/admin/UserConfirmationDialog";
+
+type UserToCreate = {
+  email: string;
+  nombre: string;
+  rol: string;
+  tipo: 'inmobiliaria' | 'rep_legal' | 'rep_comercial';
+};
 
 type Inmobiliaria = {
   id: number;
@@ -62,6 +70,10 @@ export default function Inmobiliarias() {
   const [isBankAccountsDialogOpen, setIsBankAccountsDialogOpen] = useState(false);
   const [isAgentesDialogOpen, setIsAgentesDialogOpen] = useState(false);
   const [selectedInmobiliariaForAgentes, setSelectedInmobiliariaForAgentes] = useState<Inmobiliaria | null>(null);
+  // User confirmation dialog states
+  const [showUserConfirmationDialog, setShowUserConfirmationDialog] = useState(false);
+  const [pendingInmobiliariaData, setPendingInmobiliariaData] = useState<any>(null);
+  const [usersToCreate, setUsersToCreate] = useState<UserToCreate[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
@@ -867,6 +879,110 @@ export default function Inmobiliarias() {
     }
   };
 
+  // Prepare user confirmation - detect users that will be created
+  const handlePrepareUserConfirmation = async (data: any) => {
+    const users: UserToCreate[] = [];
+    
+    // User for inmobiliaria
+    if (data.email) {
+      users.push({
+        email: data.email,
+        nombre: data.nombre_legal,
+        rol: 'Inmobiliaria',
+        tipo: 'inmobiliaria'
+      });
+    }
+    
+    // User for legal representative
+    if (data.representativeId) {
+      try {
+        const { data: repLegalData, error } = await supabase
+          .from('entidades_relacionadas')
+          .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email)')
+          .eq('id', data.representativeId)
+          .single();
+        
+        if (!error && repLegalData?.personas) {
+          const repPersona = repLegalData.personas as any;
+          if (repPersona.email) {
+            // Check if user already exists
+            const { data: existingUser } = await supabase
+              .from('usuarios')
+              .select('email')
+              .eq('email', repPersona.email)
+              .maybeSingle();
+            
+            if (!existingUser) {
+              users.push({
+                email: repPersona.email,
+                nombre: repPersona.nombre_legal,
+                rol: 'Agente Inmobiliario',
+                tipo: 'rep_legal'
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching legal representative:', e);
+      }
+    }
+    
+    // User for commercial representative
+    if (data.commercialRepresentativeId) {
+      try {
+        const { data: repComercialData, error } = await supabase
+          .from('entidades_relacionadas')
+          .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email)')
+          .eq('id', data.commercialRepresentativeId)
+          .single();
+        
+        if (!error && repComercialData?.personas) {
+          const repPersona = repComercialData.personas as any;
+          if (repPersona.email) {
+            // Check if user already exists and is not the same as legal rep
+            const { data: existingUser } = await supabase
+              .from('usuarios')
+              .select('email')
+              .eq('email', repPersona.email)
+              .maybeSingle();
+            
+            // Don't add if it's the same email as the legal rep
+            const alreadyInList = users.some(u => u.email.toLowerCase() === repPersona.email.toLowerCase());
+            
+            if (!existingUser && !alreadyInList) {
+              users.push({
+                email: repPersona.email,
+                nombre: repPersona.nombre_legal,
+                rol: 'Agente Inmobiliario',
+                tipo: 'rep_comercial'
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching commercial representative:', e);
+      }
+    }
+    
+    // Store the data and show confirmation dialog
+    setPendingInmobiliariaData(data);
+    setUsersToCreate(users);
+    setShowUserConfirmationDialog(true);
+  };
+
+  // Confirm and execute the creation
+  const handleConfirmUserCreation = () => {
+    if (pendingInmobiliariaData) {
+      createMutation.mutate(pendingInmobiliariaData, {
+        onSuccess: () => {
+          setShowUserConfirmationDialog(false);
+          setPendingInmobiliariaData(null);
+          setUsersToCreate([]);
+        }
+      });
+    }
+  };
+
   return (
     <div className="container mx-auto py-6 px-4">
       <Card className="border-border shadow-lg">
@@ -943,7 +1059,7 @@ export default function Inmobiliarias() {
             <DialogTitle>Nueva Inmobiliaria</DialogTitle>
           </DialogHeader>
           <PersonForm
-            onSubmit={(data) => createMutation.mutate(data)}
+            onSubmit={handlePrepareUserConfirmation}
             isLoading={createMutation.isPending}
             onCancel={() => setIsNewDialogOpen(false)}
             entityType="inmobiliaria"
@@ -951,6 +1067,22 @@ export default function Inmobiliarias() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Modal de confirmación de usuarios */}
+      <UserConfirmationDialog
+        open={showUserConfirmationDialog}
+        onOpenChange={(open) => {
+          setShowUserConfirmationDialog(open);
+          if (!open) {
+            setPendingInmobiliariaData(null);
+            setUsersToCreate([]);
+          }
+        }}
+        onConfirm={handleConfirmUserCreation}
+        usersToCreate={usersToCreate}
+        isLoading={createMutation.isPending}
+        inmobiliariaNombre={pendingInmobiliariaData?.nombre_legal || ''}
+      />
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
