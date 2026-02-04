@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, FileSpreadsheet, Building2, Home, Filter, FileText, Car, Warehouse, Loader2 } from "lucide-react";
+import { Search, FileSpreadsheet, Building2, Home, Filter, FileText, Car, Warehouse, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +18,8 @@ import { EstacionamientosDetailDialog } from "@/components/admin/Estacionamiento
 import { BodegasDetailDialog } from "@/components/admin/BodegasDetailDialog";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { useToast } from "@/hooks/use-toast";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
+import { generateOfferPDF } from "@/services/htmlToPdfService";
 
 const ITEMS_PER_PAGE = 50;
 // ID del estatus "Disponible" - las inmobiliarias solo ven propiedades disponibles
@@ -47,6 +50,8 @@ export default function MisPropiedades() {
   const [selectedPropertyOffers, setSelectedPropertyOffers] = useState<any[]>([]);
   const [selectedPropertyProductOffers, setSelectedPropertyProductOffers] = useState<any[]>([]);
   const [selectedPropertyForOffers, setSelectedPropertyForOffers] = useState<any | null>(null);
+  const [downloadingOfferId, setDownloadingOfferId] = useState<number | null>(null);
+  const [availableSchemes, setAvailableSchemes] = useState<any[]>([]);
 
   // Get the projects the inmobiliaria has access to
   const { data: projectIds = [], isLoading: loadingProjects } = useQuery({
@@ -313,6 +318,7 @@ export default function MisPropiedades() {
 
         return {
           id: p.id,
+          proyecto_id: proyecto?.id || edificio?.id_proyecto,
           proyecto_nombre: proyecto?.nombre,
           edificio_nombre: edificio?.nombre,
           modelo_nombre: modelo?.nombre,
@@ -545,45 +551,215 @@ export default function MisPropiedades() {
     }
   };
 
-  // Fetch property offers (for agents of the selected inmobiliaria)
+  // Fetch property offers (for agents of the selected inmobiliaria) - with full details
   const fetchPropertyOffers = async (propertyId: number): Promise<any[]> => {
     if (!selectedInmobiliariaId) return [];
     
-    // Get all offers for this property
+    // Use the database function to get offers with agent information
     const { data: offersData, error } = await supabase
-      .from('ofertas')
-      .select('id, fecha_generacion, activo, id_persona_lead, email_creador, id_esquema_pago_seleccionado')
-      .eq('id_propiedad', propertyId)
-      .is('id_producto', null)
-      .eq('activo', true)
-      .order('fecha_generacion', { ascending: false });
+      .rpc('get_offers_with_agent' as any, { property_id: propertyId });
     
     if (error) throw error;
-    return offersData || [];
+
+    // Enrich offers with additional data
+    const enrichedOffers = await Promise.all((offersData || []).map(async (offer: any) => {
+      let enrichedOffer = { ...offer };
+      
+      // Get offer display options
+      try {
+        const { data: offerData } = await supabase
+          .from('ofertas')
+          .select('mostrar_piso_en_oferta, mostrar_precio_m2_en_oferta, mostrar_seccion_efectivo_en_oferta')
+          .eq('id', offer.id)
+          .single();
+        
+        if (offerData) {
+          enrichedOffer.mostrar_piso_en_oferta = offerData.mostrar_piso_en_oferta;
+          enrichedOffer.mostrar_precio_m2_en_oferta = offerData.mostrar_precio_m2_en_oferta;
+          enrichedOffer.mostrar_seccion_efectivo_en_oferta = offerData.mostrar_seccion_efectivo_en_oferta;
+        }
+      } catch (err) {
+        console.warn('Error fetching display options for offer:', offer.id);
+      }
+      
+      // Get cuenta_cobranza ID and status if available
+      if (offer.cuenta_clabe_stp) {
+        try {
+          const { data: cuentaData } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, activo')
+            .eq('clabe_stp', offer.cuenta_clabe_stp)
+            .single();
+          
+          if (cuentaData) {
+            enrichedOffer.cuenta_cobranza_id = cuentaData.id;
+            enrichedOffer.cuenta_activo = cuentaData.activo;
+          }
+        } catch (err) {
+          console.warn('Error fetching cuenta_cobranza ID for offer:', offer.id);
+        }
+      }
+      
+      return enrichedOffer;
+    }));
+
+    return enrichedOffers;
   };
 
-  // Fetch property product offers
+  // Fetch property product offers with full details
   const fetchPropertyProductOffers = async (propertyId: number): Promise<any[]> => {
     if (!selectedInmobiliariaId) return [];
     
     const { data: offersData, error } = await supabase
       .from('ofertas')
-      .select('id, fecha_generacion, activo, id_persona_lead, email_creador, id_esquema_pago_seleccionado, id_producto, clabe_stp_tmp_producto')
+      .select(`
+        id,
+        fecha_generacion,
+        activo,
+        id_persona_lead,
+        email_creador,
+        id_esquema_pago_seleccionado,
+        id_producto,
+        clabe_stp_tmp_producto,
+        productos_servicios!ofertas_id_producto_fkey(nombre, precio_lista),
+        esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(nombre)
+      `)
       .eq('id_propiedad', propertyId)
       .not('id_producto', 'is', null)
       .eq('activo', true)
       .order('fecha_generacion', { ascending: false });
     
     if (error) throw error;
-    return offersData || [];
+
+    // Enrich offers with additional data
+    const enrichedOffers = await Promise.all((offersData || []).map(async (offer: any) => {
+      let enrichedOffer = {
+        ...offer,
+        product_name: offer.productos_servicios?.nombre || 'N/A',
+        esquema_nombre: offer.esquemas_pago?.nombre || null,
+      };
+      
+      // Get lead info
+      if (offer.id_persona_lead) {
+        const { data: personaData } = await supabase
+          .from('personas')
+          .select('nombre_legal')
+          .eq('id', offer.id_persona_lead)
+          .maybeSingle();
+        
+        if (personaData) {
+          enrichedOffer.lead_name = personaData.nombre_legal;
+        }
+      }
+      
+      // Get cuenta_cobranza if available
+      const { data: cuentaData } = await supabase
+        .from('cuentas_cobranza')
+        .select('id, activo')
+        .eq('id_oferta', offer.id)
+        .eq('activo', true)
+        .maybeSingle();
+      
+      if (cuentaData) {
+        enrichedOffer.cuenta_cobranza_id = cuentaData.id;
+        enrichedOffer.cuenta_activo = cuentaData.activo;
+      }
+      
+      return enrichedOffer;
+    }));
+
+    return enrichedOffers;
+  };
+
+  // Fetch available payment schemes for a project
+  const fetchAvailableSchemes = async (projectId: number) => {
+    const { data, error } = await supabase
+      .from('esquemas_pago')
+      .select('id, nombre')
+      .eq('id_proyecto', projectId)
+      .eq('es_manual', false)
+      .eq('activo', true)
+      .order('nombre');
+    
+    if (error) {
+      console.error('Error fetching schemes:', error);
+      return [];
+    }
+
+    return data || [];
+  };
+
+  // Handle download offer PDF
+  const handleDownloadOffer = async (offer: any) => {
+    try {
+      setDownloadingOfferId(offer.id);
+      
+      const { ofertaPdfStorageService } = await import('@/services/ofertaPdfStorageService');
+      
+      // Check if URL already exists
+      const existingUrl = await ofertaPdfStorageService.getExistingUrl(offer.id);
+      
+      if (existingUrl) {
+        toast({
+          title: "Descargando PDF",
+          description: "Descargando el PDF de la oferta...",
+        });
+        
+        const filename = existingUrl.split('/').pop() || `oferta-${offer.id}.pdf`;
+        await ofertaPdfStorageService.downloadFromUrl(existingUrl, filename);
+        
+        toast({
+          title: "PDF descargado",
+          description: "El PDF se ha descargado exitosamente.",
+        });
+      } else {
+        toast({
+          title: "Generando PDF",
+          description: "Preparando la descarga del PDF de la oferta...",
+        });
+
+        await generateOfferPDF({
+          propertyId: selectedPropertyForOffers?.id,
+          offerId: offer.id,
+          propertyNumber: selectedPropertyForOffers?.numero_departamento || "N/A",
+          leadName: offer.lead_name || "N/A",
+          leadEmail: offer.lead_email || "N/A", 
+          leadPhone: offer.lead_telefono || "N/A",
+          creatorEmail: offer.agent_name || offer.email_creador || "N/A",
+          offerOptions: {
+            mostrar_piso_en_oferta: offer.mostrar_piso_en_oferta,
+            mostrar_precio_m2_en_oferta: offer.mostrar_precio_m2_en_oferta,
+            mostrar_seccion_efectivo_en_oferta: offer.mostrar_seccion_efectivo_en_oferta,
+          }
+        });
+
+        toast({
+          title: "PDF generado",
+          description: "El PDF se ha generado y descargado exitosamente.",
+        });
+      }
+    } catch (error) {
+      console.error('Error generating/downloading PDF:', error);
+      toast({
+        title: "Error al descargar PDF",
+        description: "Hubo un problema al descargar el PDF. Intente nuevamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingOfferId(null);
+    }
   };
 
   const handleViewOffers = async (property: any) => {
     if (property.num_ofertas === 0) return;
     try {
-      const offers = await fetchPropertyOffers(property.id);
+      const [offers, schemes] = await Promise.all([
+        fetchPropertyOffers(property.id),
+        fetchAvailableSchemes(property.proyecto_id)
+      ]);
       setSelectedPropertyOffers(offers);
       setSelectedPropertyForOffers(property);
+      setAvailableSchemes(schemes);
       setOffersDialogOpen(true);
     } catch (error) {
       toast({ title: "Error", description: "No se pudieron cargar las ofertas", variant: "destructive" });
@@ -928,30 +1104,105 @@ export default function MisPropiedades() {
 
       {/* Offers Dialog */}
       <Dialog open={offersDialogOpen} onOpenChange={setOffersDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Ofertas Comerciales - {selectedPropertyForOffers?.numero_departamento}</DialogTitle>
+            <DialogTitle>
+              Ofertas para propiedad {selectedPropertyForOffers?.numero_departamento} de {selectedPropertyForOffers?.proyecto_nombre}
+            </DialogTitle>
           </DialogHeader>
-          <div className="max-h-96 overflow-y-auto">
+          <div className="space-y-4">
             {selectedPropertyOffers.length === 0 ? (
-              <p className="text-muted-foreground text-center py-4">No hay ofertas</p>
+              <div className="text-center py-8 text-muted-foreground">
+                No se encontraron ofertas para esta propiedad
+              </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Creador</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {selectedPropertyOffers.map((offer: any) => (
-                    <TableRow key={offer.id}>
-                      <TableCell>{new Date(offer.fecha_generacion).toLocaleDateString('es-MX')}</TableCell>
-                      <TableCell>{offer.email_creador}</TableCell>
+              <TooltipProvider>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Folio</TableHead>
+                      <TableHead>Agente</TableHead>
+                      <TableHead>Lead</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Esquema de Pago</TableHead>
+                      <TableHead>Cuenta de Cobranza</TableHead>
+                      <TableHead>Descarga</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedPropertyOffers.map((offer: any) => {
+                      const hasAccount = !!offer.cuenta_cobranza_id;
+                      const isAccountActive = hasAccount && offer.cuenta_activo;
+                      
+                      return (
+                        <TableRow key={offer.id}>
+                          <TableCell className="font-medium">
+                            O-{String(offer.id).padStart(6, '0')}
+                          </TableCell>
+                          <TableCell>
+                            {(offer.agent_name || 'AGENTE POR DEFINIR').toUpperCase()}
+                          </TableCell>
+                          <TableCell>
+                            {(offer.lead_name || 'N/A').toUpperCase()}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(offer.fecha_generacion).toLocaleDateString('es-MX')}
+                          </TableCell>
+                          <TableCell>
+                            {offer.esquema_id ? (
+                              <Badge 
+                                variant="outline" 
+                                className="bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700"
+                              >
+                                {offer.esquema_nombre || availableSchemes.find(s => s.id === offer.esquema_id)?.nombre || `ID: ${offer.esquema_id}`}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">Sin esquema</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {hasAccount ? (
+                              <Badge 
+                                variant="outline" 
+                                className={
+                                  isAccountActive 
+                                    ? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300" 
+                                    : "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"
+                                }
+                              >
+                                {formatCuentaCobranzaId(offer.cuenta_cobranza_id, 'Propiedad')}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">Sin cuenta</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => handleDownloadOffer(offer)}
+                                  disabled={downloadingOfferId === offer.id}
+                                >
+                                  {downloadingOfferId === offer.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Descargar PDF de oferta</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TooltipProvider>
             )}
           </div>
         </DialogContent>
@@ -959,28 +1210,79 @@ export default function MisPropiedades() {
 
       {/* Product Offers Dialog */}
       <Dialog open={productOffersDialogOpen} onOpenChange={setProductOffersDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Ofertas de Productos - {selectedPropertyForOffers?.numero_departamento}</DialogTitle>
+            <DialogTitle>
+              Ofertas de Productos para propiedad {selectedPropertyForOffers?.numero_departamento} de {selectedPropertyForOffers?.proyecto_nombre}
+            </DialogTitle>
           </DialogHeader>
-          <div className="max-h-96 overflow-y-auto">
+          <div className="space-y-4">
             {selectedPropertyProductOffers.length === 0 ? (
-              <p className="text-muted-foreground text-center py-4">No hay ofertas de productos</p>
+              <div className="text-center py-8 text-muted-foreground">
+                No se encontraron ofertas de productos para esta propiedad
+              </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Folio</TableHead>
+                    <TableHead>Producto/Servicio</TableHead>
+                    <TableHead>Lead</TableHead>
                     <TableHead>Fecha</TableHead>
-                    <TableHead>Creador</TableHead>
+                    <TableHead>Esquema de Pago</TableHead>
+                    <TableHead>Cuenta de Cobranza</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {selectedPropertyProductOffers.map((offer: any) => (
-                    <TableRow key={offer.id}>
-                      <TableCell>{new Date(offer.fecha_generacion).toLocaleDateString('es-MX')}</TableCell>
-                      <TableCell>{offer.email_creador}</TableCell>
-                    </TableRow>
-                  ))}
+                  {selectedPropertyProductOffers.map((offer: any) => {
+                    const hasAccount = !!offer.cuenta_cobranza_id;
+                    const isAccountActive = hasAccount && offer.cuenta_activo;
+                    
+                    return (
+                      <TableRow key={offer.id}>
+                        <TableCell className="font-medium">
+                          OP-{String(offer.id).padStart(6, '0')}
+                        </TableCell>
+                        <TableCell>
+                          {offer.product_name || 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          {(offer.lead_name || 'N/A').toUpperCase()}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(offer.fecha_generacion).toLocaleDateString('es-MX')}
+                        </TableCell>
+                        <TableCell>
+                          {offer.esquema_nombre ? (
+                            <Badge 
+                              variant="outline" 
+                              className="bg-green-100 text-green-800 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700"
+                            >
+                              {offer.esquema_nombre}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">Sin esquema</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {hasAccount ? (
+                            <Badge 
+                              variant="outline" 
+                              className={
+                                isAccountActive 
+                                  ? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300" 
+                                  : "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"
+                              }
+                            >
+                              {formatCuentaCobranzaId(offer.cuenta_cobranza_id, 'Producto')}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">Sin cuenta</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
