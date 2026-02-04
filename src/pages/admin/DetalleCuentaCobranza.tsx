@@ -1900,11 +1900,17 @@ export default function DetalleCuentaCobranza() {
   // Conceptos de cancelación (7 = Pago por cancelación, 9 = Devolución de pago)
   const CONCEPTOS_CANCELACION = [7, 9];
   
-  // Total pagado - EXCLUYENDO conceptos de cancelación (7 y 9)
-  const totalPagado = acuerdosPago?.reduce((sum, acuerdo) => {
+  // Total pagado basado en PAGOS REALES (suma de pagos.monto) - usado para saldo pendiente
+  const totalPagadoReal = pagos?.reduce((sum, pago) => sum + Number(pago.monto || 0), 0) || 0;
+  
+  // Total pagado basado en APLICACIONES (para compatibilidad con lógica de acuerdos individuales)
+  const totalPagadoAplicaciones = acuerdosPago?.reduce((sum, acuerdo) => {
     if (CONCEPTOS_CANCELACION.includes(acuerdo.id_concepto)) return sum;
     return sum + (acuerdo.aplicaciones || []).reduce((appSum, app) => appSum + (app?.monto || 0), 0);
   }, 0) || 0;
+  
+  // Para compatibilidad: usar totalPagadoAplicaciones donde se necesite la lógica anterior
+  const totalPagado = totalPagadoAplicaciones;
 
   // Calcular total de multas pendientes (solo las que no están completamente pagadas)
   const totalMultasPendientes = acuerdosPago?.reduce((sum, acuerdo) => {
@@ -1942,18 +1948,18 @@ export default function DetalleCuentaCobranza() {
   const discrepanciaAcuerdos = (cuentaDetalle?.precio_final || 0) - totalAcuerdos;
   const hayDiscrepancia = acuerdosPago && acuerdosPago.length > 0 && Math.abs(discrepanciaAcuerdos) > 0.01;
 
-  // Calcular diferencia real y detectar sobrepagos
-  const diferenciaReal = (cuentaDetalle?.precio_final || 0) - totalPagado;
+  // Calcular diferencia real y detectar sobrepagos - AHORA USANDO PAGOS REALES
+  const diferenciaReal = (cuentaDetalle?.precio_final || 0) - totalPagadoReal;
   const haySobrepago = diferenciaReal < -0.01; // Tolerancia para errores de punto flotante
   const montoSobrepago = haySobrepago ? Math.abs(diferenciaReal) : 0;
   const totalPendiente = Math.max(0, diferenciaReal);
 
-  // Detectar discrepancia entre pagos y aplicaciones (para mostrar botón recalcular)
+  // Detectar discrepancia entre pagos reales y aplicaciones (para mostrar botón recalcular)
   // Solo calcular cuando TODAS las queries relacionadas estén completamente cargadas para evitar falsos positivos
   const isLoadingPaymentData = !pagos || aplicacionesPorPagoLoading || acuerdosLoading || !acuerdosPago;
   const totalAplicaciones = aplicacionesPorPago?.reduce((sum, app) => sum + (app.monto || 0), 0) || 0;
-  const discrepanciaAplicaciones = totalPagado - totalAplicaciones;
-  const hayDiscrepanciaAplicaciones = !isLoadingPaymentData && pagos && pagos.length > 0 && Math.abs(discrepanciaAplicaciones) > 0.01;
+  const discrepanciaPagosVsAplicaciones = totalPagadoReal - totalAplicaciones;
+  const hayDiscrepanciaAplicaciones = !isLoadingPaymentData && pagos && pagos.length > 0 && Math.abs(discrepanciaPagosVsAplicaciones) > 0.01;
 
   // Calculate pending balance breakdown (only for properties)
   const pendingBalanceBreakdown = cuentaDetalle?.tipo_cuenta === 'Propiedad' && acuerdosPago ? (() => {
@@ -2843,7 +2849,7 @@ export default function DetalleCuentaCobranza() {
                                   accion: 'recalcular_aplicaciones',
                                   proyecto: cuentaDetalle?.proyecto,
                                   propiedad: cuentaDetalle?.numero_propiedad,
-                                  discrepancia: discrepanciaAplicaciones
+                                  discrepancia: discrepanciaPagosVsAplicaciones
                                 },
                                 'recalcular_aplicaciones_pago',
                                 'exito'
@@ -2899,8 +2905,8 @@ export default function DetalleCuentaCobranza() {
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Discrepancia detectada: {formatCurrency(Math.abs(discrepanciaAplicaciones))}</p>
-                        <p className="text-xs text-muted-foreground">Pagos: {formatCurrency(totalPagado)} | Aplicaciones: {formatCurrency(totalAplicaciones)}</p>
+                        <p>Discrepancia detectada: {formatCurrency(Math.abs(discrepanciaPagosVsAplicaciones))}</p>
+                        <p className="text-xs text-muted-foreground">Pagos: {formatCurrency(totalPagadoReal)} | Aplicaciones: {formatCurrency(totalAplicaciones)}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
