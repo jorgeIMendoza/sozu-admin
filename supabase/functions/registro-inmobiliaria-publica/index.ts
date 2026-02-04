@@ -237,6 +237,101 @@ Deno.serve(async (req) => {
       console.error('Error logging activity:', logError);
     }
 
+    // Send notification to admins about the new draft inmobiliaria
+    try {
+      const N8N_WEBHOOK_BASE_URL = Deno.env.get('N8N_WEBHOOK_BASE_URL') || 'https://automatizacion-n8n.fbqqbe.easypanel.host/webhook';
+      const webhookUrl = `${N8N_WEBHOOK_BASE_URL}/manda_notificacion`;
+      console.log('Sending draft inmobiliaria notification to:', webhookUrl);
+
+      // Get Super Admin users (rol_id = 1)
+      const { data: superAdmins } = await supabase
+        .from('usuarios')
+        .select('email, telefono, clave_pais_telefono')
+        .eq('rol_id', 1)
+        .eq('activo', true);
+
+      // Get Project Admin users (rol_id = 2)
+      const { data: adminProyecto } = await supabase
+        .from('usuarios')
+        .select('email, telefono, clave_pais_telefono')
+        .eq('rol_id', 2)
+        .eq('activo', true);
+
+      // Format super admin emails
+      const correosSuperAdmin = (superAdmins || [])
+        .map(u => u.email)
+        .filter(Boolean)
+        .join(',');
+
+      // Format project admin emails
+      const correosAdminProy = (adminProyecto || [])
+        .map(u => u.email)
+        .filter(Boolean)
+        .join(',');
+
+      // Get country phone codes from DB
+      const { data: paises } = await supabase
+        .from('paises')
+        .select('id, clave_pais_telefono')
+        .eq('activo', true);
+
+      const codigosPorPais = new Map(
+        (paises || []).map((p: { id: string; clave_pais_telefono: string | null }) => [p.id.trim(), p.clave_pais_telefono?.trim()])
+      );
+
+      // Helper to format phone numbers with country code from DB
+      const formatearTelefonos = (usuarios: { telefono: string | null; clave_pais_telefono: string | null }[]) => {
+        return (usuarios || [])
+          .filter(u => u.telefono)
+          .map(u => {
+            const clavePais = (u.clave_pais_telefono || 'MX').trim();
+            const codigoPais = codigosPorPais.get(clavePais) || '+52';
+            return `${codigoPais}${u.telefono}`;
+          })
+          .join(',');
+      };
+
+      // Format project admin phones, with fallback to super admins
+      const numerosAdminProy = formatearTelefonos(adminProyecto || []) || formatearTelefonos(superAdmins || []);
+
+      const notificationPayload = {
+        tipo: "ambos",
+        from: "Notificaciones Sozu <notificaciones@sozu.com>",
+        email: correosAdminProy || correosSuperAdmin,
+        cc: correosSuperAdmin,
+        telefono: numerosAdminProy,
+        mensajeWA: `Se ha creado la Inmobiliaria *${inmobiliaria.razon_social}*, con el usuario: *${inmobiliariaEmailLower}* desde el formulario, revisa la pestaña de DRAFT para verificar.`,
+        asunto: "Nueva Inmobiliaria (Pendiente de Aprobación)",
+        mensaje: {
+          nombre: 'Administrador',
+          actividad: "Registro de inmobiliaria desde formulario público",
+          detalles: `<tr><td class='label'>Nombre:</td> <td class='value'>${inmobiliaria.razon_social}</td> </tr><tr><td class='label'>Usuario:</td><td class='value'>${inmobiliariaEmailLower}</td></tr><tr><td class='label'>Estado:</td><td class='value'>Pendiente de aprobación (DRAFT)</td></tr>`
+        },
+        templateId: 41353048
+      };
+
+      console.log('Notification payload:', JSON.stringify(notificationPayload));
+
+      const notificationResponse = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-postmark-server-token': '8aac4f6f-e5af-4e2f-a318-c2723bf52bb8',
+          'apikey': 'FD9481D57CC7-43E0-8ACF-01BF7B8B19B7'
+        },
+        body: JSON.stringify(notificationPayload)
+      });
+
+      if (!notificationResponse.ok) {
+        console.error('Error sending draft inmobiliaria notification:', notificationResponse.status);
+      } else {
+        console.log('Draft inmobiliaria notification sent successfully');
+      }
+    } catch (notificationError) {
+      console.error('Error sending draft inmobiliaria notification:', notificationError);
+      // Don't throw error to avoid blocking the registration
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
