@@ -6038,6 +6038,18 @@ export type Database = {
         }
         Relationships: []
       }
+      v_pago_tipo: {
+        Row: {
+          "?column?": string | null
+        }
+        Insert: {
+          "?column?"?: string | null
+        }
+        Update: {
+          "?column?"?: string | null
+        }
+        Relationships: []
+      }
       videos_youtube: {
         Row: {
           activo: boolean | null
