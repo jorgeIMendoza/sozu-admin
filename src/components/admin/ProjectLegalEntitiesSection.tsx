@@ -756,11 +756,11 @@ export const ProjectLegalEntitiesSection = ({
                           )}
                         </div>
                         
-                        {/* Cuenta para cobrar comisiones y Cuenta Madre STP - For Dueño Vendedor, Inmobiliaria, Administradora, and Aportante */}
-                        {([4, 5, 6, 15].includes(entity.tipos_entidad?.id || 0)) && (
+                        {/* Cuenta para cobrar comisiones y Cuenta Madre STP - For Dueño Vendedor, Inmobiliaria, Administradora, Proveedor, and Aportante */}
+                        {([4, 5, 6, 8, 15].includes(entity.tipos_entidad?.id || 0)) && (
                           <div className="mt-3 pt-3 border-t space-y-3">
-                            {/* Cuenta para Cobrar Comisiones - Only for Dueño Vendedor, Administradora, and Aportante (not Inmobiliaria) */}
-                            {([4, 6, 15].includes(entity.tipos_entidad?.id || 0)) && (
+                            {/* Cuenta para Cobrar Comisiones - Only for Dueño Vendedor, Administradora, Proveedor, and Aportante (not Inmobiliaria) */}
+                            {([4, 6, 8, 15].includes(entity.tipos_entidad?.id || 0)) && (
                               <div>
                                 <label className="text-sm font-medium">Cuenta para Cobrar Comisiones:</label>
                                 {!(entity as any).cuenta_stp_comisiones ? (
@@ -888,8 +888,8 @@ export const ProjectLegalEntitiesSection = ({
                               )}
                             </div>
 
-                            {/* Facturar checkbox and API Key field - Only for Dueño Vendedor, Administradora, and Aportante (not Inmobiliaria) */}
-                            {([4, 6, 15].includes(entity.tipos_entidad?.id || 0)) && (
+                            {/* Facturar checkbox and API Key field - Only for Dueño Vendedor, Administradora, Proveedor, and Aportante (not Inmobiliaria) */}
+                            {([4, 6, 8, 15].includes(entity.tipos_entidad?.id || 0)) && (
                               <div className="space-y-2">
                                 <div className="flex items-center space-x-2">
                                   <Checkbox
