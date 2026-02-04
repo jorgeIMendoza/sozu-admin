@@ -1074,7 +1074,7 @@ export default function Inmobiliarias() {
           from: "Notificaciones Sozu <notificaciones@sozu.com>",
           email: inmobiliaria.email,
           telefono: telefonoFormateado,
-          mensajeWA: `Tu inmobiliaria *${inmobiliaria.nombre_legal}* ha sido aprobada.\nUsuario: ${inmobiliaria.email}\nPassword: Temporal123!`,
+          mensajeWA: `Tu inmobiliaria *${inmobiliaria.nombre_legal}* ha sido aprobada.\nLink: admin.sozu.com\nUsuario: ${inmobiliaria.email}\nPassword: Temporal123!`,
           asunto: "Aprobación de Inmobiliaria",
           mensaje: {
             nombre: inmobiliaria.nombre_legal || inmobiliaria.nombre_comercial,
