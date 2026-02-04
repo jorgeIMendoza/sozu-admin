@@ -2592,7 +2592,7 @@ const Propiedades = () => {
         return { properties: [], count: 0 };
       }
     },
-    enabled: !isLoadingAccess && (canUpdate || isSuperAdmin),
+    enabled: !isLoadingAccess && !isLoadingPermissions && (canUpdate || isSuperAdmin),
   });
 
   const { data: propiedadesEliminadasData, isLoading: loadingEliminados, refetch: refetchEliminados } = useQuery({
@@ -3005,7 +3005,7 @@ const Propiedades = () => {
         return { properties: [], count: 0 };
       }
     },
-    enabled: !isLoadingAccess && canSeeAdvancedFilters,
+    enabled: !isLoadingAccess && !isLoadingPermissions && canSeeAdvancedFilters,
   });
 
   const activeProperties = propiedadesActivasData?.properties || [];

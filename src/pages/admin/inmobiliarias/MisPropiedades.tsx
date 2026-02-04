@@ -105,7 +105,7 @@ export default function MisPropiedades() {
       const edificioModeloIds = (edificiosModelosData || []).map((em: any) => em.id);
       if (edificioModeloIds.length === 0) return [];
 
-      // Step 3: Get propiedades for those edificios_modelos - ONLY with estatus "Disponible" (id=2)
+      // Step 3: Get propiedades for those edificios_modelos - ONLY with estatus "Disponible" (id=2) and approved (es_aprobado=true)
       const { data, error } = await supabase
         .from('propiedades')
         .select(`
@@ -118,9 +118,11 @@ export default function MisPropiedades() {
           clabe_stp_tmp_apartado,
           id_edificio_modelo,
           id_estatus_disponibilidad,
-          id_entidad_relacionada_dueno
+          id_entidad_relacionada_dueno,
+          id_tipo_transaccion
         `)
         .eq('activo', true)
+        .eq('es_aprobado', true) // Only show approved properties (not draft)
         .eq('id_estatus_disponibilidad', ESTATUS_DISPONIBLE_ID)
         .in('id_edificio_modelo', edificioModeloIds)
         .order('numero_propiedad', { ascending: true });
@@ -299,6 +301,101 @@ export default function MisPropiedades() {
       const proyectosMap = new Map((proyectosDetails || []).map((p: any) => [p.id, p]));
       const modelosMap = new Map((modelosDetails || []).map((m: any) => [m.id, m]));
 
+      // Step 5: Get previous buyer info for Reventa properties (id_tipo_transaccion = 2)
+      const ID_TIPO_REVENTA = 2;
+      const reventaPropertyIds = (data || [])
+        .filter((p: any) => p.id_tipo_transaccion === ID_TIPO_REVENTA)
+        .map((p: any) => p.id);
+      
+      let reventaPropietariosMap: Record<number, string> = {};
+      
+      if (reventaPropertyIds.length > 0) {
+        // Get the most recent offer for each Reventa property (regardless of active status)
+        const { data: reventaOfertas } = await supabase
+          .from('ofertas')
+          .select('id, id_propiedad, fecha_creacion')
+          .in('id_propiedad', reventaPropertyIds)
+          .is('id_producto', null)
+          .order('fecha_creacion', { ascending: false });
+        
+        // Group by property and get the most recent offer
+        const reventaOfertasMap: Record<number, any> = {};
+        (reventaOfertas || []).forEach((oferta: any) => {
+          if (!reventaOfertasMap[oferta.id_propiedad]) {
+            reventaOfertasMap[oferta.id_propiedad] = oferta;
+          }
+        });
+        
+        // Get cuentas_cobranza for these ofertas (including inactive ones since they are deactivated on resale)
+        const reventaOfertaIds = Object.values(reventaOfertasMap).map((o: any) => o.id);
+        if (reventaOfertaIds.length > 0) {
+          const { data: reventaCuentas } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_oferta')
+            .in('id_oferta', reventaOfertaIds)
+            .order('fecha_creacion', { ascending: false });
+          
+          // Map by id_oferta, only keeping the first (most recent) cuenta for each oferta
+          const reventaCuentasMap: Record<number, any> = {};
+          (reventaCuentas || []).forEach((cuenta: any) => {
+            if (!reventaCuentasMap[cuenta.id_oferta]) {
+              reventaCuentasMap[cuenta.id_oferta] = cuenta;
+            }
+          });
+          
+          // Get compradores for these cuentas
+          const reventaCuentaIds = Object.values(reventaCuentasMap).map((c: any) => c.id);
+          if (reventaCuentaIds.length > 0) {
+            const { data: reventaCompradores } = await supabase
+              .from('compradores')
+              .select('id_cuenta_cobranza, id_persona, porcentaje_copropiedad')
+              .in('id_cuenta_cobranza', reventaCuentaIds)
+              .eq('activo', true)
+              .order('porcentaje_copropiedad', { ascending: false });
+            
+            // Get persona names
+            const reventaPersonaIds = (reventaCompradores || []).map((c: any) => c.id_persona);
+            const reventaPersonasNamesMap: Record<number, string> = {};
+            if (reventaPersonaIds.length > 0) {
+              const { data: personasData } = await supabase
+                .from('personas')
+                .select('id, nombre_legal')
+                .in('id', reventaPersonaIds);
+              (personasData || []).forEach((p: any) => {
+                reventaPersonasNamesMap[p.id] = p.nombre_legal || 'Sin nombre';
+              });
+            }
+            
+            // Build compradores map by cuenta_cobranza_id
+            const compradoresPorCuenta: Record<number, { nombre: string; porcentaje: number }[]> = {};
+            (reventaCompradores || []).forEach((c: any) => {
+              if (!compradoresPorCuenta[c.id_cuenta_cobranza]) {
+                compradoresPorCuenta[c.id_cuenta_cobranza] = [];
+              }
+              compradoresPorCuenta[c.id_cuenta_cobranza].push({
+                nombre: reventaPersonasNamesMap[c.id_persona] || 'Sin nombre',
+                porcentaje: Number(c.porcentaje_copropiedad) || 0
+              });
+            });
+            
+            // Map property ID to previous buyer name
+            for (const propId of reventaPropertyIds) {
+              const oferta = reventaOfertasMap[propId];
+              if (oferta) {
+                const cuenta = reventaCuentasMap[oferta.id];
+                if (cuenta) {
+                  const compradores = compradoresPorCuenta[cuenta.id];
+                  if (compradores && compradores.length > 0) {
+                    reventaPropietariosMap[propId] = compradores[0].nombre + 
+                      (compradores.length > 1 ? ` (+${compradores.length - 1})` : '');
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
       return (data || []).map((p: any) => {
         const edModelo = edificiosModelosMap.get(p.id_edificio_modelo);
         const cuentaCobranza = cuentasMap.get(p.id);
@@ -315,6 +412,12 @@ export default function MisPropiedades() {
         const modelo = modelosMap.get(modeloId);
         const estatus = estatusMap.get(p.id_estatus_disponibilidad);
         const propietarioPersona = personasMap.get(p.id_entidad_relacionada_dueno);
+        
+        // For Reventa properties, show previous buyer as owner
+        const esReventa = p.id_tipo_transaccion === ID_TIPO_REVENTA;
+        const propietarioDisplay = esReventa && reventaPropietariosMap[p.id]
+          ? reventaPropietariosMap[p.id]
+          : propietarioPersona?.nombre_legal;
 
         return {
           id: p.id,
@@ -328,7 +431,7 @@ export default function MisPropiedades() {
           banos: modelo?.numero_completo_banos,
           precio_lista: p.precio_lista,
           estatus_disponibilidad_nombre: estatus?.nombre,
-          propietario_nombre: propietarioPersona?.nombre_legal,
+          propietario_nombre: propietarioDisplay,
           cuenta_cobranza_id: cuentaCobranza?.id,
           clabe_stp: cuentaCobranza?.clabe_stp || p.clabe_stp_tmp_apartado,
           precio_final: cuentaCobranza?.precio_final,
