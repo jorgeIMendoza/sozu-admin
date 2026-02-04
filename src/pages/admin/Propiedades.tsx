@@ -2592,7 +2592,7 @@ const Propiedades = () => {
         return { properties: [], count: 0 };
       }
     },
-    enabled: activeTab === "draft" && !isLoadingAccess,
+    enabled: !isLoadingAccess && (canUpdate || isSuperAdmin),
   });
 
   const { data: propiedadesEliminadasData, isLoading: loadingEliminados, refetch: refetchEliminados } = useQuery({
@@ -3005,7 +3005,7 @@ const Propiedades = () => {
         return { properties: [], count: 0 };
       }
     },
-    enabled: activeTab === "eliminados" && !isLoadingAccess,
+    enabled: !isLoadingAccess && canSeeAdvancedFilters,
   });
 
   const activeProperties = propiedadesActivasData?.properties || [];
