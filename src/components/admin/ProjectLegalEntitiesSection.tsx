@@ -32,8 +32,8 @@ export const ProjectLegalEntitiesSection = ({
   isProductosOrServicios = false
 }: ProjectLegalEntitiesSectionProps) => {
   const [selectedEntityId, setSelectedEntityId] = useState<string>("");
-  // Para Productos o Servicios, inicializar vacío (el usuario puede elegir entre tipos permitidos)
-  const [selectedEntityTypeId, setSelectedEntityTypeId] = useState<string>("");
+  // Para Productos o Servicios, preseleccionar "Dueño Vendedor" (id=4)
+  const [selectedEntityTypeId, setSelectedEntityTypeId] = useState<string>(isProductosOrServicios ? "4" : "");
   const [editingCuentaMadre, setEditingCuentaMadre] = useState<number | null>(null);
   const [tempCuentaMadre, setTempCuentaMadre] = useState<string>("");
   const [generatingComisiones, setGeneratingComisiones] = useState<number | null>(null);
@@ -634,7 +634,7 @@ export const ProjectLegalEntitiesSection = ({
             Agregar Entidad Legal
           </CardTitle>
           <CardDescription>
-            Selecciona una entidad legal para agregar al proyecto.
+            Selecciona una entidad legal para agregar al proyecto. {!isProductosOrServicios && "Solo puede haber una entidad por tipo."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -647,8 +647,9 @@ export const ProjectLegalEntitiesSection = ({
                   setSelectedEntityTypeId(value);
                   setSelectedEntityId("");
                 }}
+                disabled={isProductosOrServicios}
               >
-                <SelectTrigger>
+                <SelectTrigger className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""}>
                   <SelectValue placeholder="Selecciona un tipo" />
                 </SelectTrigger>
                 <SelectContent>
