@@ -33,6 +33,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { NoProjectAccess } from "@/components/admin/NoProjectAccess";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 interface Modelo {
   id: number;
@@ -72,6 +73,7 @@ export default function Modelos() {
   
   const { toast } = useToast();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { registrarEliminacion, registrarRestauracion } = useActivityLogger();
   
   // Project access control
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess, hasNoAccess } = useProjectAccess();
@@ -231,6 +233,7 @@ export default function Modelos() {
         title: "Modelo eliminado",
         description: `El modelo "${modelo.nombre}" ha sido eliminado.`,
       });
+      registrarEliminacion('modelo', { id: modelo.id, nombre: modelo.nombre });
 
       refetchActivos();
       setModeloToDelete(null);
@@ -257,6 +260,10 @@ export default function Modelos() {
         title: "Modelo restaurado",
         description: `El modelo "${modelo.nombre}" ha sido restaurado.`,
       });
+      registrarRestauracion('modelo',
+        { id: modelo.id, activo: false },
+        { id: modelo.id, activo: true, nombre: modelo.nombre }
+      );
 
       refetchEliminados();
       refetchActivos();

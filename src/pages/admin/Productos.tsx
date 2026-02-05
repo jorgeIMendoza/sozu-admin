@@ -17,6 +17,7 @@ import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationD
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProductPaymentSchemeManagement } from "@/components/admin/ProductPaymentSchemeManagement";
 import { Combobox } from "@/components/ui/combobox";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Producto = {
   id: number;
@@ -63,6 +64,7 @@ export default function Productos() {
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
   
   const itemsPerPage = 20;
   const currentPage = activeTab === 'active' ? currentPageActive : currentPageDeleted;
@@ -354,6 +356,11 @@ export default function Productos() {
         title: "Éxito",
         description: "Producto creado correctamente.",
       });
+      registrarCreacion('producto', {
+        nombre: formData.nombre,
+        precio_lista: formData.precio_lista,
+        id_categoria: formData.id_categoria,
+      });
     },
     onError: (error: any) => {
       toast({
@@ -386,6 +393,10 @@ export default function Productos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['productos'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('producto',
+        { id: editingEntity?.id, nombre: editingEntity?.nombre, precio_lista: editingEntity?.precio_lista },
+        { id: editingEntity?.id, nombre: formData.nombre, precio_lista: formData.precio_lista }
+      );
       setEditingEntity(null);
       resetForm();
       toast({
@@ -414,6 +425,7 @@ export default function Productos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['productos'] });
       setDeleteDialogOpen(false);
+      registrarEliminacion('producto', { id: entityToDelete?.id, nombre: entityToDelete?.nombre });
       setEntityToDelete(null);
       toast({
         title: "Éxito",
@@ -441,6 +453,10 @@ export default function Productos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['productos'] });
       setRestoreDialogOpen(false);
+      registrarRestauracion('producto',
+        { id: entityToRestore?.id, activo: false },
+        { id: entityToRestore?.id, activo: true, nombre: entityToRestore?.nombre }
+      );
       setEntityToRestore(null);
       toast({
         title: "Éxito",

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Categoria = {
   id: number;
@@ -41,6 +42,7 @@ export default function CategoriasProductos() {
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
   
   const showDeletedTab = canDelete || isSuperAdmin;
   
@@ -141,6 +143,7 @@ export default function CategoriasProductos() {
         title: "Éxito",
         description: "Categoría creada correctamente.",
       });
+      registrarCreacion('categoria', { nombre: formData.nombre });
     },
     onError: (error: any) => {
       toast({
@@ -163,6 +166,10 @@ export default function CategoriasProductos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categorias'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('categoria',
+        { id: editingEntity?.id, nombre: editingEntity?.nombre },
+        { id: editingEntity?.id, nombre: formData.nombre }
+      );
       setEditingEntity(null);
       resetForm();
       toast({
@@ -191,6 +198,7 @@ export default function CategoriasProductos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categorias'] });
       setDeleteDialogOpen(false);
+      registrarEliminacion('categoria', { id: entityToDelete?.id, nombre: entityToDelete?.nombre });
       setEntityToDelete(null);
       toast({
         title: "Éxito",
@@ -218,6 +226,10 @@ export default function CategoriasProductos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categorias'] });
       setRestoreDialogOpen(false);
+      registrarRestauracion('categoria',
+        { id: entityToRestore?.id, activo: false },
+        { id: entityToRestore?.id, activo: true, nombre: entityToRestore?.nombre }
+      );
       setEntityToRestore(null);
       toast({
         title: "Éxito",

@@ -19,6 +19,7 @@ import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, Pagi
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { ConvertirProspectoDialog } from "@/components/admin/ConvertirProspectoDialog";
 import { PhoneDisplay } from "@/components/admin/PhoneDisplay";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Comprador = {
   id: number;
@@ -83,6 +84,7 @@ export default function Compradores() {
   const [isConvertirDialogOpen, setIsConvertirDialogOpen] = useState(false);
   // Using sonner toast imported at line 9
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
 
   const { data: activeCompradoresData, isLoading: loadingActive } = useQuery({
     queryKey: ['compradores', 'active', currentPageActive, searchTerm],
@@ -328,6 +330,7 @@ export default function Compradores() {
       queryClient.invalidateQueries({ queryKey: ['compradores'] });
       setIsNewDialogOpen(false);
       toast.success("Comprador creado correctamente.");
+      registrarCreacion('comprador', { workflow: 'crear_comprador' });
     },
     onError: (error: any) => {
       let errorMessage = `Error al crear el comprador: ${error.message}`;
@@ -382,6 +385,10 @@ export default function Compradores() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['compradores'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('comprador',
+        { id: editingComprador?.id, nombre_legal: editingComprador?.nombre_legal },
+        { id: editingComprador?.id }
+      );
       setEditingComprador(null);
       toast.success("Comprador actualizado correctamente.");
     },
@@ -401,6 +408,7 @@ export default function Compradores() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['compradores'] });
+      registrarEliminacion('comprador', { id: compradorToDelete?.id, nombre_legal: compradorToDelete?.nombre_legal });
       toast.success("Comprador eliminado correctamente.");
     },
     onError: (error: any) => {
@@ -419,6 +427,10 @@ export default function Compradores() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['compradores'] });
+      registrarRestauracion('comprador',
+        { id: compradorToRestore?.id, activo: false },
+        { id: compradorToRestore?.id, activo: true, nombre_legal: compradorToRestore?.nombre_legal }
+      );
       toast.success("Comprador restaurado correctamente.");
     },
     onError: (error: any) => {

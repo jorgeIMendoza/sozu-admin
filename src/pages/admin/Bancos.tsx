@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { Label } from "@/components/ui/label";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Banco = {
   id: number;
@@ -37,6 +38,7 @@ export default function Bancos() {
   const [formData, setFormData] = useState({ nombre: "" });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
   
   const showDeletedTab = canDelete || isSuperAdmin;
   
@@ -100,6 +102,7 @@ export default function Bancos() {
         title: "Éxito",
         description: "Banco creado correctamente.",
       });
+      registrarCreacion('banco', { nombre: formData.nombre });
     },
     onError: (error: any) => {
       toast({
@@ -122,6 +125,10 @@ export default function Bancos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bancos'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('banco',
+        { id: editingBanco?.id, nombre: editingBanco?.nombre },
+        { id: editingBanco?.id, nombre: formData.nombre }
+      );
       setEditingBanco(null);
       setFormData({ nombre: "" });
       toast({
@@ -150,6 +157,7 @@ export default function Bancos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bancos'] });
       setDeleteDialogOpen(false);
+      registrarEliminacion('banco', { id: bancoToDelete?.id, nombre: bancoToDelete?.nombre });
       setBancoToDelete(null);
       toast({
         title: "Éxito",
@@ -177,6 +185,10 @@ export default function Bancos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bancos'] });
       setRestoreDialogOpen(false);
+      registrarRestauracion('banco',
+        { id: bancoToRestore?.id, activo: false },
+        { id: bancoToRestore?.id, activo: true, nombre: bancoToRestore?.nombre }
+      );
       setBancoToRestore(null);
       toast({
         title: "Éxito",

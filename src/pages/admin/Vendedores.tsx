@@ -15,6 +15,7 @@ import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationD
 import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
 import { saveTempPersonData } from "@/utils/personUtils";
 import { useExportToExcel } from "@/hooks/useExportToExcel";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Vendedor = {
   id: number;
@@ -45,6 +46,7 @@ export default function Vendedores() {
   const [vendedorToRestore, setVendedorToRestore] = useState<Vendedor | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
 
   const { data: activeVendedores = [], isLoading: loadingActive } = useQuery({
     queryKey: ['vendedores', 'active'],
@@ -195,6 +197,7 @@ export default function Vendedores() {
         title: "Éxito",
         description: "Vendedor creado correctamente.",
       });
+      registrarCreacion('vendedor', { workflow: 'crear_vendedor' });
     },
     onError: (error: any) => {
       toast({
@@ -228,6 +231,10 @@ export default function Vendedores() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendedores'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('vendedor',
+        { id: editingVendedor?.id, nombre_legal: editingVendedor?.nombre_legal },
+        { id: editingVendedor?.id }
+      );
       setEditingVendedor(null);
       toast({
         title: "Éxito",
@@ -254,6 +261,7 @@ export default function Vendedores() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendedores'] });
+      registrarEliminacion('vendedor', { id: vendedorToDelete?.id, nombre_legal: vendedorToDelete?.nombre_legal });
       toast({
         title: "Éxito",
         description: "Vendedor eliminado correctamente.",
@@ -279,6 +287,10 @@ export default function Vendedores() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendedores'] });
+      registrarRestauracion('vendedor',
+        { id: vendedorToRestore?.id, activo: false },
+        { id: vendedorToRestore?.id, activo: true, nombre_legal: vendedorToRestore?.nombre_legal }
+      );
       toast({
         title: "Éxito",
         description: "Vendedor restaurado correctamente.",

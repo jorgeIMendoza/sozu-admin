@@ -19,6 +19,7 @@ import { highlightText } from "@/lib/highlightText";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { NoProjectAccess } from "@/components/admin/NoProjectAccess";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 interface Bodega {
   id: number;
@@ -90,6 +91,7 @@ const Bodegas = () => {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarEliminacion, registrarRestauracion } = useActivityLogger();
   
   // Project access control
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess, hasNoAccess } = useProjectAccess();
@@ -338,6 +340,7 @@ const Bodegas = () => {
         title: "Bodega eliminada",
         description: "La bodega se ha marcado como inactiva.",
       });
+      registrarEliminacion('bodega', { id: bodegaId });
 
       queryClient.invalidateQueries({ queryKey: ['bodegas'] });
     } catch (error) {
@@ -392,6 +395,10 @@ const Bodegas = () => {
         title: "Bodega restaurada",
         description: "La bodega se ha reactivado.",
       });
+      registrarRestauracion('bodega',
+        { id: bodegaId, activo: false },
+        { id: bodegaId, activo: true }
+      );
 
       queryClient.invalidateQueries({ queryKey: ['bodegas'] });
     } catch (error) {

@@ -14,6 +14,7 @@ import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { PhoneDisplay } from "@/components/admin/PhoneDisplay";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type RepresentanteLegal = {
   id: number;
@@ -43,6 +44,7 @@ export default function RepresentantesLegales() {
   const [representantToRestore, setRepresentantToRestore] = useState<RepresentanteLegal | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
 
   const { data: activeRepresentantes = [], isLoading: loadingActiveRepresentantes } = useQuery({
     queryKey: ['representantes_legales', 'active'],
@@ -178,6 +180,7 @@ export default function RepresentantesLegales() {
         title: "Éxito",
         description: "Representante legal creado correctamente.",
       });
+      registrarCreacion('representante_legal', { workflow: 'crear_representante_legal' });
     },
     onError: (error: any) => {
       toast({
@@ -203,6 +206,10 @@ export default function RepresentantesLegales() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representantes_legales'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('representante_legal',
+        { id: editingRepresentant?.id, nombre_legal: editingRepresentant?.nombre_legal },
+        { id: editingRepresentant?.id }
+      );
       setEditingRepresentant(null);
       toast({
         title: "Éxito",
@@ -229,6 +236,7 @@ export default function RepresentantesLegales() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representantes_legales'] });
+      registrarEliminacion('representante_legal', { id: representantToDelete?.id, nombre_legal: representantToDelete?.nombre_legal });
       toast({
         title: "Éxito",
         description: "Representante legal eliminado correctamente.",
@@ -254,6 +262,10 @@ export default function RepresentantesLegales() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representantes_legales'] });
+      registrarRestauracion('representante_legal',
+        { id: representantToRestore?.id, activo: false },
+        { id: representantToRestore?.id, activo: true, nombre_legal: representantToRestore?.nombre_legal }
+      );
       toast({
         title: "Éxito",
         description: "Representante legal restaurado correctamente.",

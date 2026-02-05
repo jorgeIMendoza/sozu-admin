@@ -14,6 +14,7 @@ import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { PhoneDisplay } from "@/components/admin/PhoneDisplay";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type RepresentanteComercial = {
   id: number;
@@ -40,6 +41,7 @@ export default function RepresentantesComerciales() {
   const [representantToRestore, setRepresentantToRestore] = useState<RepresentanteComercial | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
 
   const { data: activeRepresentantes = [], isLoading: loadingActiveRepresentantes } = useQuery({
     queryKey: ['representantes_comerciales', 'active'],
@@ -148,6 +150,7 @@ export default function RepresentantesComerciales() {
         title: "Éxito",
         description: "Representante comercial creado correctamente.",
       });
+      registrarCreacion('representante_comercial', { workflow: 'crear_representante_comercial' });
     },
     onError: (error: any) => {
       toast({
@@ -172,6 +175,10 @@ export default function RepresentantesComerciales() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representantes_comerciales'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('representante_comercial',
+        { id: editingRepresentant?.id, nombre_legal: editingRepresentant?.nombre_legal },
+        { id: editingRepresentant?.id }
+      );
       setEditingRepresentant(null);
       toast({
         title: "Éxito",
@@ -199,6 +206,7 @@ export default function RepresentantesComerciales() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representantes_comerciales'] });
       setDeleteDialogOpen(false);
+      registrarEliminacion('representante_comercial', { id: representantToDelete?.id, nombre_legal: representantToDelete?.nombre_legal });
       setRepresentantToDelete(null);
       toast({
         title: "Éxito",
@@ -226,6 +234,10 @@ export default function RepresentantesComerciales() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representantes_comerciales'] });
       setRestoreDialogOpen(false);
+      registrarRestauracion('representante_comercial',
+        { id: representantToRestore?.id, activo: false },
+        { id: representantToRestore?.id, activo: true, nombre_legal: representantToRestore?.nombre_legal }
+      );
       setRepresentantToRestore(null);
       toast({
         title: "Éxito",

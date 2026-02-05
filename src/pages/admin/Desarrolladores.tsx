@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Desarrollador = {
   id: number;
@@ -44,6 +45,7 @@ export default function Desarrolladores() {
   const [entityToRestore, setEntityToRestore] = useState<Desarrollador | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
   
   const itemsPerPage = 10;
 
@@ -262,6 +264,7 @@ export default function Desarrolladores() {
         title: "Éxito",
         description: "Desarrollador creado correctamente.",
       });
+      registrarCreacion('desarrollador', { workflow: 'crear_desarrollador' });
     },
     onError: (error: any) => {
       toast({
@@ -347,6 +350,10 @@ export default function Desarrolladores() {
       queryClient.invalidateQueries({ queryKey: ['desarrolladores'] });
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('desarrollador',
+        { id: editingEntity?.id, nombre_legal: editingEntity?.nombre_legal },
+        { id: editingEntity?.id }
+      );
       setEditingEntity(null);
       toast({
         title: "Éxito",
@@ -374,6 +381,7 @@ export default function Desarrolladores() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['desarrolladores'] });
       setDeleteDialogOpen(false);
+      registrarEliminacion('desarrollador', { id: entityToDelete?.id, nombre_legal: entityToDelete?.nombre_legal });
       setEntityToDelete(null);
       toast({
         title: "Éxito",
@@ -401,6 +409,10 @@ export default function Desarrolladores() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['desarrolladores'] });
       setRestoreDialogOpen(false);
+      registrarRestauracion('desarrollador',
+        { id: entityToRestore?.id, activo: false },
+        { id: entityToRestore?.id, activo: true, nombre_legal: entityToRestore?.nombre_legal }
+      );
       setEntityToRestore(null);
       toast({
         title: "Éxito",
