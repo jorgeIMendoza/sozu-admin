@@ -39,6 +39,7 @@
    DollarSign,
    Cog,
    ShoppingCart,
+   GitBranch,
  } from 'lucide-react';
  
  // Mapeo de iconos por vista_front_end o menu_id
@@ -89,6 +90,7 @@
    '/admin/rastreo-clabes-stp': CreditCard,
    '/admin/rastreo-pagos-stp': CreditCard,
    '/admin/configuracion-reportes': Cog,
+   '/admin/version-produccion': GitBranch,
    // Inmobiliarias portal
    '/admin/inmobiliarias/mi-informacion': User,
    '/admin/inmobiliarias/mis-agentes': Briefcase,

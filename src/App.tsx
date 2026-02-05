@@ -68,6 +68,7 @@ const LogsActividad = lazy(() => import("./pages/admin/LogsActividad"));
 const RastreoClabeSTP = lazy(() => import("./pages/admin/RastreoClabeSTP"));
 const RastreoPagosSTP = lazy(() => import("./pages/admin/RastreoPagosSTP"));
 const ConfiguracionReportes = lazy(() => import("./pages/admin/ConfiguracionReportes"));
+ const VersionProduccion = lazy(() => import("./pages/admin/VersionProduccion"));
 const ReportesInventarios = lazy(() => import("./pages/admin/reportes/Inventarios"));
 const ReportesFinanzas = lazy(() => import("./pages/admin/reportes/Finanzas"));
 const ReporteViewer = lazy(() => import("./pages/admin/reportes/ReporteViewer"));
@@ -178,6 +179,7 @@ const App = () => (
                   <Route path="rastreo-clabes-stp" element={<RastreoClabeSTP />} />
                   <Route path="rastreo-pagos-stp" element={<RastreoPagosSTP />} />
                   <Route path="configuracion-reportes" element={<ConfiguracionReportes />} />
+                 <Route path="version-produccion" element={<VersionProduccion />} />
                   <Route path="reportes/inventarios" element={<ReportesInventarios />} />
                   <Route path="reportes/finanzas" element={<ReportesFinanzas />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
