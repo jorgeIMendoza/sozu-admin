@@ -3438,6 +3438,7 @@ export type Database = {
           fecha_creacion: string | null
           id: number
           nombre: string
+          orden: number | null
         }
         Insert: {
           activo?: boolean | null
@@ -3445,6 +3446,7 @@ export type Database = {
           fecha_creacion?: string | null
           id?: never
           nombre: string
+          orden?: number | null
         }
         Update: {
           activo?: boolean | null
@@ -3452,6 +3454,7 @@ export type Database = {
           fecha_creacion?: string | null
           id?: never
           nombre?: string
+          orden?: number | null
         }
         Relationships: []
       }

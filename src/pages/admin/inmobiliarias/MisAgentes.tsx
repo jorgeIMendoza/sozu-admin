@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Edit, Trash2, FileSpreadsheet, RotateCcw, UserX, Plus } from "lucide-react";
+import { Search, Edit, Trash2, FileSpreadsheet, RotateCcw, UserX, Plus, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import { InmobiliariaHeader } from "@/components/admin/InmobiliariaHeader";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { BulkUploadMisAgentesDialog } from "@/components/admin/BulkUploadMisAgentesDialog";
 
 type Agente = {
   id: number;
@@ -46,6 +47,7 @@ export default function MisAgentes() {
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState("activos");
   const [selectedInmobiliariaId, setSelectedInmobiliariaId] = useState<number | null>(null);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canCreate, canUpdate, canDelete, canExport, canApprove } = usePagePermissions('/admin/inmobiliarias/mis-agentes');
@@ -54,6 +56,24 @@ export default function MisAgentes() {
   const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
 
   const inmobiliariaId = selectedInmobiliariaId;
+
+  // Get inmobiliaria name for bulk upload
+  const { data: inmobiliariaData } = useQuery({
+    queryKey: ['inmobiliaria-nombre', inmobiliariaId],
+    queryFn: async () => {
+      if (!inmobiliariaId) return null;
+      const { data, error } = await supabase
+        .from('personas')
+        .select('nombre_legal, nombre_comercial')
+        .eq('id', inmobiliariaId)
+        .single();
+      if (error) return null;
+      return data;
+    },
+    enabled: !!inmobiliariaId,
+  });
+
+  const inmobiliariaNombre = inmobiliariaData?.nombre_comercial || inmobiliariaData?.nombre_legal || 'Inmobiliaria';
 
   // Query for active agents
   const { data: agentesActivos = [], isLoading: loadingActivos } = useQuery({
@@ -473,10 +493,16 @@ export default function MisAgentes() {
         </div>
         <div className="flex gap-2">
           {canCreate && inmobiliariaId && (
-            <Button onClick={() => setIsNewDialogOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo Agente
-            </Button>
+            <>
+              <Button onClick={() => setIsNewDialogOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo Agente
+              </Button>
+              <Button variant="outline" onClick={() => setIsBulkUploadOpen(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Carga Masiva
+              </Button>
+            </>
           )}
           {canExport && (
             <Button
@@ -765,6 +791,20 @@ export default function MisAgentes() {
         warningMessage="Esta acción también reactivará el acceso del usuario asociado al sistema."
         actionType="restore"
       />
+
+      {/* Bulk Upload Dialog */}
+      {inmobiliariaId && (
+        <BulkUploadMisAgentesDialog
+          open={isBulkUploadOpen}
+          onClose={() => setIsBulkUploadOpen(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['mis-agentes-activos'] });
+            queryClient.invalidateQueries({ queryKey: ['mis-agentes-eliminados'] });
+          }}
+          inmobiliariaId={inmobiliariaId}
+          inmobiliariaNombre={inmobiliariaNombre}
+        />
+      )}
     </div>
   );
 }
