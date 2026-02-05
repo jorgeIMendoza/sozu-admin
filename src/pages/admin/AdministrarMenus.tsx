@@ -27,7 +27,7 @@ interface Submenu {
   menu_id: number;
   orden: number;
   activo: boolean;
-  solo_usuarioA?: boolean;
+  solo_usuarioa?: boolean;
 }
 
 export default function AdministrarMenus() {
@@ -61,7 +61,7 @@ export default function AdministrarMenus() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('submenus')
-        .select('id, nombre, vista_front_end, menu_id, orden, activo, solo_usuarioA')
+        .select('id, nombre, vista_front_end, menu_id, orden, activo, solo_usuarioa')
         .order('orden');
       if (error) throw error;
       return data as unknown as Submenu[];

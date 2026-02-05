@@ -39,7 +39,7 @@ interface Submenu {
   menu_id: number;
   orden: number;
   activo: boolean;
-  solo_usuarioA?: boolean;
+  solo_usuarioa?: boolean;
 }
 
 interface Menu {
@@ -60,7 +60,7 @@ export function SortableSubmenuRow({ submenu, menus, allSubmenus, onUpdate }: So
   const [nombre, setNombre] = useState(submenu.nombre);
   const [vistaFrontEnd, setVistaFrontEnd] = useState(submenu.vista_front_end || '');
   const [activo, setActivo] = useState(submenu.activo);
-  const [soloUsuarioA, setSoloUsuarioA] = useState(submenu.solo_usuarioA || false);
+  const [soloUsuarioA, setSoloUsuarioA] = useState(submenu.solo_usuarioa || false);
   const [menuId, setMenuId] = useState(submenu.menu_id);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -83,7 +83,7 @@ export function SortableSubmenuRow({ submenu, menus, allSubmenus, onUpdate }: So
     setNombre(submenu.nombre);
     setVistaFrontEnd(submenu.vista_front_end || '');
     setActivo(submenu.activo);
-    setSoloUsuarioA(submenu.solo_usuarioA || false);
+    setSoloUsuarioA(submenu.solo_usuarioa || false);
     setMenuId(submenu.menu_id);
   }, [submenu]);
 
@@ -191,12 +191,12 @@ export function SortableSubmenuRow({ submenu, menus, allSubmenus, onUpdate }: So
     
     const { error } = await supabase
       .from('submenus')
-      .update({ solo_usuarioA: checked, fecha_actualizacion: new Date().toISOString() })
+      .update({ solo_usuarioa: checked, fecha_actualizacion: new Date().toISOString() })
       .eq('id', submenu.id);
 
     if (error) {
       toast.error('Error al actualizar restricción');
-      setSoloUsuarioA(submenu.solo_usuarioA || false);
+      setSoloUsuarioA(submenu.solo_usuarioa || false);
     } else {
       onUpdate();
     }
