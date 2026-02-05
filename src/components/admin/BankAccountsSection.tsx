@@ -48,9 +48,14 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
   });
 
   // Fetch bank accounts with bank names
-  const { data: bankAccounts = [] } = useQuery({
+  const { data: bankAccounts = [], isLoading: loadingAccounts } = useQuery({
     queryKey: ['bankAccounts', personId],
     queryFn: async () => {
+      console.log('[BankAccountsSection] Fetching bank accounts for personId:', personId);
+      if (!personId) {
+        console.warn('[BankAccountsSection] No personId provided, returning empty array');
+        return [];
+      }
       const { data, error } = await supabase
         .from('cuentas_bancarias')
         .select(`
@@ -61,9 +66,14 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error('[BankAccountsSection] Error fetching bank accounts:', error);
+        throw error;
+      }
+      console.log('[BankAccountsSection] Fetched bank accounts:', data);
       return data || [];
-    }
+    },
+    enabled: !!personId,
   });
 
   // Check if person has "Dueño Vendedor" or "Aportante" entity type for this project
@@ -123,25 +133,38 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
 
   const addMutation = useMutation({
     mutationFn: async (accountData: typeof newAccount) => {
+      console.log('[BankAccountsSection] Adding bank account for personId:', personId, accountData);
+      
+      if (!personId) {
+        throw new Error('No se puede agregar cuenta: ID de persona no disponible');
+      }
+      
       // If trying to set STP account, check if this person already has one
       if (accountData.es_cuenta_fisica_para_stp && existingStpAccount) {
         throw new Error('Esta entidad ya tiene una cuenta STP');
       }
 
+      const insertData = {
+        ...accountData,
+        id_banco: parseInt(accountData.id_banco),
+        id_persona: personId,
+        url_evidencia: accountData.url_evidencia || null,
+        cuenta_clabe: accountData.cuenta_clabe || null,
+        cuenta_swift: accountData.cuenta_swift || null
+      };
+      console.log('[BankAccountsSection] Insert data:', insertData);
+      
       const { data, error } = await supabase
         .from('cuentas_bancarias')
-        .insert([{
-          ...accountData,
-          id_banco: parseInt(accountData.id_banco),
-          id_persona: personId,
-          url_evidencia: accountData.url_evidencia || null,
-          cuenta_clabe: accountData.cuenta_clabe || null,
-          cuenta_swift: accountData.cuenta_swift || null
-        }])
+        .insert([insertData])
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('[BankAccountsSection] Insert error:', error);
+        throw error;
+      }
+      console.log('[BankAccountsSection] Insert success:', data);
       return data;
     },
     onSuccess: () => {
@@ -157,8 +180,13 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
       setIsAdding(false);
       toast({ title: "Cuenta bancaria agregada exitosamente" });
     },
-    onError: () => {
-      toast({ title: "Error al agregar cuenta bancaria", variant: "destructive" });
+    onError: (error: any) => {
+      console.error('[BankAccountsSection] Add mutation error:', error);
+      toast({ 
+        title: "Error al agregar cuenta bancaria", 
+        description: error.message || 'Error desconocido',
+        variant: "destructive" 
+      });
     }
   });
 
