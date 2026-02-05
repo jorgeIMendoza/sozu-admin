@@ -1,121 +1,80 @@
 
+# Plan: Crear Menú "Configuraciones/Logs" con 4 Submenus
 
-# Plan: Menús Dinámicos desde Base de Datos
+## Resumen
 
-## Objetivo
-Modificar el sistema para que los nombres de menús y submenús se obtengan dinámicamente de las tablas `menus` y `submenus` de la base de datos, eliminando los títulos hardcodeados en el código.
-
-## Análisis de la Situación Actual
-
-### Estructura de Base de Datos
-- **Tabla `menus`**: id, nombre, activo
-- **Tabla `submenus`**: id, nombre, vista_front_end, menu_id, activo
-
-### Datos Relevantes Encontrados
-El submenu con `vista_front_end: /admin/inmobiliarias/mis-propiedades` tiene:
-- **En BD**: nombre = "Mi inventario"  
-- **En código**: título hardcodeado = "Mis Propiedades"
-
-### Problema Identificado
-Los nombres están definidos estáticamente en `AdminSidebar.tsx` y no se sincronizan con la BD.
-
----
-
-## Solución Propuesta
-
-### Crear nuevo hook: `useDynamicMenus.ts`
-
-Este hook obtendrá la estructura completa de menús y submenús desde la BD, respetando los permisos del usuario.
+Crear el menú faltante "Configuraciones/Logs" (ID 13) con los 4 submenus que aparecen en la imagen:
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                    useDynamicMenus                          │
-├─────────────────────────────────────────────────────────────┤
-│  1. Fetch menus activos                                     │
-│  2. Fetch submenus con permisos del rol                     │
-│  3. Construir estructura NavigationItem[]                   │
-│  4. Mapear iconos por vista_front_end                       │
-│  5. Retornar menús filtrados listos para renderizar         │
-└─────────────────────────────────────────────────────────────┘
+Configuraciones/Logs (Menu ID: 13)
+├── Pregunta a Aloris-IA    → /admin/consultas-ia
+├── Logs de Actividad       → /admin/logs-actividad
+├── Rastreo CLABEs STP      → /admin/rastreo-clabes-stp
+└── Rastreo Pagos STP       → /admin/rastreo-pagos-stp
 ```
 
-### Flujo de Datos
+## Verificación del Frontend
 
-```text
-BD: menus + submenus
-        ↓
-   useDynamicMenus
-        ↓
-  Combina con iconos (mapeo local)
-        ↓
-  Filtra por permisos del rol
-        ↓
-   AdminSidebar renderiza
-```
-
----
+El código ya está preparado:
+- Iconos mapeados en `useDynamicMenus.ts` líneas 87-90
+- Icono del menú 13: Activity (línea 113)
+- Restricción por email ya implementada (solo jorge.mendoza@sozu.com)
 
 ## Detalles Técnicos
 
-### 1. Nuevo archivo: `src/hooks/useDynamicMenus.ts`
+### Migración de Base de Datos
 
-Responsabilidades:
-- Consultar tabla `menus` con sus `submenus` relacionados
-- Filtrar submenus según permisos del usuario (usando lógica similar a `useAllowedMenus`)
-- Retornar estructura lista para el sidebar
+```sql
+-- Crear menú Configuraciones/Logs
+INSERT INTO public.menus (id, nombre, orden, activo)
+VALUES (13, 'Configuraciones/Logs', 13, true)
+ON CONFLICT (id) DO NOTHING;
 
-### 2. Mapeo de Iconos
-
-Dado que la BD no tiene campo de iconos, se mantendrá un mapeo por `vista_front_end`:
-
-```typescript
-const iconMap: Record<string, LucideIcon> = {
-  '/admin': LayoutDashboard,
-  '/admin/proyectos': Building2,
-  '/admin/propiedades': Building,
-  '/admin/inmobiliarias/mis-propiedades': Building,
-  // ... etc
-};
+-- Crear los 4 submenus
+INSERT INTO public.submenus (id, nombre, menu_id, vista_front_end, orden, activo) VALUES
+(51, 'Pregunta a Aloris-IA', 13, '/admin/consultas-ia', 51, true),
+(52, 'Logs de Actividad', 13, '/admin/logs-actividad', 52, true),
+(53, 'Rastreo CLABEs STP', 13, '/admin/rastreo-clabes-stp', 53, true),
+(54, 'Rastreo Pagos STP', 13, '/admin/rastreo-pagos-stp', 54, true)
+ON CONFLICT (id) DO NOTHING;
 ```
 
-### 3. Modificación de `AdminSidebar.tsx`
+### Mapeo de Iconos (Ya Existente)
 
-- Eliminar arrays estáticos `navigationItems`, `inmobiliariasMenuItem`, `logsMenuItem`
-- Usar el nuevo hook `useDynamicMenus()`
-- Los títulos vendrán de la BD, los iconos del mapeo local
+| Ruta | Icono |
+|------|-------|
+| /admin/consultas-ia | Bot |
+| /admin/logs-actividad | Activity |
+| /admin/rastreo-clabes-stp | CreditCard |
+| /admin/rastreo-pagos-stp | CreditCard |
 
-### 4. Casos Especiales
+### Restricción de Acceso (Ya Existente)
 
-| Caso | Solución |
-|------|----------|
-| Menú "Configuraciones/Logs" (solo jorge.mendoza@sozu.com) | Agregar menú en BD con id específico, filtrar en hook por email |
-| Menú Dashboard sin hijos | Detectar cuando menu tiene un solo submenu y aplanar |
-| Super Admin | Mostrar todos los menús sin filtrar por permisos |
+El código en `useDynamicMenus.ts` ya filtra este menú:
 
----
+```typescript
+const LOGS_ALLOWED_EMAIL = 'jorge.mendoza@sozu.com';
+const LOGS_MENU_ID = 13;
 
-## Archivos a Modificar/Crear
+// En el filtrado:
+if (submenu.menu_id === LOGS_MENU_ID && userEmail !== LOGS_ALLOWED_EMAIL) {
+  return false;
+}
+```
 
-| Archivo | Acción |
+Solo el usuario `jorge.mendoza@sozu.com` podrá ver este menú.
+
+## Archivos a Modificar
+
+| Archivo | Cambio |
 |---------|--------|
-| `src/hooks/useDynamicMenus.ts` | **Crear** - Hook para obtener menús de BD |
-| `src/components/admin/AdminSidebar.tsx` | **Modificar** - Usar hook dinámico |
-| `src/hooks/useAllowedMenus.ts` | **Modificar** - Exportar lógica reutilizable |
+| Nueva migración SQL | Insertar menú 13 y 4 submenus |
 
----
+No se requieren cambios en código frontend - todo está preparado.
 
-## Beneficios
+## Resultado Esperado
 
-1. **Flexibilidad**: Cambios en BD se reflejan automáticamente
-2. **Mantenibilidad**: No requiere deploy para cambiar nombres de menús
-3. **Consistencia**: Una sola fuente de verdad (BD)
-4. **Escalabilidad**: Agregar nuevos menús/submenús solo requiere insertar en BD
-
----
-
-## Consideraciones de Rendimiento
-
-- Los menús se cachean con React Query (staleTime alto)
-- Solo se recargan cuando cambian permisos (`permissionVersion`)
-- Carga inicial junto con permisos (una sola consulta combinada si es posible)
-
+Después de aplicar la migración:
+1. El usuario jorge.mendoza@sozu.com verá el menú "Configuraciones/Logs"
+2. Dentro aparecerán los 4 submenus en el orden correcto
+3. Otros usuarios no verán este menú
