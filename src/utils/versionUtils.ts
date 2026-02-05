@@ -1,4 +1,5 @@
 import { APP_VERSION } from '@/lib/config';
+ import { supabase } from '@/integrations/supabase/client';
  
  const PRODUCTION_URL = 'https://sozu-admin.lovable.app';
 
@@ -57,12 +58,15 @@ export async function checkForUpdates(): Promise<boolean> {
   */
  export async function fetchProductionVersion(): Promise<{ version: string; buildTime: number } | null> {
    try {
-     const response = await fetch(`${PRODUCTION_URL}/version.json?t=${Date.now()}`, {
-       cache: 'no-store',
-       headers: { 'Cache-Control': 'no-cache' }
-     });
-     if (!response.ok) return null;
-     return await response.json();
+     // Use edge function to avoid CORS issues
+     const { data, error } = await supabase.functions.invoke('get-production-version');
+     
+     if (error) {
+       console.error('Error fetching production version:', error);
+       return null;
+     }
+     
+     return data;
    } catch {
      return null;
    }
