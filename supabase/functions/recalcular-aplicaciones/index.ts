@@ -125,17 +125,23 @@ serve(async (req) => {
 
         const aAplicar = Math.min(remaining, necesario);
         
-        if (aAplicar > 0) {
-          newAplicaciones.push({
-            id_pago: pago.id,
-            id_acuerdo_pago: acuerdo.id,
-            monto: aAplicar,
-            activo: true,
-            es_multa: false
-          });
+        // Only create application if amount is significant (> 0.01 to avoid constraint violations)
+        if (aAplicar >= 0.01) {
+          // Round to 2 decimal places to avoid floating point issues
+          const montoRedondeado = Math.round(aAplicar * 100) / 100;
+          
+          if (montoRedondeado > 0) {
+            newAplicaciones.push({
+              id_pago: pago.id,
+              id_acuerdo_pago: acuerdo.id,
+              monto: montoRedondeado,
+              activo: true,
+              es_multa: false
+            });
 
-          paymentRemaining.set(pago.id, remaining - aAplicar);
-          acuerdo.montoPagado += aAplicar;
+            paymentRemaining.set(pago.id, remaining - montoRedondeado);
+            acuerdo.montoPagado += montoRedondeado;
+          }
         }
       }
     }
