@@ -232,6 +232,47 @@
          }, {});
        }
  
+       // Get specific bodega/estacionamiento names for product-based sales
+       // We need to find the bodega linked to the property AND the product
+       const propiedadProductoLinks = ofertasData
+         .filter((o: any) => o.id_producto && o.id_propiedad)
+         .map((o: any) => ({ id_propiedad: o.id_propiedad, id_producto: o.id_producto, oferta_id: o.id }));
+ 
+       let bodegasNombresMap: Record<string, string> = {};
+       let estacionamientosNombresMap: Record<string, string> = {};
+ 
+       if (propiedadProductoLinks.length > 0) {
+         // Get bodegas linked to these properties/products
+         const propiedadIdsForProducts = [...new Set(propiedadProductoLinks.map((l: any) => l.id_propiedad))] as number[];
+         const productoIdsForLinks = [...new Set(propiedadProductoLinks.map((l: any) => l.id_producto))] as number[];
+ 
+         const { data: bodegasData } = await supabase
+           .from('bodegas')
+           .select('id, nombre, id_propiedad, id_producto')
+           .in('id_propiedad', propiedadIdsForProducts)
+           .in('id_producto', productoIdsForLinks)
+           .eq('activo', true);
+ 
+         // Map: "propiedadId-productoId" -> bodega nombre
+         (bodegasData || []).forEach((b: any) => {
+           const key = `${b.id_propiedad}-${b.id_producto}`;
+           bodegasNombresMap[key] = b.nombre;
+         });
+ 
+         // Get estacionamientos linked to these properties/products
+         const { data: estacionamientosData } = await supabase
+           .from('estacionamientos')
+           .select('id, nombre, id_propiedad, id_producto')
+           .in('id_propiedad', propiedadIdsForProducts)
+           .in('id_producto', productoIdsForLinks)
+           .eq('activo', true);
+ 
+         (estacionamientosData || []).forEach((e: any) => {
+           const key = `${e.id_propiedad}-${e.id_producto}`;
+           estacionamientosNombresMap[key] = e.nombre;
+         });
+       }
+ 
        // Get existing invoices (documento tipo 46) for these cuentas
        const cuentaIds = cuentasData.map((c: any) => c.id);
        const { data: documentosData } = await supabase
@@ -263,6 +304,13 @@
          const propInfo = oferta?.id_propiedad ? propiedadesMap[oferta.id_propiedad] : null;
          const prodInfo = oferta?.id_producto ? productosMap[oferta.id_producto] : null;
  
+         // For product sales linked to a property, get the specific bodega/estacionamiento name
+         let specificProductName = null;
+         if (oferta?.id_producto && oferta?.id_propiedad) {
+           const key = `${oferta.id_propiedad}-${oferta.id_producto}`;
+           specificProductName = bodegasNombresMap[key] || estacionamientosNombresMap[key] || null;
+         }
+ 
          const precioFinal = cuenta.precio_final || 0;
          const porcentaje = cuenta.porcentaje_comision_venta || 0;
          const montoComision = precioFinal * (porcentaje / 100);
@@ -272,8 +320,8 @@
            cuenta_cobranza_id: cuenta.id,
            proyecto_nombre: propInfo?.proyecto_nombre || '-',
            edificio_nombre: propInfo?.edificio_nombre || '-',
-           modelo_nombre: propInfo?.modelo_nombre || prodInfo?.nombre || '-',
-           numero_propiedad: propInfo?.numero_propiedad || prodInfo?.nombre || '-',
+           modelo_nombre: prodInfo?.nombre || propInfo?.modelo_nombre || '-',
+           numero_propiedad: specificProductName || propInfo?.numero_propiedad || '-',
            precio_final: precioFinal,
            porcentaje_comision: porcentaje,
            monto_comision: montoComision,
