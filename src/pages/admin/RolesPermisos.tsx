@@ -560,7 +560,7 @@ export default function RolesPermisos() {
         .from('submenus')
         .select('id, nombre, menu_id, orden')
         .eq('activo', true)
-        .or('solo_usuarioA.is.null,solo_usuarioA.eq.false')
+        .or('solo_usuarioa.is.null,solo_usuarioa.eq.false')
         .order('orden');
       
       if (submenusError) throw submenusError;
@@ -572,12 +572,12 @@ export default function RolesPermisos() {
     },
   });
 
-  // Fetch available permissions per submenu (which permissions are configured for each submenu)
+  // Fetch available permissions per submenu from submenus_permisos_disponibles
   const { data: availablePermissions = new Set<string>() } = useQuery<Set<string>>({
     queryKey: ['available-permissions-per-submenu'],
     queryFn: async (): Promise<Set<string>> => {
       const { data, error } = await supabase
-        .from('submenus_permisos')
+        .from('submenus_permisos_disponibles')
         .select('submenu_id, permiso_id')
         .eq('activo', true);
       
@@ -593,22 +593,8 @@ export default function RolesPermisos() {
     },
   });
 
-  // Permisos que NO aplican a ciertos submenus (hardcoded exclusions)
-  // Submenu 45 = Comisiones externas: no tiene exportar ni generar_oferta
-  const SUBMENU_PERMISSION_EXCLUSIONS: Record<number, string[]> = {
-    45: ['exportar', 'generar_oferta'],
-  };
-
   // Check if a permission is available for a submenu
   const isPermissionAvailableForSubmenu = (submenuId: number, permisoId: number): boolean => {
-    // Check hardcoded exclusions first
-    const exclusions = SUBMENU_PERMISSION_EXCLUSIONS[submenuId];
-    if (exclusions) {
-      const permiso = permisos.find(p => p.id === permisoId);
-      if (permiso && exclusions.includes(permiso.nombre)) {
-        return false;
-      }
-    }
     return availablePermissions.has(`${submenuId}-${permisoId}`);
   };
 

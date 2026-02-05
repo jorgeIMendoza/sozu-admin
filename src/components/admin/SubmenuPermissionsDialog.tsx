@@ -19,13 +19,7 @@ interface Submenu {
   menu_id: number;
   orden: number;
   activo: boolean;
-  solo_usuarioA?: boolean;
-}
-
-interface Role {
-  id: number;
-  nombre: string;
-  es_rol_interno: boolean;
+  solo_usuarioa?: boolean;
 }
 
 interface Permission {
@@ -40,21 +34,9 @@ interface SubmenuPermissionsDialogProps {
 
 export function SubmenuPermissionsDialog({ submenu, onClose }: SubmenuPermissionsDialogProps) {
   const queryClient = useQueryClient();
-  const [selectedPermissions, setSelectedPermissions] = useState<Record<number, Set<number>>>({});
+  const [selectedPermissions, setSelectedPermissions] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
-
-  const { data: roles = [] } = useQuery({
-    queryKey: ['roles-for-permissions'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roles')
-        .select('id, nombre, es_rol_interno')
-        .eq('activo', true)
-        .order('nombre');
-      if (error) throw error;
-      return data as Role[];
-    },
-  });
+  const [initialized, setInitialized] = useState(false);
 
   const { data: permissions = [] } = useQuery({
     queryKey: ['all-permissions'],
@@ -69,77 +51,52 @@ export function SubmenuPermissionsDialog({ submenu, onClose }: SubmenuPermission
     },
   });
 
-  const { data: currentPermissions = [], isLoading: loadingCurrentPermissions } = useQuery({
-    queryKey: ['submenu-permissions', submenu?.id],
+  const { data: availablePermissions = [], isLoading: loadingAvailable } = useQuery({
+    queryKey: ['submenu-available-permissions', submenu?.id],
     queryFn: async () => {
       if (!submenu) return [];
       const { data, error } = await supabase
-        .from('submenus_permisos')
-        .select('rol_id, permiso_id')
+        .from('submenus_permisos_disponibles')
+        .select('permiso_id')
         .eq('submenu_id', submenu.id)
         .eq('activo', true);
       if (error) throw error;
-      return data;
+      return data.map(d => d.permiso_id);
     },
     enabled: !!submenu,
   });
 
-  // Initialize selected permissions when data loads - only when submenu changes
+  // Reset initialization when submenu changes
   useEffect(() => {
-    if (!submenu) {
-      setSelectedPermissions({});
-      return;
-    }
+    setInitialized(false);
   }, [submenu?.id]);
 
-  // Sync permissions when currentPermissions data is fetched
+  // Initialize selected permissions when data loads
   useEffect(() => {
-    if (!currentPermissions || !submenu) return;
+    if (!submenu || loadingAvailable || initialized) return;
     
-    const permMap: Record<number, Set<number>> = {};
-    currentPermissions.forEach(cp => {
-      if (!permMap[cp.rol_id]) {
-        permMap[cp.rol_id] = new Set();
-      }
-      permMap[cp.rol_id].add(cp.permiso_id);
-    });
-    setSelectedPermissions(permMap);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingCurrentPermissions, submenu?.id]);
+    setSelectedPermissions(new Set(availablePermissions));
+    setInitialized(true);
+  }, [submenu?.id, loadingAvailable, availablePermissions, initialized]);
 
-  const togglePermission = (roleId: number, permissionId: number) => {
+  const togglePermission = (permissionId: number) => {
     setSelectedPermissions(prev => {
-      const newMap = { ...prev };
-      if (!newMap[roleId]) {
-        newMap[roleId] = new Set();
+      const newSet = new Set(prev);
+      if (newSet.has(permissionId)) {
+        newSet.delete(permissionId);
       } else {
-        newMap[roleId] = new Set(newMap[roleId]);
+        newSet.add(permissionId);
       }
-      
-      if (newMap[roleId].has(permissionId)) {
-        newMap[roleId].delete(permissionId);
-      } else {
-        newMap[roleId].add(permissionId);
-      }
-      
-      return newMap;
+      return newSet;
     });
   };
 
-  const toggleAllForRole = (roleId: number) => {
-    setSelectedPermissions(prev => {
-      const newMap = { ...prev };
-      const currentSet = prev[roleId] || new Set();
-      const allSelected = permissions.every(p => currentSet.has(p.id));
-      
-      if (allSelected) {
-        newMap[roleId] = new Set();
-      } else {
-        newMap[roleId] = new Set(permissions.map(p => p.id));
-      }
-      
-      return newMap;
-    });
+  const toggleAll = () => {
+    if (selectedPermissions.size === permissions.length) {
+      setSelectedPermissions(new Set());
+    } else {
+      setSelectedPermissions(new Set(permissions.map(p => p.id)));
+    }
   };
 
   const handleSave = async () => {
@@ -147,103 +104,89 @@ export function SubmenuPermissionsDialog({ submenu, onClose }: SubmenuPermission
     
     setIsSaving(true);
     try {
-      // Delete all existing permissions for this submenu
+      // Delete all existing available permissions for this submenu
       await supabase
-        .from('submenus_permisos')
+        .from('submenus_permisos_disponibles')
         .delete()
         .eq('submenu_id', submenu.id);
       
-      // Build new permissions array
-      const newPermissions: { submenu_id: number; rol_id: number; permiso_id: number; activo: boolean }[] = [];
-      
-      Object.entries(selectedPermissions).forEach(([roleIdStr, permissionSet]) => {
-        const roleId = parseInt(roleIdStr);
-        permissionSet.forEach(permissionId => {
-          newPermissions.push({
-            submenu_id: submenu.id,
-            rol_id: roleId,
-            permiso_id: permissionId,
-            activo: true,
-          });
-        });
-      });
-      
-      if (newPermissions.length > 0) {
+      // Insert new available permissions
+      if (selectedPermissions.size > 0) {
+        const newRecords = Array.from(selectedPermissions).map(permiso_id => ({
+          submenu_id: submenu.id,
+          permiso_id,
+          activo: true,
+        }));
+        
         const { error } = await supabase
-          .from('submenus_permisos')
-          .insert(newPermissions);
+          .from('submenus_permisos_disponibles')
+          .insert(newRecords);
         
         if (error) throw error;
       }
       
-      toast.success('Permisos actualizados');
-      queryClient.invalidateQueries({ queryKey: ['submenu-permissions', submenu.id] });
+      toast.success('Permisos disponibles actualizados');
+      queryClient.invalidateQueries({ queryKey: ['submenu-available-permissions', submenu.id] });
       onClose();
     } catch (error) {
-      console.error('Error saving permissions:', error);
+      console.error('Error saving available permissions:', error);
       toast.error('Error al guardar permisos');
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Filter to only show internal roles (es_rol_interno = true)
-  const internalRoles = roles.filter(r => r.es_rol_interno);
+  const allSelected = selectedPermissions.size === permissions.length;
 
   return (
     <Dialog open={!!submenu} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            Permisos: {submenu?.nombre}
+            Permisos disponibles: {submenu?.nombre}
           </DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Selecciona qué permisos estarán disponibles para este submenú en la configuración de roles.
+          </p>
         </DialogHeader>
         
-        {loadingCurrentPermissions ? (
+        {loadingAvailable ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : (
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-background border-b">
-                <tr>
-                  <th className="text-left p-2 font-medium">Rol</th>
-                  {permissions.map(perm => (
-                    <th key={perm.id} className="p-2 text-center font-medium capitalize text-xs">
-                      {perm.nombre}
-                    </th>
-                  ))}
-                  <th className="p-2 text-center font-medium text-xs">Todos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {internalRoles.map(role => {
-                  const rolePerms = selectedPermissions[role.id] || new Set();
-                  const allSelected = permissions.every(p => rolePerms.has(p.id));
-                  
-                  return (
-                    <tr key={role.id} className="border-b hover:bg-muted/50">
-                      <td className="p-2 font-medium">{role.nombre}</td>
-                      {permissions.map(perm => (
-                        <td key={perm.id} className="p-2 text-center">
-                          <Checkbox
-                            checked={rolePerms.has(perm.id)}
-                            onCheckedChange={() => togglePermission(role.id, perm.id)}
-                          />
-                        </td>
-                      ))}
-                      <td className="p-2 text-center">
-                        <Checkbox
-                          checked={allSelected}
-                          onCheckedChange={() => toggleAllForRole(role.id)}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            {permissions.map(perm => (
+              <div key={perm.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/50">
+                <Checkbox
+                  id={`perm-${perm.id}`}
+                  checked={selectedPermissions.has(perm.id)}
+                  onCheckedChange={() => togglePermission(perm.id)}
+                />
+                <label 
+                  htmlFor={`perm-${perm.id}`}
+                  className="flex-1 cursor-pointer capitalize"
+                >
+                  {perm.nombre}
+                </label>
+              </div>
+            ))}
+            
+            <div className="border-t pt-3">
+              <div className="flex items-center gap-3 p-2 rounded hover:bg-muted/50">
+                <Checkbox
+                  id="perm-all"
+                  checked={allSelected}
+                  onCheckedChange={toggleAll}
+                />
+                <label 
+                  htmlFor="perm-all"
+                  className="flex-1 cursor-pointer font-medium"
+                >
+                  Seleccionar todos
+                </label>
+              </div>
+            </div>
           </div>
         )}
         

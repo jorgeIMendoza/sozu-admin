@@ -5478,6 +5478,48 @@ export type Database = {
           },
         ]
       }
+      submenus_permisos_disponibles: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          permiso_id: number
+          submenu_id: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          permiso_id: number
+          submenu_id: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          permiso_id?: number
+          submenu_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submenus_permisos_disponibles_permiso_id_fkey"
+            columns: ["permiso_id"]
+            isOneToOne: false
+            referencedRelation: "permisos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "submenus_permisos_disponibles_submenu_id_fkey"
+            columns: ["submenu_id"]
+            isOneToOne: false
+            referencedRelation: "submenus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tabla_carga_documentos_propiedades_n8n: {
         Row: {
           error: string | null
