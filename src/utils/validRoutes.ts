@@ -1,0 +1,91 @@
+// Rutas válidas del sistema (deben coincidir con las rutas en src/App.tsx)
+export const VALID_ADMIN_ROUTES = new Set([
+  '/admin',
+  '/admin/proyectos',
+  '/admin/propiedades',
+  '/admin/usuarios',
+  '/admin/usuarios/nuevo',
+  '/admin/usuarios-directivos',
+  '/admin/usuarios-clientes',
+  '/admin/roles-permisos',
+  '/admin/entidades-legales',
+  '/admin/desarrolladores',
+  '/admin/inmobiliarias',
+  '/admin/administradoras',
+  '/admin/notarias',
+  '/admin/bancos',
+  '/admin/prospectos',
+  '/admin/compradores',
+  '/admin/vendedores',
+  '/admin/duenos',
+  '/admin/residentes',
+  '/admin/agentes',
+  '/admin/administradores-personas',
+  '/admin/representantes-legales',
+  '/admin/representantes-comerciales',
+  '/admin/productos',
+  '/admin/servicios',
+  '/admin/categorias-productos',
+  '/admin/amenidades',
+  '/admin/caracteristicas',
+  '/admin/modelos',
+  '/admin/vistas',
+  '/admin/estacionamientos',
+  '/admin/bodegas',
+  '/admin/cuentas-cobranza',
+  '/admin/cuentas-mantenimiento',
+  '/admin/comisiones',
+  '/admin/aprobacion-comisiones',
+  '/admin/comisiones-externas',
+  '/admin/pagar-comisiones',
+  '/admin/pago-proveedores',
+  '/admin/pagos',
+  '/admin/cuentas-bancarias',
+  '/admin/documentos',
+  '/admin/notarios/revision-documentacion',
+  '/admin/consultas-ia',
+  '/admin/reservas',
+  '/admin/legal/contratos',
+  '/admin/reportes/discrepancias',
+  '/admin/logs-actividad',
+  '/admin/rastreo-clabes-stp',
+  '/admin/rastreo-pagos-stp',
+  '/admin/configuracion-reportes',
+  '/admin/version-produccion',
+  '/admin/reportes/inventarios',
+  '/admin/reportes/finanzas',
+  '/admin/reportes/ver/:id',
+  '/admin/inmobiliarias/mi-informacion',
+  '/admin/inmobiliarias/mis-agentes',
+  '/admin/inmobiliarias/mis-propiedades',
+  '/admin/inmobiliarias/mis-ventas',
+  '/admin/administrar-menus',
+  '/admin/cuentas-mantenimiento/:id/detalle',
+  '/admin/cuentas-cobranza/:id/detalle',
+]);
+
+export function isValidRoute(route: string): boolean {
+  if (!route || !route.startsWith('/admin')) {
+    return false;
+  }
+  
+  // Buscar ruta exacta
+  if (VALID_ADMIN_ROUTES.has(route)) {
+    return true;
+  }
+  
+  // Soporte para rutas parametrizadas (ej: /admin/reportes/ver/:id)
+  // Normalizar la ruta entrante para comparar con patrones
+  for (const validRoute of VALID_ADMIN_ROUTES) {
+    if (validRoute.includes(':')) {
+      // Convertir patrón a regex
+      const pattern = validRoute.replace(/:\w+/g, '[^/]+');
+      const regex = new RegExp(`^${pattern}$`);
+      if (regex.test(route)) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}

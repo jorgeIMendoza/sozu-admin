@@ -90,13 +90,14 @@
    '/admin/rastreo-clabes-stp': CreditCard,
    '/admin/rastreo-pagos-stp': CreditCard,
    '/admin/configuracion-reportes': Cog,
-   '/admin/version-produccion': GitBranch,
-   // Inmobiliarias portal
-   '/admin/inmobiliarias/mi-informacion': User,
-   '/admin/inmobiliarias/mis-agentes': Briefcase,
-   '/admin/inmobiliarias/mis-propiedades': Building,
-   '/admin/inmobiliarias/mis-ventas': BadgeDollarSign,
- };
+  '/admin/version-produccion': GitBranch,
+  // Inmobiliarias portal
+  '/admin/inmobiliarias/mi-informacion': User,
+  '/admin/inmobiliarias/mis-agentes': Briefcase,
+  '/admin/inmobiliarias/mis-propiedades': Building,
+  '/admin/inmobiliarias/mis-ventas': BadgeDollarSign,
+  '/admin/administrar-menus': Settings,
+};
  
  // Mapeo de iconos por menu_id para los grupos
  const iconMapByMenuId: Record<number, LucideIcon> = {
@@ -130,22 +131,23 @@
    submenuId: number;
  }
  
- interface RawSubmenu {
-   id: number;
-   nombre: string;
-   vista_front_end: string | null;
-   menu_id: number;
+interface RawSubmenu {
+  id: number;
+  nombre: string;
+  vista_front_end: string | null;
+  menu_id: number;
   orden: number;
-   menus: {
-     id: number;
-     nombre: string;
-   } | null;
- }
+  solo_usuarioA?: boolean;
+  menus: {
+    id: number;
+    nombre: string;
+  } | null;
+}
  
- const LOGS_ALLOWED_EMAIL = 'jorge.mendoza@sozu.com';
- const LOGS_MENU_ID = 13; // Menu de Configuraciones/Logs
- const INMOBILIARIAS_PORTAL_MENU_ID = 12; // Menu de Inmobiliarias (portal)
- const DASHBOARD_MENU_ID = 1;
+const USUARIO_A_EMAIL = 'jorge.mendoza@sozu.com';
+const LOGS_MENU_ID = 13; // Menu de Configuraciones/Logs
+const INMOBILIARIAS_PORTAL_MENU_ID = 12; // Menu de Inmobiliarias (portal)
+const DASHBOARD_MENU_ID = 1;
  
  export function useDynamicMenus() {
    const { profile, isLoading: isAuthLoading, user, permissionVersion } = useAuth();
@@ -197,22 +199,22 @@
          allowedSubmenuIds = permisosData?.map(p => p.submenu_id) || [];
        }
  
-       // Obtener todos los submenus activos con su menu padre
-       const { data: submenusData, error: submenusError } = await supabase
-         .from('submenus')
-         .select(`
-           id,
-           nombre,
-           vista_front_end,
-           menu_id,
-          orden,
-           menus!inner (
-             id,
-             nombre
-           )
-         `)
-         .eq('activo', true)
-      .order('orden');
+        // Obtener todos los submenus activos con su menu padre
+        const { data: submenusData, error: submenusError } = await supabase
+          .from('submenus')
+          .select(`
+            id,
+            nombre,
+            vista_front_end,
+            menu_id,
+            orden,
+            menus!inner (
+              id,
+              nombre
+            )
+          `)
+          .eq('activo', true)
+          .order('orden');
 
     // Obtener menus con campo orden
     const { data: menusData } = await supabase
@@ -232,27 +234,32 @@
          return;
        }
  
-       // Filtrar submenus por permisos
-       const filteredSubmenus = (submenusData as unknown as RawSubmenu[])?.filter(submenu => {
-         // Super Admin ve todo
-         if (isSuperAdmin) {
-           // Excepto menu de logs que es solo para jorge.mendoza@sozu.com
-           if (submenu.menu_id === LOGS_MENU_ID && userEmail !== LOGS_ALLOWED_EMAIL) {
-             return false;
-           }
-           return true;
-         }
- 
-         // Filtrar por permisos
-         const hasPermission = allowedSubmenuIds.includes(submenu.id);
-         
-         // Menu de logs solo para jorge.mendoza@sozu.com
-         if (submenu.menu_id === LOGS_MENU_ID && userEmail !== LOGS_ALLOWED_EMAIL) {
-           return false;
-         }
- 
-         return hasPermission;
-       }) || [];
+        // Filtrar submenus por permisos
+        const filteredSubmenus = (submenusData as unknown as RawSubmenu[])?.filter(submenu => {
+          // Filtrar submenus solo_usuarioA
+          if (submenu.solo_usuarioA && userEmail !== USUARIO_A_EMAIL) {
+            return false;
+          }
+          
+          // Super Admin ve todo
+          if (isSuperAdmin) {
+            // Excepto menu de logs que es solo para jorge.mendoza@sozu.com
+            if (submenu.menu_id === LOGS_MENU_ID && userEmail !== USUARIO_A_EMAIL) {
+              return false;
+            }
+            return true;
+          }
+
+          // Filtrar por permisos
+          const hasPermission = allowedSubmenuIds.includes(submenu.id);
+          
+          // Menu de logs solo para jorge.mendoza@sozu.com
+          if (submenu.menu_id === LOGS_MENU_ID && userEmail !== USUARIO_A_EMAIL) {
+            return false;
+          }
+
+          return hasPermission;
+        }) || [];
  
        // Agrupar por menu
        const menuMap = new Map<number, { menuNombre: string; children: DynamicMenuChild[] }>();
