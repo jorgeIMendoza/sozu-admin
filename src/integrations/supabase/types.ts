@@ -5400,6 +5400,7 @@ export type Database = {
           id: number
           menu_id: number
           nombre: string
+          orden: number | null
           vista_front_end: string | null
         }
         Insert: {
@@ -5409,6 +5410,7 @@ export type Database = {
           id?: never
           menu_id: number
           nombre: string
+          orden?: number | null
           vista_front_end?: string | null
         }
         Update: {
@@ -5418,6 +5420,7 @@ export type Database = {
           id?: never
           menu_id?: number
           nombre?: string
+          orden?: number | null
           vista_front_end?: string | null
         }
         Relationships: [

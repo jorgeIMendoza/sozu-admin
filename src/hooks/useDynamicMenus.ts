@@ -133,6 +133,7 @@
    nombre: string;
    vista_front_end: string | null;
    menu_id: number;
+  orden: number;
    menus: {
      id: number;
      nombre: string;
@@ -202,13 +203,14 @@
            nombre,
            vista_front_end,
            menu_id,
+          orden,
            menus!inner (
              id,
              nombre
            )
          `)
          .eq('activo', true)
-      .order('id');
+      .order('orden');
 
     // Obtener menus con campo orden
     const { data: menusData } = await supabase
