@@ -64,6 +64,7 @@ export default function AdministrarMenus() {
       const { data, error } = await supabase
         .from('submenus')
         .select('id, nombre, vista_front_end, menu_id, orden, activo, solo_usuarioa')
+        .order('menu_id')
         .order('orden');
       if (error) throw error;
       return data as unknown as Submenu[];
