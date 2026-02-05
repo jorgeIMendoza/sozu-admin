@@ -5401,6 +5401,7 @@ export type Database = {
           menu_id: number
           nombre: string
           orden: number | null
+          solo_usuarioa: boolean | null
           vista_front_end: string | null
         }
         Insert: {
@@ -5411,6 +5412,7 @@ export type Database = {
           menu_id: number
           nombre: string
           orden?: number | null
+          solo_usuarioa?: boolean | null
           vista_front_end?: string | null
         }
         Update: {
@@ -5421,6 +5423,7 @@ export type Database = {
           menu_id?: number
           nombre?: string
           orden?: number | null
+          solo_usuarioa?: boolean | null
           vista_front_end?: string | null
         }
         Relationships: [
