@@ -27,8 +27,8 @@ type Venta = {
   porcentaje_comision: number;
   monto_comision: number;
   iva_incluido: boolean;
-  agente_nombre: string;
-  agente_email: string;
+  agente_vendedor_nombre: string;
+  agente_vendedor_email: string;
   tiene_factura: boolean;
   factura_url: string | null;
 };
@@ -274,49 +274,92 @@ type Venta = {
          });
        }
  
-       // Get existing invoices (documento tipo 46) for these cuentas
-       const cuentaIds = cuentasData.map((c: any) => c.id);
-       const { data: documentosData } = await supabase
-         .from('documentos')
-         .select('id, id_cuenta_cobranza, url')
-         .in('id_cuenta_cobranza', cuentaIds)
-         .eq('id_tipo_documento', 46)
-         .eq('activo', true);
- 
-       const facturasMap = (documentosData || []).reduce((acc: any, d: any) => {
-         acc[d.id_cuenta_cobranza] = d.url;
-         return acc;
-       }, {});
- 
-       // Create agent email map
-       const agentMap = agentEmails.reduce((acc: any, a: any) => {
-         acc[a.email] = a.nombre;
-         return acc;
-       }, {});
- 
-       // Build ofertas map
-       const ofertasMap = ofertasData.reduce((acc: any, o: any) => {
-         acc[o.id] = o;
-         return acc;
-       }, {});
- 
-       return cuentasData.map((cuenta: any) => {
-         const oferta = ofertasMap[cuenta.id_oferta];
-         const propInfo = oferta?.id_propiedad ? propiedadesMap[oferta.id_propiedad] : null;
-         const prodInfo = oferta?.id_producto ? productosMap[oferta.id_producto] : null;
- 
-         // For product sales linked to a property, get the specific bodega/estacionamiento name
-         let specificProductName = null;
-         if (oferta?.id_producto && oferta?.id_propiedad) {
-           const key = `${oferta.id_propiedad}-${oferta.id_producto}`;
-           specificProductName = bodegasNombresMap[key] || estacionamientosNombresMap[key] || null;
-         }
- 
-         const precioFinal = cuenta.precio_final || 0;
-         const porcentaje = cuenta.porcentaje_comision_venta || 0;
-         const montoComision = precioFinal * (porcentaje / 100);
- 
-        return {
+        // Get existing invoices (documento tipo 46) for these cuentas
+        const cuentaIds = cuentasData.map((c: any) => c.id);
+        const { data: documentosData } = await supabase
+          .from('documentos')
+          .select('id, id_cuenta_cobranza, url')
+          .in('id_cuenta_cobranza', cuentaIds)
+          .eq('id_tipo_documento', 46)
+          .eq('activo', true);
+
+        const facturasMap = (documentosData || []).reduce((acc: any, d: any) => {
+          acc[d.id_cuenta_cobranza] = d.url;
+          return acc;
+        }, {});
+
+        // Get the inmobiliaria's email to find their commission in comisionistas table
+        const { data: inmobiliariaData } = await supabase
+          .from('personas')
+          .select('email')
+          .eq('id', selectedInmobiliariaId)
+          .single();
+        
+        const inmobiliariaEmail = inmobiliariaData?.email?.toLowerCase();
+
+        // Get comisionistas for these cuentas where the commissionist is the inmobiliaria
+        let comisionistasMap: Record<number, { porcentaje: number; monto: number }> = {};
+        if (inmobiliariaEmail) {
+          const { data: comisionistasData } = await (supabase as any)
+            .from('comisionistas')
+            .select('id_cuenta_cobranza, porcentaje_comision, monto_comision')
+            .in('id_cuenta_cobranza', cuentaIds)
+            .eq('email_comisionista', inmobiliariaEmail)
+            .eq('activo', true);
+
+          comisionistasMap = (comisionistasData || []).reduce((acc: any, c: any) => {
+            acc[c.id_cuenta_cobranza] = {
+              porcentaje: Number(c.porcentaje_comision) || 0,
+              monto: Number(c.monto_comision) || 0,
+            };
+            return acc;
+          }, {});
+        }
+
+        // Get agent names from usuarios table for email_creador
+        const creadorEmails = [...new Set(ofertasData.map((o: any) => o.email_creador).filter(Boolean))];
+        let usuariosNombresMap: Record<string, string> = {};
+        if (creadorEmails.length > 0) {
+          const { data: usuariosData } = await supabase
+            .from('usuarios')
+            .select('email, nombre')
+            .in('email', creadorEmails);
+          
+          usuariosNombresMap = (usuariosData || []).reduce((acc: any, u: any) => {
+            acc[u.email?.toLowerCase()] = u.nombre;
+            return acc;
+          }, {});
+        }
+
+        // Build ofertas map
+        const ofertasMap = ofertasData.reduce((acc: any, o: any) => {
+          acc[o.id] = o;
+          return acc;
+        }, {});
+
+        return cuentasData.map((cuenta: any) => {
+          const oferta = ofertasMap[cuenta.id_oferta];
+          const propInfo = oferta?.id_propiedad ? propiedadesMap[oferta.id_propiedad] : null;
+          const prodInfo = oferta?.id_producto ? productosMap[oferta.id_producto] : null;
+
+          // For product sales linked to a property, get the specific bodega/estacionamiento name
+          let specificProductName = null;
+          if (oferta?.id_producto && oferta?.id_propiedad) {
+            const key = `${oferta.id_propiedad}-${oferta.id_producto}`;
+            specificProductName = bodegasNombresMap[key] || estacionamientosNombresMap[key] || null;
+          }
+
+          const precioFinal = cuenta.precio_final || 0;
+          // Use the commission from comisionistas table for this inmobiliaria
+          const comisionistaInfo = comisionistasMap[cuenta.id];
+          const porcentaje = comisionistaInfo?.porcentaje || 0;
+          const montoComision = comisionistaInfo?.monto || 0;
+
+          // Get agent vendedor name from usuarios table
+          const emailCreador = oferta?.email_creador?.toLowerCase();
+          const agenteVendedorNombre = usuariosNombresMap[emailCreador] || oferta?.email_creador || '-';
+
+         return {
             id: cuenta.id,
             cuenta_cobranza_id: cuenta.id,
             proyecto_nombre: propInfo?.proyecto_nombre || '-',
@@ -328,29 +371,29 @@ type Venta = {
             porcentaje_comision: porcentaje,
             monto_comision: montoComision,
             iva_incluido: cuenta.iva_incluido || false,
-            agente_nombre: agentMap[oferta?.email_creador?.toLowerCase()] || oferta?.email_creador || '-',
-            agente_email: oferta?.email_creador || '-',
+            agente_vendedor_nombre: agenteVendedorNombre,
+            agente_vendedor_email: oferta?.email_creador || '-',
             tiene_factura: !!facturasMap[cuenta.id],
             factura_url: facturasMap[cuenta.id] || null,
           } as Venta;
-       });
-     },
-     enabled: agentEmails.length > 0,
-   });
+        });
+      },
+      enabled: agentEmails.length > 0 && !!selectedInmobiliariaId,
+    });
  
-   const filteredVentas = useMemo(() => {
-    if (!searchTerm) return ventas;
-    const term = searchTerm.toLowerCase();
-    return ventas.filter((v: Venta) =>
-      v.proyecto_nombre?.toLowerCase().includes(term) ||
-      v.edificio_nombre?.toLowerCase().includes(term) ||
-      v.modelo_nombre?.toLowerCase().includes(term) ||
-      v.numero_propiedad?.toLowerCase().includes(term) ||
-      v.producto_nombre?.toLowerCase().includes(term) ||
-      v.agente_nombre?.toLowerCase().includes(term) ||
-      String(v.cuenta_cobranza_id).includes(term)
-    );
-   }, [ventas, searchTerm]);
+    const filteredVentas = useMemo(() => {
+     if (!searchTerm) return ventas;
+     const term = searchTerm.toLowerCase();
+     return ventas.filter((v: Venta) =>
+       v.proyecto_nombre?.toLowerCase().includes(term) ||
+       v.edificio_nombre?.toLowerCase().includes(term) ||
+       v.modelo_nombre?.toLowerCase().includes(term) ||
+       v.numero_propiedad?.toLowerCase().includes(term) ||
+       v.producto_nombre?.toLowerCase().includes(term) ||
+       v.agente_vendedor_nombre?.toLowerCase().includes(term) ||
+       String(v.cuenta_cobranza_id).includes(term)
+     );
+    }, [ventas, searchTerm]);
  
    const totalPages = Math.ceil(filteredVentas.length / ITEMS_PER_PAGE);
    const paginatedVentas = filteredVentas.slice(
@@ -372,24 +415,24 @@ type Venta = {
      return `${value.toFixed(2)}%`;
    };
  
-   const handleExport = async () => {
-    const exportData = filteredVentas.map((v: Venta) => ({
-      'Cuenta': v.cuenta_cobranza_id,
-      'Proyecto': v.proyecto_nombre,
-      'Edificio': v.edificio_nombre,
-      'Modelo': v.modelo_nombre,
-      'Producto': v.producto_nombre,
-      'No. Depto': v.numero_propiedad,
-      'Agente': v.agente_nombre,
-      'Precio Final': v.precio_final,
-      'Comisión %': v.porcentaje_comision,
-      'Comisión $': v.monto_comision,
-      'IVA Incluido': v.iva_incluido ? 'Sí' : 'No',
-      'Factura Subida': v.tiene_factura ? 'Sí' : 'No',
-    }));
- 
-     await exportToExcel({ data: exportData, filename: 'Mis_Ventas_Comisiones' });
-   };
+    const handleExport = async () => {
+     const exportData = filteredVentas.map((v: Venta) => ({
+       'Cuenta': v.cuenta_cobranza_id,
+       'Proyecto': v.proyecto_nombre,
+       'Edificio': v.edificio_nombre,
+       'Modelo': v.modelo_nombre,
+       'Producto': v.producto_nombre,
+       'No. Depto': v.numero_propiedad,
+       'Agente Vendedor': v.agente_vendedor_nombre,
+       'Precio Final': v.precio_final,
+       'Comisión %': v.porcentaje_comision,
+       'Comisión $': v.monto_comision,
+       'IVA Incluido': v.iva_incluido ? 'Sí' : 'No',
+       'Factura Subida': v.tiene_factura ? 'Sí' : 'No',
+     }));
+
+      await exportToExcel({ data: exportData, filename: 'Mis_Ventas_Comisiones' });
+    };
  
    // Calculate totals
    const totals = useMemo(() => {
@@ -547,39 +590,46 @@ type Venta = {
  
            <div className="rounded-md border overflow-x-auto">
              <Table>
-               <TableHeader>
-                <TableRow>
-                    <TableHead>Cuenta</TableHead>
-                    <TableHead>Proyecto</TableHead>
-                    <TableHead>Edificio</TableHead>
-                    <TableHead>Modelo</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>No. Depto</TableHead>
-                    <TableHead>Precio Final</TableHead>
-                    <TableHead>Comisión</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-               </TableHeader>
+                <TableHeader>
+                 <TableRow>
+                     <TableHead>Cuenta</TableHead>
+                     <TableHead>Proyecto</TableHead>
+                     <TableHead>Edificio</TableHead>
+                     <TableHead>Modelo</TableHead>
+                     <TableHead>Producto</TableHead>
+                     <TableHead>No. Depto</TableHead>
+                     <TableHead>Agente Vendedor</TableHead>
+                     <TableHead>Precio Final</TableHead>
+                     <TableHead>Comisión</TableHead>
+                     <TableHead>Acciones</TableHead>
+                   </TableRow>
+                </TableHeader>
                <TableBody>
-                 {paginatedVentas.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                        {selectedInmobiliariaId 
-                          ? (isLoading ? 'Cargando ventas...' : 'No se encontraron ventas de agentes de esta inmobiliaria')
-                          : 'Selecciona una inmobiliaria para ver sus ventas'
-                        }
-                      </TableCell>
-                    </TableRow>
+                  {paginatedVentas.length === 0 ? (
+                     <TableRow>
+                       <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                         {selectedInmobiliariaId 
+                           ? (isLoading ? 'Cargando ventas...' : 'No se encontraron ventas de agentes de esta inmobiliaria')
+                           : 'Selecciona una inmobiliaria para ver sus ventas'
+                         }
+                       </TableCell>
+                     </TableRow>
                  ) : (
                    paginatedVentas.map((v: Venta) => (
-                      <TableRow key={v.id}>
-                        <TableCell className="font-mono font-medium">{v.cuenta_cobranza_id}</TableCell>
-                        <TableCell className="font-medium">{v.proyecto_nombre}</TableCell>
-                        <TableCell>{v.edificio_nombre}</TableCell>
-                        <TableCell>{v.modelo_nombre}</TableCell>
-                        <TableCell>{v.producto_nombre}</TableCell>
-                        <TableCell>{v.numero_propiedad}</TableCell>
-                       <TableCell>{formatCurrency(v.precio_final)}</TableCell>
+                       <TableRow key={v.id}>
+                         <TableCell className="font-mono font-medium">{v.cuenta_cobranza_id}</TableCell>
+                         <TableCell className="font-medium">{v.proyecto_nombre}</TableCell>
+                         <TableCell>{v.edificio_nombre}</TableCell>
+                         <TableCell>{v.modelo_nombre}</TableCell>
+                         <TableCell>{v.producto_nombre}</TableCell>
+                         <TableCell>{v.numero_propiedad}</TableCell>
+                         <TableCell>
+                           <div className="flex flex-col">
+                             <span className="font-medium">{v.agente_vendedor_nombre}</span>
+                             <span className="text-xs text-muted-foreground">{v.agente_vendedor_email}</span>
+                           </div>
+                         </TableCell>
+                        <TableCell>{formatCurrency(v.precio_final)}</TableCell>
                        <TableCell>
                          <div className="flex flex-col gap-1">
                            <span className="font-medium">{formatCurrency(v.monto_comision)}</span>
