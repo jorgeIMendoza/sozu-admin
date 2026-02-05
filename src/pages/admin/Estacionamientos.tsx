@@ -19,6 +19,7 @@ import { highlightText } from "@/lib/highlightText";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { NoProjectAccess } from "@/components/admin/NoProjectAccess";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 interface Estacionamiento {
   id: number;
@@ -92,6 +93,7 @@ const Estacionamientos = () => {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarEliminacion, registrarRestauracion } = useActivityLogger();
   
   // Project access control
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess, hasNoAccess } = useProjectAccess();
@@ -340,6 +342,7 @@ const Estacionamientos = () => {
         title: "Estacionamiento eliminado",
         description: "El estacionamiento se ha marcado como inactivo.",
       });
+      registrarEliminacion('estacionamiento', { id: estacionamientoId });
 
       queryClient.invalidateQueries({ queryKey: ['estacionamientos'] });
     } catch (error) {
@@ -394,6 +397,10 @@ const Estacionamientos = () => {
         title: "Estacionamiento restaurado",
         description: "El estacionamiento se ha reactivado.",
       });
+      registrarRestauracion('estacionamiento',
+        { id: estacionamientoId, activo: false },
+        { id: estacionamientoId, activo: true }
+      );
 
       queryClient.invalidateQueries({ queryKey: ['estacionamientos'] });
     } catch (error) {

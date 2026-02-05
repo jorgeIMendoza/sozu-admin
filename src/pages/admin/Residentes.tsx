@@ -14,6 +14,7 @@ import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Residente = {
   id: number;
@@ -45,6 +46,7 @@ export default function Residentes() {
   const [residenteToRestore, setResidenteToRestore] = useState<Residente | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Debounce search input
@@ -202,6 +204,7 @@ export default function Residentes() {
         title: "Éxito",
         description: "Residente creado correctamente.",
       });
+      registrarCreacion('residente', { workflow: 'crear_residente' });
     },
     onError: (error: any) => {
       toast({
@@ -235,6 +238,10 @@ export default function Residentes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['residentes'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('residente',
+        { id: editingResidente?.id, nombre_legal: editingResidente?.nombre_legal },
+        { id: editingResidente?.id }
+      );
       setEditingResidente(null);
       toast({
         title: "Éxito",
@@ -261,6 +268,7 @@ export default function Residentes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['residentes'] });
+      registrarEliminacion('residente', { id: residenteToDelete?.id, nombre_legal: residenteToDelete?.nombre_legal });
       toast({
         title: "Éxito",
         description: "Residente eliminado correctamente.",
@@ -286,6 +294,10 @@ export default function Residentes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['residentes'] });
+      registrarRestauracion('residente',
+        { id: residenteToRestore?.id, activo: false },
+        { id: residenteToRestore?.id, activo: true, nombre_legal: residenteToRestore?.nombre_legal }
+      );
       toast({
         title: "Éxito",
         description: "Residente restaurado correctamente.",

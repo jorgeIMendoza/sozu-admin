@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Servicio = {
   id: number;
@@ -57,6 +58,7 @@ export default function Servicios() {
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
   
   const showDeletedTab = canDelete || isSuperAdmin;
   
@@ -297,6 +299,11 @@ export default function Servicios() {
         title: "Éxito",
         description: "Servicio creado correctamente.",
       });
+      registrarCreacion('servicio', {
+        nombre: formData.nombre,
+        precio_lista: formData.precio_lista,
+        id_entidad_relacionada_dueno: formData.id_entidad_relacionada_dueno,
+      });
     },
     onError: (error: any) => {
       toast({
@@ -325,6 +332,10 @@ export default function Servicios() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servicios'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('servicio',
+        { id: editingEntity?.id, nombre: editingEntity?.nombre, precio_lista: editingEntity?.precio_lista },
+        { id: editingEntity?.id, nombre: formData.nombre, precio_lista: formData.precio_lista }
+      );
       setEditingEntity(null);
       resetForm();
       toast({
@@ -353,6 +364,10 @@ export default function Servicios() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servicios'] });
       setDeleteDialogOpen(false);
+      registrarEliminacion('servicio', {
+        id: entityToDelete?.id,
+        nombre: entityToDelete?.nombre,
+      });
       setEntityToDelete(null);
       toast({
         title: "Éxito",
@@ -380,6 +395,10 @@ export default function Servicios() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servicios'] });
       setRestoreDialogOpen(false);
+      registrarRestauracion('servicio',
+        { id: entityToRestore?.id, activo: false },
+        { id: entityToRestore?.id, activo: true, nombre: entityToRestore?.nombre }
+      );
       setEntityToRestore(null);
       toast({
         title: "Éxito",

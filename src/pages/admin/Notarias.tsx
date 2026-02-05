@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Notario = {
   id: number;
@@ -42,6 +43,7 @@ export default function Notarias() {
   const [entityToRestore, setEntityToRestore] = useState<Notario | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
   
   const itemsPerPage = 10;
 
@@ -129,6 +131,11 @@ export default function Notarias() {
         title: "Éxito",
         description: "Notario creado correctamente.",
       });
+      registrarCreacion('notario', {
+        nombre: formData.nombre,
+        notaria: formData.notaria,
+        email: formData.email,
+      });
     },
     onError: (error: any) => {
       toast({
@@ -151,6 +158,10 @@ export default function Notarias() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notarios'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('notario',
+        { id: editingEntity?.id, nombre: editingEntity?.nombre, notaria: editingEntity?.notaria },
+        { id: editingEntity?.id, nombre: formData.nombre, notaria: formData.notaria }
+      );
       setEditingEntity(null);
       resetForm();
       toast({
@@ -179,6 +190,7 @@ export default function Notarias() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notarios'] });
       setDeleteDialogOpen(false);
+      registrarEliminacion('notario', { id: entityToDelete?.id, nombre: entityToDelete?.nombre });
       setEntityToDelete(null);
       toast({
         title: "Éxito",
@@ -206,6 +218,10 @@ export default function Notarias() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notarios'] });
       setRestoreDialogOpen(false);
+      registrarRestauracion('notario',
+        { id: entityToRestore?.id, activo: false },
+        { id: entityToRestore?.id, activo: true, nombre: entityToRestore?.nombre }
+      );
       setEntityToRestore(null);
       toast({
         title: "Éxito",

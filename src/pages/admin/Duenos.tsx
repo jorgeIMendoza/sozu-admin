@@ -15,6 +15,7 @@ import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
 import { ConvertirDuenoDialog } from "@/components/admin/ConvertirDuenoDialog";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 type Dueno = {
   id: number;
@@ -47,6 +48,7 @@ export default function Duenos() {
   const [duenoToRestore, setDuenoToRestore] = useState<Dueno | null>(null);
   const { toast} = useToast();
   const queryClient = useQueryClient();
+  const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Debounce search input
@@ -204,6 +206,7 @@ export default function Duenos() {
         title: "Éxito",
         description: "Dueño creado correctamente.",
       });
+      registrarCreacion('dueno', { workflow: 'crear_dueno' });
     },
     onError: (error: any) => {
       toast({
@@ -237,6 +240,10 @@ export default function Duenos() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['duenos'] });
       setIsEditDialogOpen(false);
+      registrarActualizacion('dueno',
+        { id: editingDueno?.id, nombre_legal: editingDueno?.nombre_legal },
+        { id: editingDueno?.id }
+      );
       setEditingDueno(null);
       toast({
         title: "Éxito",
@@ -263,6 +270,7 @@ export default function Duenos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['duenos'] });
+      registrarEliminacion('dueno', { id: duenoToDelete?.id, nombre_legal: duenoToDelete?.nombre_legal });
       toast({
         title: "Éxito",
         description: "Dueño eliminado correctamente.",
@@ -288,6 +296,10 @@ export default function Duenos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['duenos'] });
+      registrarRestauracion('dueno',
+        { id: duenoToRestore?.id, activo: false },
+        { id: duenoToRestore?.id, activo: true, nombre_legal: duenoToRestore?.nombre_legal }
+      );
       toast({
         title: "Éxito",
         description: "Dueño restaurado correctamente.",
