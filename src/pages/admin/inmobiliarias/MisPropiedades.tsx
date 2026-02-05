@@ -271,6 +271,99 @@ export default function MisPropiedades() {
         bodCountMap.set(b.id_propiedad, (bodCountMap.get(b.id_propiedad) || 0) + 1);
       }
 
+       // Step 3.6: Calculate correct offer counts excluding cancelled accounts
+       // Get all ofertas (property offers) for these properties with creation dates
+       const { data: allOfertasData } = await supabase
+         .from('ofertas')
+         .select('id, id_propiedad, fecha_creacion')
+         .in('id_propiedad', propIds)
+         .eq('activo', true)
+         .is('id_producto', null);
+
+       // Get all product ofertas for these properties with creation dates
+       const { data: allOfertasProdData } = await supabase
+         .from('ofertas')
+         .select('id, id_propiedad, fecha_creacion')
+         .in('id_propiedad', propIds)
+         .eq('activo', true)
+         .not('id_producto', 'is', null);
+
+       // Get all cuentas_cobranza to check cancelled status
+       const allOfertaIdsForCounts = [
+         ...(allOfertasData || []).map((o: any) => o.id),
+         ...(allOfertasProdData || []).map((o: any) => o.id)
+       ];
+
+       let cuentasCancelledByProperty: Record<number, string> = {};
+       let ofertaCuentaCancelledMap: Record<number, boolean> = {};
+
+       if (allOfertaIdsForCounts.length > 0) {
+         // Get cancelled cuentas
+         const { data: cancelledCuentasData } = await supabase
+           .from('cuentas_cobranza')
+           .select('id, id_oferta, fecha_creacion, id_tipo_cancelacion')
+           .in('id_oferta', allOfertaIdsForCounts)
+           .not('id_tipo_cancelacion', 'is', null);
+
+         // Map ofertas that have cancelled cuentas
+         for (const c of (cancelledCuentasData || [])) {
+           ofertaCuentaCancelledMap[c.id_oferta] = true;
+         }
+
+         // Map oferta_id to property_id
+         const ofertaToPropMap: Record<number, number> = {};
+         for (const o of [...(allOfertasData || []), ...(allOfertasProdData || [])]) {
+           ofertaToPropMap[o.id] = o.id_propiedad;
+         }
+
+         // For each property, find the most recent cancelled cuenta to get cutoff date
+         for (const c of (cancelledCuentasData || [])) {
+           const propId = ofertaToPropMap[c.id_oferta];
+           if (propId) {
+             if (!cuentasCancelledByProperty[propId] || new Date(c.fecha_creacion) > new Date(cuentasCancelledByProperty[propId])) {
+               cuentasCancelledByProperty[propId] = c.fecha_creacion;
+             }
+           }
+         }
+       }
+
+       // Calculate correct counts filtering out cancelled offers
+       const filteredOfertasCountMap = new Map<number, number>();
+       for (const o of (allOfertasData || [])) {
+         const cutoffDate = cuentasCancelledByProperty[o.id_propiedad];
+         const offerIsCancelledCuenta = ofertaCuentaCancelledMap[o.id];
+         
+         // Skip if offer has a cancelled cuenta
+         if (offerIsCancelledCuenta) continue;
+         
+         // Skip if offer was created before or at the cutoff date
+         if (cutoffDate) {
+           const offerDate = new Date(o.fecha_creacion);
+           const cutoff = new Date(cutoffDate);
+           if (offerDate <= cutoff) continue;
+         }
+         
+         filteredOfertasCountMap.set(o.id_propiedad, (filteredOfertasCountMap.get(o.id_propiedad) || 0) + 1);
+       }
+
+       const filteredOfertasProdCountMap = new Map<number, number>();
+       for (const o of (allOfertasProdData || [])) {
+         const cutoffDate = cuentasCancelledByProperty[o.id_propiedad];
+         const offerIsCancelledCuenta = ofertaCuentaCancelledMap[o.id];
+         
+         // Skip if offer has a cancelled cuenta
+         if (offerIsCancelledCuenta) continue;
+         
+         // Skip if offer was created before or at the cutoff date
+         if (cutoffDate) {
+           const offerDate = new Date(o.fecha_creacion);
+           const cutoff = new Date(cutoffDate);
+           if (offerDate <= cutoff) continue;
+         }
+         
+         filteredOfertasProdCountMap.set(o.id_propiedad, (filteredOfertasProdCountMap.get(o.id_propiedad) || 0) + 1);
+       }
+
       // Step 4: Get additional data for edificios and modelos separately
       const edificioIdsForDetails = [...new Set(
         (data || []).map((p: any) => edificiosModelosMap.get(p.id_edificio_modelo)?.id_edificio).filter(Boolean)
@@ -436,8 +529,8 @@ export default function MisPropiedades() {
           clabe_stp: cuentaCobranza?.clabe_stp || p.clabe_stp_tmp_apartado,
           precio_final: cuentaCobranza?.precio_final,
           total_pagado: totalPagado,
-          num_ofertas: ofertasCountMap.get(p.id) || 0,
-          num_ofertas_productos: ofertasProdCountMap.get(p.id) || 0,
+        num_ofertas: filteredOfertasCountMap.get(p.id) || 0,
+        num_ofertas_productos: filteredOfertasProdCountMap.get(p.id) || 0,
           num_estacionamientos: estCountMap.get(p.id) || 0,
           num_bodegas: bodCountMap.get(p.id) || 0,
         };
