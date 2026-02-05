@@ -1,4 +1,6 @@
 import { APP_VERSION } from '@/lib/config';
+ 
+ const PRODUCTION_URL = 'https://sozu-admin.lovable.app';
 
 /**
  * Fetch the server version from version.json (with cache busting)
@@ -49,3 +51,19 @@ export async function checkForUpdates(): Promise<boolean> {
   if (!serverVersion) return false;
   return serverVersion !== APP_VERSION;
 }
+ 
+ /**
+  * Fetch the production version from the live production server
+  */
+ export async function fetchProductionVersion(): Promise<{ version: string; buildTime: number } | null> {
+   try {
+     const response = await fetch(`${PRODUCTION_URL}/version.json?t=${Date.now()}`, {
+       cache: 'no-store',
+       headers: { 'Cache-Control': 'no-cache' }
+     });
+     if (!response.ok) return null;
+     return await response.json();
+   } catch {
+     return null;
+   }
+ }
