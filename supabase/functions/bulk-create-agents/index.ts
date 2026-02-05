@@ -10,7 +10,7 @@ interface AgentRow {
   telefono: string;
   email: string;
   inmobiliaria: string;
-  proyecto: string;
+  inmobiliariaId?: number; // Optional: pre-filled for inmobiliaria portal
 }
 
 interface ValidationResult {
@@ -19,12 +19,10 @@ interface ValidationResult {
   error?: string;
   personaId?: number;
   inmobiliariaId?: number;
-  proyectoId?: number;
   needsPersona?: boolean;
   needsEntidad?: boolean;
   needsAuthUser?: boolean;
   needsUsuario?: boolean;
-  needsAccess?: boolean;
 }
 
 interface CreatedRecord {
@@ -32,7 +30,6 @@ interface CreatedRecord {
   id?: number;
   email?: string;
   authUserId?: string;
-  proyectoId?: number;
 }
 
 // Función para normalizar nombres (quitar acentos, espacios extra, convertir a minúsculas)
@@ -107,40 +104,6 @@ async function findInmobiliariaByName(
   return null;
 }
 
-// Función para encontrar un proyecto por nombre con matching flexible
-async function findProyectoByName(
-  supabaseAdmin: any, 
-  inputName: string
-): Promise<number | null> {
-  const normalizedInput = normalizeName(inputName);
-  
-  const { data: proyectos, error } = await supabaseAdmin
-    .from('proyectos')
-    .select('id, nombre')
-    .eq('activo', true);
-
-  if (error || !proyectos) {
-    console.error('[bulk-create-agents] Error fetching proyectos:', error);
-    return null;
-  }
-
-  for (const proyecto of proyectos) {
-    const normalizedNombre = normalizeName(proyecto.nombre || '');
-    
-    // Exact match
-    if (normalizedNombre === normalizedInput) {
-      return proyecto.id;
-    }
-    
-    // Contains match
-    if (normalizedNombre.includes(normalizedInput) || normalizedInput.includes(normalizedNombre)) {
-      return proyecto.id;
-    }
-  }
-
-  return null;
-}
-
 function getErrorMessage(technicalError: string): string {
   if (technicalError.includes('personas_clave_pais_telefono_fkey')) {
     return 'Error con el código de país del teléfono';
@@ -196,8 +159,7 @@ Deno.serve(async (req) => {
     for (const agent of agents) {
       const email = agent.email?.trim().toLowerCase();
       const nombre = agent.nombre?.trim();
-      const inmobiliariaNombre = agent.inmobiliaria?.trim();
-      const proyectoNombre = agent.proyecto?.trim();
+      const inmobiliariaNombre = agent.inmobiliaria?.trim() || '';
 
       const validation: ValidationResult = { email: email || 'N/A', isValid: true };
 
@@ -210,31 +172,32 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Validación 2: Inmobiliaria reconocida (búsqueda dinámica en BD)
-      const inmobiliariaResult = await findInmobiliariaByName(supabaseAdmin, inmobiliariaNombre);
-      if (!inmobiliariaResult) {
+      // Validación 2: Inmobiliaria - puede venir pre-filled (portal) o por nombre
+      if (agent.inmobiliariaId) {
+        // Pre-filled from portal
+        validation.inmobiliariaId = agent.inmobiliariaId;
+        console.log(`[bulk-create-agents] Usando inmobiliaria pre-asignada ID: ${agent.inmobiliariaId}`);
+      } else if (inmobiliariaNombre) {
+        // Search by name
+        const inmobiliariaResult = await findInmobiliariaByName(supabaseAdmin, inmobiliariaNombre);
+        if (!inmobiliariaResult) {
+          validation.isValid = false;
+          validation.error = `Inmobiliaria no reconocida: ${inmobiliariaNombre}`;
+          validationErrors.push(`${email}: Inmobiliaria no reconocida: ${inmobiliariaNombre}`);
+          validationResults.push(validation);
+          continue;
+        }
+        validation.inmobiliariaId = inmobiliariaResult.id;
+        console.log(`[bulk-create-agents] Inmobiliaria encontrada: "${inmobiliariaNombre}" -> ${inmobiliariaResult.nombre} (ID: ${inmobiliariaResult.id})`);
+      } else {
         validation.isValid = false;
-        validation.error = `Inmobiliaria no reconocida: ${inmobiliariaNombre}`;
-        validationErrors.push(`${email}: Inmobiliaria no reconocida: ${inmobiliariaNombre}`);
+        validation.error = 'Inmobiliaria no especificada';
+        validationErrors.push(`${email}: Inmobiliaria no especificada`);
         validationResults.push(validation);
         continue;
       }
-      validation.inmobiliariaId = inmobiliariaResult.id;
-      console.log(`[bulk-create-agents] Inmobiliaria encontrada: "${inmobiliariaNombre}" -> ${inmobiliariaResult.nombre} (ID: ${inmobiliariaResult.id})`);
 
-      // Validación 3: Proyecto reconocido (búsqueda dinámica en BD)
-      const proyectoId = await findProyectoByName(supabaseAdmin, proyectoNombre);
-      if (!proyectoId) {
-        validation.isValid = false;
-        validation.error = `Proyecto no reconocido: ${proyectoNombre}`;
-        validationErrors.push(`${email}: Proyecto no reconocido: ${proyectoNombre}`);
-        validationResults.push(validation);
-        continue;
-      }
-      validation.proyectoId = proyectoId;
-      console.log(`[bulk-create-agents] Proyecto encontrado: "${proyectoNombre}" -> ID: ${proyectoId}`);
-
-      // Validación 4: Verificar que el email NO pertenece a una inmobiliaria
+      // Validación 3: Verificar que el email NO pertenece a una inmobiliaria
       const { data: existingPersona } = await supabaseAdmin
         .from('personas')
         .select('id, nombre_legal')
@@ -287,15 +250,6 @@ Deno.serve(async (req) => {
         .single();
       validation.needsUsuario = !existingUsuario;
       validation.needsAuthUser = !existingUsuario;
-
-      // Verificar si necesita acceso al proyecto
-      const { data: existingAccess } = await supabaseAdmin
-        .from('proyectos_acceso')
-        .select('usuario_id, proyecto_id')
-        .eq('usuario_id', email)
-        .eq('proyecto_id', proyectoId)
-        .single();
-      validation.needsAccess = !existingAccess;
 
       validationResults.push(validation);
     }
@@ -488,35 +442,57 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 4. Crear acceso al proyecto si es necesario
-        if (validation.needsAccess && validation.proyectoId) {
-          // Verificar que el usuario existe antes de crear acceso
-          const { data: userExists } = await supabaseAdmin
-            .from('usuarios')
+        // 4. Heredar accesos de proyecto desde la inmobiliaria
+        if (validation.inmobiliariaId) {
+          // Obtener el email de la inmobiliaria
+          const { data: inmobiliariaPersona } = await supabaseAdmin
+            .from('personas')
             .select('email')
-            .eq('email', email)
+            .eq('id', validation.inmobiliariaId)
             .single();
 
-          if (!userExists) {
-            throw new Error(`No se puede asignar proyecto: usuario ${email} no existe en tabla usuarios`);
+          if (inmobiliariaPersona?.email) {
+            // Obtener accesos de la inmobiliaria
+            const { data: inmobiliariaAccesos } = await supabaseAdmin
+              .from('proyectos_acceso')
+              .select('proyecto_id')
+              .eq('usuario_id', inmobiliariaPersona.email)
+              .eq('activo', true);
+
+            if (inmobiliariaAccesos && inmobiliariaAccesos.length > 0) {
+              // Verificar accesos existentes del agente
+              const { data: existingAccesos } = await supabaseAdmin
+                .from('proyectos_acceso')
+                .select('proyecto_id')
+                .eq('usuario_id', email);
+
+              const existingProyectoIds = new Set(existingAccesos?.map(a => a.proyecto_id) || []);
+
+              // Insertar accesos faltantes
+              for (const acceso of inmobiliariaAccesos) {
+                if (!existingProyectoIds.has(acceso.proyecto_id)) {
+                  const { error: accessError } = await supabaseAdmin
+                    .from('proyectos_acceso')
+                    .insert({
+                      usuario_id: email,
+                      proyecto_id: acceso.proyecto_id,
+                      activo: true,
+                    });
+
+                  if (accessError) {
+                    console.error(`[bulk-create-agents] Error heredando acceso para ${email}: ${accessError.message}`);
+                  } else {
+                    createdRecords.push({ type: 'acceso', email, proyectoId: acceso.proyecto_id });
+                    console.log(`[bulk-create-agents] Acceso heredado: ${email} -> proyecto ${acceso.proyecto_id}`);
+                  }
+                }
+              }
+            }
           }
-
-          const { error: accessError } = await supabaseAdmin
-            .from('proyectos_acceso')
-            .insert({
-              usuario_id: email,
-              proyecto_id: validation.proyectoId,
-              activo: true,
-            });
-
-          if (accessError) {
-            throw new Error(`Error asignando proyecto a ${email}: ${accessError.message}`);
-          }
-
-          createdRecords.push({ type: 'acceso', email, proyectoId: validation.proyectoId });
-          didCreateSomething = true;
-          console.log(`[bulk-create-agents] Acceso creado: ${email} -> proyecto ${validation.proyectoId}`);
         }
+interface CreatedRecordWithProyecto extends CreatedRecord {
+  proyectoId?: number;
+}
 
         // Determinar resultado basado en lo que realmente pasó
         if (!didCreateSomething) {

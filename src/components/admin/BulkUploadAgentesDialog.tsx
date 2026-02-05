@@ -20,7 +20,6 @@ interface AgentRow {
   telefono: string;
   email: string;
   inmobiliaria: string;
-  proyecto: string;
 }
 
 interface ProcessResult {
@@ -76,13 +75,12 @@ export function BulkUploadAgentesDialog({ open, onClose, onSuccess }: BulkUpload
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.trim());
-      if (values.length >= 5) {
+      if (values.length >= 4) {
         agents.push({
           nombre: values[headers.indexOf('nombre')] || values[0],
           telefono: values[headers.indexOf('telefono')] || values[1],
           email: values[headers.indexOf('email')] || values[2],
           inmobiliaria: values[headers.indexOf('inmobiliaria')] || values[3],
-          proyecto: values[headers.indexOf('proyecto')] || values[4],
         });
       }
     }
@@ -193,7 +191,7 @@ export function BulkUploadAgentesDialog({ open, onClose, onSuccess }: BulkUpload
   };
 
   const downloadTemplate = () => {
-    const csvContent = 'Nombre,Telefono,Email,Inmobiliaria,Proyecto\nJuan Pérez,3312345678,juan@trust-realestate.mx,TRUST,Vive Daiku';
+    const csvContent = 'Nombre,Telefono,Email,Inmobiliaria\nNombre De Ejemplo,3333333333,correo@correo.com,NOMBRE INMOBILIARIA';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);

@@ -208,7 +208,19 @@
            )
          `)
          .eq('activo', true)
-         .order('id');
+      .order('id');
+
+    // Obtener menus con campo orden
+    const { data: menusData } = await supabase
+      .from('menus')
+      .select('id, nombre, orden')
+      .eq('activo', true);
+
+    // Crear mapa de orden de menus
+    const menuOrdenMap = new Map<number, number>();
+    menusData?.forEach(m => {
+      menuOrdenMap.set(m.id, m.orden ?? 100);
+    });
  
        if (submenusError) {
          console.error('Error fetching submenus:', submenusError);
@@ -264,8 +276,12 @@
        // Convertir a array de DynamicMenuItem
        const items: DynamicMenuItem[] = [];
  
-       // Orden de menus según el id (que sigue el orden deseado)
-       const sortedMenuIds = Array.from(menuMap.keys()).sort((a, b) => a - b);
+    // Orden de menus según el campo 'orden' de la tabla menus
+    const sortedMenuIds = Array.from(menuMap.keys()).sort((a, b) => {
+      const ordenA = menuOrdenMap.get(a) ?? 100;
+      const ordenB = menuOrdenMap.get(b) ?? 100;
+      return ordenA - ordenB;
+    });
  
        sortedMenuIds.forEach(menuId => {
          const menuData = menuMap.get(menuId)!;
