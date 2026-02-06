@@ -160,7 +160,7 @@ export default function ComisionesExternas() {
                 numero_propiedad,
                 id_edificio_modelo,
                 id_estatus_disponibilidad,
-                estatus_disponibilidad!propiedades_id_estatus_disponibilidad_fkey(id, nombre),
+                estatus_disponibilidad!fk_propiedades_estatus_disp(id, nombre),
                 edificios_modelos!propiedades_id_edificio_modelo_fkey(
                   id,
                   id_edificio,
