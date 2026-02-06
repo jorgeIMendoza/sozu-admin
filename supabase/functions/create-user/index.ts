@@ -274,15 +274,21 @@ serve(async (req) => {
 
     console.log("Usuario created successfully:", usuarioData);
 
-    // For agents (rol_id 3 or 9), handle the inmobiliaria linkage
+    // For agents (rol_id 3 or 9) OR secondary Inmobiliaria users (rol_id 4), handle the inmobiliaria linkage
     const ROLE_AGENTE_INTERNO = 9;
     
-    if ((rol_id === ROLE_AGENTE_INMOBILIARIO || rol_id === ROLE_AGENTE_INTERNO) && id_inmobiliaria) {
+    // Determine if this is a secondary Inmobiliaria user (rol 4 with id_inmobiliaria but id_persona doesn't match)
+    const isSecondaryInmobiliariaUser = rol_id === ROLE_INMOBILIARIA && id_inmobiliaria && finalIdPersona !== id_inmobiliaria;
+    
+    if (((rol_id === ROLE_AGENTE_INMOBILIARIO || rol_id === ROLE_AGENTE_INTERNO) && id_inmobiliaria) || isSecondaryInmobiliariaUser) {
+      // Determine entity type: 19 for Agents, 30 for secondary Inmobiliaria users
+      const entityTypeId = (rol_id === ROLE_AGENTE_INMOBILIARIO || rol_id === ROLE_AGENTE_INTERNO) ? 19 : 30;
       try {
         let personaIdToUse = finalIdPersona;
         
-        // If no id_persona was provided, create a new persona record
-        if (!personaIdToUse) {
+        // If no id_persona was provided, create a new persona record (for agents)
+        // Secondary Inmobiliaria users don't need their own persona
+        if (!personaIdToUse && (rol_id === ROLE_AGENTE_INMOBILIARIO || rol_id === ROLE_AGENTE_INTERNO)) {
           const { data: newPersona, error: personaError } = await supabaseAdmin
             .from("personas")
             .insert({
@@ -311,13 +317,15 @@ serve(async (req) => {
           }
         }
         
-        if (personaIdToUse) {
+        // For agents, create entidad_relacionada with tipo 19
+        // For secondary Inmobiliaria users, create entidad_relacionada with tipo 30
+        if (personaIdToUse || isSecondaryInmobiliariaUser) {
           // Check if entidad_relacionada already exists
           const { data: existingEntidad } = await supabaseAdmin
             .from("entidades_relacionadas")
             .select("id, id_persona_duena_lead")
-            .eq("id_persona", personaIdToUse)
-            .eq("id_tipo_entidad", 19) // Agente
+            .eq("id_persona", personaIdToUse || 0) // For secondary inmob users, persona might not exist
+            .eq("id_tipo_entidad", entityTypeId)
             .eq("activo", true)
             .maybeSingle();
           
@@ -329,26 +337,26 @@ serve(async (req) => {
                 .update({ id_persona_duena_lead: id_inmobiliaria })
                 .eq("id", existingEntidad.id);
               
-              console.log(`Updated agent ${personaIdToUse} with inmobiliaria ${id_inmobiliaria}`);
+              console.log(`Updated entity ${personaIdToUse} with inmobiliaria ${id_inmobiliaria}`);
             }
-          } else {
-            // Create new entidad_relacionada linking agent to inmobiliaria
+          } else if (personaIdToUse) {
+            // Create new entidad_relacionada
             const { error: entidadError } = await supabaseAdmin
               .from("entidades_relacionadas")
               .insert({
                 id_persona: personaIdToUse,
-                id_tipo_entidad: 19, // Agente
+                id_tipo_entidad: entityTypeId,
                 id_persona_duena_lead: id_inmobiliaria,
                 activo: true
               });
             
             if (entidadError) {
-              console.error("Error creating entidad_relacionada for agent:", entidadError);
+              console.error("Error creating entidad_relacionada:", entidadError);
             } else {
-              console.log(`Created entidad_relacionada linking agent ${personaIdToUse} to inmobiliaria ${id_inmobiliaria}`);
+              console.log(`Created entidad_relacionada (type ${entityTypeId}) linking ${personaIdToUse} to inmobiliaria ${id_inmobiliaria}`);
             }
           }
-          
+
           // Copy project access from the inmobiliaria
           const { data: inmobiliariaPersona } = await supabaseAdmin
             .from("personas")
@@ -379,9 +387,9 @@ serve(async (req) => {
                 });
 
               if (accessError) {
-                console.error("Error copying project access to agent:", accessError);
+                console.error("Error copying project access:", accessError);
               } else {
-                console.log(`Copied ${accessToInsert.length} project access entries to agent ${email}`);
+                console.log(`Copied ${accessToInsert.length} project access entries to user ${email}`);
               }
             }
           }

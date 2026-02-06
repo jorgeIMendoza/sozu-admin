@@ -18,8 +18,46 @@ export default function MiInformacion() {
   const queryClient = useQueryClient();
   const [selectedInmobiliariaId, setSelectedInmobiliariaId] = useState<number | null>(null);
 
+  // Resolve the inmobiliaria ID: could be profile.id_persona (primary) or via entidades_relacionadas (secondary)
+  const { data: resolvedInmobiliariaId, isLoading: isLoadingResolution } = useQuery({
+    queryKey: ['resolve-inmobiliaria-id', profile?.id_persona],
+    queryFn: async () => {
+      if (!profile?.id_persona) return null;
+
+      // First check if user's persona IS the inmobiliaria (tipo_entidad = 5)
+      const { data: entidadData } = await supabase
+        .from('entidades_relacionadas')
+        .select('id')
+        .eq('id_persona', profile.id_persona)
+        .eq('id_tipo_entidad', 5)
+        .eq('activo', true)
+        .maybeSingle();
+
+      if (entidadData) {
+        // User IS the inmobiliaria
+        return profile.id_persona;
+      }
+
+      // Check if this is a secondary user linked to an inmobiliaria (tipo_entidad = 30)
+      const { data: linkData } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_persona_duena_lead')
+        .eq('id_persona', profile.id_persona)
+        .eq('id_tipo_entidad', 30)
+        .eq('activo', true)
+        .maybeSingle();
+
+      if (linkData?.id_persona_duena_lead) {
+        return linkData.id_persona_duena_lead;
+      }
+
+      return null;
+    },
+    enabled: !isSuperAdmin && !!profile?.id_persona,
+  });
+
   // Get the inmobiliaria ID based on user type
-  const inmobiliariaId = selectedInmobiliariaId || profile?.id_persona;
+  const inmobiliariaId = selectedInmobiliariaId || resolvedInmobiliariaId;
 
   // Check data completion status
   const { isDataComplete, missingFields, isLoading: isLoadingStatus } = useInmobiliariaDataStatus(inmobiliariaId);
