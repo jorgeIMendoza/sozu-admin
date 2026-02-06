@@ -79,8 +79,8 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
   // Check if user is Inmobiliaria (role 4) - their changes propagate to agents
   const isInmobiliaria = userRoleId === 4;
   
-  // Check if user is a secondary Inmobiliaria user (not the principal) - they should NOT access this dialog
-  const isSecondaryInmobiliaria = isInmobiliaria && isUsuarioPrincipal === false;
+  // Check if user is a secondary Inmobiliaria user (not the principal) - they should see read-only view
+  const isSecondaryInmobiliaria = isInmobiliaria && isUsuarioPrincipal !== true;
 
   // Query to get agent count for this inmobiliaria
   const { data: agentCount } = useQuery({

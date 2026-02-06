@@ -454,9 +454,10 @@ export default function Usuarios() {
       return ((data || []) as (Usuario & { roles: { nombre: string; es_rol_interno: boolean } | null })[])
         .map(u => {
           // Check if user with Inmobiliaria role (4) is the main user (email matches persona email)
-          const esUsuarioPrincipal = u.rol_id === ROLE_INMOBILIARIA && 
-            u.personas?.email && 
-            u.email.toLowerCase() === u.personas.email.toLowerCase();
+          // Must be explicitly true or false (not undefined) for secondary user detection
+          const esUsuarioPrincipal = u.rol_id === ROLE_INMOBILIARIA 
+            ? (u.personas?.email && u.email.toLowerCase() === u.personas.email.toLowerCase()) === true
+            : undefined; // Non-Inmobiliaria users don't have this concept
           
           // Get inmobiliaria name: first from persona map, then from email-based lookup for users without persona
           const inmobiliariaNombre = u.id_persona 
