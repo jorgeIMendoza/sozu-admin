@@ -30,6 +30,7 @@ interface UserProjectAccessDialogProps {
   userRole?: string;
   userRoleId?: number;
   userPersonaId?: number;
+  isUsuarioPrincipal?: boolean; // For Inmobiliaria role: indicates if this is the main agency user
 }
 
 interface Proyecto {
@@ -57,7 +58,7 @@ interface EntidadDueno {
   } | null;
 }
 
-export function UserProjectAccessDialog({ userId, userName, userEmail, userRole, userRoleId, userPersonaId }: UserProjectAccessDialogProps) {
+export function UserProjectAccessDialog({ userId, userName, userEmail, userRole, userRoleId, userPersonaId, isUsuarioPrincipal }: UserProjectAccessDialogProps) {
   const [open, setOpen] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState<number[]>([]);
   // Map: projectId -> ownerId (null means all owners)
@@ -77,6 +78,9 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
   
   // Check if user is Inmobiliaria (role 4) - their changes propagate to agents
   const isInmobiliaria = userRoleId === 4;
+  
+  // Check if user is a secondary Inmobiliaria user (not the principal) - they should NOT access this dialog
+  const isSecondaryInmobiliaria = isInmobiliaria && isUsuarioPrincipal === false;
 
   // Query to get agent count for this inmobiliaria
   const { data: agentCount } = useQuery({
@@ -442,8 +446,8 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
 
   const isLoading = loadingProyectos || loadingAccess || loadingRoleConfig || loadingLinkedEntity;
 
-  // Don't show button for Super Admins
-  if (isSuperAdmin) {
+  // Don't show button for Super Admins or secondary Inmobiliaria users (they inherit from principal)
+  if (isSuperAdmin || isSecondaryInmobiliaria) {
     return null;
   }
 

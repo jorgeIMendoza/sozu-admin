@@ -195,6 +195,7 @@ function UsersTable({
                         userRole={usuario.roles?.nombre}
                         userRoleId={usuario.rol_id ?? undefined}
                         userPersonaId={usuario.id_persona ?? undefined}
+                        isUsuarioPrincipal={usuario.es_usuario_principal}
                       />
                     )}
                     {!isCurrentUser && (
@@ -358,9 +359,9 @@ export default function Usuarios() {
         });
 
         // For secondary Inmobiliaria users: look up via proyectos_acceso
-        // Get their emails to do a separate query
+        // Get their emails - including those WITHOUT id_persona (secondary users created without persona link)
         const secondaryInmobEmails = (data || [])
-          .filter(u => u.rol_id === ROLE_INMOBILIARIA && u.id_persona && !inmobByPersona.has(u.id_persona))
+          .filter(u => u.rol_id === ROLE_INMOBILIARIA)
           .map(u => u.email);
 
         if (secondaryInmobEmails.length > 0) {
@@ -383,7 +384,7 @@ export default function Usuarios() {
               .in('id', entidadIds)
               .eq('activo', true);
 
-            // Create map of entidad_id -> nombre
+            // Create map of entidad_id -> nombre and map of email -> nombre for users without persona
             const entidadNombres = new Map<number, string>();
             (entidadesData || []).forEach((e: any) => {
               if (e.id && e.personas) {
@@ -391,15 +392,36 @@ export default function Usuarios() {
               }
             });
 
-            // Map user email to inmobiliaria name
+            // Map user email to inmobiliaria name - store by email for users without persona
             proyectosAcceso.forEach((pa: any) => {
               const nombre = entidadNombres.get(pa.id_entidad_relacionada_dueno);
               if (nombre) {
-                // Find the user's persona id
                 const usuario = (data || []).find(u => u.email === pa.usuario_id);
-                if (usuario?.id_persona) {
-                  inmobByPersona.set(usuario.id_persona, nombre);
+                if (usuario) {
+                  if (usuario.id_persona) {
+                    // User has persona - use persona id as key
+                    inmobByPersona.set(usuario.id_persona, nombre);
+                  } else {
+                    // User without persona - use a negative key based on email hash to avoid conflicts
+                    // We'll handle this separately below
+                  }
                 }
+              }
+            });
+
+            // Create a separate map for users without persona (by email)
+            const inmobByEmail = new Map<string, string>();
+            proyectosAcceso.forEach((pa: any) => {
+              const nombre = entidadNombres.get(pa.id_entidad_relacionada_dueno);
+              if (nombre) {
+                inmobByEmail.set(pa.usuario_id, nombre);
+              }
+            });
+
+            // Store in a way we can access later - add to data array
+            (data || []).forEach((u: any) => {
+              if (u.rol_id === ROLE_INMOBILIARIA && !u.id_persona && inmobByEmail.has(u.email)) {
+                u._inmobiliaria_by_email = inmobByEmail.get(u.email);
               }
             });
           }
@@ -436,9 +458,14 @@ export default function Usuarios() {
             u.personas?.email && 
             u.email.toLowerCase() === u.personas.email.toLowerCase();
           
+          // Get inmobiliaria name: first from persona map, then from email-based lookup for users without persona
+          const inmobiliariaNombre = u.id_persona 
+            ? (inmobByPersona.get(u.id_persona) || null) 
+            : ((u as any)._inmobiliaria_by_email || null);
+          
           return {
             ...u,
-            inmobiliaria_nombre: u.id_persona ? inmobByPersona.get(u.id_persona) || null : null,
+            inmobiliaria_nombre: inmobiliariaNombre,
             es_usuario_principal: esUsuarioPrincipal
           };
         });
