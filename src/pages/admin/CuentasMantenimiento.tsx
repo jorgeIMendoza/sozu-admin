@@ -1,100 +1,27 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
-import { Search, Eye, X, Edit, Download, Loader2, Filter, TrendingUp, TrendingDown, Equal, AlertCircle, DollarSign, CheckCircle, FileText, Receipt, Wrench, Package, UserPlus, FileDown } from "lucide-react";
+import { Search, Eye, Loader2, Package, UserPlus, FileDown } from "lucide-react";
 import { EstadoCuentaMantenimientoService } from "@/services/estadoCuentaMantenimientoService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
-import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { CompradoresDetailDialog } from "@/components/admin/CompradoresDetailDialog";
-import { EditCuentaCobranzaDialog } from "@/components/admin/EditCuentaCobranzaDialog";
-import { CashPaymentDetailDialog } from "@/components/admin/CashPaymentDetailDialog";
 import { ComplementosDetailDialog } from "@/components/admin/ComplementosDetailDialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
 import { AddResidenteDialog } from "@/components/admin/AddResidenteDialog";
 import { ResidentesDetailDialog } from "@/components/admin/ResidentesDetailDialog";
-
-interface Comprador {
-  nombre_legal: string;
-  rfc: string | null;
-  porcentaje_copropiedad: number;
-  id_persona?: number;
-}
+import { useCuentasMantenimientoPaginadas, type CuentaMantenimiento } from "@/hooks/useCuentasMantenimientoPaginadas";
 
 interface Residente {
   id_persona: number;
   nombre_legal: string;
   activo: boolean;
-}
-
-interface CashPayment {
-  fecha_pago: string;
-  monto: number;
-}
-
-interface BodegaDetalle {
-  nombre: string;
-  m2: number;
-  ubicacion?: string;
-  es_incluido: boolean;
-}
-
-interface EstacionamientoDetalle {
-  nombre: string;
-  tipo: string;
-  m2: number;
-  ubicacion?: string;
-  es_incluido: boolean;
-}
-
-interface ProductoDetalle {
-  nombre: string;
-  categoria: string;
-  precio: number;
-}
-
-interface CuentaCobranza {
-  id: number;
-  tipo: 'Propiedad' | 'Producto' | 'Servicio';
-  producto_nombre?: string;
-  clabe_stp: string | null;
-  precio_final: number;
-  precio_lista: number | null;
-  pagado: number;
-  total_pagos: number; // Total real de pagos (para calcular excedente)
-  restante: number;
-  compradores: Comprador[];
-  residentes: Residente[];
-  dueno: string;
-  proyecto: string;
-  edificio: string;
-  numero_propiedad: string;
-  modelo: string;
-  clave_catastral: string | null;
-  activo: boolean;
-  id_oferta: number;
-  motivo_cancelacion?: string | null;
-  apartado_pagado: boolean;
-  tiene_acuerdos: boolean;
-  tiene_multas_pendientes?: boolean;
-  cash_limit?: number;
-  cash_paid?: number;
-  cash_remaining?: number;
-  cash_percentage?: number;
-  cash_payments?: CashPayment[];
-  id_propiedad?: number;
-  bodegas?: BodegaDetalle[];
-  estacionamientos?: EstacionamientoDetalle[];
-  productos?: ProductoDetalle[];
-  proxima_fecha_pago?: string | null;
 }
 
 export default function CuentasMantenimiento() {
@@ -112,17 +39,12 @@ export default function CuentasMantenimiento() {
   const [modeloFilter, setModeloFilter] = useState("");
   const [claveCatastralFilter, setClaveCatastralFilter] = useState("");
   
-  const [editDialog, setEditDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
+  const [complementosDialog, setComplementosDialog] = useState<{ isOpen: boolean; cuenta: CuentaMantenimiento | null }>({
     isOpen: false,
     cuenta: null,
   });
   
-  const [complementosDialog, setComplementosDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
-    isOpen: false,
-    cuenta: null,
-  });
-  
-  const [addResidenteDialog, setAddResidenteDialog] = useState<{ isOpen: boolean; cuenta: CuentaCobranza | null }>({
+  const [addResidenteDialog, setAddResidenteDialog] = useState<{ isOpen: boolean; cuenta: CuentaMantenimiento | null }>({
     isOpen: false,
     cuenta: null,
   });
@@ -158,737 +80,24 @@ export default function CuentasMantenimiento() {
   const normalizarSaldo = (saldo: number): number => {
     return Math.abs(saldo) < 0.01 ? 0 : saldo;
   };
-  
-  const { data: cuentasCobranza, isLoading } = useQuery({
-    queryKey: ["cuentas_mantenimiento"],
-    queryFn: async () => {
-      // Helper function to batch queries with .in() to avoid URL length limits
-      const BATCH_SIZE = 100;
 
-      // Get basic cuenta cobranza data with payment sums (ONLY maintenance accounts)
-      const { data: cuentas, error: cuentasError } = await supabase
-        .from('cuentas_cobranza')
-        .select(`
-          id,
-          clabe_stp,
-          precio_final,
-          id_oferta,
-          activo,
-          valor_uma,
-          id_cuenta_cobranza_padre,
-          tipos_cancelacion:id_tipo_cancelacion(nombre)
-        `)
-        .not('id_cuenta_cobranza_padre', 'is', null)
-        .limit(50000);
-
-      if (cuentasError) {
-        console.error('Error fetching cuentas:', cuentasError);
-        return [];
-      }
-
-      if (!cuentas || cuentas.length === 0) return [];
-
-      // Get parent cuentas_cobranza to fetch clave_catastral and parent oferta
-      const parentCuentaIds = [...new Set(cuentas.map(c => c.id_cuenta_cobranza_padre).filter((id): id is number => id !== null))];
-      const { data: parentCuentas } = parentCuentaIds.length > 0 ? await supabase
-        .from('cuentas_cobranza')
-        .select(`
-          id,
-          clave_catastral,
-          id_oferta
-        `)
-        .in('id', parentCuentaIds)
-        .limit(50000) : { data: [] };
-
-      // Create map for quick parent lookup
-      const parentCuentasMap = new Map((parentCuentas || []).map(pc => [pc.id, pc] as [number, typeof pc]));
-
-      // Get all payment amounts for each account using aplicaciones_pago
-      const cuentaIds = cuentas.map(c => c.id);
-      console.log('Cuenta IDs:', cuentaIds);
-      
-      // First get all acuerdos for these cuentas with monto - use batching to avoid URL length limits
-      let acuerdosForPagos: { id: number; id_cuenta_cobranza: number; monto: number }[] = [];
-      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
-        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
-        const { data } = await supabase
-          .from('acuerdos_pago')
-          .select('id, id_cuenta_cobranza, monto')
-          .in('id_cuenta_cobranza', batchIds)
-          .eq('activo', true);
-        if (data) acuerdosForPagos.push(...data);
-      }
-
-      const acuerdoIdsForPagos = acuerdosForPagos.map(a => a.id);
-      
-      console.log('🔍 Acuerdos de pago (inicial):', acuerdosForPagos?.length);
-      
-      // Now get aplicaciones_pago for those acuerdos - use batching
-      let aplicacionesPago: { monto: number; id_acuerdo_pago: number; es_multa: boolean }[] = [];
-      for (let i = 0; i < acuerdoIdsForPagos.length; i += BATCH_SIZE) {
-        const batchIds = acuerdoIdsForPagos.slice(i, i + BATCH_SIZE);
-        const { data } = await supabase
-          .from('aplicaciones_pago')
-          .select('monto, id_acuerdo_pago, es_multa')
-          .in('id_acuerdo_pago', batchIds)
-          .eq('activo', true)
-          .eq('es_multa', false);
-        if (data) aplicacionesPago.push(...data);
-      }
-
-      console.log('Aplicaciones pago query result:', aplicacionesPago?.length);
-
-      // Create a map from acuerdo_id to cuenta_id
-      const acuerdoToCuentaMap = acuerdosForPagos.reduce((acc: Record<number, number>, a) => {
-        acc[a.id] = a.id_cuenta_cobranza;
-        return acc;
-      }, {});
-
-      // Calculate total payments per account from aplicaciones (lo aplicado a acuerdos)
-      const pagadoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const totalPagado = aplicacionesPago
-          .filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
-          .reduce((sum, ap) => sum + (ap.monto || 0), 0);
-        acc[cuenta.id] = totalPagado;
-        return acc;
-      }, {});
-
-      // Get ALL payments per account (for calculating excedente) - batched
-      let todosLosPagos: { id: number; id_cuenta_cobranza: number; monto: number }[] = [];
-      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
-        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
-        const { data } = await supabase
-          .from('pagos')
-          .select('id, id_cuenta_cobranza, monto')
-          .in('id_cuenta_cobranza', batchIds)
-          .eq('activo', true);
-        if (data) todosLosPagos.push(...data);
-      }
-
-      // Calculate total real payments per account (suma de tabla pagos)
-      const totalPagosPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const totalPagos = todosLosPagos
-          .filter(p => p.id_cuenta_cobranza === cuenta.id)
-          .reduce((sum, p) => sum + (p.monto || 0), 0);
-        acc[cuenta.id] = totalPagos;
-        return acc;
-      }, {});
-
-      // Get cash payments (id_metodos_pago = 1) for all accounts using aplicaciones_pago - batched
-      let pagosCash: { id: number; fecha_pago: string; id_metodos_pago: number; activo: boolean }[] = [];
-      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
-        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
-        const { data } = await supabase
-          .from('pagos')
-          .select('id, fecha_pago, id_metodos_pago, activo')
-          .in('id_cuenta_cobranza', batchIds)
-          .eq('id_metodos_pago', 1)
-          .eq('activo', true)
-          .order('fecha_pago', { ascending: false });
-        if (data) pagosCash.push(...data);
-      }
-
-      const pagosCashIds = pagosCash.map(p => p.id);
-      
-      // Get aplicaciones for cash payments - batched
-      let aplicacionesCash: { monto: number; id_acuerdo_pago: number; id_pago: number; es_multa: boolean }[] = [];
-      for (let i = 0; i < pagosCashIds.length; i += BATCH_SIZE) {
-        const batchIds = pagosCashIds.slice(i, i + BATCH_SIZE);
-        const { data } = await supabase
-          .from('aplicaciones_pago')
-          .select('monto, id_acuerdo_pago, id_pago, es_multa')
-          .in('id_pago', batchIds)
-          .eq('activo', true)
-          .eq('es_multa', false);
-        if (data) aplicacionesCash.push(...data);
-      }
-      // Filter by acuerdo IDs that belong to our cuentas
-      aplicacionesCash = aplicacionesCash.filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] !== undefined);
-
-      const pagadoEfectivoPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const totalEfectivo = aplicacionesCash
-          .filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id)
-          .reduce((sum, ap) => sum + (ap.monto || 0), 0);
-        acc[cuenta.id] = totalEfectivo;
-        return acc;
-      }, {});
-
-      // Create a map of individual cash payments per account with aggregated amounts
-      const pagosCashPorCuenta = cuentas.reduce((acc: Record<number, CashPayment[]>, cuenta) => {
-        // Get all cash payment IDs for this cuenta through aplicaciones
-        const aplicacionesForCuenta = aplicacionesCash
-          .filter(ap => acuerdoToCuentaMap[ap.id_acuerdo_pago] === cuenta.id);
-        
-        // Group by payment ID and sum amounts
-        const pagoAggregated = aplicacionesForCuenta.reduce((pagoAcc: Record<number, number>, ap) => {
-          pagoAcc[ap.id_pago] = (pagoAcc[ap.id_pago] || 0) + (ap.monto || 0);
-          return pagoAcc;
-        }, {});
-        
-        // Map to payment details
-        const pagos = Object.entries(pagoAggregated).map(([pagoId, monto]) => {
-          const pago = pagosCash.find(p => p.id === parseInt(pagoId));
-          return {
-            fecha_pago: pago?.fecha_pago || '',
-            monto: monto as number
-          };
-        }).filter(p => p.fecha_pago);
-        
-        acc[cuenta.id] = pagos;
-        return acc;
-      }, {});
-
-      // Calculate total mensual per account (sum of acuerdos monto) - using acuerdosForPagos
-      const totalMensualPorCuenta = cuentas.reduce((acc: Record<number, number>, cuenta) => {
-        const acuerdosCuenta = acuerdosForPagos.filter(ap => ap.id_cuenta_cobranza === cuenta.id);
-        const totalMensual = acuerdosCuenta.reduce((sum, acuerdo) => sum + (acuerdo.monto || 0), 0);
-        acc[cuenta.id] = totalMensual;
-        return acc;
-      }, {});
-
-      // Get aplicaciones_pago para verificar si hay pagos de cesión de derechos
-      const acuerdoIds = acuerdosForPagos.map(a => a.id);
-      let cesionDerechosMap: Record<number, boolean> = {};
-      
-      if (acuerdoIds.length > 0) {
-        // Batch fetch aplicaciones
-        let aplicaciones: { id_acuerdo_pago: number; monto: number }[] = [];
-        for (let i = 0; i < acuerdoIds.length; i += BATCH_SIZE) {
-          const batchIds = acuerdoIds.slice(i, i + BATCH_SIZE);
-          const { data } = await supabase
-            .from('aplicaciones_pago')
-            .select('id_acuerdo_pago, monto')
-            .in('id_acuerdo_pago', batchIds)
-            .eq('activo', true);
-          if (data) aplicaciones.push(...data);
-        }
-
-        // Get concepto info for cesion de derechos check - batched
-        let acuerdosConConcepto: { id: number; id_concepto: number; id_cuenta_cobranza: number }[] = [];
-        for (let i = 0; i < acuerdoIds.length; i += BATCH_SIZE) {
-          const batchIds = acuerdoIds.slice(i, i + BATCH_SIZE);
-          const { data } = await supabase
-            .from('acuerdos_pago')
-            .select('id, id_concepto, id_cuenta_cobranza')
-            .in('id', batchIds)
-            .eq('activo', true);
-          if (data) acuerdosConConcepto.push(...data);
-        }
-
-        // Crear mapeo de acuerdo_id a concepto_id y cuenta_id
-        const acuerdosMap = acuerdosConConcepto.reduce((acc: Record<number, { id_concepto: number; id_cuenta_cobranza: number }>, a) => {
-          acc[a.id] = { id_concepto: a.id_concepto, id_cuenta_cobranza: a.id_cuenta_cobranza };
-          return acc;
-        }, {});
-
-        // Crear un mapa de cuentas que tienen cesión de derechos con pagos (id_concepto = 6)
-        aplicaciones.forEach((app) => {
-          const acuerdo = acuerdosMap[app.id_acuerdo_pago];
-          if (acuerdo && acuerdo.id_concepto === 6 && app.monto > 0) {
-            cesionDerechosMap[acuerdo.id_cuenta_cobranza] = true;
-          }
-        });
-        
-        console.log('🔍 Cuentas con cesión de derechos:', cesionDerechosMap);
-      }
-
-      // Primero necesitamos determinar qué cuentas son de productos
-      // Obtenemos las ofertas para saber cuáles tienen id_producto - batched
-      const ofertaIdsTemp = cuentas.map(c => c.id_oferta).filter((id): id is number => id !== null);
-      let ofertasTemp: { id: number; id_producto: number | null }[] = [];
-      for (let i = 0; i < ofertaIdsTemp.length; i += BATCH_SIZE) {
-        const batchIds = ofertaIdsTemp.slice(i, i + BATCH_SIZE);
-        const { data } = await supabase
-          .from('ofertas')
-          .select('id, id_producto')
-          .in('id', batchIds);
-        if (data) ofertasTemp.push(...data);
-      }
-
-      const cuentasProductoSet = new Set(
-        ofertasTemp.filter(o => o.id_producto).map(o => 
-          cuentas.find(c => c.id_oferta === o.id)?.id
-        ).filter(Boolean) || []
-      );
-
-      // Get acuerdos with concepto info for apartado check - batched
-      let acuerdosConceptos: { id: number; id_cuenta_cobranza: number; id_concepto: number; pago_completado: boolean }[] = [];
-      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
-        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
-        const { data } = await supabase
-          .from('acuerdos_pago')
-          .select('id, id_cuenta_cobranza, id_concepto, pago_completado')
-          .in('id_cuenta_cobranza', batchIds)
-          .eq('activo', true);
-        if (data) acuerdosConceptos.push(...data);
-      }
-
-      // Create a map of whether initial payment is made for each cuenta
-      const apartadoPagadoPorCuenta = cuentas.reduce((acc: Record<number, boolean>, cuenta) => {
-        const esProducto = cuentasProductoSet.has(cuenta.id);
-        
-        if (esProducto) {
-          // Para productos, el pago inicial es el Enganche (id_concepto = 2)
-          const acuerdoEnganche = acuerdosConceptos.find(
-            ap => ap.id_cuenta_cobranza === cuenta.id && ap.id_concepto === 2
-          );
-          acc[cuenta.id] = acuerdoEnganche?.pago_completado || false;
-        } else {
-          // Para propiedades, el pago inicial es Apartado (id_concepto = 1) o Cesión de derechos (id_concepto = 6)
-          const acuerdoApartado = acuerdosConceptos.find(
-            ap => ap.id_cuenta_cobranza === cuenta.id && ap.id_concepto === 1
-          );
-          acc[cuenta.id] = (acuerdoApartado?.pago_completado || false) || (cesionDerechosMap[cuenta.id] || false);
-        }
-        
-        return acc;
-      }, {});
-
-      // Create a map to check if each cuenta has acuerdos
-      const tieneAcuerdosPorCuenta = cuentas.reduce((acc: Record<number, boolean>, cuenta) => {
-        const tieneAcuerdos = acuerdosForPagos.some(ap => ap.id_cuenta_cobranza === cuenta.id);
-        acc[cuenta.id] = tieneAcuerdos;
-        return acc;
-      }, {});
-
-      // Get multas pendientes para cada cuenta
-      const acuerdoIdsForMultas = acuerdosForPagos.map(ap => ap.id);
-      let multasPendientesPorCuenta: Record<number, boolean> = {};
-      let montosMultasPorCuenta: Record<number, number> = {};
-      
-      if (acuerdoIdsForMultas.length > 0) {
-        // Batch fetch multas
-        let multas: { id: number; id_acuerdo_pago: number; es_pagada: boolean; monto: number }[] = [];
-        for (let i = 0; i < acuerdoIdsForMultas.length; i += BATCH_SIZE) {
-          const batchIds = acuerdoIdsForMultas.slice(i, i + BATCH_SIZE);
-          const { data } = await supabase
-            .from('multas')
-            .select('id, id_acuerdo_pago, es_pagada, monto')
-            .in('id_acuerdo_pago', batchIds)
-            .eq('activo', true);
-          if (data) multas.push(...data);
-        }
-
-        // Crear un mapa de acuerdo_id a cuenta_id
-        const acuerdoToCuentaMapMultas = acuerdosForPagos.reduce((acc: Record<number, number>, ap) => {
-          acc[ap.id] = ap.id_cuenta_cobranza;
-          return acc;
-        }, {});
-
-        // Calcular total de multas por cuenta (pagadas y no pagadas)
-        cuentas.forEach(cuenta => {
-          const multasCuenta = multas.filter(multa => 
-            acuerdoToCuentaMapMultas[multa.id_acuerdo_pago] === cuenta.id
-          );
-          
-          const totalMultas = multasCuenta.reduce((sum, multa) => sum + (multa.monto || 0), 0);
-          montosMultasPorCuenta[cuenta.id] = totalMultas;
-          
-          // Verificar si tiene multas pendientes (no pagadas)
-          const tieneMultasPendientes = multasCuenta.some(m => !m.es_pagada);
-          multasPendientesPorCuenta[cuenta.id] = tieneMultasPendientes;
-        });
-      }
-
-      // Get próxima fecha de pago (fecha_pago máxima no pagada) para cada cuenta - batched
-      let proximasFechasPago: { id_cuenta_cobranza: number; fecha_pago: string }[] = [];
-      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
-        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
-        const { data } = await supabase
-          .from('acuerdos_pago')
-          .select('id_cuenta_cobranza, fecha_pago')
-          .in('id_cuenta_cobranza', batchIds)
-          .eq('activo', true)
-          .eq('pago_completado', false)
-          .not('fecha_pago', 'is', null)
-          .order('fecha_pago', { ascending: false });
-        if (data) proximasFechasPago.push(...data);
-      }
-
-      // Crear un mapa con la fecha máxima de pago por cuenta
-      const proximaFechaPagoPorCuenta = cuentas.reduce((acc: Record<number, string | null>, cuenta) => {
-        const fechasCuenta = proximasFechasPago.filter(f => f.id_cuenta_cobranza === cuenta.id);
-        if (fechasCuenta.length > 0) {
-          // Obtener la fecha máxima
-          const fechasOrdenadas = fechasCuenta
-            .map(f => f.fecha_pago)
-            .filter(Boolean)
-            .sort((a, b) => new Date(b!).getTime() - new Date(a!).getTime());
-          acc[cuenta.id] = fechasOrdenadas[0] || null;
-        } else {
-          acc[cuenta.id] = null;
-        }
-        return acc;
-      }, {});
-
-      // Get parent ofertas to fetch property/project/modelo from parent cuenta
-      const parentOfertaIds = parentCuentas?.map(pc => pc.id_oferta).filter((id): id is number => id !== null) || [];
-      const { data: parentOfertas } = parentOfertaIds.length > 0 ? await supabase
-        .from('ofertas')
-        .select(`
-          id,
-          id_propiedad,
-          propiedades!ofertas_id_propiedad_fkey(
-            id,
-            numero_propiedad,
-            id_entidad_relacionada_dueno,
-            id_edificio_modelo
-          )
-        `)
-        .in('id', parentOfertaIds)
-        .limit(50000) : { data: [] };
-
-      // Create map for quick parent oferta lookup
-      const parentOfertasMap = new Map((parentOfertas || []).map(po => [po.id, po] as [number, typeof po]));
-
-      // Get offer IDs to fetch related data
-      const ofertaIds = cuentas.map(c => c.id_oferta).filter(id => id !== null);
-
-      // Get ofertas with properties and products
-      const { data: ofertas, error: ofertasError } = ofertaIds.length > 0 ? await supabase
-        .from('ofertas')
-        .select(`
-          id,
-          id_propiedad,
-          id_producto,
-          propiedades!ofertas_id_propiedad_fkey(
-            id,
-            numero_propiedad,
-            precio_lista,
-            id_entidad_relacionada_dueno,
-            id_edificio_modelo
-          )
-        `)
-        .in('id', ofertaIds)
-        .limit(50000) : { data: [], error: null };
-
-      if (ofertasError) {
-        console.error('Error fetching ofertas:', ofertasError);
-        return [];
-      }
-
-      // Get compradores - batched
-      let compradores: { id_cuenta_cobranza: number; porcentaje_copropiedad: number; id_persona: number; personas: { id: number; nombre_legal: string; rfc: string | null } | null }[] = [];
-      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
-        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
-        const { data } = await supabase
-          .from('compradores')
-          .select(`
-            id_cuenta_cobranza,
-            porcentaje_copropiedad,
-            id_persona,
-            personas!compradores_id_persona_fkey(id, nombre_legal, rfc)
-          `)
-          .in('id_cuenta_cobranza', batchIds);
-        if (data) compradores.push(...(data as any));
-      }
-
-      // Get todos los residentes (activos e inactivos) - batched
-      let residentes: { id_cuenta_cobranza: number; id_persona: number; activo: boolean; personas: { id: number; nombre_legal: string } | null }[] = [];
-      for (let i = 0; i < cuentaIds.length; i += BATCH_SIZE) {
-        const batchIds = cuentaIds.slice(i, i + BATCH_SIZE);
-        const { data } = await (supabase as any)
-          .from('residentes')
-          .select(`
-            id_cuenta_cobranza,
-            id_persona,
-            activo,
-            personas!residentes_id_persona_fkey(id, nombre_legal)
-          `)
-          .in('id_cuenta_cobranza', batchIds);
-        if (data) residentes.push(...data);
-      }
-
-      // Get entidades relacionadas, proyectos, edificios, modelos, productos
-      // Include both maintenance account ofertas AND parent ofertas
-      const entidadIds = [
-        ...(ofertas?.map(o => o.propiedades?.id_entidad_relacionada_dueno).filter(Boolean) || []),
-        ...(parentOfertas?.map(po => po.propiedades?.id_entidad_relacionada_dueno).filter(Boolean) || [])
-      ];
-      const edificioModeloIds = [
-        ...(ofertas?.map(o => o.propiedades?.id_edificio_modelo).filter(Boolean) || []),
-        ...(parentOfertas?.map(po => po.propiedades?.id_edificio_modelo).filter(Boolean) || [])
-      ];
-      const productoIds = ofertas?.map(o => o.id_producto).filter(Boolean) || [];
-
-      // Get productos_servicios data 
-      let productosData: any[] = [];
-      let entidadesProductosMap: Map<number, number> = new Map(); // id_entidad -> id_proyecto
-      let proyectosProductosData: any[] = [];
-      
-      if (productoIds.length > 0) {
-        const { data: productos } = await supabase
-          .from('productos_servicios')
-          .select('id, nombre, id_entidad_relacionada_dueno')
-          .in('id', productoIds);
-        
-        productosData = productos || [];
-        
-        if (productosData.length > 0) {
-          const entidadIdsProductos = productosData
-            .map(p => p.id_entidad_relacionada_dueno)
-            .filter(Boolean);
-          
-          if (entidadIdsProductos.length > 0) {
-            const { data: entidadesProductos } = await supabase
-              .from('entidades_relacionadas')
-              .select('id, id_proyecto')
-              .in('id', entidadIdsProductos);
-            
-            // Create a map for quick lookup
-            entidadesProductos?.forEach(e => {
-              entidadesProductosMap.set(e.id, e.id_proyecto);
-            });
-            
-            const proyectoIdsProductos = entidadesProductos
-              ?.map(e => e.id_proyecto)
-              .filter(Boolean) || [];
-              
-            if (proyectoIdsProductos.length > 0) {
-              const { data: proyectos } = await supabase
-                .from('proyectos')
-                .select('id, id_tipo_uso')
-                .in('id', proyectoIdsProductos);
-              
-              proyectosProductosData = proyectos || [];
-            }
-          }
-        }
-      }
-
-      const [entidadesResult, edificiosModelosResult] = await Promise.all([
-        supabase
-          .from('entidades_relacionadas')
-          .select(`
-            id,
-            personas!fk_entrel_persona(nombre_legal),
-            proyectos!entidades_relacionadas_id_proyecto_fkey(
-              nombre,
-              id_tipo_uso
-            )
-          `)
-          .in('id', entidadIds)
-          .limit(50000),
-        supabase
-          .from('edificios_modelos')
-          .select(`
-            id,
-            edificios!edificios_modelos_id_edificio_fkey(nombre),
-            modelos!edificios_modelos_id_modelo_fkey(nombre)
-          `)
-          .in('id', edificioModeloIds)
-          .limit(50000)
-      ]);
-
-      // Get complementos (bodegas, estacionamientos, productos) for each property
-      const propiedadIds = parentOfertas?.map(po => po.propiedades?.id).filter(Boolean) || [];
-      
-      // Get bodegas
-      const { data: bodegasData } = propiedadIds.length > 0 ? await supabase
-        .from('bodegas')
-        .select('id_propiedad, nombre, m2, ubicacion, es_incluido')
-        .in('id_propiedad', propiedadIds)
-        .eq('activo', true)
-        .limit(50000) : { data: [] };
-
-      // Get estacionamientos with tipo
-      const { data: estacionamientosData } = propiedadIds.length > 0 ? await supabase
-        .from('estacionamientos')
-        .select(`
-          id_propiedad, 
-          nombre, 
-          m2, 
-          ubicacion, 
-          es_incluido,
-          tipos_estacionamiento!estacionamientos_id_tipo_fkey(nombre)
-        `)
-        .in('id_propiedad', propiedadIds)
-        .eq('activo', true)
-        .limit(50000) : { data: [] };
-
-      // Get productos (condensadoras, etc.) - productos adicionales comprados via ofertas
-      const ofertasProductosIds = parentOfertaIds;
-      const { data: ofertasProductos } = ofertasProductosIds.length > 0 ? await supabase
-        .from('ofertas')
-        .select(`
-          id,
-          id_propiedad,
-          id_producto,
-          productos_servicios!ofertas_id_producto_fkey(
-            id,
-            nombre,
-            precio_lista,
-            categorias_producto!productos_servicios_id_categoria_fkey(nombre)
-          )
-        `)
-        .in('id', ofertasProductosIds)
-        .not('id_producto', 'is', null)
-        .limit(50000) : { data: [] };
-
-      // Create maps for complementos by propiedad
-      const bodegasPorPropiedad = (bodegasData || []).reduce((acc: Record<number, any[]>, b) => {
-        if (!acc[b.id_propiedad]) acc[b.id_propiedad] = [];
-        acc[b.id_propiedad].push(b);
-        return acc;
-      }, {});
-
-      const estacionamientosPorPropiedad = (estacionamientosData || []).reduce((acc: Record<number, any[]>, e) => {
-        if (!acc[e.id_propiedad]) acc[e.id_propiedad] = [];
-        acc[e.id_propiedad].push(e);
-        return acc;
-      }, {});
-
-      const productosPorPropiedad = (ofertasProductos || []).reduce((acc: Record<number, any[]>, o) => {
-        if (o.id_propiedad && o.productos_servicios) {
-          if (!acc[o.id_propiedad]) acc[o.id_propiedad] = [];
-          // Solo incluir bodegas, estacionamientos y otros productos (no mostrar productos que ya están en las tablas específicas)
-          const categoria = o.productos_servicios.categorias_producto?.nombre;
-          if (categoria && !['Bodega', 'Estacionamiento'].includes(categoria)) {
-            acc[o.id_propiedad].push(o.productos_servicios);
-          }
-        }
-        return acc;
-      }, {});
-
-      // Transform the data
-      const transformedData: CuentaCobranza[] = cuentas.map(cuenta => {
-        // Get parent cuenta and its oferta (for proyecto, propiedad, modelo, clave_catastral)
-        const parentCuenta = cuenta.id_cuenta_cobranza_padre ? parentCuentasMap.get(cuenta.id_cuenta_cobranza_padre) : null;
-        const parentOferta = parentCuenta?.id_oferta ? parentOfertasMap.get(parentCuenta.id_oferta) : null;
-        const parentPropiedad = parentOferta?.propiedades;
-        
-        // Get parent entidad and edificioModelo for proyecto and modelo
-        const entidad = entidadesResult.data?.find(e => e.id === parentPropiedad?.id_entidad_relacionada_dueno);
-        const edificioModelo = edificiosModelosResult.data?.find(em => em.id === parentPropiedad?.id_edificio_modelo);
-        const cuentaCompradores = compradores?.filter(c => c.id_cuenta_cobranza === cuenta.id) || [];
-        const cuentaResidentes = residentes?.filter(r => r.id_cuenta_cobranza === cuenta.id) || [];
-        
-        // Get clave_catastral from parent cuenta
-        const claveCatastral = parentCuenta?.clave_catastral || null;
-        
-        // Get maintenance account's own oferta (still needed for tipo determination)
-        const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
-        
-        // Determine tipo based on oferta
-        let tipo: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
-        let productoNombre: string | undefined;
-        if (oferta?.id_producto) {
-          const producto = productosData?.find((p: any) => p.id === oferta.id_producto);
-          productoNombre = producto?.nombre;
-          if (producto && producto.id_entidad_relacionada_dueno) {
-            // Get proyecto id from the map
-            const idProyecto = entidadesProductosMap.get(producto.id_entidad_relacionada_dueno);
-            
-            if (idProyecto) {
-              const proyecto = proyectosProductosData?.find((pr: any) => pr.id === idProyecto);
-              if (proyecto) {
-                // id_tipo_uso: 9 = Productos, 10 = Servicios, 11 = Mantenimientos (also Servicios)
-                const tipoUso = proyecto.id_tipo_uso;
-                if (tipoUso === 9) {
-                  tipo = 'Producto';
-                } else if (tipoUso === 10 || tipoUso === 11) {
-                  tipo = 'Servicio';
-                }
-              } else {
-                tipo = 'Producto'; // Default if we can't determine
-              }
-            } else {
-              tipo = 'Producto'; // Default if we can't determine
-            }
-          } else {
-            tipo = 'Producto'; // Default if we can't determine
-          }
-        }
-
-        const pagado = pagadoPorCuenta[cuenta.id] || 0;
-        const totalMensual = totalMensualPorCuenta[cuenta.id] || 0;
-        const precio_final = totalMensual; // Ya incluye multas como acuerdos_pago (id_concepto=13)
-        // Calculate difference and normalize to avoid -0
-        let restante = precio_final - pagado;
-        restante = Math.round(restante * 100) / 100;
-        // Force any zero (including -0) to positive 0
-        if (Math.abs(restante) < 0.01) {
-          restante = 0;
-        }
-        // Final cleanup: use + operator to convert -0 to 0
-        restante = +restante.toFixed(2);
-
-        // Calculate cash payment data (only for properties)
-        const valorUma = cuenta.valor_uma || 0;
-        const limiteEfectivo = valorUma * 8025;
-        const pagadoEfectivo = tipo === 'Propiedad' ? (pagadoEfectivoPorCuenta[cuenta.id] || 0) : 0;
-        let restanteEfectivo = limiteEfectivo - pagadoEfectivo;
-        restanteEfectivo = Math.round(restanteEfectivo * 100) / 100;
-        if (Math.abs(restanteEfectivo) < 0.01) {
-          restanteEfectivo = 0;
-        }
-        restanteEfectivo = +restanteEfectivo.toFixed(2);
-        const porcentajeEfectivo = limiteEfectivo > 0 ? (pagadoEfectivo / limiteEfectivo) * 100 : 0;
-
-        return {
-          id: cuenta.id,
-          tipo,
-          producto_nombre: productoNombre,
-          clabe_stp: cuenta.clabe_stp,
-          precio_final,
-          precio_lista: parentPropiedad?.precio_lista || null,
-          pagado,
-          total_pagos: totalPagosPorCuenta[cuenta.id] || 0,
-          restante,
-          cash_limit: limiteEfectivo,
-          cash_paid: pagadoEfectivo,
-          cash_remaining: restanteEfectivo,
-          cash_percentage: porcentajeEfectivo,
-          cash_payments: tipo === 'Propiedad' ? (pagosCashPorCuenta[cuenta.id] || []) : [],
-          compradores: cuentaCompradores.map(c => ({
-            nombre_legal: c.personas?.nombre_legal || '',
-            rfc: c.personas?.rfc || null,
-            porcentaje_copropiedad: c.porcentaje_copropiedad || 0,
-            id_persona: c.id_persona
-          })).filter(c => c.nombre_legal),
-          residentes: cuentaResidentes.map(r => ({
-            id_persona: r.id_persona,
-            nombre_legal: r.personas?.nombre_legal || 'Sin nombre',
-            activo: r.activo
-          })),
-          dueno: entidad?.personas?.nombre_legal || 'Sin dueño',
-          proyecto: entidad?.proyectos?.nombre || 'Sin proyecto',
-          edificio: edificioModelo?.edificios?.nombre || 'Sin edificio',
-          numero_propiedad: parentPropiedad?.numero_propiedad || 'Sin número',
-          modelo: edificioModelo?.modelos?.nombre || 'Sin modelo',
-          clave_catastral: claveCatastral,
-          activo: cuenta.activo,
-          id_oferta: cuenta.id_oferta,
-          motivo_cancelacion: (cuenta as any).tipos_cancelacion?.nombre || null,
-          apartado_pagado: apartadoPagadoPorCuenta[cuenta.id],
-          tiene_acuerdos: tieneAcuerdosPorCuenta[cuenta.id],
-          tiene_multas_pendientes: multasPendientesPorCuenta[cuenta.id] || false,
-          id_propiedad: parentPropiedad?.id,
-          proxima_fecha_pago: proximaFechaPagoPorCuenta[cuenta.id] || null,
-          bodegas: parentPropiedad?.id ? (bodegasPorPropiedad[parentPropiedad.id] || []).map((b: any) => ({
-            nombre: b.nombre,
-            m2: b.m2,
-            ubicacion: b.ubicacion,
-            es_incluido: b.es_incluido
-          })) : [],
-          estacionamientos: parentPropiedad?.id ? (estacionamientosPorPropiedad[parentPropiedad.id] || []).map((e: any) => ({
-            nombre: e.nombre,
-            tipo: e.tipos_estacionamiento?.nombre || 'Sin tipo',
-            m2: e.m2,
-            ubicacion: e.ubicacion,
-            es_incluido: e.es_incluido
-          })) : [],
-          productos: parentPropiedad?.id ? (productosPorPropiedad[parentPropiedad.id] || []).map((p: any) => ({
-            nombre: p.nombre,
-            categoria: p.categorias_producto?.nombre || 'Sin categoría',
-            precio: p.precio_lista || 0
-          })) : []
-        };
-      });
-
-      return transformedData.sort((a, b) => b.id - a.id);
-    },
+  // Use the new paginated hook
+  const { data, isLoading } = useCuentasMantenimientoPaginadas({
+    page: currentPage,
+    perPage: itemsPerPage,
+    idCuenta: idCuentaFilter,
+    propietarios: propietariosFilter,
+    clabe: clabeFilter,
+    proyecto: proyectoFilter,
+    noPropiedad: noPropiedadFilter,
+    modelo: modeloFilter,
+    claveCatastral: claveCatastralFilter,
+    search: searchTerm,
   });
+
+  const paginatedCuentas = data?.cuentas || [];
+  const totalCount = data?.totalCount || 0;
+  const totalPages = data?.totalPages || 0;
 
   // Refocus search input after loading completes
   useEffect(() => {
@@ -896,44 +105,6 @@ export default function CuentasMantenimiento() {
       searchInputRef.current.focus();
     }
   }, [isLoading, inputValue]);
-
-  // Filter only active maintenance accounts
-  const cuentasToFilter = cuentasCobranza?.filter(c => c.activo) || [];
-  
-  const filteredCuentas = cuentasToFilter.filter(cuenta => {
-    // Filter by search term
-    const matchesSearch = searchTerm === "" || (
-      cuenta.id.toString().includes(searchTerm) ||
-      cuenta.compradores.some(c => c.nombre_legal.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        c.rfc?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      cuenta.dueno.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.clabe_stp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.proyecto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.edificio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.numero_propiedad.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cuenta.precio_final.toString().includes(searchTerm)
-    );
-    
-    // Apply individual filters
-    const formattedId = formatCuentaMantenimientoId(cuenta.id);
-    const filterValue = idCuentaFilter.toLowerCase().replace('cm-', '');
-    const matchesIdCuenta = idCuentaFilter === "" || 
-      formattedId.toLowerCase().includes(idCuentaFilter.toLowerCase()) ||
-      cuenta.id.toString().includes(filterValue);
-    const matchesPropietarios = propietariosFilter === "" || cuenta.compradores.some(c => 
-      c.nombre_legal.toLowerCase().includes(propietariosFilter.toLowerCase()) || 
-      c.rfc?.toLowerCase().includes(propietariosFilter.toLowerCase())
-    );
-    const matchesClabe = clabeFilter === "" || cuenta.clabe_stp?.toLowerCase().includes(clabeFilter.toLowerCase());
-    const matchesProyecto = proyectoFilter === "" || cuenta.proyecto.toLowerCase().includes(proyectoFilter.toLowerCase());
-    const matchesNoPropiedad = noPropiedadFilter === "" || cuenta.numero_propiedad.toLowerCase().includes(noPropiedadFilter.toLowerCase());
-    const matchesModelo = modeloFilter === "" || cuenta.modelo.toLowerCase().includes(modeloFilter.toLowerCase());
-    const matchesClaveCatastral = claveCatastralFilter === "" || cuenta.clave_catastral?.toLowerCase().includes(claveCatastralFilter.toLowerCase());
-    
-    return matchesSearch && matchesIdCuenta && matchesPropietarios && 
-           matchesClabe && matchesProyecto && matchesNoPropiedad && matchesModelo && matchesClaveCatastral;
-  });
 
   const clearFilters = () => {
     setIdCuentaFilter("");
@@ -950,11 +121,6 @@ export default function CuentasMantenimiento() {
   const hasActiveFilters = idCuentaFilter || propietariosFilter || 
                           clabeFilter || proyectoFilter || noPropiedadFilter || 
                           modeloFilter || claveCatastralFilter || searchTerm;
-
-  // Pagination logic
-  const totalFilteredCount = filteredCuentas.length;
-  const totalPages = Math.ceil(totalFilteredCount / itemsPerPage);
-  const paginatedCuentas = filteredCuentas.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   // Helper function to generate pagination items with ellipsis
   const getPaginationItems = (currentPage: number, totalPages: number) => {
@@ -1036,24 +202,7 @@ export default function CuentasMantenimiento() {
     );
   };
 
-  // Navigation functions
-  const handlePropertyClick = (clabe: string) => {
-    navigate(`/admin/propiedades?search=${encodeURIComponent(clabe)}`);
-  };
-
-  const handleCompradorClick = (rfc: string) => {
-    navigate(`/admin/compradores?search=${encodeURIComponent(rfc)}`);
-  };
-
-  const handleVendedorClick = (nombreVendedor: string) => {
-    navigate(`/admin/entidades-legales?search=${encodeURIComponent(nombreVendedor)}`);
-  };
-
-  const handleEditCuenta = (cuenta: CuentaCobranza) => {
-    setEditDialog({ isOpen: true, cuenta });
-  };
-
-  if (isLoading) {
+  if (isLoading && paginatedCuentas.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="flex items-center space-x-2">
@@ -1070,7 +219,7 @@ export default function CuentasMantenimiento() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Cuentas de Mantenimientos</h1>
           <p className="text-muted-foreground">
-            Gestiona todas las cuentas de mantenimiento ({filteredCuentas.length})
+            Gestiona todas las cuentas de mantenimiento ({totalCount})
           </p>
         </div>
       </div>
@@ -1161,7 +310,8 @@ export default function CuentasMantenimiento() {
         <CardContent>
           {/* Filtered count display */}
           <div className="mb-4 text-sm text-muted-foreground">
-            Mostrando <span className="font-semibold text-foreground">{paginatedCuentas.length}</span> de <span className="font-semibold text-foreground">{filteredCuentas.length}</span> cuentas
+            Mostrando <span className="font-semibold text-foreground">{paginatedCuentas.length}</span> de <span className="font-semibold text-foreground">{totalCount}</span> cuentas
+            {isLoading && <Loader2 className="inline h-4 w-4 animate-spin ml-2" />}
           </div>
           
           <div className="overflow-x-auto">
@@ -1450,8 +600,6 @@ export default function CuentasMantenimiento() {
         open={residentesDialog.isOpen}
         onOpenChange={(open) => setResidentesDialog({ isOpen: open, residentes: [] })}
       />
-
-      {/* Dialog de pago manual */}
     </div>
   );
 }
