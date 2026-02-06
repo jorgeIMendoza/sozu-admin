@@ -1,138 +1,97 @@
 
-# Plan: Ajuste automatizado de centavos para propiedades Margot
+
+# Plan: Corregir Estatus Masivo de Propiedades de Margot
 
 ## Resumen
 
-Se creara una nueva Edge Function `ajustar-centavos-margot` que corregira todas las discrepancias de centavos (< $1) entre el precio final y la suma de acuerdos de pago para las cuentas de propiedades principales del proyecto Margot.
-
-**Total de cuentas a procesar:**
-- **~130 cuentas Caso B** (precio_final = Excel, solo ajustar ultimo acuerdo + ultimo pago)
-- **50 cuentas Caso C** (precio_final != Excel, actualizar PF + ajustar ultimo acuerdo + ultimo pago)
-- **Total: ~180 cuentas de propiedades principales**
-
-Las cuentas de productos (bodegas, estacionamientos, paquetes amueblados, condensadoras) NO se incluyen en este ajuste ya que no forman parte de la comparacion con el Excel. Se pueden corregir en una fase posterior.
+Se identificaron **177 propiedades** en el proyecto Margot que estan en estatus "Vendido" (5) pero ya estan completamente pagadas. Se dividen en dos grupos segun la presencia de documentos de entrega verificados.
 
 ---
 
-## Archivos a crear/modificar
+## Grupo 1: Mover a Entregado (estatus 8) -- 45 propiedades
 
-### 1. Nuevo archivo: `supabase/functions/ajustar-centavos-margot/index.ts`
+Estas propiedades cumplen TODAS las condiciones:
+- Completamente pagadas (saldo <= $0.01)
+- Datos de escritura completos (numero, fecha, notario)
+- 8 o mas documentos de entrega verificados (categoria 7)
 
-Edge Function que contiene:
+### Las 22 propiedades originales
+201, 215, 305, 401, 406, 409, 414, 417, 513, 616, 704, 714, 904, 1013, 1017, 1115, 1203, 1220, 1607, 1613, 1715, 1719
 
-**a) Mapa de overrides Caso C (50 cuentas):**
-Cuentas donde precio_final en BD difiere del Excel y necesita actualizarse:
+### 23 propiedades adicionales que tambien cumplen todas las condiciones
+504, 505, 511, 606, 614, 703, 801, 909, 1001, 1002, 1004, 1012, 1105, 1106, 1112, 1114, 1120, 1207, 1211, 1405, 1409, 1608, 1707
 
-| cuenta_id | depto | Excel (target) | DB actual |
-|-----------|-------|-----------------|-----------|
-| 374 | 202 | 2,292,821.44 | 2,292,821.42 |
-| 280 | 205 | 2,584,949.00 | 2,584,948.97 |
-| 506 | 207 | 1,450,240.00 | 1,450,240.16 |
-| 490 | 219 | 3,917,410.25 | 3,917,410.33 |
-| 510 | 220 | 1,489,840.00 | 1,489,840.16 |
-| 278 | 305 | 2,636,056.74 | 2,636,056.75 |
-| 330 | 311 | 2,085,274.51 | 2,085,274.65 |
-| 414 | 312 | 3,709,268.13 | 3,709,268.30 |
-| 320 | 319 | 3,925,286.75 | 3,925,286.79 |
-| 486 | 405 | 2,608,561.52 | 2,608,561.62 |
-| 311 | 406 | 2,509,075.86 | 2,509,075.84 |
-| 261 | 413 | 3,516,293.33 | 3,516,293.38 |
-| 428 | 414 | 2,240,030.64 | 2,240,030.72 |
-| 215 | 415 | 2,300,708.67 | 2,300,708.60 |
-| 202 | 419 | 3,665,491.33 | 3,665,491.29 |
-| 491 | 505 | 2,675,518.67 | 2,675,518.69 |
-| 367 | 513 | 3,451,437.99 | 3,451,438.12 |
-| 519 | 518 | 2,776,559.65 | 2,776,559.76 |
-| 370 | 608 | 2,375,120.93 | 2,375,120.69 |
-| 383 | 613 | 3,477,323.71 | 3,477,323.84 |
-| 509 | 614 | 2,273,756.99 | 2,273,757.00 |
-| 255 | 618 | 2,806,357.82 | 2,806,357.91 |
-| 193 | 619 | 3,762,169.98 | 3,762,169.88 |
-| 439 | 705 | 2,548,636.60 | 2,548,636.58 |
-| 176 | 709 | 2,564,053.21 | 2,564,053.26 |
-| 369 | 712 | 3,841,009.12 | 3,841,009.14 |
-| 406 | 715 | 2,342,521.48 | 2,342,521.32 |
-| 173 | 718 | 2,735,348.41 | 2,735,348.58 |
-| 331 | 719 | 3,511,223.64 | 3,511,223.75 |
-| 395 | 720 | 1,506,770.00 | 1,506,770.02 |
-| 498 | 805 | 2,702,783.20 | 2,702,783.14 |
-| 493 | 806 | 2,634,537.67 | 2,634,537.66 |
-| 420 | 807 | 1,466,720.00 | 1,466,719.84 |
-| 181 | 1013 | 3,465,994.71 | 3,465,994.76 |
-| 340 | 1018 | 2,521,326.08 | 2,521,325.93 |
-| 225 | 1103 | 2,329,119.73 | 2,329,119.59 |
-| 446 | 1105 | 2,695,658.26 | 2,695,658.31 |
-| 230 | 1112 | 3,341,664.96 | 3,341,664.94 |
-| 248 | 1113 | 3,555,277.02 | 3,555,277.15 |
-| 487 | 1114 | 2,562,776.45 | 2,562,776.38 |
-| 329 | 1115 | 2,498,840.24 | 2,498,840.16 |
-| 229 | 1118 | 2,748,306.88 | 2,748,306.97 |
-| 358 | 1205 | 2,581,584.45 | 2,581,584.60 |
-| 372 | 1206 | 2,780,564.66 | 2,780,564.70 |
-| 323 | 1317 | 3,046,260.57 | 3,046,260.65 |
-| 400 | 1416 | 3,080,823.42 | 3,080,823.44 |
-| 398 | 1505 | 2,640,106.53 | 2,640,106.44 |
-| 206 | 1516 | 3,103,841.73 | 3,103,841.77 |
-| 403 | 1608 | 2,851,203.34 | 2,851,203.33 |
-| 1 | 1614 | 2,699,048.79 | 2,699,048.77 |
+### ADVERTENCIA IMPORTANTE
+Normalmente la transicion a estatus 8 (Entregado) se hace a traves de un webhook de N8N que:
+1. Actualiza el estatus de la propiedad
+2. Genera una cuenta de cobranza de mantenimiento
+3. Crea una CLABE STP para mantenimiento
 
-**b) Logica de procesamiento por cada cuenta:**
-
-```text
-Para cada cuenta:
-
-1. Determinar target:
-   - Si esta en el mapa de overrides Case C: target = valor del Excel
-   - Si no: target = precio_final actual (Case B)
-
-2. Si |target - precio_final| > 0.001:
-   → UPDATE cuentas_cobranza SET precio_final = target WHERE id = cuenta_id
-
-3. Obtener suma actual de acuerdos activos
-
-4. Calcular diff = target - suma_acuerdos
-
-5. Si |diff| > 0.001:
-   a. Obtener ultimo acuerdo activo (ORDER BY orden DESC LIMIT 1)
-   b. UPDATE acuerdos_pago SET monto = monto + diff WHERE id = ultimo_acuerdo_id
-   c. Obtener ultimo pago activo (ORDER BY fecha_pago DESC, id DESC LIMIT 1)
-   d. UPDATE pagos SET monto = monto + diff WHERE id = ultimo_pago_id
-
-6. Recalcular aplicaciones de pago:
-   - Eliminar aplicaciones_pago no-multa existentes
-   - Redistribuir pagos a acuerdos en orden
-   - Actualizar flag pago_completado en cada acuerdo
-```
-
-**c) Cuentas Caso B (target = precio_final actual):**
-
-La funcion consultara dinamicamente todas las cuentas de propiedades principales de Margot (ofertas sin id_producto, precio_final > $100K) donde |precio_final - suma_acuerdos| > 0.001 AND < 1. Para estas, el target es el precio_final actual.
-
-**d) Respuesta:** Retorna un JSON con el detalle de cada cuenta procesada (exito/error, valores antes/despues, ajustes realizados).
-
-### 2. Archivo modificado: `supabase/config.toml`
-
-Se agrega la configuracion de la nueva funcion:
-
-```text
-[functions.ajustar-centavos-margot]
-verify_jwt = false
-```
+Al hacer la actualizacion directa en la base de datos, estas 45 propiedades NO tendran cuentas de mantenimiento generadas automaticamente. Si necesitan cuentas de mantenimiento, se tendrian que generar por separado despues.
 
 ---
 
-## Flujo de ejecucion
+## Grupo 2: Mover a Escrituracion (estatus 7) -- 132 propiedades
 
-1. Se despliega automaticamente la Edge Function al guardar
-2. Se invoca la funcion via POST (sin body necesario) 
-3. La funcion procesa las ~180 cuentas secuencialmente
-4. Retorna un reporte detallado con resultados
-5. Se verifica con la pagina ReporteDiscrepancias que ya no existan diferencias de centavos
+Estas propiedades estan completamente pagadas pero NO tienen los documentos de entrega completos. Se mueven de Vendido (5) a Escrituracion (7).
 
-## Notas tecnicas
+Son las 155 propiedades restantes MENOS las 23 adicionales del Grupo 1 = 132 propiedades.
 
-- La logica de redistribucion de aplicaciones se incluye directamente en la funcion (replicando `recalcular-aplicaciones`) para evitar llamadas anidadas y timeouts
-- Se usa `SUPABASE_SERVICE_ROLE_KEY` para las operaciones de escritura (mismo patron que `recalcular-aplicaciones`)
-- El threshold minimo de $0.01 para aplicaciones se mantiene para cumplir con el constraint `chk_apppago_monto_positivo`
-- Los montos se redondean a 2 decimales con `Math.round(x * 100) / 100`
-- Se procesan las cuentas secuencialmente para evitar race conditions
+---
+
+## Seccion Tecnica
+
+### Migracion 1: Actualizar 45 propiedades a Entregado (8)
+
+```sql
+UPDATE propiedades
+SET id_estatus_disponibilidad = 8,
+    fecha_actualizacion = NOW()
+WHERE id IN (
+  -- 22 originales
+  5130, 4853, 4862, 4877, 4882, 4885, 4889, 4892,
+  4906, 4928, 4935, 4953, 5096, 5044, 5049, 4941,
+  4952, 5149, 5081, 5088, 5133, 5137,
+  -- 23 adicionales
+  4897, 4898, 4904, 4918, 4926, 4934, 4962, 5108,
+  5020, 5022, 5026, 5042, 5061, 5127, 4932, 4939,
+  5148, 4961, 4969, 5009, 5017, 5082, 5109
+)
+AND id_estatus_disponibilidad = 5
+AND activo = true;
+```
+
+### Migracion 2: Actualizar 132 propiedades a Escrituracion (7)
+
+```sql
+UPDATE propiedades
+SET id_estatus_disponibilidad = 7,
+    fecha_actualizacion = NOW()
+WHERE id IN (
+  -- Todas las fully-paid menos las 45 de Entregado
+  4842, 4844, 4845, 4849, 4850, 4852, 4854, 4855,
+  4856, 4861, 4863, 4864, 4866, 4867, 4868, 4869,
+  4870, 4873, 4874, 4878, 4879, 4881, 4883, 4886,
+  4888, 4891, 4894, 4895, 4901, 4907, 4909, 4910,
+  4911, 4912, 4914, 4917, 4921, 4922, 4925, 4929,
+  4930, 4931, 4933, 4936, 4937, 4940, 4942, 4943,
+  4944, 4945, 4946, 4947, 4948, 4950, 4951, 4954,
+  4955, 4956, 4957, 4958, 4959, 4960, 4963, 4965,
+  4968, 4970, 4972, 4982, 4984, 4988, 4992, 4998,
+  4999, 5003, 5005, 5006, 5008, 5011, 5014, 5017,
+  5019, 5021, 5024, 5028, 5029, 5032, 5034, 5037,
+  5039, 5040, 5041, 5045, 5046, 5050, 5051, 5054,
+  5056, 5057, 5058, 5063, 5064, 5065, 5069, 5072,
+  5074, 5077, 5079, 5087, 5089, 5090, 5091, 5092,
+  5093, 5102, 5107, 5111, 5114, 5117, 5118, 5122,
+  5126, 5129, 5131, 5132, 5135, 5140, 5141, 5143,
+  5152, 5153, 5154, 5157, 5158
+)
+AND id_estatus_disponibilidad = 5
+AND activo = true;
+```
+
+Ambas migraciones incluyen la condicion de seguridad `AND id_estatus_disponibilidad = 5` para no afectar propiedades que ya hayan cambiado de estatus por otro proceso.
+
+No se requieren cambios en el frontend. El `PropertyProgressTimeline.tsx` ya interpreta correctamente los estatus 7 y 8.
+
