@@ -1,13 +1,15 @@
- import { useState, useEffect } from "react";
- import { Link, useNavigate } from "react-router-dom";
- import { cn } from "@/lib/utils";
- import { APP_VERSION } from "@/lib/config";
- import { ScrollArea } from "@/components/ui/scroll-area";
- import { useAuth } from "@/contexts/AuthContext";
- import { useDynamicMenus, DynamicMenuItem } from "@/hooks/useDynamicMenus";
- import { useQuery } from "@tanstack/react-query";
- import { supabase } from "@/integrations/supabase/client";
- import { Loader2, ChevronDown, ChevronRight, LogOut, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
+import { APP_VERSION } from "@/lib/config";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/AuthContext";
+import { useDynamicMenus, DynamicMenuItem } from "@/hooks/useDynamicMenus";
+import { useInmobiliariaDataStatus } from "@/hooks/useInmobiliariaDataStatus";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Loader2, ChevronDown, ChevronRight, LogOut, X, Lock } from "lucide-react";
  
  interface AdminSidebarProps {
    isOpen: boolean;
@@ -15,41 +17,59 @@
    currentPath: string;
  }
  
- export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps) => {
-   const { profile, signOut } = useAuth();
-   const navigate = useNavigate();
-   const { menuItems, isLoading: isLoadingMenus, isSuperAdmin } = useDynamicMenus();
- 
-   // Check if user is Inmobiliaria role (rol_id 4)
-   const isInmobiliariaRole = profile?.rol_id === 4;
- 
-   // Fetch inmobiliaria data for Inmobiliaria role users
-   const { data: inmobiliariaData } = useQuery({
-     queryKey: ['sidebar-inmobiliaria-data', profile?.id_persona],
-     queryFn: async () => {
-       if (!profile?.id_persona) return null;
- 
-       const { data, error } = await supabase
-         .from('personas')
-         .select('id, nombre_legal, nombre_comercial, url_logo')
-         .eq('id', profile.id_persona)
-         .single();
- 
-       if (error) return null;
- 
-       return {
-         nombre_legal: data.nombre_legal,
-         nombre_comercial: data.nombre_comercial,
-         logo_url: data.url_logo,
-       };
-     },
-     enabled: isInmobiliariaRole && !!profile?.id_persona,
-   });
- 
-   const handleSignOut = async () => {
-     await signOut();
-     navigate("/auth/login");
-   };
+export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps) => {
+  const { profile, signOut } = useAuth();
+  const navigate = useNavigate();
+  const { menuItems, isLoading: isLoadingMenus, isSuperAdmin } = useDynamicMenus();
+
+  // Check if user is Inmobiliaria role (rol_id 4)
+  const isInmobiliariaRole = profile?.rol_id === 4;
+
+  // Fetch inmobiliaria data for Inmobiliaria role users
+  const { data: inmobiliariaData } = useQuery({
+    queryKey: ['sidebar-inmobiliaria-data', profile?.id_persona],
+    queryFn: async () => {
+      if (!profile?.id_persona) return null;
+
+      const { data, error } = await supabase
+        .from('personas')
+        .select('id, nombre_legal, nombre_comercial, url_logo')
+        .eq('id', profile.id_persona)
+        .single();
+
+      if (error) return null;
+
+      return {
+        nombre_legal: data.nombre_legal,
+        nombre_comercial: data.nombre_comercial,
+        logo_url: data.url_logo,
+      };
+    },
+    enabled: isInmobiliariaRole && !!profile?.id_persona,
+  });
+
+  // Use the hook to check if inmobiliaria data is complete
+  const { isDataComplete, missingFields, isLoading: isLoadingDataStatus } = useInmobiliariaDataStatus(
+    isInmobiliariaRole ? profile?.id_persona : null
+  );
+
+  // Routes that should be blocked when data is incomplete
+  const blockedRoutes = [
+    '/admin/inmobiliarias/mis-propiedades',
+    '/admin/inmobiliarias/mis-ventas',
+    '/admin/inmobiliarias/mis-agentes',
+  ];
+
+  const isRouteBlocked = (href: string) => {
+    if (isSuperAdmin) return false; // Super Admin always has access
+    if (!isInmobiliariaRole) return false;
+    return !isDataComplete && blockedRoutes.includes(href);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth/login");
+  };
  
    // Get user initials for avatar
    const getInitials = (name: string | undefined) => {
@@ -170,26 +190,56 @@
                            <ChevronRight className="h-4 w-4 transition-transform" />
                          )}
                        </button>
-                       {expandedGroups.has(item.title) && (
-                         <div className="space-y-1 animate-in slide-in-from-top-2 duration-200">
-                           {item.children?.map((child, childIndex) => (
-                             <Link
-                               key={childIndex}
-                               to={child.href}
-                               className={cn(
-                                 "flex items-center space-x-3 pl-8 pr-3 py-2 rounded-lg transition-colors text-sm",
-                                 currentPath === child.href
-                                   ? "bg-primary text-primary-foreground"
-                                   : "hover:bg-accent"
-                               )}
-                               onClick={onClose}
-                             >
-                               <child.icon className="h-4 w-4" />
-                               <span>{child.title}</span>
-                             </Link>
-                           ))}
-                         </div>
-                       )}
+                        {expandedGroups.has(item.title) && (
+                          <div className="space-y-1 animate-in slide-in-from-top-2 duration-200">
+                            {item.children?.map((child, childIndex) => {
+                              const isBlocked = isRouteBlocked(child.href);
+                              
+                              if (isBlocked) {
+                                return (
+                                  <TooltipProvider key={childIndex} delayDuration={100}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div
+                                          className="flex items-center justify-between pl-8 pr-3 py-2 rounded-lg text-sm text-muted-foreground/50 cursor-not-allowed"
+                                        >
+                                          <div className="flex items-center space-x-3">
+                                            <child.icon className="h-4 w-4" />
+                                            <span>{child.title}</span>
+                                          </div>
+                                          <Lock className="h-3 w-3" />
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="right" className="max-w-xs">
+                                        <p className="font-medium">Sección bloqueada</p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          Completa la información en "Mi Información" para habilitar esta sección.
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              }
+                              
+                              return (
+                                <Link
+                                  key={childIndex}
+                                  to={child.href}
+                                  className={cn(
+                                    "flex items-center space-x-3 pl-8 pr-3 py-2 rounded-lg transition-colors text-sm",
+                                    currentPath === child.href
+                                      ? "bg-primary text-primary-foreground"
+                                      : "hover:bg-accent"
+                                  )}
+                                  onClick={onClose}
+                                >
+                                  <child.icon className="h-4 w-4" />
+                                  <span>{child.title}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
                      </div>
                    )}
                  </div>
