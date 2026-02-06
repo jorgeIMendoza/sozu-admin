@@ -16,13 +16,14 @@ interface BankAccountsSectionProps {
   personId: number;
   showStpCheckbox?: boolean;
   projectId?: number;
+  onEditingStateChange?: (isEditing: boolean) => void;
 }
 
-export function BankAccountsSection({ personId, showStpCheckbox = false, projectId }: BankAccountsSectionProps) {
+export function BankAccountsSection({ personId, showStpCheckbox = false, projectId, onEditingStateChange }: BankAccountsSectionProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<any>(null);
+  const [isAdding, setIsAddingInternal] = useState(false);
+  const [editingAccount, setEditingAccountInternal] = useState<any>(null);
   const [newAccount, setNewAccount] = useState({
     id_banco: "",
     numero_cuenta: "",
@@ -31,6 +32,17 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
     url_evidencia: "",
     es_cuenta_fisica_para_stp: false
   });
+
+  // Wrapper functions to notify parent of editing state changes
+  const setIsAdding = (value: boolean) => {
+    setIsAddingInternal(value);
+    onEditingStateChange?.(value || !!editingAccount);
+  };
+
+  const setEditingAccount = (value: any) => {
+    setEditingAccountInternal(value);
+    onEditingStateChange?.(isAdding || !!value);
+  };
 
   // Ensure personId is a valid number
   const validPersonId = typeof personId === 'number' && personId > 0 ? personId : null;

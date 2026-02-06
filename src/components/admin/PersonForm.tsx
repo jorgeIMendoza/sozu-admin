@@ -161,6 +161,9 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     id_parentesco: string;
     porcentaje_participacion: string;
   }>>([]);
+
+  // State to track if bank accounts section is in editing mode
+  const [isBankAccountsEditing, setIsBankAccountsEditing] = useState(false);
   
   // Using sonner toast imported at line 11
 
@@ -1968,6 +1971,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       <BankAccountsSection 
                         personId={initialData.id}
                         showStpCheckbox={shouldShowStpCheckbox()}
+                        onEditingStateChange={setIsBankAccountsEditing}
                       />
                     ) : (
                       <TempBankAccountsSection
@@ -2054,14 +2058,16 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
           </div>
         )}
 
-        <div className="flex gap-4 pt-4">
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? 'Guardando...' : 'Guardar'}
-          </Button>
-        </div>
+        {!isBankAccountsEditing && (
+          <div className="flex gap-4 pt-4">
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </div>
+        )}
       </form>
     </Card>
   );
