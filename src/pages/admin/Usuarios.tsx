@@ -141,8 +141,8 @@ function UsersTable({
                           </Badge>
                         )}
                       </p>
-                      {/* Solo mostrar inmobiliaria para Agente Inmobiliario (3) o Agente Interno (9) */}
-                      {usuario.inmobiliaria_nombre && (usuario.rol_id === ROLE_AGENTE_INMOBILIARIO || usuario.rol_id === ROLE_AGENTE_INTERNO) ? (
+                      {/* Mostrar inmobiliaria para Agente Inmobiliario (3), Agente Interno (9), o Inmobiliaria secundario (4) */}
+                      {usuario.inmobiliaria_nombre && (usuario.rol_id === ROLE_AGENTE_INMOBILIARIO || usuario.rol_id === ROLE_AGENTE_INTERNO || usuario.rol_id === ROLE_INMOBILIARIA) ? (
                         <p className="text-xs text-muted-foreground">
                           Inmobiliaria: {usuario.inmobiliaria_nombre}
                         </p>
@@ -335,26 +335,63 @@ export default function Usuarios() {
       
       if (error) throw error;
       
-      // Get inmobiliaria info for agents (rol 3 and 9) from entidades_relacionadas
-      const agentPersonaIds = (data || [])
-        .filter(u => (u.rol_id === ROLE_AGENTE_INMOBILIARIO || u.rol_id === ROLE_AGENTE_INTERNO) && u.id_persona)
+      // Get inmobiliaria info for agents (rol 3 and 9) and secondary Inmobiliaria users (rol 4) from entidades_relacionadas
+      const personaIdsForLookup = (data || [])
+        .filter(u => (u.rol_id === ROLE_AGENTE_INMOBILIARIO || u.rol_id === ROLE_AGENTE_INTERNO || u.rol_id === ROLE_INMOBILIARIA) && u.id_persona)
         .map(u => u.id_persona as number);
       
       let inmobByPersona = new Map<number, string>();
       
-      if (agentPersonaIds.length > 0) {
-        const { data: entidadesData } = await supabase
+      if (personaIdsForLookup.length > 0) {
+        // Query for agents (tipo 19)
+        const { data: agentEntidadesData } = await supabase
           .from('entidades_relacionadas')
           .select('id_persona, id_persona_duena_lead, personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_comercial, nombre_legal)')
           .eq('id_tipo_entidad', 19) // Agente Inmobiliario
           .eq('activo', true)
-          .in('id_persona', agentPersonaIds);
+          .in('id_persona', personaIdsForLookup);
         
-        (entidadesData || []).forEach((e: any) => {
+        (agentEntidadesData || []).forEach((e: any) => {
           if (e.id_persona && e.personas) {
             inmobByPersona.set(e.id_persona, e.personas.nombre_comercial || e.personas.nombre_legal || '');
           }
         });
+
+        // Query for secondary Inmobiliaria users (tipo 30)
+        const { data: secondaryInmobEntidadesData } = await supabase
+          .from('entidades_relacionadas')
+          .select('id_persona, id_persona_duena_lead, personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_comercial, nombre_legal)')
+          .eq('id_tipo_entidad', 30) // Usuario Inmobiliaria Secundario
+          .eq('activo', true)
+          .in('id_persona', personaIdsForLookup);
+        
+        (secondaryInmobEntidadesData || []).forEach((e: any) => {
+          if (e.id_persona && e.personas) {
+            inmobByPersona.set(e.id_persona, e.personas.nombre_comercial || e.personas.nombre_legal || '');
+          }
+        });
+
+        // For primary Inmobiliaria users (rol 4), their persona IS the inmobiliaria
+        // Get the inmobiliaria name from their own persona record
+        const inmobiliariaUserPersonaIds = (data || [])
+          .filter(u => u.rol_id === ROLE_INMOBILIARIA && u.id_persona && !inmobByPersona.has(u.id_persona))
+          .map(u => u.id_persona as number);
+
+        if (inmobiliariaUserPersonaIds.length > 0) {
+          // Check which of these personas are inmobiliarias themselves
+          const { data: inmobPersonas } = await supabase
+            .from('entidades_relacionadas')
+            .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
+            .eq('id_tipo_entidad', 5) // Inmobiliaria
+            .eq('activo', true)
+            .in('id_persona', inmobiliariaUserPersonaIds);
+
+          (inmobPersonas || []).forEach((e: any) => {
+            if (e.id_persona && e.personas) {
+              inmobByPersona.set(e.id_persona, e.personas.nombre_comercial || e.personas.nombre_legal || '');
+            }
+          });
+        }
       }
       
       // Add inmobiliaria info to users (filtering already done at DB level)

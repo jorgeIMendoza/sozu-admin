@@ -26,26 +26,68 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
   const isInmobiliariaRole = profile?.rol_id === 4;
 
   // Fetch inmobiliaria data for Inmobiliaria role users
+  // For primary users: id_persona points to the inmobiliaria
+  // For secondary users: we need to look up via entidades_relacionadas
   const { data: inmobiliariaData } = useQuery({
-    queryKey: ['sidebar-inmobiliaria-data', profile?.id_persona],
+    queryKey: ['sidebar-inmobiliaria-data', profile?.id_persona, profile?.email],
     queryFn: async () => {
-      if (!profile?.id_persona) return null;
+      if (!profile) return null;
 
-      const { data, error } = await supabase
-        .from('personas')
-        .select('id, nombre_legal, nombre_comercial, url_logo')
-        .eq('id', profile.id_persona)
-        .single();
+      // First check if user's persona IS the inmobiliaria (primary user)
+      if (profile.id_persona) {
+        const { data: personaData, error: personaError } = await supabase
+          .from('personas')
+          .select('id, nombre_legal, nombre_comercial, url_logo, email')
+          .eq('id', profile.id_persona)
+          .single();
 
-      if (error) return null;
+        if (!personaError && personaData) {
+          // Check if this persona is an inmobiliaria (tipo_entidad = 5)
+          const { data: entidadData } = await supabase
+            .from('entidades_relacionadas')
+            .select('id')
+            .eq('id_persona', profile.id_persona)
+            .eq('id_tipo_entidad', 5)
+            .eq('activo', true)
+            .maybeSingle();
 
-      return {
-        nombre_legal: data.nombre_legal,
-        nombre_comercial: data.nombre_comercial,
-        logo_url: data.url_logo,
-      };
+          if (entidadData) {
+            // User's persona IS the inmobiliaria
+            return {
+              nombre_legal: personaData.nombre_legal,
+              nombre_comercial: personaData.nombre_comercial,
+              logo_url: personaData.url_logo,
+              inmobiliaria_id: personaData.id,
+            };
+          }
+        }
+      }
+
+      // Secondary user: look up inmobiliaria via entidades_relacionadas (tipo 30)
+      // or via the persona linkage
+      if (profile.id_persona) {
+        const { data: linkData, error: linkError } = await supabase
+          .from('entidades_relacionadas')
+          .select('id_persona_duena_lead, personas!entidades_relacionadas_id_persona_duena_lead_fkey(id, nombre_legal, nombre_comercial, url_logo)')
+          .eq('id_persona', profile.id_persona)
+          .eq('id_tipo_entidad', 30) // Usuario Inmobiliaria Secundario
+          .eq('activo', true)
+          .maybeSingle();
+
+        if (!linkError && linkData?.personas) {
+          const inmob = linkData.personas as any;
+          return {
+            nombre_legal: inmob.nombre_legal,
+            nombre_comercial: inmob.nombre_comercial,
+            logo_url: inmob.url_logo,
+            inmobiliaria_id: inmob.id,
+          };
+        }
+      }
+
+      return null;
     },
-    enabled: isInmobiliariaRole && !!profile?.id_persona,
+    enabled: isInmobiliariaRole && !!profile,
   });
 
   // Use the hook to check if inmobiliaria data is complete
