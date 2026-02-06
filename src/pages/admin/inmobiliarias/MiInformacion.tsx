@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building, Loader2 } from "lucide-react";
+import { Building, Loader2, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { PersonForm } from "@/components/admin/PersonForm";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useAuth } from "@/contexts/AuthContext";
 import { InmobiliariaHeader } from "@/components/admin/InmobiliariaHeader";
+import { useInmobiliariaDataStatus } from "@/hooks/useInmobiliariaDataStatus";
 
 export default function MiInformacion() {
   const { canUpdate, isSuperAdmin, isLoading: isLoadingPermissions } = usePagePermissions('/admin/inmobiliarias/mi-informacion');
@@ -18,6 +20,9 @@ export default function MiInformacion() {
 
   // Get the inmobiliaria ID based on user type
   const inmobiliariaId = selectedInmobiliariaId || profile?.id_persona;
+
+  // Check data completion status
+  const { isDataComplete, missingFields, isLoading: isLoadingStatus } = useInmobiliariaDataStatus(inmobiliariaId);
 
   // Fetch inmobiliaria data
   const { data: inmobiliariaData, isLoading: loadingData } = useQuery({
@@ -142,6 +147,13 @@ export default function MiInformacion() {
       queryClient.invalidateQueries({ queryKey: ['mi-informacion-inmobiliaria', inmobiliariaId] });
       queryClient.invalidateQueries({ queryKey: ['sidebar-inmobiliaria-data'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-inmobiliaria-data'] });
+      queryClient.invalidateQueries({ queryKey: ['inmobiliaria-data-status', inmobiliariaId] });
+      
+      // Refetch to check updated status
+      setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ['inmobiliaria-data-status', inmobiliariaId] });
+      }, 500);
+      
       toast({
         title: "Éxito",
         description: "Información actualizada correctamente.",
@@ -179,7 +191,25 @@ export default function MiInformacion() {
             Mi información
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Alert for missing data */}
+          {!isLoadingStatus && !isDataComplete && missingFields.length > 0 && (
+            <Alert variant="warning">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <p className="font-medium mb-2">
+                  Para habilitar "Mi Inventario", "Mis Ventas" y "Mis Agentes", completa la siguiente información:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  {missingFields.map((section, idx) => (
+                    <li key={idx}>
+                      <strong>{section.section}:</strong> {section.fields.join(', ')}
+                    </li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
           {inmobiliariaData ? (
             canUpdate ? (
               <PersonForm

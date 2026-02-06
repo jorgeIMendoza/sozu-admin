@@ -124,12 +124,13 @@
    children?: DynamicMenuChild[];
  }
  
- export interface DynamicMenuChild {
-   title: string;
-   href: string;
-   icon: LucideIcon;
-   submenuId: number;
- }
+export interface DynamicMenuChild {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  submenuId: number;
+  disabled?: boolean;
+}
  
 interface RawSubmenu {
   id: number;
