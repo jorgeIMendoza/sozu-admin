@@ -6525,6 +6525,48 @@ export type Database = {
           total_propiedades: number
         }[]
       }
+      get_cuentas_mantenimiento_paginadas: {
+        Args: {
+          p_clabe?: string
+          p_clave_catastral?: string
+          p_dueno_entity_ids?: number[]
+          p_id_cuenta?: string
+          p_modelo?: string
+          p_no_propiedad?: string
+          p_page?: number
+          p_per_page?: number
+          p_propietarios?: string
+          p_proyecto?: string
+          p_proyecto_ids?: number[]
+          p_search?: string
+        }
+        Returns: {
+          activo: boolean
+          bodegas_json: Json
+          clabe_stp: string
+          clave_catastral: string
+          compradores_json: Json
+          dueno: string
+          edificio: string
+          estacionamientos_json: Json
+          id: number
+          id_cuenta_cobranza_padre: number
+          id_oferta: number
+          id_propiedad: number
+          id_proyecto: number
+          modelo: string
+          numero_propiedad: string
+          pago_acumulado: number
+          productos_json: Json
+          proxima_fecha_pago: string
+          proyecto: string
+          residentes_json: Json
+          saldo_pendiente: number
+          tiene_multas_pendientes: boolean
+          total_count: number
+          total_pagado: number
+        }[]
+      }
       get_current_user_persona_id: { Args: never; Returns: number }
       get_current_user_profile: {
         Args: never
