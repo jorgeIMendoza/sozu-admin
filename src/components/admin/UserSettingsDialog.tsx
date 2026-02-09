@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { User, Mail, Shield, Key, Eye, EyeOff, CheckCircle, Building2, UserCog } from "lucide-react";
 import { PersonForm } from "./PersonForm";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 
 interface UserSettingsDialogProps {
   open: boolean;
@@ -20,6 +21,7 @@ interface UserSettingsDialogProps {
 export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogProps) {
   const { profile, user, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
+  const { registrarActualizacion } = useActivityLogger();
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -193,10 +195,24 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
         return;
       }
 
+      await registrarActualizacion(
+        'contraseña',
+        null,
+        { origen: 'configuracion_usuario' },
+        'cambiar_password_configuracion'
+      );
       toast.success("Contraseña actualizada correctamente");
       resetForm();
     } catch (err) {
       toast.error("Error al cambiar la contraseña");
+      await registrarActualizacion(
+        'contraseña',
+        null,
+        { origen: 'configuracion_usuario' },
+        'cambiar_password_configuracion',
+        'error',
+        'Error desconocido al cambiar contraseña'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -275,12 +291,26 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
           .eq('email', profile.email);
       }
 
+      await registrarActualizacion(
+        'datos_personales',
+        { id_persona: effectiveIdPersona },
+        { id_persona: effectiveIdPersona, campos_actualizados: Object.keys(data) },
+        'actualizar_datos_personales_configuracion'
+      );
       toast.success("Datos actualizados correctamente");
       setIsEditingProfile(false);
       queryClient.invalidateQueries({ queryKey: ["user_persona_data"] });
       refreshProfile();
     } catch (error: any) {
       console.error('Error updating profile:', error);
+      await registrarActualizacion(
+        'datos_personales',
+        { id_persona: effectiveIdPersona },
+        { id_persona: effectiveIdPersona },
+        'actualizar_datos_personales_configuracion',
+        'error',
+        error.message
+      );
       toast.error("Error al actualizar los datos: " + error.message);
     } finally {
       setIsSavingProfile(false);
