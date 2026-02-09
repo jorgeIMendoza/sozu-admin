@@ -1377,6 +1377,69 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_pagos_revision_evidencias: {
+        Row: {
+          clave_rastreo: string | null
+          descripcion_falla: string | null
+          fecha_pago: string
+          fecha_pago_evidencia: string | null
+          id: number
+          id_cuenta_cobranza: number
+          metodo_pago: string | null
+          monto: number
+          monto_evidencia: string | null
+          procesado: boolean | null
+          texto_evidencia: string | null
+          url_evidencia: string | null
+          validacion: boolean | null
+        }
+        Insert: {
+          clave_rastreo?: string | null
+          descripcion_falla?: string | null
+          fecha_pago: string
+          fecha_pago_evidencia?: string | null
+          id?: number
+          id_cuenta_cobranza: number
+          metodo_pago?: string | null
+          monto: number
+          monto_evidencia?: string | null
+          procesado?: boolean | null
+          texto_evidencia?: string | null
+          url_evidencia?: string | null
+          validacion?: boolean | null
+        }
+        Update: {
+          clave_rastreo?: string | null
+          descripcion_falla?: string | null
+          fecha_pago?: string
+          fecha_pago_evidencia?: string | null
+          id?: number
+          id_cuenta_cobranza?: number
+          metodo_pago?: string | null
+          monto?: number
+          monto_evidencia?: string | null
+          procesado?: boolean | null
+          texto_evidencia?: string | null
+          url_evidencia?: string | null
+          validacion?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "borrar_pagos_revision_evidencias_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "borrar_pagos_revision_evidencias_id_cuenta_cobranza_fkey1"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       borrar_pagos_stagin: {
         Row: {
           clave_rastreo: string | null
