@@ -1,15 +1,24 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2, ShieldAlert, LogOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface ProtectedRouteProps {
   children: ReactNode;
 }
 
+const BLOCKED_ROLE_NAMES = ['Cliente', 'Directores'];
+
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, isLoading, mustChangePassword, profile } = useAuth();
   const location = useLocation();
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/auth/login';
+  };
 
   if (isLoading) {
     return (
@@ -22,17 +31,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  // If not authenticated, redirect to login
   if (!user) {
     return <Navigate to="/auth/login" state={{ from: location }} replace />;
   }
 
-  // If user must change password and not already on change-password page
   if (mustChangePassword && location.pathname !== '/auth/change-password') {
     return <Navigate to="/auth/change-password" replace />;
   }
 
-  // If user is inactive
   if (profile && !profile.activo) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -41,6 +47,27 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
           <p className="text-muted-foreground mb-6">
             Tu cuenta ha sido desactivada. Contacta al administrador para más información.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (profile && BLOCKED_ROLE_NAMES.includes(profile.rol_nombre)) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center p-8 bg-card rounded-lg shadow-lg max-w-md space-y-4">
+          <ShieldAlert className="h-16 w-16 text-destructive mx-auto" />
+          <h1 className="text-2xl font-bold text-destructive">
+            Acceso No Autorizado
+          </h1>
+          <p className="text-muted-foreground">
+            Tu tipo de usuario no tiene acceso a este sistema.
+            Contacta al administrador si crees que esto es un error.
+          </p>
+          <Button variant="destructive" onClick={handleSignOut}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Cerrar Sesión
+          </Button>
         </div>
       </div>
     );
