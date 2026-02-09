@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { activityLoggerService } from '@/services/activityLoggerService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -108,10 +109,29 @@ export default function ChangePassword() {
       const { error } = await updatePassword(newPassword);
       
       if (error) {
+        await activityLoggerService.registrarActualizacion(
+          profile?.email || session?.user?.email || 'sistema',
+          'contraseña',
+          null,
+          { origen: 'cambio_password_temporal' },
+          'cambiar_password_temporal',
+          'error',
+          error.message
+        );
         setError(error.message);
         setIsLoading(false);
         return;
       }
+
+      // Log successful password change
+      await activityLoggerService.registrarActualizacion(
+        profile?.email || session?.user?.email || 'sistema',
+        'contraseña',
+        null,
+        { origen: 'cambio_password_temporal' },
+        'cambiar_password_temporal',
+        'exito'
+      );
 
       // Success - redirect to admin
       navigate('/admin', { replace: true });
