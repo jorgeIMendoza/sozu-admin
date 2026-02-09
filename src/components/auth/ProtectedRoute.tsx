@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, ShieldAlert, LogOut } from 'lucide-react';
+import { Loader2, ShieldAlert, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ProtectedRouteProps {
@@ -65,8 +65,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
             Contacta al administrador si crees que esto es un error.
           </p>
           <Button variant="destructive" onClick={handleSignOut}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Cerrar Sesión
+            <LogIn className="mr-2 h-4 w-4" />
+            Iniciar Sesión
           </Button>
         </div>
       </div>
