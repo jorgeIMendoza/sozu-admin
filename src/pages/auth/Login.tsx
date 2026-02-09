@@ -41,10 +41,11 @@ export default function Login() {
     return null;
   }
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setIsBlocked(false);
-    setError(null);
+  const handleGoToLogin = () => {
+    supabase.auth.signOut().finally(() => {
+      setIsBlocked(false);
+      setError(null);
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -61,7 +62,33 @@ export default function Login() {
         return;
       }
 
-      // Check if the email belongs to a blocked role BEFORE attempting auth
+      // Check for app updates before login
+      const hasUpdate = await checkForUpdates();
+      if (hasUpdate) {
+        setIsUpdating(true);
+        setIsLoading(false);
+        await clearCacheAndReload();
+        return;
+      }
+
+      const { error } = await signIn(email, password);
+      
+      if (error) {
+        if (error.message.includes('Invalid login credentials')) {
+          // Before showing "incorrect credentials", check if this email belongs to a blocked role
+          // Query as anon won't work due to RLS, so we try a different approach:
+          // We'll show the generic error. The blocked check happens after successful auth.
+          setError('Email o contraseña incorrectos');
+        } else if (error.message.includes('Email not confirmed')) {
+          setError('Por favor confirma tu email antes de iniciar sesión');
+        } else {
+          setError(error.message);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // Auth succeeded — now check if user has a blocked role
       const { data: usuario } = await supabase
         .from('usuarios')
         .select('rol_id, roles!inner(nombre)')
@@ -70,31 +97,9 @@ export default function Login() {
         .maybeSingle();
 
       if (usuario && BLOCKED_ROLE_NAMES.includes((usuario as any).roles?.nombre)) {
+        // Sign out immediately and show blocked screen
+        await supabase.auth.signOut();
         setIsBlocked(true);
-        setIsLoading(false);
-        return;
-      }
-
-      // Check for app updates before login
-      const hasUpdate = await checkForUpdates();
-      if (hasUpdate) {
-        setIsUpdating(true);
-        setIsLoading(false);
-        // Clear cache and reload to get latest version
-        await clearCacheAndReload();
-        return; // Page will reload
-      }
-
-      const { error } = await signIn(email, password);
-      
-      if (error) {
-        if (error.message.includes('Invalid login credentials')) {
-          setError('Email o contraseña incorrectos');
-        } else if (error.message.includes('Email not confirmed')) {
-          setError('Por favor confirma tu email antes de iniciar sesión');
-        } else {
-          setError(error.message);
-        }
         setIsLoading(false);
         return;
       }
@@ -120,9 +125,9 @@ export default function Login() {
             Tu tipo de usuario no tiene acceso a este sistema.
             Contacta al administrador si crees que esto es un error.
           </p>
-          <Button variant="destructive" onClick={handleSignOut}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Cerrar Sesión
+          <Button variant="destructive" onClick={handleGoToLogin}>
+            <LogIn className="mr-2 h-4 w-4" />
+            Iniciar Sesión
           </Button>
         </div>
       </div>
