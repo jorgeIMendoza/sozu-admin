@@ -1,61 +1,32 @@
 
-## Plan: Boton "Recalcular Aplicaciones" en Detalle Cuenta Mantenimiento
 
-### Objetivo
-Agregar un boton en la vista de detalle de cuenta de mantenimiento que permita redistribuir automaticamente las aplicaciones de pago cuando exista una discrepancia (pagos sin aplicar a acuerdos).
+## Plan: Ocultar boton "Recalcular" cuando no hay acuerdos pendientes
 
-### Cuando aparece el boton
-El boton solo sera visible cuando el sistema detecte que hay dinero pagado pero no aplicado a acuerdos, es decir, cuando `excedente > 0.01` (total pagado - total aplicado > $0.01). Esto cubre exactamente el caso de CM-1365 donde hay $2,610 flotando sin aplicar.
+### Problema
+El boton "Recalcular Aplicaciones" aparece en cuentas como CM-1366 donde hay saldo a favor ($27,900) pero todos los acuerdos ya estan completamente pagados. No tiene sentido recalcular si no hay acuerdos pendientes que puedan recibir fondos.
 
-### Cambios
+### Solucion
+Cambiar la condicion de visibilidad del boton para que ademas de verificar que hay excedente, tambien verifique que existen acuerdos sin pagar.
+
+### Cambio
 
 **Archivo: `src/pages/admin/DetalleCuentaMantenimiento.tsx`**
 
-1. Agregar estado `recalculando` para controlar el loading del boton
-2. Agregar funcion `handleRecalcular` que:
-   - Llama a la edge function `recalcular-aplicaciones` con el `id_cuenta_cobranza` actual
-   - Muestra toast de exito/error
-   - Invalida las queries de acuerdos, pagos y aplicaciones para refrescar la vista
-3. Agregar el boton en la barra de acciones del header (junto a los botones existentes), con:
-   - Icono de `RefreshCw` de lucide-react
-   - Texto "Recalcular Aplicaciones"
-   - Solo visible cuando `excedente > 0.01` (hay pagos sin aplicar)
-   - Estado de carga mientras se ejecuta la funcion
-
-### Detalle tecnico
-
-La funcion llamara a la edge function existente `recalcular-aplicaciones`:
-
-```typescript
-const handleRecalcular = async () => {
-  setRecalculando(true);
-  try {
-    const { data, error } = await supabase.functions.invoke('recalcular-aplicaciones', {
-      body: { id_cuenta_cobranza: cuentaId }
-    });
-    if (error) throw error;
-    // Invalidar queries para refrescar datos
-    queryClient.invalidateQueries({ queryKey: ["acuerdos_mantenimiento", cuentaId] });
-    queryClient.invalidateQueries({ queryKey: ["pagos_mantenimiento", cuentaId] });
-    queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
-    toast({ title: "Recalculo completado", description: "..." });
-  } catch (error) {
-    toast({ title: "Error", variant: "destructive" });
-  } finally {
-    setRecalculando(false);
-  }
-};
-```
-
-El boton se renderiza condicionalmente:
+Linea 799 - Cambiar la condicion del boton de:
 
 ```tsx
 {excedente > 0.01 && (
-  <Button onClick={handleRecalcular} variant="outline" disabled={recalculando}>
-    <RefreshCw className="h-4 w-4 mr-2" />
-    Recalcular Aplicaciones
-  </Button>
-)}
 ```
 
-No se requieren cambios en la edge function `recalcular-aplicaciones` ya que esta preparada para recibir un `id_cuenta_cobranza` y redistribuir los pagos.
+A:
+
+```tsx
+{excedente > 0.01 && acuerdosData?.some(a => !a.pago_completado) && (
+```
+
+Esto asegura que el boton solo aparece cuando:
+1. Hay dinero pagado sin aplicar (excedente > $0.01)
+2. Existen acuerdos pendientes donde se pueda redistribuir ese dinero
+
+En el caso de CM-1366 (todos los acuerdos pagados), el boton se oculta. En CM-1365 (acuerdos sin pagar con fondos flotando), el boton sigue visible.
+
