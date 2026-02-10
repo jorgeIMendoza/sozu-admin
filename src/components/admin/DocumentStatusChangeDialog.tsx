@@ -46,30 +46,38 @@ export function DocumentStatusChangeDialog({
   const [selectedStatus, setSelectedStatus] = useState<string>(currentStatus.toString());
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { registrarActualizacion } = useActivityLogger();
 
   const handleConfirm = async () => {
     const newStatusId = parseInt(selectedStatus);
     
-    // Require comment for non-validated status changes
     if (newStatusId !== 2 && !comment.trim()) {
       setError("El comentario es obligatorio para este estatus");
       return;
     }
     
     setError("");
-    await onConfirm(newStatusId, comment.trim());
+    setIsSubmitting(true);
     
-    // Registrar actividad
-    const statusAnterior = statusOptions.find(s => s.id === currentStatus)?.label;
-    const statusNuevo = statusOptions.find(s => s.id === newStatusId)?.label;
-    registrarActualizacion('documento_estatus', 
-      { documento: documentName, estatus_id: currentStatus, estatus: statusAnterior },
-      { documento: documentName, estatus_id: newStatusId, estatus: statusNuevo, comentario: comment.trim() }
-    );
-    
-    setComment("");
-    setSelectedStatus(currentStatus.toString());
+    try {
+      await onConfirm(newStatusId, comment.trim());
+      
+      const statusAnterior = statusOptions.find(s => s.id === currentStatus)?.label;
+      const statusNuevo = statusOptions.find(s => s.id === newStatusId)?.label;
+      registrarActualizacion('documento_estatus', 
+        { documento: documentName, estatus_id: currentStatus, estatus: statusAnterior },
+        { documento: documentName, estatus_id: newStatusId, estatus: statusNuevo, comentario: comment.trim() }
+      );
+      
+      setComment("");
+      setSelectedStatus(currentStatus.toString());
+      onClose();
+    } catch (err) {
+      // Mantener dialogo abierto en caso de error
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
@@ -142,10 +150,13 @@ export function DocumentStatusChangeDialog({
         <AlertDialogFooter>
           <AlertDialogCancel onClick={handleClose}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
-            onClick={handleConfirm}
-            disabled={isLoading || selectedStatus === currentStatus.toString()}
+            onClick={(e) => {
+              e.preventDefault();
+              handleConfirm();
+            }}
+            disabled={isSubmitting || selectedStatus === currentStatus.toString()}
           >
-            {isLoading ? "Guardando..." : "Confirmar Cambio"}
+            {isSubmitting ? "Procesando..." : "Confirmar Cambio"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
