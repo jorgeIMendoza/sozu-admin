@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, Plus, Calendar, Upload, Loader2, Eye, Download } from "lucide-react";
+import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, Plus, Calendar, Upload, Loader2, Eye, Download, RefreshCw } from "lucide-react";
 import { EstadoCuentaMantenimientoService } from "@/services/estadoCuentaMantenimientoService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
@@ -82,6 +82,7 @@ export default function DetalleCuentaMantenimiento() {
   const [reservaDialog, setReservaDialog] = useState(false);
   const [uploadingEvidence, setUploadingEvidence] = useState<number | null>(null);
   const [generatingEstadoCuenta, setGeneratingEstadoCuenta] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { registrarSubidaDocumento } = useActivityLogger();
@@ -795,6 +796,44 @@ export default function DetalleCuentaMantenimiento() {
               )}
             </Tooltip>
           </TooltipProvider>
+          {excedente > 0.01 && (
+            <Button 
+              onClick={async () => {
+                setRecalculando(true);
+                try {
+                  const { data, error } = await supabase.functions.invoke('recalcular-aplicaciones', {
+                    body: { id_cuenta_cobranza: cuentaId }
+                  });
+                  if (error) throw error;
+                  queryClient.invalidateQueries({ queryKey: ["acuerdos_mantenimiento", cuentaId] });
+                  queryClient.invalidateQueries({ queryKey: ["pagos_mantenimiento", cuentaId] });
+                  queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
+                  toast({
+                    title: "Recálculo completado",
+                    description: `Se redistribuyeron las aplicaciones de pago correctamente.`,
+                  });
+                } catch (error) {
+                  console.error("Error recalculando:", error);
+                  toast({
+                    title: "Error",
+                    description: "No se pudieron recalcular las aplicaciones de pago.",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setRecalculando(false);
+                }
+              }}
+              variant="outline"
+              disabled={recalculando}
+            >
+              {recalculando ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Recalcular Aplicaciones
+            </Button>
+          )}
         </div>
       </div>
 
