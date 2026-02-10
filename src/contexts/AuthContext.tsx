@@ -294,8 +294,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Handle inactivity logout
   const handleInactivityTimeout = useCallback(async () => {
     console.log("Session expired due to inactivity");
-    await signOut();
-    // Redirect to login with inactivity reason
+    try {
+      // Clean up realtime channel
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Error during inactivity signOut:", err);
+    }
+    // Siempre redirigir, sin importar si signOut falló
     window.location.href = "/auth/login?reason=inactivity";
   }, []);
 
