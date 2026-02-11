@@ -28,8 +28,17 @@ export class EstadoCuentaMantenimientoEdgeFunctionService {
 
       console.log('Estado de cuenta mantenimiento generated successfully:', response.url_estado_cuenta);
 
-      // Open the PDF in a new tab
-      window.open(response.url_estado_cuenta, '_blank');
+      // Download the PDF automatically
+      const pdfResponse = await fetch(response.url_estado_cuenta);
+      const blob = await pdfResponse.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = response.fileName || `estado_cuenta_mantenimiento_${data.id_cuenta}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
       return response.url_estado_cuenta;
     } catch (error) {
