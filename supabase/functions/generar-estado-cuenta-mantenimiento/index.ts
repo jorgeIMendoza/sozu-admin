@@ -203,39 +203,40 @@ Deno.serve(async (req) => {
 
     // === HEADER ===
     page.drawText(proyectoData?.nombre || 'Estado de Cuenta - Mantenimiento', {
-      x: margin, y, size: 16, font: helveticaBold, color: primaryColor,
+      x: margin, y, size: 18, font: helveticaBold, color: primaryColor,
     });
-    y -= 12;
+    y -= 14;
     if (proyectoData?.direccion) {
-      page.drawText(proyectoData.direccion, { x: margin, y, size: 8, font: helvetica, color: grayColor });
+      page.drawText(proyectoData.direccion, { x: margin, y, size: 9, font: helvetica, color: grayColor });
     }
 
     // Account number (right)
-    const labelY = y + 12;
-    drawRightText('CUENTA MANTENIMIENTO', labelY + 6, helvetica, 7, lightGrayColor);
-    drawRightText(cuentaId, labelY - 4, helveticaBold, 13, primaryColor);
+    const labelY = y + 14;
+    drawRightText('CUENTA MANTENIMIENTO', labelY + 8, helvetica, 8, lightGrayColor);
+    drawRightText(cuentaId, labelY - 6, helveticaBold, 14, primaryColor);
 
     // Property number
     if (propiedadData?.numero_propiedad) {
-      drawRightText(`Propiedad: ${propiedadData.numero_propiedad}`, labelY - 16, helvetica, 8, grayColor);
+      drawRightText(`Propiedad: ${propiedadData.numero_propiedad}`, labelY - 20, helvetica, 9, grayColor);
     }
 
     // Client name
-    let rhY = labelY - 28;
+    let rhY = labelY - 34;
     if (compradores && compradores.length > 0) {
       const clientName = compradores.map((c: any) => c.personas?.nombre_legal).filter(Boolean).join(', ');
-      drawRightText(clientName.substring(0, 50), rhY, helvetica, 9, primaryColor);
-      rhY -= 10;
+      drawRightText(clientName.substring(0, 50), rhY, helvetica, 10, primaryColor);
+      rhY -= 12;
       const clientId = compradores[0]?.personas?.rfc || compradores[0]?.personas?.curp || '';
-      if (clientId) drawRightText(clientId, rhY, helvetica, 7, lightGrayColor);
+      if (clientId) drawRightText(clientId, rhY, helvetica, 8, lightGrayColor);
     }
 
-    y -= 30;
+    y -= 40;
     drawLine(y, primaryColor);
-    y -= 14;
+    y -= 24;
 
     // === META INFO ===
-    const metaBoxWidth = contentWidth / 3 - 4;
+    const metaBoxWidth = contentWidth / 3 - 6;
+    const metaBoxHeight = 42;
     const fechaInicio = (acuerdos || []).length > 0 ? formatDate(acuerdos![0].fecha_pago) : 'N/A';
     const fechaFin = (acuerdos || []).length > 0 ? formatDate(acuerdos![acuerdos!.length - 1].fecha_pago) : 'N/A';
 
@@ -247,23 +248,22 @@ Deno.serve(async (req) => {
 
     for (let i = 0; i < metaItems.length; i++) {
       const item = metaItems[i];
-      const x = margin + i * (metaBoxWidth + 6);
+      const x = margin + i * (metaBoxWidth + 9);
 
       // Box background
-      page.drawRectangle({ x, y: y - 14, width: metaBoxWidth, height: 14 * 2.5, color: bgLight });
-      // Left border
-      page.drawRectangle({ x, y: y - 14, width: 2, height: 14 * 2.5, color: primaryColor });
+      page.drawRectangle({ x, y: y - metaBoxHeight + 14, width: metaBoxWidth, height: metaBoxHeight, color: bgLight });
+      // Left border accent
+      page.drawRectangle({ x, y: y - metaBoxHeight + 14, width: 2.5, height: metaBoxHeight, color: primaryColor });
 
-      page.drawText(item.label, { x: x + 6, y: y + 8, size: 6, font: helvetica, color: lightGrayColor });
-      page.drawText(item.value.substring(0, 35), { x: x + 6, y: y - 2, size: 8, font: helveticaBold, color: primaryColor });
+      page.drawText(item.label, { x: x + 8, y: y + 6, size: 7, font: helvetica, color: lightGrayColor });
+      page.drawText(item.value.substring(0, 35), { x: x + 8, y: y - 10, size: 9, font: helveticaBold, color: primaryColor });
     }
 
-    y -= 28;
+    y -= metaBoxHeight + 16;
 
     // === SUMMARY CARDS ===
-    const cardW = contentWidth / 3 - 3;
-    const cardH = 35;
-    const saldoEsPositivo = saldoPendienteReal > 0.01;
+    const cardW = contentWidth / 3 - 5;
+    const cardH = 52;
     const saldoEsNegativo = saldoPendienteReal < -0.01;
 
     const summaryItems = [
@@ -279,7 +279,7 @@ Deno.serve(async (req) => {
 
     for (let i = 0; i < summaryItems.length; i++) {
       const item = summaryItems[i];
-      const cx = margin + i * (cardW + 4.5);
+      const cx = margin + i * (cardW + 7.5);
       const cardY = y - cardH;
 
       if (item.highlight) {
@@ -292,46 +292,47 @@ Deno.serve(async (req) => {
       const labelColor = item.highlight ? white : grayColor;
       const valueColor = item.highlight ? white : primaryColor;
 
-      const lw = helvetica.widthOfTextAtSize(item.label, 6);
-      page.drawText(item.label, { x: cx + (cardW - lw) / 2, y: cardY + cardH - 12, size: 6, font: helvetica, color: labelColor });
+      const lw = helvetica.widthOfTextAtSize(item.label, 7);
+      page.drawText(item.label, { x: cx + (cardW - lw) / 2, y: cardY + cardH - 16, size: 7, font: helvetica, color: labelColor });
 
-      const vw = helveticaBold.widthOfTextAtSize(item.value, 10);
-      page.drawText(item.value, { x: cx + (cardW - vw) / 2, y: cardY + 8, size: 10, font: helveticaBold, color: valueColor });
+      const vw = helveticaBold.widthOfTextAtSize(item.value, 13);
+      page.drawText(item.value, { x: cx + (cardW - vw) / 2, y: cardY + 14, size: 13, font: helveticaBold, color: valueColor });
     }
 
-    y -= cardH + 14;
+    y -= cardH + 24;
 
     // === ACUERDOS DE PAGO TABLE ===
-    checkNewPage(50);
-    page.drawText('Acuerdos de Pago - Últimos 12 Meses', { x: margin, y, size: 10, font: helveticaBold, color: primaryColor });
-    y -= 8;
+    checkNewPage(60);
+    page.drawText('Acuerdos de Pago - Últimos 12 Meses', { x: margin, y, size: 12, font: helveticaBold, color: primaryColor });
+    y -= 12;
     drawLine(y);
-    y -= 14;
+    y -= 24;
 
-    // Column widths
-    const aCols = [175, 70, 70, 70, 70, 60]; // Concepto, Fecha, Monto, Pagado, Pendiente, Estado
+    // Column widths - proportional to original jsPDF layout (total = contentWidth = 515)
+    // Original ratios: Concepto=60, Fecha=28, Monto=28, Pagado=28, Pendiente=28, Estado=18 (total=190)
+    const aCols = [160, 80, 75, 70, 75, 55]; // = 515
     const aHeaders = ['CONCEPTO', 'FECHA', 'MONTO', 'PAGADO', 'PENDIENTE', 'ESTADO'];
 
     // Header bg
-    page.drawRectangle({ x: margin, y: y - 2, width: contentWidth, height: 14, color: bgLight });
+    page.drawRectangle({ x: margin, y: y - 4, width: contentWidth, height: 16, color: bgLight });
 
     let colX = margin;
     for (let i = 0; i < aHeaders.length; i++) {
       const align = i >= 2 && i <= 4 ? 'right' : (i === 5 ? 'center' : 'left');
-      let tx = colX + 2;
-      if (align === 'right') tx = colX + aCols[i] - 2;
-      else if (align === 'center') tx = colX + aCols[i] / 2 - helveticaBold.widthOfTextAtSize(aHeaders[i], 6) / 2;
-      page.drawText(aHeaders[i], { x: tx, y, size: 6, font: helveticaBold, color: grayColor });
+      let tx = colX + 4;
+      if (align === 'right') tx = colX + aCols[i] - 4;
+      else if (align === 'center') tx = colX + aCols[i] / 2 - helveticaBold.widthOfTextAtSize(aHeaders[i], 7) / 2;
+      page.drawText(aHeaders[i], { x: tx, y, size: 7, font: helveticaBold, color: grayColor });
       colX += aCols[i];
     }
 
-    y -= 16;
-    drawLine(y + 2);
+    y -= 22;
+    drawLine(y + 4);
 
     // Rows
     for (let idx = 0; idx < (acuerdos || []).length; idx++) {
       const acuerdo = acuerdos![idx];
-      checkNewPage(14);
+      checkNewPage(18);
 
       const pagadoAcuerdo = aplicaciones
         .filter((ap: any) => ap.id_acuerdo_pago === acuerdo.id && !ap.es_multa)
@@ -342,7 +343,7 @@ Deno.serve(async (req) => {
       const isPaid = acuerdo.pago_completado;
 
       if (idx % 2 === 0) {
-        page.drawRectangle({ x: margin, y: y - 3, width: contentWidth, height: 12, color: rgb(0.98, 0.98, 0.98) });
+        page.drawRectangle({ x: margin, y: y - 5, width: contentWidth, height: 16, color: rgb(0.98, 0.98, 0.98) });
       }
 
       colX = margin;
@@ -357,7 +358,7 @@ Deno.serve(async (req) => {
       }
 
       const rowData = [
-        conceptoText.substring(0, 35),
+        conceptoText.substring(0, 40),
         acuerdo.fecha_pago ? formatDate(acuerdo.fecha_pago) : 'N/A',
         formatMoneyAllowNegative(acuerdo.monto),
         formatMoneyAllowNegative(pagadoAcuerdo),
@@ -367,36 +368,36 @@ Deno.serve(async (req) => {
 
       for (let i = 0; i < rowData.length - 1; i++) {
         const align = i >= 2 && i <= 4 ? 'right' : 'left';
-        let tx = colX + 2;
+        let tx = colX + 4;
         if (align === 'right') {
-          const tw = helvetica.widthOfTextAtSize(rowData[i], 7);
-          tx = colX + aCols[i] - 2 - tw;
+          const tw = helvetica.widthOfTextAtSize(rowData[i], 8);
+          tx = colX + aCols[i] - 4 - tw;
         }
-        page.drawText(rowData[i], { x: tx, y, size: 7, font: helvetica, color: primaryColor });
+        page.drawText(rowData[i], { x: tx, y, size: 8, font: helvetica, color: primaryColor });
         colX += aCols[i];
       }
 
       // Status badge
       const statusText = isPaid ? 'Pagado' : 'Pendiente';
       const badgeColor = isPaid ? rgb(0.863, 0.988, 0.906) : rgb(0.996, 0.953, 0.780);
-      const textColor = isPaid ? rgb(0.086, 0.396, 0.204) : rgb(0.573, 0.251, 0.055);
-      const badgeW = 36;
+      const txtColor = isPaid ? rgb(0.086, 0.396, 0.204) : rgb(0.573, 0.251, 0.055);
+      const badgeW = 42;
       const badgeX = colX + (aCols[5] - badgeW) / 2;
-      page.drawRectangle({ x: badgeX, y: y - 3, width: badgeW, height: 11, color: badgeColor });
-      const stw = helvetica.widthOfTextAtSize(statusText, 6);
-      page.drawText(statusText, { x: badgeX + (badgeW - stw) / 2, y, size: 6, font: helvetica, color: textColor });
+      page.drawRectangle({ x: badgeX, y: y - 4, width: badgeW, height: 13, color: badgeColor });
+      const stw = helvetica.widthOfTextAtSize(statusText, 7);
+      page.drawText(statusText, { x: badgeX + (badgeW - stw) / 2, y: y - 1, size: 7, font: helvetica, color: txtColor });
 
-      y -= 13;
+      y -= 18;
     }
 
     if ((acuerdos || []).length === 0) {
       const noDataText = 'No hay acuerdos de pago en los últimos 12 meses';
-      const ntw = helvetica.widthOfTextAtSize(noDataText, 8);
-      page.drawText(noDataText, { x: margin + (contentWidth - ntw) / 2, y, size: 8, font: helvetica, color: grayColor });
-      y -= 14;
+      const ntw = helvetica.widthOfTextAtSize(noDataText, 9);
+      page.drawText(noDataText, { x: margin + (contentWidth - ntw) / 2, y, size: 9, font: helvetica, color: grayColor });
+      y -= 18;
     }
 
-    y -= 10;
+    y -= 16;
 
     // === FOOTER ===
     checkNewPage(20);
