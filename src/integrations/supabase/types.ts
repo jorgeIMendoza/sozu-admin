@@ -364,16 +364,19 @@ export type Database = {
       }
       avisos_roles_destinatarios: {
         Row: {
+          correos: Json | null
           id: number
           id_aviso: number
           id_rol: number
         }
         Insert: {
+          correos?: Json | null
           id?: never
           id_aviso: number
           id_rol: number
         }
         Update: {
+          correos?: Json | null
           id?: never
           id_aviso?: number
           id_rol?: number

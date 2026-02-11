@@ -37,29 +37,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get target role IDs
+    // Get recipients from correos JSON field
     const { data: rolesData } = await supabaseAdmin
       .from('avisos_roles_destinatarios')
-      .select('id_rol')
+      .select('id_rol, correos')
       .eq('id_aviso', aviso_id);
 
-    const rolIds = rolesData?.map(r => r.id_rol) || [];
-
-    if (rolIds.length === 0) {
+    if (!rolesData || rolesData.length === 0) {
       return new Response(JSON.stringify({ error: 'No hay roles destinatarios configurados' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Get emails from usuarios table
-    const { data: usuarios } = await supabaseAdmin
-      .from('usuarios')
-      .select('email')
-      .in('rol_id', rolIds)
-      .eq('activo', true)
-      .not('email', 'is', null);
-
-    const emails = usuarios?.map(u => u.email).filter(Boolean) || [];
+    // Extract unique emails from correos JSON
+    const emailSet = new Set<string>();
+    const emails: string[] = [];
+    
+    for (const row of rolesData) {
+      const correos = row.correos as any;
+      const destinatarios = correos?.destinatarios || [];
+      for (const dest of destinatarios) {
+        if (dest.email && !emailSet.has(dest.email)) {
+          emailSet.add(dest.email);
+          emails.push(dest.email);
+        }
+      }
+    }
 
     // Create ejecucion record
     const { data: ejecucion, error: ejErr } = await supabaseAdmin
