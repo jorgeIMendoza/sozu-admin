@@ -53,20 +53,48 @@ export function AvisoDestinatariosSection({
   const [pool, setPool] = useState<PoolItem[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
 
-  // Sync from parent on mount
+  // Sync from parent on mount: load users for pre-selected roles, only select those from DB JSON
   useEffect(() => {
-    if (destinatarios.length > 0) {
-      setPool(prev => {
-        const merged = [...prev];
-        for (const d of destinatarios) {
-          if (!merged.some(p => p.email === d.email)) {
-            merged.push({ ...d, rolIds: [] });
+    const initPool = async () => {
+      const dbEmails = new Set(destinatarios.map(d => d.email));
+      const merged: PoolItem[] = [];
+
+      // Add destinatarios from DB JSON first (as manual if no role matched)
+      for (const d of destinatarios) {
+        merged.push({ ...d, rolIds: [] });
+      }
+
+      // Fetch users for each pre-selected role and add to pool (but don't auto-select)
+      if (selectedRoles.length > 0) {
+        const { data: usuarios } = await supabase
+          .from("usuarios")
+          .select("nombre, email, rol_id")
+          .in("rol_id", selectedRoles)
+          .eq("activo", true)
+          .not("email", "is", null);
+
+        if (usuarios) {
+          for (const u of usuarios) {
+            if (!u.email) continue;
+            const existing = merged.find(p => p.email === u.email);
+            if (existing) {
+              // Update rolIds for items already from DB JSON
+              if (u.rol_id && !existing.rolIds.includes(u.rol_id)) {
+                existing.rolIds.push(u.rol_id);
+              }
+            } else {
+              merged.push({ nombre: u.nombre || u.email, email: u.email, rolIds: u.rol_id ? [u.rol_id] : [] });
+            }
           }
         }
-        return merged;
-      });
-      setSelectedEmails(new Set(destinatarios.map(d => d.email)));
-    }
+      }
+
+      setPool(merged);
+      // Only select emails that came from DB JSON
+      setSelectedEmails(dbEmails);
+    };
+
+    initPool();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const notifyParent = useCallback((newSelected: Set<string>, currentPool: PoolItem[]) => {
