@@ -320,8 +320,10 @@ Deno.serve(async (req) => {
     for (let i = 0; i < aHeaders.length; i++) {
       const align = i >= 2 && i <= 4 ? 'right' : (i === 5 ? 'center' : 'left');
       let tx = colX + 4;
-      if (align === 'right') tx = colX + aCols[i] - 4;
-      else if (align === 'center') tx = colX + aCols[i] / 2 - helveticaBold.widthOfTextAtSize(aHeaders[i], 7) / 2;
+      if (align === 'right') {
+        const hw = helveticaBold.widthOfTextAtSize(aHeaders[i], 7);
+        tx = colX + aCols[i] - 4 - hw;
+      } else if (align === 'center') tx = colX + aCols[i] / 2 - helveticaBold.widthOfTextAtSize(aHeaders[i], 7) / 2;
       page.drawText(aHeaders[i], { x: tx, y, size: 7, font: helveticaBold, color: grayColor });
       colX += aCols[i];
     }
