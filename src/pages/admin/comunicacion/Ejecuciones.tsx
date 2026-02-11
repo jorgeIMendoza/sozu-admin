@@ -40,6 +40,7 @@ export default function Ejecuciones() {
   const [avisos, setAvisos] = useState<AvisoOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterAviso, setFilterAviso] = useState<string>("all");
+  const [filterEstado, setFilterEstado] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
 
   const fetchData = async () => {
@@ -57,6 +58,7 @@ export default function Ejecuciones() {
 
   const filtered = ejecuciones.filter(e => {
     if (filterAviso !== 'all' && e.id_aviso !== parseInt(filterAviso)) return false;
+    if (filterEstado !== 'all' && e.estado !== filterEstado) return false;
     if (searchTerm) {
       const name = (e.avisos as any)?.nombre || '';
       if (!name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
@@ -111,6 +113,16 @@ export default function Ejecuciones() {
           <SelectContent>
             <SelectItem value="all">Todos los avisos</SelectItem>
             {avisos.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.nombre}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterEstado} onValueChange={setFilterEstado}>
+          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Filtrar por estado" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los estados</SelectItem>
+            <SelectItem value="completado">Completado</SelectItem>
+            <SelectItem value="enviando">Enviando</SelectItem>
+            <SelectItem value="pendiente">Pendiente</SelectItem>
+            <SelectItem value="error">Error</SelectItem>
           </SelectContent>
         </Select>
       </div>
