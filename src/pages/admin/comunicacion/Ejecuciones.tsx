@@ -162,7 +162,13 @@ export default function Ejecuciones() {
                 </TableCell>
                 <TableCell className="text-right">{e.total_destinatarios ?? 0}</TableCell>
                 <TableCell className="text-right">{e.total_enviados ?? 0}</TableCell>
-                <TableCell className="text-right">{e.total_errores ?? 0}</TableCell>
+                <TableCell className="text-right">
+                  {(e.total_errores ?? 0) > 0 && e.detalle_error ? (
+                    <Badge variant="destructive" className="cursor-pointer" onClick={() => setErrorDetail(e)}>
+                      {e.total_errores}
+                    </Badge>
+                  ) : (e.total_errores ?? 0)}
+                </TableCell>
                 <TableCell>
                   {e.estado === 'error' && e.detalle_error ? (
                     <Badge
