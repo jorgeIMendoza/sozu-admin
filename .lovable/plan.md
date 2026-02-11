@@ -1,52 +1,76 @@
 
-## Plan: Mostrar el número de correos a enviar en el diálogo de confirmación
 
-### Análisis Actual
-- La página `EnviarAvisos.tsx` carga una lista de avisos activos desde la tabla `avisos`
-- El diálogo de confirmación (línea 160) muestra "a todos los destinatarios configurados" sin número específico
-- Los destinatarios están almacenados en `avisos_roles_destinatarios.correos` (campo JSONB)
-- La edge function `enviar-aviso-bulk` calcula el total en tiempo de envío
+## Plan: Usar Template de Postmark con variables dinámicas
 
-### Solución Propuesta
+### Problema Actual
+La edge function `enviar-aviso-bulk` envía correos usando `HtmlBody` directo con el endpoint `/email/batch`. No usa templates de Postmark, por lo que los placeholders no se reemplazan.
 
-**1. Extender el tipo `Aviso` y la consulta inicial**
-   - Agregar un campo `destinatarios_count: number | null` al interfaz `Aviso`
-   - Modificar la consulta `fetchAvisos` para obtener también `avisos_roles_destinatarios` relacionados
-   - Calcular el total de destinatarios únicos desde el campo `correos` JSONB
+### Cambios Requeridos
 
-**2. Crear una función auxiliar para contar destinatarios**
-   - Función que reciba los datos de `avisos_roles_destinatarios` 
-   - Extraiga emails únicos del campo `correos` (siguiendo la misma lógica que la edge function)
-   - Retorne el conteo
+**Archivo: `supabase/functions/enviar-aviso-bulk/index.ts`**
 
-**3. Actualizar el diálogo de confirmación**
-   - Mostrar el número exacto: "¿Enviar a {N} destinatarios?" 
-   - Incluir un fallback para avisos sin destinatarios configurados
-   - Mostrar un aviso si no hay destinatarios (desactivar botón de envío)
+1. **Cambiar el endpoint de Postmark** de `/email/batch` a `/email/batchWithTemplates`
+2. **Usar el TemplateId `36978552`** en lugar de enviar HTML directo
+3. **Construir el TemplateModel** con la estructura requerida por cada destinatario:
+   ```json
+   {
+     "mensaje": {
+       "nombre": "Nombre del destinatario",
+       "texto": "<strong>El mensaje HTML del aviso</strong>",
+       "asunto": "Asunto del mensaje"
+     }
+   }
+   ```
+4. **Mapear los datos del destinatario**: El campo `nombre` se tomara del array de destinatarios en `correos` JSONB (cada entrada ya tiene `nombre` y `email`)
+5. **El campo `texto`** sera el `mensaje_html` del aviso
+6. **El campo `asunto`** sera el `asunto` del aviso
 
-**4. Mejorar la experiencia de carga**
-   - Mostrar un skeleton/placeholder mientras se calcula el conteo
-   - Los datos se cargan con la página inicial, sin peticiones adicionales
+### Cambio clave en el codigo
 
-### Cambios Técnicos
-- **Archivo**: `src/pages/admin/comunicacion/EnviarAvisos.tsx`
-  - Extender interfaz `Aviso` con `destinatarios_count`
-  - Modificar `fetchAvisos()` para hacer una consulta JOINada con `avisos_roles_destinatarios`
-  - Agregar función `extractDestinatariosCount()` que parsee el JSONB
-  - Actualizar el diálogo de confirmación para mostrar el número
-  - Agregar validación: mostrar alerta si el aviso no tiene destinatarios
-
-### Flujo de Datos
-```
-1. fetchAvisos() → Query avisos + avisos_roles_destinatarios
-2. Para cada aviso, extrae destinatarios del campo correos
-3. Cuenta emails únicos y guarda en estado
-4. Al hacer clic en "Enviar", muestra diálogo con el número exacto
-5. Usuario confirma y se ejecuta enviar-aviso-bulk
+Antes (actual):
+```javascript
+const messages = batch.map(email => ({
+  From: 'notificaciones@sozu.mx',
+  To: email,
+  Subject: aviso.asunto,
+  HtmlBody: aviso.mensaje_html,
+  MessageStream: 'outbound',
+}));
+// POST a /email/batch
 ```
 
-### Edge Cases
-- Avisos sin roles/destinatarios configurados → mostrar 0 y desactivar botón
-- Cambios en destinatarios entre refresh → Los datos son estáticos por página load
-- Múltiples roles con mismo email → Sistema de deduplicación ya implementado en edge function
+Despues (propuesto):
+```javascript
+const messages = batch.map(recipient => ({
+  From: 'notificaciones@sozu.mx',
+  To: recipient.email,
+  TemplateId: 36978552,
+  TemplateModel: {
+    mensaje: {
+      nombre: recipient.nombre || '',
+      texto: aviso.mensaje_html,
+      asunto: aviso.asunto,
+    },
+  },
+  MessageStream: 'outbound',
+}));
+// POST a /email/batchWithTemplates
+```
 
+### Ajuste en la recoleccion de destinatarios
+
+Actualmente solo se guardan los emails en un array de strings. Se cambiara para guardar objetos `{ nombre, email }` para poder pasar el nombre al template:
+
+```javascript
+// Antes: emails: string[]
+// Despues: recipients: { nombre: string; email: string }[]
+```
+
+La deduplicacion seguira siendo por email, pero se conservara el nombre asociado.
+
+### Resumen de cambios
+- **1 archivo modificado**: `supabase/functions/enviar-aviso-bulk/index.ts`
+  - Recolectar recipients como objetos `{nombre, email}` en lugar de solo strings
+  - Cambiar endpoint a `/email/batchWithTemplates`
+  - Usar `TemplateId: 36978552` con el `TemplateModel` especificado
+  - Eliminar `Subject` y `HtmlBody` del mensaje (el template los maneja)
