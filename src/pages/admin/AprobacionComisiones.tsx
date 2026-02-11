@@ -226,9 +226,9 @@ export default function AprobacionComisiones() {
         ? await supabase.from("usuarios").select("email, nombre, rol_id").in("email", comisionistaEmails)
         : { data: [] };
       
-      // Identificar emails de agentes inmobiliarios (rol_id = 3)
-      const emailsAgentesInmobiliarios = new Set(
-        usuariosData?.filter(u => u.rol_id === 3).map(u => u.email) || []
+      // Identificar emails de agentes inmobiliarios (rol_id = 3) e inmobiliarias (rol_id = 4)
+      const emailsExternos = new Set(
+        usuariosData?.filter(u => u.rol_id === 3 || u.rol_id === 4).map(u => u.email) || []
       );
       
       const usuariosMap = new Map<string, { nombre: string; esInmobiliaria: boolean; esAgenteInmobiliario: boolean }>();
@@ -236,7 +236,7 @@ export default function AprobacionComisiones() {
         usuariosMap.set(u.email, { 
           nombre: u.nombre, 
           esInmobiliaria: false,
-          esAgenteInmobiliario: u.rol_id === 3
+          esAgenteInmobiliario: u.rol_id === 3 || u.rol_id === 4
         });
       });
       
@@ -286,7 +286,7 @@ export default function AprobacionComisiones() {
         const comisionistasFiltered = (comisionistas?.filter(c => c.id_cuenta_cobranza === cuenta.id) || [])
           .map(c => {
             const userData = usuariosMap.get(c.email_usuario);
-            const esAgenteExterno = emailsInmobiliarias.has(c.email_usuario) || emailsAgentesInmobiliarios.has(c.email_usuario);
+            const esAgenteExterno = emailsInmobiliarias.has(c.email_usuario) || emailsExternos.has(c.email_usuario);
             return {
               ...c,
               nombre: userData?.nombre || 'N/A',
