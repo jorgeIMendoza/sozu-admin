@@ -5,8 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Search, Copy, Check } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { useToast } from "@/hooks/use-toast";
 
 interface Ejecucion {
   id: number;
@@ -28,13 +31,12 @@ interface AvisoOption {
 
 const estadoColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   completado: 'default',
-  enviando: 'secondary',
-  pendiente: 'outline',
   error: 'destructive',
 };
 
 export default function Ejecuciones() {
   const { isLoading: permLoading } = usePagePermissions('/admin/comunicacion/ejecuciones');
+  const { toast } = useToast();
 
   const [ejecuciones, setEjecuciones] = useState<Ejecucion[]>([]);
   const [avisos, setAvisos] = useState<AvisoOption[]>([]);
@@ -42,6 +44,8 @@ export default function Ejecuciones() {
   const [filterAviso, setFilterAviso] = useState<string>("all");
   const [filterEstado, setFilterEstado] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [errorDetail, setErrorDetail] = useState<Ejecucion | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -66,7 +70,6 @@ export default function Ejecuciones() {
     return true;
   });
 
-  // Chart data: group by date
   const chartData = (() => {
     const map = new Map<string, { date: string; enviados: number; errores: number }>();
     filtered.forEach(e => {
@@ -79,13 +82,19 @@ export default function Ejecuciones() {
     return Array.from(map.values()).reverse().slice(-14);
   })();
 
+  const handleCopyError = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast({ title: "Copiado", description: "Detalle de error copiado al portapapeles" });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   if (permLoading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Ejecuciones de Avisos</h1>
 
-      {/* Chart */}
       {chartData.length > 0 && (
         <div className="border rounded-lg p-4">
           <h3 className="text-sm font-medium mb-4">Envíos por día (últimos 14 días)</h3>
@@ -120,8 +129,6 @@ export default function Ejecuciones() {
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
             <SelectItem value="completado">Completado</SelectItem>
-            <SelectItem value="enviando">Enviando</SelectItem>
-            <SelectItem value="pendiente">Pendiente</SelectItem>
             <SelectItem value="error">Error</SelectItem>
           </SelectContent>
         </Select>
@@ -139,14 +146,13 @@ export default function Ejecuciones() {
               <TableHead className="text-right">Enviados</TableHead>
               <TableHead className="text-right">Errores</TableHead>
               <TableHead>Estado</TableHead>
-              <TableHead>Detalle Error</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8">Cargando...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8">Cargando...</TableCell></TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay ejecuciones</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No hay ejecuciones</TableCell></TableRow>
             ) : filtered.map(e => (
               <TableRow key={e.id}>
                 <TableCell className="text-sm">{new Date(e.fecha_ejecucion).toLocaleString('es-MX')}</TableCell>
@@ -158,16 +164,49 @@ export default function Ejecuciones() {
                 <TableCell className="text-right">{e.total_enviados ?? 0}</TableCell>
                 <TableCell className="text-right">{e.total_errores ?? 0}</TableCell>
                 <TableCell>
-                  <Badge variant={estadoColors[e.estado] || 'outline'}>{e.estado}</Badge>
-                </TableCell>
-                <TableCell className="text-sm text-destructive max-w-xs truncate" title={e.detalle_error || ''}>
-                  {e.detalle_error || '—'}
+                  {e.estado === 'error' && e.detalle_error ? (
+                    <Badge
+                      variant="destructive"
+                      className="cursor-pointer"
+                      onClick={() => setErrorDetail(e)}
+                    >
+                      error
+                    </Badge>
+                  ) : (
+                    <Badge variant={estadoColors[e.estado] || 'outline'}>{e.estado}</Badge>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      {/* Error Detail Dialog */}
+      <Dialog open={!!errorDetail} onOpenChange={() => setErrorDetail(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Detalle de Error</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Aviso: <strong>{(errorDetail?.avisos as any)?.nombre}</strong> — {errorDetail && new Date(errorDetail.fecha_ejecucion).toLocaleString('es-MX')}
+            </p>
+            <div className="bg-muted rounded-lg p-4 text-sm font-mono whitespace-pre-wrap break-all">
+              {errorDetail?.detalle_error || 'Sin detalle disponible'}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => errorDetail?.detalle_error && handleCopyError(errorDetail.detalle_error)}
+              disabled={!errorDetail?.detalle_error}
+            >
+              {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+              {copied ? 'Copiado' : 'Copiar detalle'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
