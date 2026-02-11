@@ -193,6 +193,33 @@ export type Database = {
           },
         ]
       }
+      analytics_events: {
+        Row: {
+          created_at: string | null
+          event_data: Json | null
+          event_type: string
+          id: number
+          session_id: string | null
+          user_email: string
+        }
+        Insert: {
+          created_at?: string | null
+          event_data?: Json | null
+          event_type: string
+          id?: never
+          session_id?: string | null
+          user_email: string
+        }
+        Update: {
+          created_at?: string | null
+          event_data?: Json | null
+          event_type?: string
+          id?: never
+          session_id?: string | null
+          user_email?: string
+        }
+        Relationships: []
+      }
       aplicaciones_pago: {
         Row: {
           activo: boolean

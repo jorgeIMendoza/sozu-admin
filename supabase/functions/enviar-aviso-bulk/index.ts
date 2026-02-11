@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
               totalEnviados++;
             } else {
               totalErrores++;
-              const errMsg = `[${r.ErrorCode}] ${r.Message || 'Error desconocido'}`;
+              const errMsg = `${r.To}: [${r.ErrorCode}] ${r.Message || 'Error desconocido'}`;
               errorMessages.push(errMsg);
               console.error('Postmark email error:', { to: r.To, errorCode: r.ErrorCode, message: r.Message });
             }
@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
     }
 
     const detalleError = totalErrores > 0 
-      ? errorMessages.slice(0, 5).join(' | ') 
+      ? errorMessages.slice(0, 20).join(' | ') 
       : null;
 
     await supabaseAdmin
