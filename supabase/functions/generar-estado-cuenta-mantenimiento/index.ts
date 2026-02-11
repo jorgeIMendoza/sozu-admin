@@ -310,7 +310,7 @@ Deno.serve(async (req) => {
 
     // Column widths - proportional to original jsPDF layout (total = contentWidth = 515)
     // Original ratios: Concepto=60, Fecha=28, Monto=28, Pagado=28, Pendiente=28, Estado=18 (total=190)
-    const aCols = [160, 80, 75, 70, 75, 55]; // = 515
+    const aCols = [140, 75, 75, 70, 85, 70]; // = 515
     const aHeaders = ['CONCEPTO', 'FECHA', 'MONTO', 'PAGADO', 'PENDIENTE', 'ESTADO'];
 
     // Header bg
