@@ -1,34 +1,71 @@
 
 
-## Plan: Corregir Error de Precision Flotante en Validacion SAT (Cuenta 374)
+## Plan: Edge Function para Estado de Cuenta de Mantenimiento + Integracion UI
 
-### Problema
-La cuenta 374 tiene `precio_final = 2,292,821.44` y la suma real de pagos en la base de datos es exactamente `2,292,821.44` (41 pagos). Sin embargo, el servicio SAT suma los 41 pagos uno por uno en JavaScript usando `parseFloat`, lo cual causa errores de precision de punto flotante. El resultado puede ser algo como `2,292,821.4399999997`, que es menor que `precioFinal`, y por eso `estaPagadaCompletamente = false`.
+### Objetivo
+Crear una Edge Function `generar-estado-cuenta-mantenimiento` que genere el PDF en el servidor (usando `pdf-lib`, igual que `generar-estado-cuenta`) y actualizar los botones existentes en la UI para que la usen en lugar del servicio client-side con jsPDF.
 
-Esto es consistente con el patron ya usado en el resto del sistema, donde se usa una tolerancia de `<= $0.01` para determinar si una cuenta esta pagada.
+### Arquitectura
 
-### Solucion
+La nueva Edge Function seguira exactamente el mismo patron que `generar-estado-cuenta`:
+1. Recibe `{ id_cuenta }` por POST
+2. Consulta datos con service_role key
+3. Genera PDF con `pdf-lib`
+4. Sube a storage `documentos/estados_cuenta_temp/` con TTL de 1 minuto
+5. Retorna `{ success, url_estado_cuenta }`
 
-Aplicar la misma tolerancia de `$0.01` que ya se usa en el resto del sistema (triggers de escrituracion, indicadores de progreso, etc.).
+### Archivos a crear
 
-### Cambio Unico
+**1. `supabase/functions/generar-estado-cuenta-mantenimiento/index.ts`**
+- Endpoint POST que recibe `{ id_cuenta }`
+- Valida que la cuenta tenga `id_cuenta_cobranza_padre` (es mantenimiento)
+- Consulta: cuenta padre, compradores, proyecto/propiedad, acuerdos de pago (ultimos 12 meses), aplicaciones, pagos reales
+- Calcula: pago mensual acumulado, total pagado real, excedente, saldo pendiente (misma logica del servicio actual)
+- Genera PDF con `pdf-lib` replicando el mismo diseno del servicio actual (header, meta info, summary cards, tabla de acuerdos, footer con CLABE)
+- Sube PDF a `documentos/estados_cuenta_temp/` y retorna URL publica
+- CORS headers completos
 
-**Archivo: `src/services/satNotificationService.ts`**
-- Linea 99: Cambiar la comparacion estricta por una con tolerancia
-
-```
-// Actual (falla por precision flotante):
-const estaPagadaCompletamente = precioFinal > 0 && totalPagado >= precioFinal;
-
-// Corregido (tolerancia de $0.01, igual que el resto del sistema):
-const restante = precioFinal - totalPagado;
-const estaPagadaCompletamente = precioFinal > 0 && restante <= 0.01;
-```
-
-Esto es exactamente el mismo patron usado en:
-- El trigger `actualizar_estatus_a_escrituracion` en PostgreSQL
-- Los indicadores de progreso de cuentas de cobranza
-- La logica de reconciliacion de estatus de propiedades
+**2. `src/services/estadoCuentaMantenimientoEdgeFunctionService.ts`**
+- Clase `EstadoCuentaMantenimientoEdgeFunctionService` con metodo `generateEstadoCuenta({ id_cuenta })`
+- Llama a la Edge Function via `supabase.functions.invoke('generar-estado-cuenta-mantenimiento')`
+- Abre el PDF en nueva pestana
+- Misma interfaz que `EstadoCuentaEdgeFunctionService`
 
 ### Archivos a modificar
-- `src/services/satNotificationService.ts` (1 linea)
+
+**3. `supabase/config.toml`**
+- Agregar seccion `[functions.generar-estado-cuenta-mantenimiento]` con `verify_jwt = false`
+
+**4. `src/pages/admin/CuentasMantenimiento.tsx`**
+- Cambiar import de `EstadoCuentaMantenimientoService` a `EstadoCuentaMantenimientoEdgeFunctionService`
+- Actualizar la llamada en el boton de descarga
+
+**5. `src/pages/admin/DetalleCuentaMantenimiento.tsx`**
+- Mismo cambio: usar el nuevo servicio Edge Function en lugar del client-side
+
+### Seccion tecnica
+
+**Logica de calculo (replicada del servicio actual):**
+```
+pagoAcumulado = SUM(acuerdos.monto) -- ultimos 12 meses
+totalAplicado = SUM(aplicaciones_pago.monto WHERE !es_multa)
+totalPagadoReal = SUM(pagos.monto)
+excedente = totalPagadoReal - totalAplicado
+saldoPendienteBruto = pagoAcumulado - totalAplicado
+saldoPendienteReal = saldoPendienteBruto - excedente
+```
+
+**Estructura del PDF (misma que el actual):**
+- Header: nombre proyecto, direccion, numero cuenta CM-XXXXXX, propiedad, cliente
+- Meta info: tipo "Mantenimiento", periodo 12 meses, fecha emision
+- Summary cards: Pago Mensual Acumulado, Total Pagado, Saldo Pendiente/A Favor
+- Tabla: acuerdos de pago con concepto, fecha, monto, pagado, pendiente, estado
+- Footer: notas + CLABE STP
+
+**API externa:**
+```
+POST /functions/v1/generar-estado-cuenta-mantenimiento
+Body: { "id_cuenta": 123 }
+Response: { "success": true, "url_estado_cuenta": "https://...", "expiresIn": "1 minute" }
+```
+
