@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { AvisoDestinatariosSection } from "@/components/admin/AvisoDestinatariosSection";
 
 interface Aviso {
   id: number;
@@ -28,6 +29,11 @@ interface Aviso {
 interface Rol {
   id: number;
   nombre: string;
+}
+
+interface Destinatario {
+  nombre: string;
+  email: string;
 }
 
 const CRON_PRESETS = [
@@ -47,12 +53,10 @@ export default function AdministrarAvisos() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAviso, setEditingAviso] = useState<Aviso | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  // Form state
   const [nombre, setNombre] = useState("");
   const [asunto, setAsunto] = useState("");
   const [mensajeHtml, setMensajeHtml] = useState("");
@@ -60,6 +64,7 @@ export default function AdministrarAvisos() {
   const [cronExpression, setCronExpression] = useState("");
   const [activo, setActivo] = useState(true);
   const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
+  const [destinatariosPorRol, setDestinatariosPorRol] = useState<Record<number, Destinatario[]>>({});
 
   const fetchAvisos = async () => {
     setIsLoading(true);
@@ -73,15 +78,12 @@ export default function AdministrarAvisos() {
     setRoles(data || []);
   };
 
-  useEffect(() => {
-    fetchAvisos();
-    fetchRoles();
-  }, []);
+  useEffect(() => { fetchAvisos(); fetchRoles(); }, []);
 
   const openCreate = () => {
     setEditingAviso(null);
     setNombre(""); setAsunto(""); setMensajeHtml(""); setTipoEnvio("manual");
-    setCronExpression(""); setActivo(true); setSelectedRoles([]);
+    setCronExpression(""); setActivo(true); setSelectedRoles([]); setDestinatariosPorRol({});
     setDialogOpen(true);
   };
 
@@ -91,8 +93,16 @@ export default function AdministrarAvisos() {
     setTipoEnvio(aviso.tipo_envio); setCronExpression(aviso.cron_expression || "");
     setActivo(aviso.activo);
 
-    const { data } = await supabase.from('avisos_roles_destinatarios').select('id_rol').eq('id_aviso', aviso.id);
-    setSelectedRoles(data?.map(r => r.id_rol) || []);
+    const { data } = await supabase.from('avisos_roles_destinatarios').select('id_rol, correos').eq('id_aviso', aviso.id);
+    const rolIds: number[] = [];
+    const destMap: Record<number, Destinatario[]> = {};
+    data?.forEach(r => {
+      rolIds.push(r.id_rol);
+      const correos = r.correos as any;
+      destMap[r.id_rol] = correos?.destinatarios || [];
+    });
+    setSelectedRoles(rolIds);
+    setDestinatariosPorRol(destMap);
     setDialogOpen(true);
   };
 
@@ -101,7 +111,6 @@ export default function AdministrarAvisos() {
       toast({ title: "Error", description: "Nombre, asunto y mensaje son requeridos", variant: "destructive" });
       return;
     }
-
     if (tipoEnvio === 'automatico' && !cronExpression) {
       toast({ title: "Error", description: "La expresión cron es requerida para envío automático", variant: "destructive" });
       return;
@@ -114,7 +123,6 @@ export default function AdministrarAvisos() {
     };
 
     let avisoId: number;
-
     if (editingAviso) {
       const { error } = await supabase.from('avisos').update(payload).eq('id', editingAviso.id);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
@@ -125,11 +133,15 @@ export default function AdministrarAvisos() {
       avisoId = data.id;
     }
 
-    // Update roles
+    // Update roles with correos
     await supabase.from('avisos_roles_destinatarios').delete().eq('id_aviso', avisoId);
     if (selectedRoles.length > 0) {
       await supabase.from('avisos_roles_destinatarios').insert(
-        selectedRoles.map(id_rol => ({ id_aviso: avisoId, id_rol }))
+        selectedRoles.map(id_rol => ({
+          id_aviso: avisoId,
+          id_rol,
+          correos: JSON.parse(JSON.stringify({ destinatarios: destinatariosPorRol[id_rol] || [] })),
+        }))
       );
     }
 
@@ -152,7 +164,32 @@ export default function AdministrarAvisos() {
   };
 
   const toggleRole = (rolId: number) => {
-    setSelectedRoles(prev => prev.includes(rolId) ? prev.filter(r => r !== rolId) : [...prev, rolId]);
+    setSelectedRoles(prev =>
+      prev.includes(rolId) ? prev.filter(r => r !== rolId) : [...prev, rolId]
+    );
+    // Initialize empty destinatarios for new role if needed
+    if (!selectedRoles.includes(rolId)) {
+      setDestinatariosPorRol(prev => ({ ...prev, [rolId]: prev[rolId] || [] }));
+    }
+  };
+
+  // Flatten all destinatarios for the section component
+  const allDestinatarios = selectedRoles.flatMap(rolId => destinatariosPorRol[rolId] || []);
+  // Deduplicate by email
+  const uniqueDestinatarios = allDestinatarios.filter(
+    (d, i, arr) => arr.findIndex(x => x.email === d.email) === i
+  );
+
+  const handleDestinatariosChange = (newDests: Destinatario[]) => {
+    // Store all destinatarios under the first selected role, or create a general bucket
+    const targetRol = selectedRoles[0];
+    if (targetRol) {
+      setDestinatariosPorRol(prev => ({ ...prev, [targetRol]: newDests }));
+      // Clear other roles' destinatarios to avoid duplication
+      const cleaned: Record<number, Destinatario[]> = { [targetRol]: newDests };
+      selectedRoles.slice(1).forEach(r => { cleaned[r] = []; });
+      setDestinatariosPorRol(cleaned);
+    }
   };
 
   const filtered = avisos.filter(a => a.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -219,7 +256,6 @@ export default function AdministrarAvisos() {
           </DialogHeader>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Form */}
             <div className="space-y-4">
               <div>
                 <Label>Nombre</Label>
@@ -262,20 +298,16 @@ export default function AdministrarAvisos() {
                 <Switch checked={activo} onCheckedChange={setActivo} />
                 <Label>Activo</Label>
               </div>
-              <div>
-                <Label>Roles Destinatarios</Label>
-                <div className="grid grid-cols-2 gap-1 mt-2 max-h-40 overflow-y-auto border rounded p-2">
-                  {roles.map(rol => (
-                    <label key={rol.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted p-1 rounded">
-                      <input type="checkbox" checked={selectedRoles.includes(rol.id)} onChange={() => toggleRole(rol.id)} className="rounded" />
-                      {rol.nombre}
-                    </label>
-                  ))}
-                </div>
-              </div>
+
+              <AvisoDestinatariosSection
+                roles={roles}
+                selectedRoles={selectedRoles}
+                onToggleRole={toggleRole}
+                destinatarios={uniqueDestinatarios}
+                onDestinatariosChange={handleDestinatariosChange}
+              />
             </div>
 
-            {/* Preview */}
             <div>
               <Label>Vista previa</Label>
               <div className="border rounded-lg mt-2 bg-background overflow-hidden" style={{ height: '500px' }}>
@@ -296,7 +328,6 @@ export default function AdministrarAvisos() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
       <DeleteConfirmationDialog
         open={deleteId !== null}
         onOpenChange={() => setDeleteId(null)}
