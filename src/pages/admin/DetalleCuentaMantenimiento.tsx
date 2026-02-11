@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, Plus, Calendar, Upload, Loader2, Eye, Download, RefreshCw } from "lucide-react";
-import { EstadoCuentaMantenimientoService } from "@/services/estadoCuentaMantenimientoService";
+import { EstadoCuentaMantenimientoEdgeFunctionService } from "@/services/estadoCuentaMantenimientoEdgeFunctionService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
 import { format } from "date-fns";
@@ -731,13 +731,13 @@ export default function DetalleCuentaMantenimiento() {
               if (!cuentaId) return;
               try {
                 setGeneratingEstadoCuenta(true);
-                const service = new EstadoCuentaMantenimientoService();
+                const service = new EstadoCuentaMantenimientoEdgeFunctionService();
                 await service.generateEstadoCuenta({
                   id_cuenta: cuentaId
                 });
                 toast({
                   title: "Estado de cuenta generado",
-                  description: "El PDF se ha descargado exitosamente."
+                  description: "El PDF se ha abierto en una nueva pestaña."
                 });
               } catch (error) {
                 console.error("Error generating estado de cuenta:", error);

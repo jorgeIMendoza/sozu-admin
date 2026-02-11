@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.ejecutar-avisos-cron]
 verify_jwt = false
+
+[functions.generar-estado-cuenta-mantenimiento]
+verify_jwt = false

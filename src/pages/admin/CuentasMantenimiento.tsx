@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Search, Eye, Loader2, Package, UserPlus, FileDown } from "lucide-react";
-import { EstadoCuentaMantenimientoService } from "@/services/estadoCuentaMantenimientoService";
+import { EstadoCuentaMantenimientoEdgeFunctionService } from "@/services/estadoCuentaMantenimientoEdgeFunctionService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
@@ -544,11 +544,11 @@ export default function CuentasMantenimiento() {
                                       onClick={async () => {
                                         try {
                                           setGeneratingEstadoCuenta(cuenta.id);
-                                          const service = new EstadoCuentaMantenimientoService();
+                                          const service = new EstadoCuentaMantenimientoEdgeFunctionService();
                                           await service.generateEstadoCuenta({ id_cuenta: cuenta.id });
                                           toast({
                                             title: "Estado de cuenta generado",
-                                            description: "El PDF se ha descargado exitosamente."
+                                            description: "El PDF se ha abierto en una nueva pestaña."
                                           });
                                         } catch (error) {
                                           console.error("Error generating estado de cuenta:", error);
