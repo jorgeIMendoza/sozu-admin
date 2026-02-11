@@ -91,8 +91,8 @@ export default function AdministrarAvisos() {
     setTipoEnvio(aviso.tipo_envio); setCronExpression(aviso.cron_expression || "");
     setActivo(aviso.activo);
 
-    const { data } = await supabase.from('avisos_roles_destinatarios').select('rol_id').eq('aviso_id', aviso.id);
-    setSelectedRoles(data?.map(r => r.rol_id) || []);
+    const { data } = await supabase.from('avisos_roles_destinatarios').select('id_rol').eq('id_aviso', aviso.id);
+    setSelectedRoles(data?.map(r => r.id_rol) || []);
     setDialogOpen(true);
   };
 
@@ -126,10 +126,10 @@ export default function AdministrarAvisos() {
     }
 
     // Update roles
-    await supabase.from('avisos_roles_destinatarios').delete().eq('aviso_id', avisoId);
+    await supabase.from('avisos_roles_destinatarios').delete().eq('id_aviso', avisoId);
     if (selectedRoles.length > 0) {
       await supabase.from('avisos_roles_destinatarios').insert(
-        selectedRoles.map(rol_id => ({ aviso_id: avisoId, rol_id }))
+        selectedRoles.map(id_rol => ({ id_aviso: avisoId, id_rol }))
       );
     }
 
