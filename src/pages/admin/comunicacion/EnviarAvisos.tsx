@@ -47,7 +47,7 @@ export default function EnviarAvisos() {
 
     try {
       const { data, error } = await supabase.functions.invoke('enviar-aviso-bulk', {
-        body: { aviso_id: aviso.id, ejecutado_por: user?.id, tipo_trigger: 'manual' },
+        body: { aviso_id: aviso.id, ejecutado_por: user?.email, tipo_trigger: 'manual' },
       });
 
       if (error) throw error;

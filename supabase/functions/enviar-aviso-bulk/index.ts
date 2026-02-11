@@ -40,10 +40,10 @@ Deno.serve(async (req) => {
     // Get target role IDs
     const { data: rolesData } = await supabaseAdmin
       .from('avisos_roles_destinatarios')
-      .select('rol_id')
-      .eq('aviso_id', aviso_id);
+      .select('id_rol')
+      .eq('id_aviso', aviso_id);
 
-    const rolIds = rolesData?.map(r => r.rol_id) || [];
+    const rolIds = rolesData?.map(r => r.id_rol) || [];
 
     if (rolIds.length === 0) {
       return new Response(JSON.stringify({ error: 'No hay roles destinatarios configurados' }), {
@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
     const { data: ejecucion, error: ejErr } = await supabaseAdmin
       .from('avisos_ejecuciones')
       .insert({
-        aviso_id,
+        id_aviso: aviso_id,
         tipo_trigger,
         ejecutado_por: ejecutado_por || null,
         total_destinatarios: emails.length,

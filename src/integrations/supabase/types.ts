@@ -279,36 +279,36 @@ export type Database = {
       }
       avisos_ejecuciones: {
         Row: {
-          aviso_id: number
           detalle_error: string | null
           ejecutado_por: string | null
           estado: string
           fecha_ejecucion: string
           id: number
+          id_aviso: number
           tipo_trigger: string
           total_destinatarios: number | null
           total_enviados: number | null
           total_errores: number | null
         }
         Insert: {
-          aviso_id: number
           detalle_error?: string | null
           ejecutado_por?: string | null
           estado?: string
           fecha_ejecucion?: string
           id?: never
+          id_aviso: number
           tipo_trigger: string
           total_destinatarios?: number | null
           total_enviados?: number | null
           total_errores?: number | null
         }
         Update: {
-          aviso_id?: number
           detalle_error?: string | null
           ejecutado_por?: string | null
           estado?: string
           fecha_ejecucion?: string
           id?: never
+          id_aviso?: number
           tipo_trigger?: string
           total_destinatarios?: number | null
           total_enviados?: number | null
@@ -317,7 +317,7 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "avisos_ejecuciones_aviso_id_fkey"
-            columns: ["aviso_id"]
+            columns: ["id_aviso"]
             isOneToOne: false
             referencedRelation: "avisos"
             referencedColumns: ["id"]
@@ -364,31 +364,31 @@ export type Database = {
       }
       avisos_roles_destinatarios: {
         Row: {
-          aviso_id: number
           id: number
-          rol_id: number
+          id_aviso: number
+          id_rol: number
         }
         Insert: {
-          aviso_id: number
           id?: never
-          rol_id: number
+          id_aviso: number
+          id_rol: number
         }
         Update: {
-          aviso_id?: number
           id?: never
-          rol_id?: number
+          id_aviso?: number
+          id_rol?: number
         }
         Relationships: [
           {
             foreignKeyName: "avisos_roles_destinatarios_aviso_id_fkey"
-            columns: ["aviso_id"]
+            columns: ["id_aviso"]
             isOneToOne: false
             referencedRelation: "avisos"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "avisos_roles_destinatarios_rol_id_fkey"
-            columns: ["rol_id"]
+            columns: ["id_rol"]
             isOneToOne: false
             referencedRelation: "roles"
             referencedColumns: ["id"]

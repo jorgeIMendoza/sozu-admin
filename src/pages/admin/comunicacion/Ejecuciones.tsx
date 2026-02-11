@@ -10,7 +10,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 interface Ejecucion {
   id: number;
-  aviso_id: number;
+  id_aviso: number;
   fecha_ejecucion: string;
   tipo_trigger: string;
   total_destinatarios: number | null;
@@ -56,7 +56,7 @@ export default function Ejecuciones() {
   useEffect(() => { fetchData(); }, []);
 
   const filtered = ejecuciones.filter(e => {
-    if (filterAviso !== 'all' && e.aviso_id !== parseInt(filterAviso)) return false;
+    if (filterAviso !== 'all' && e.id_aviso !== parseInt(filterAviso)) return false;
     if (searchTerm) {
       const name = (e.avisos as any)?.nombre || '';
       if (!name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
