@@ -1,52 +1,53 @@
 
+## Plan: Corregir error de descarga de PDF de ofertas
 
-## Plan: Mostrar estatus de aprobacion solo cuando hay esquema de pago seleccionado
+### Problema
+Al intentar descargar el PDF de la oferta O-001759, el metodo `downloadFromUrl` en `ofertaPdfStorageService.ts` hace un `fetch(url)` directo a la URL publica de Supabase Storage. Esto puede fallar por restricciones CORS del navegador cuando la app corre en el dominio de Lovable (preview/published), ya que el dominio de origen es diferente al de Supabase Storage.
 
-Actualmente el badge de estatus de aprobacion se muestra siempre en los modales de ofertas y en los PDFs. Debe mostrarse unicamente cuando la oferta tiene un `id_esquema_pago_seleccionado` asignado (no null).
+### Solucion
+Modificar el metodo `downloadFromUrl` para usar una estrategia mas robusta:
+1. Primero intentar con `fetch()` (funciona cuando CORS lo permite)
+2. Si falla, usar un `<a>` tag con `href` directo a la URL (abre en nueva pestana pero siempre funciona)
 
----
+### Archivo a modificar
 
-### Cambios
+**`src/services/ofertaPdfStorageService.ts`** - Metodo `downloadFromUrl` (linea ~282)
 
-#### 1. `src/pages/admin/Propiedades.tsx` - Modales de ofertas comerciales y productos
-
-En las celdas de "Estatus Aprob.", agregar condicion: solo mostrar el badge si la oferta tiene `id_esquema_pago_seleccionado` (o el campo equivalente en productos). Si no tiene esquema, mostrar "-" o dejarlo vacio.
-
+Cambiar de:
 ```typescript
-// En lugar de siempre mostrar el badge:
-offer.id_esquema_pago_seleccionado ? (
-  <Badge ...>{statusName}</Badge>
-) : (
-  <span className="text-muted-foreground">-</span>
-)
+async downloadFromUrl(url: string, filename: string): Promise<void> {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch PDF: ${response.status}`);
+      }
+      const blob = await response.blob();
+      this.downloadBlob(blob, filename);
+    } catch (error) {
+      console.error('Error downloading from URL:', error);
+      throw error;
+    }
+}
 ```
 
-#### 2. `src/pages/admin/inmobiliarias/MisPropiedades.tsx` - Mismos modales
+A:
+```typescript
+async downloadFromUrl(url: string, filename: string): Promise<void> {
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch PDF: ${response.status}`);
+      }
+      const blob = await response.blob();
+      this.downloadBlob(blob, filename);
+    } catch (error) {
+      console.warn('Fetch download failed, opening in new tab:', error);
+      // Fallback: abrir en nueva pestana si CORS bloquea el fetch
+      window.open(url, '_blank');
+    }
+}
+```
 
-Mismo cambio condicional en ambos modales (ofertas comerciales y productos).
-
-#### 3. `src/services/ofertaPdfNativeService.ts` - PDF de propiedad
-
-En la seccion donde se dibuja el badge de estatus junto al nombre del esquema (~linea 586), agregar condicion: solo dibujar el badge si hay esquema de pago seleccionado. Si no hay esquema, omitir el badge.
-
-#### 4. `src/services/ofertaProductoPdfNativeService.ts` - PDF de producto
-
-Mismo cambio condicional al dibujar el badge.
-
-#### 5. `supabase/functions/generar-oferta-pdf/index.ts` - Edge function
-
-En ambas secciones (propiedad ~linea 863 y producto ~linea 1702), condicionar el dibujo del badge a que exista `id_esquema_pago_seleccionado` en la oferta.
-
-#### 6. `src/services/ofertaPdfStorageService.ts` - Validacion de regeneracion
-
-La validacion que fuerza regeneracion cuando `id_estatus_aprobacion !== 2` tambien debe condicionarse a que exista esquema de pago seleccionado. Si no hay esquema, no aplicar esta regla.
-
----
-
-### Resumen de archivos a modificar
-1. `src/pages/admin/Propiedades.tsx` - Condicionar badge en modales
-2. `src/pages/admin/inmobiliarias/MisPropiedades.tsx` - Condicionar badge en modales
-3. `src/services/ofertaPdfNativeService.ts` - Condicionar badge en PDF
-4. `src/services/ofertaProductoPdfNativeService.ts` - Condicionar badge en PDF
-5. `supabase/functions/generar-oferta-pdf/index.ts` - Condicionar badge en edge function
-6. `src/services/ofertaPdfStorageService.ts` - Condicionar validacion de regeneracion
+### Resumen
+- 1 archivo modificado: `src/services/ofertaPdfStorageService.ts`
+- El cambio agrega un fallback que abre el PDF en nueva pestana si el fetch directo falla, evitando que el usuario vea un error sin poder descargar el PDF
