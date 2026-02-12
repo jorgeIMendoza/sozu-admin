@@ -384,9 +384,11 @@ export default function AdministrarAvisos() {
                   {aviso.tipo_envio === 'automatico' && aviso.cron_expression ? (
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Badge variant="default" className="cursor-pointer hover:opacity-80">
-                          automático
-                        </Badge>
+                        <button type="button" className="inline-flex">
+                          <Badge variant="default" className="cursor-pointer hover:opacity-80">
+                            automático
+                          </Badge>
+                        </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto max-w-xs text-sm">
                         <p className="font-medium mb-1">Programación</p>
