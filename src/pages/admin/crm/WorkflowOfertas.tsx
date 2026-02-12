@@ -106,10 +106,10 @@ export default function WorkflowOfertas() {
       if (isSuperAdmin) {
         const { data } = await (supabase
           .from('personas' as any)
-          .select('id, nombre, apellido_paterno')
+          .select('id, nombre_legal, nombre_comercial')
           .eq('activo', true)
           .eq('id_tipo_persona', 4));
-        if (data) setInmobiliarias(data.map((i: any) => ({ id: i.id, nombre: `${i.nombre} ${i.apellido_paterno || ''}`.trim() })));
+        if (data) setInmobiliarias(data.map((i: any) => ({ id: i.id, nombre: i.nombre_comercial || i.nombre_legal || 'Sin nombre' })));
       }
 
       if (isSuperAdmin) {
