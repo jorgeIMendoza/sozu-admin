@@ -879,7 +879,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
           color: black,
         });
         
-        // Draw approval status badge
+        // Draw approval status badge next to name
         if (oferta.id_esquema_pago_seleccionado && oferta.id_estatus_aprobacion && estatus_aprobacion_nombre) {
           const statusColorsMap: Record<number, { bg: { r: number; g: number; b: number }; text: { r: number; g: number; b: number } }> = {
             1: { bg: { r: 1, g: 0.953, b: 0.804 }, text: { r: 0.522, g: 0.392, b: 0.016 } },
@@ -899,24 +899,47 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
           const badgeY = lineY - 2;
           
           currentPage.drawRectangle({
-            x: badgeX,
-            y: badgeY,
-            width: badgeW,
-            height: badgeH,
+            x: badgeX, y: badgeY, width: badgeW, height: badgeH,
             color: rgb(sColors.bg.r, sColors.bg.g, sColors.bg.b),
             borderColor: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
             borderWidth: 0.3,
           });
           currentPage.drawText(badgeText, {
-            x: badgeX + badgePad,
-            y: badgeY + 3,
-            size: badgeFontSize,
-            font: helvetica,
-            color: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
+            x: badgeX + badgePad, y: badgeY + 3, size: badgeFontSize,
+            font: helvetica, color: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
           });
         }
         
         lineY -= 14;
+      } else if (oferta.id_esquema_pago_seleccionado && oferta.id_estatus_aprobacion && estatus_aprobacion_nombre) {
+        // Draw approval status badge for manual schemes
+        const statusColorsMap: Record<number, { bg: { r: number; g: number; b: number }; text: { r: number; g: number; b: number } }> = {
+          1: { bg: { r: 1, g: 0.953, b: 0.804 }, text: { r: 0.522, g: 0.392, b: 0.016 } },
+          2: { bg: { r: 0.831, g: 0.929, b: 0.855 }, text: { r: 0.082, g: 0.341, b: 0.141 } },
+          3: { bg: { r: 0.973, g: 0.843, b: 0.855 }, text: { r: 0.447, g: 0.110, b: 0.141 } },
+          4: { bg: { r: 0.800, g: 0.898, b: 1 }, text: { r: 0, g: 0.251, b: 0.522 } },
+        };
+        const sColors = statusColorsMap[oferta.id_estatus_aprobacion] || statusColorsMap[1];
+        const badgeText = estatus_aprobacion_nombre;
+        const badgeFontSize = 7;
+        const badgeTextW = helveticaBold.widthOfTextAtSize(badgeText, badgeFontSize);
+        const badgePad = 4;
+        const badgeW = badgeTextW + badgePad * 2;
+        const badgeH = 12;
+        const badgeX = schemeX + padding;
+        const badgeY = lineY - 2;
+        
+        currentPage.drawRectangle({
+          x: badgeX, y: badgeY, width: badgeW, height: badgeH,
+          color: rgb(sColors.bg.r, sColors.bg.g, sColors.bg.b),
+          borderColor: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
+          borderWidth: 0.3,
+        });
+        currentPage.drawText(badgeText, {
+          x: badgeX + badgePad, y: badgeY + 3, size: badgeFontSize,
+          font: helveticaBold, color: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
+        });
+        lineY -= 16;
       }
 
       // Final price
@@ -1776,24 +1799,47 @@ async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprob
           const badgeY = lineY - 2;
           
           currentPage.drawRectangle({
-            x: badgeX,
-            y: badgeY,
-            width: badgeW,
-            height: badgeH,
+            x: badgeX, y: badgeY, width: badgeW, height: badgeH,
             color: rgb(sColors.bg.r, sColors.bg.g, sColors.bg.b),
             borderColor: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
             borderWidth: 0.3,
           });
           currentPage.drawText(badgeText, {
-            x: badgeX + badgePad,
-            y: badgeY + 3,
-            size: badgeFontSize,
-            font: helvetica,
-            color: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
+            x: badgeX + badgePad, y: badgeY + 3, size: badgeFontSize,
+            font: helvetica, color: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
           });
         }
         
         lineY -= 14;
+      } else if (oferta.id_esquema_pago_seleccionado && oferta.id_estatus_aprobacion && estatus_aprobacion_nombre) {
+        // Draw approval status badge for manual schemes
+        const statusColorsMap: Record<number, { bg: { r: number; g: number; b: number }; text: { r: number; g: number; b: number } }> = {
+          1: { bg: { r: 1, g: 0.953, b: 0.804 }, text: { r: 0.522, g: 0.392, b: 0.016 } },
+          2: { bg: { r: 0.831, g: 0.929, b: 0.855 }, text: { r: 0.082, g: 0.341, b: 0.141 } },
+          3: { bg: { r: 0.973, g: 0.843, b: 0.855 }, text: { r: 0.447, g: 0.110, b: 0.141 } },
+          4: { bg: { r: 0.800, g: 0.898, b: 1 }, text: { r: 0, g: 0.251, b: 0.522 } },
+        };
+        const sColors = statusColorsMap[oferta.id_estatus_aprobacion] || statusColorsMap[1];
+        const badgeText = estatus_aprobacion_nombre;
+        const badgeFontSize = 7;
+        const badgeTextW = helveticaBold.widthOfTextAtSize(badgeText, badgeFontSize);
+        const badgePad = 4;
+        const badgeW = badgeTextW + badgePad * 2;
+        const badgeH = 12;
+        const badgeX = schemeX + padding;
+        const badgeY = lineY - 2;
+        
+        currentPage.drawRectangle({
+          x: badgeX, y: badgeY, width: badgeW, height: badgeH,
+          color: rgb(sColors.bg.r, sColors.bg.g, sColors.bg.b),
+          borderColor: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
+          borderWidth: 0.3,
+        });
+        currentPage.drawText(badgeText, {
+          x: badgeX + badgePad, y: badgeY + 3, size: badgeFontSize,
+          font: helveticaBold, color: rgb(sColors.text.r, sColors.text.g, sColors.text.b),
+        });
+        lineY -= 16;
       }
 
       // Final price
