@@ -614,6 +614,29 @@ export class OfertaPdfNativeService {
           }
           
           lineY += 5;
+        } else if (isSelected && data.offerData.id_esquema_pago_seleccionado && data.id_estatus_aprobacion && data.estatus_aprobacion_nombre) {
+          // Draw approval status badge for manual schemes (no scheme name)
+          const statusColors: Record<number, { bg: [number, number, number]; text: [number, number, number] }> = {
+            1: { bg: [255, 243, 205], text: [133, 100, 4] },
+            2: { bg: [212, 237, 218], text: [21, 87, 36] },
+            3: { bg: [248, 215, 218], text: [114, 28, 36] },
+            4: { bg: [204, 229, 255], text: [0, 64, 133] },
+          };
+          const colors = statusColors[data.id_estatus_aprobacion] || statusColors[1];
+          const badgeText = data.estatus_aprobacion_nombre;
+          pdf.setFontSize(7);
+          pdf.setFont("helvetica", "bold");
+          const badgeTextWidth = pdf.getTextWidth(badgeText);
+          const badgePadding = 2;
+          const badgeW = badgeTextWidth + badgePadding * 2;
+          const badgeH = 5;
+          const badgeX = schemeX + schemePadding;
+          const badgeY = lineY - 3;
+          pdf.setFillColor(colors.bg[0], colors.bg[1], colors.bg[2]);
+          pdf.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, "F");
+          pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+          pdf.text(badgeText, badgeX + badgePadding, badgeY + 3.2);
+          lineY += 6;
         }
 
         pdf.setFontSize(8);
