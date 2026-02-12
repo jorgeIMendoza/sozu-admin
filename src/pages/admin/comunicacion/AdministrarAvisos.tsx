@@ -101,8 +101,34 @@ function describeCron(expr: string): string {
   let time = '';
   if (min.startsWith('*/') && hour === '*') {
     time = `cada ${min.slice(2)} minutos`;
-  } else if (hour.startsWith('*/')) {
+  } else if (min.startsWith('*/') && hour !== '*' && !hour.startsWith('*/') && !hour.includes('-')) {
+    // Step minutes + fixed hour (e.g., */15 9)
+    const step = min.slice(2);
+    time = `cada ${step} minutos de ${hour}:00 a ${hour}:59`;
+  } else if (min.includes(',') && hour !== '*' && !hour.startsWith('*/') && !hour.includes('-')) {
+    // List of minutes + fixed hour (e.g., 0,30 9)
+    const mins = min.split(',').map(m => `${hour}:${m.padStart(2, '0')}`);
+    time = `a las ${formatList(mins)}`;
+  } else if (min.includes('-') && min.includes('/') && hour !== '*' && !hour.startsWith('*/') && !hour.includes('-')) {
+    // Range of minutes with step + fixed hour (e.g., 0-15/5 9)
+    const [range, step] = min.split('/');
+    const [minStart, minEnd] = range.split('-');
+    time = `cada ${step} minutos de ${hour}:${minStart.padStart(2, '0')} a ${hour}:${minEnd.padStart(2, '0')}`;
+  } else if (hour.startsWith('*/') && min === '*') {
     time = `cada ${hour.slice(2)} horas`;
+  } else if (hour.includes('-') && !hour.startsWith('*/')) {
+    // Range of hours (e.g., 9-14)
+    const [startHour, endHour] = hour.split('-');
+    if (min !== '*' && !min.includes('*') && !min.includes(',') && !min.includes('-')) {
+      // Fixed minute with hour range (e.g., 0 9-14)
+      time = `a las ${startHour}:${min.padStart(2, '0')} a ${endHour}:${min.padStart(2, '0')}`;
+    } else if (min.startsWith('*/')) {
+      // Step minutes with hour range (e.g., */15 9-14)
+      const step = min.slice(2);
+      time = `cada ${step} minutos de ${startHour}:00 a ${endHour}:59`;
+    } else {
+      time = `de las ${startHour}:00 a ${endHour}:59`;
+    }
   } else if (min !== '*' && hour !== '*') {
     time = `a las ${hour}:${min.padStart(2, '0')}`;
   } else if (hour !== '*') {
