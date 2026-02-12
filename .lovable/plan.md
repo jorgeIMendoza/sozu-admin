@@ -1,58 +1,121 @@
 
 
-## Plan: Permitir cambiar estatus de aprobacion desde el badge en modales de ofertas
+## Plan: Crear Menu CRM con Workflow de Ofertas y Dashboard Ejecutivo
 
-### Contexto
-Actualmente el badge de estatus de aprobacion es solo informativo. Se necesita que cuando el estatus sea "Aprobacion pendiente" (ID 1), el badge sea clickeable y abra un dialogo para cambiar a: Aprobada (2), Rechazada (3) o Revisar (4). Para Rechazada y Revisar se debe permitir agregar un comentario.
+### Resumen
 
-### Tabla de estatus de aprobacion
-| ID | Nombre | Color |
-|----|--------|-------|
-| 1 | Aprobacion pendiente | Amarillo |
-| 2 | Aprobada | Verde |
-| 3 | Rechazada | Rojo |
-| 4 | Revisar | Azul |
+Se creara un nuevo menu "CRM" con dos submenus:
+1. **Workflow de Ofertas** - Vista tipo tablero Kanban (solo visual, sin drag-and-drop) con 10 columnas que muestran el pipeline de ofertas desde su generacion hasta el cierre de venta.
+2. **Dashboard Ejecutivo** - Vista con resumenes estadisticos por inmobiliaria, agente y proyecto.
 
-### Cambios
+Ambas vistas respetan restricciones de visibilidad por rol (Agente solo ve sus ofertas, Inmobiliaria ve las de sus agentes, Super Admin ve todo).
 
-**1. Nuevo componente: `src/components/admin/CambiarEstatusAprobacionDialog.tsx`**
+---
 
-Dialogo que recibe el `offerId` y permite:
-- Seleccionar nuevo estatus (Aprobada, Rechazada, Revisar) mediante botones o radio group
-- Campo de comentario (textarea) que aparece solo cuando se selecciona Rechazada o Revisar
-- Al guardar: actualiza `ofertas.id_estatus_aprobacion` y `ofertas.comentario_justificacion` en Supabase
-- Invalida la URL del PDF (setea `url: null`) para forzar regeneracion con el badge correcto
+### Parte 1: Datos en Base de Datos (Migracion SQL)
 
-**2. Modificar `src/pages/admin/Propiedades.tsx`** (2 secciones)
+Se ejecutara una sola migracion que:
 
-- Seccion de ofertas de propiedad (~linea 5932): Convertir el Badge estático en un boton clickeable cuando `id_estatus_aprobacion === 1`. Al hacer click, abre el nuevo dialogo.
-- Seccion de ofertas de producto (~linea 6315): Mismo cambio.
+1. **Crea el menu "CRM"** en la tabla `menus` con orden 15 (despues de Comunicacion)
+2. **Crea 2 submenus**:
+   - "Workflow de Ofertas" con ruta `/admin/crm/workflow-ofertas` (orden 1)
+   - "Dashboard Ejecutivo" con ruta `/admin/crm/dashboard-ejecutivo` (orden 2)
+3. **Asigna permisos al Super Admin (rol_id=1)**:
+   - Workflow: permisos Leer (1) y Actualizar (3)
+   - Dashboard: solo permiso Leer (1)
+4. **Configura permisos disponibles** en `submenus_permisos_disponibles`:
+   - Workflow: solo Leer y Actualizar activos
+   - Dashboard: solo Leer activo
 
-**3. Modificar `src/pages/admin/inmobiliarias/MisPropiedades.tsx`** (2 secciones)
+---
 
-- Seccion de ofertas de propiedad (~linea 1418): Mismo patron.
-- Seccion de ofertas de producto (~linea 1540): Mismo patron.
+### Parte 2: Rutas y Navegacion
 
-### Detalle tecnico
+**Archivos a modificar:**
 
-El nuevo dialogo:
-```
-- Props: open, onOpenChange, offerId, onSuccess (callback para refrescar datos)
-- Estado local: nuevoEstatus (number), comentario (string)
-- Al confirmar:
-  supabase.from('ofertas').update({
-    id_estatus_aprobacion: nuevoEstatus,
-    comentario_justificacion: comentario || null,
-    url: null  // forzar regeneracion del PDF
-  }).eq('id', offerId)
-- Validacion: comentario obligatorio si estatus es 3 (Rechazada) o 4 (Revisar)
-```
+- `src/utils/validRoutes.ts` - Agregar las 2 nuevas rutas
+- `src/App.tsx` - Agregar las 2 rutas con lazy loading
+- `src/hooks/useDynamicMenus.ts` - Agregar iconos para las nuevas rutas y el menu CRM (menu_id=15)
 
-En las tablas, el badge se renderiza asi:
-- Si `id_estatus_aprobacion === 1`: badge clickeable con cursor pointer que abre el dialogo
-- Otros estatus: badge estatico (sin cambios)
+---
 
-### Archivos involucrados
-- 1 archivo nuevo: `src/components/admin/CambiarEstatusAprobacionDialog.tsx`
-- 2 archivos modificados: `Propiedades.tsx` y `MisPropiedades.tsx`
+### Parte 3: Pagina Workflow de Ofertas
+
+**Archivo nuevo: `src/pages/admin/crm/WorkflowOfertas.tsx`**
+
+Vista tipo tablero con columnas horizontales scrolleables. Cada columna es un "stage" del pipeline.
+
+**Logica de filtrado por rol:**
+- **Super Admin**: ve todo. Filtros: Inmobiliaria (select), Agentes de esa inmobiliaria (multiselect), Proyecto (multiselect)
+- **Inmobiliaria (rol 4)**: ve ofertas de sus agentes. Filtros: Agente (multiselect de sus agentes), Proyecto (multiselect de proyectos con acceso; read-only si solo tiene 1)
+- **Agente Inmobiliario/Interno (rol 3/9)**: solo ve ofertas donde `email_creador` = su email. Filtro de proyecto (multiselect de proyectos con acceso)
+
+**Las 10 columnas del tablero:**
+
+| Columna | Condicion SQL (todas con fecha_generacion >= 2026-01-01 y activo=true) |
+|---|---|
+| Expiradas (oculta por default) | Vigencia expirada (fecha_generacion + 5 dias < hoy) |
+| Nuevas Ofertas | id_esquema_pago_seleccionado IS NULL y vigente |
+| Pendientes de Aprobacion | id_esquema_pago_seleccionado IS NOT NULL, vigente, id_estatus_aprobacion=1 |
+| Aprobadas | id_esquema_pago_seleccionado IS NOT NULL, vigente, id_estatus_aprobacion=2 |
+| Rechazadas | id_esquema_pago_seleccionado IS NOT NULL, vigente, id_estatus_aprobacion=3 (mostrar comentario_justificacion) |
+| En Revision | id_esquema_pago_seleccionado IS NOT NULL, vigente, id_estatus_aprobacion=4 (mostrar comentario_justificacion) |
+| Apartado | Tiene cuenta_cobranza activa y propiedad estatus_disponibilidad=4 |
+| Generacion de Contrato | cuenta_cobranza.contrato_draft IS NOT NULL |
+| Firma de Contrato | cuenta_cobranza tiene documento tipo 42 (Contrato firmado por cliente) activo |
+| Cierre de Venta | Propiedad con estatus_disponibilidad=5 (Vendido) |
+
+**Cards de ofertas:**
+Cada card mostrara: nombre de propiedad, prospecto (id_persona_lead), agente (email_creador), precio, fecha de generacion.
+
+**Detalle al hacer click en una card (Dialog/Sheet):**
+- Datos de la propiedad (nombre, proyecto, precio, estatus)
+- Datos del prospecto (nombre del lead)
+- Datos del agente (nombre, si es interno o externo)
+- Resumen del deal (esquema seleccionado, precio)
+- Checklist de lo que falta para avanzar a la siguiente etapa:
+  - Nuevas Ofertas: para es_manual=true -> aprobar oferta; para es_manual=false -> seleccionar esquema de pago
+  - Pendientes: aprobar la oferta
+  - Aprobadas: pagar el apartado
+  - Apartado: documentos de compradores verificados + iniciar generacion de contrato
+  - Generacion de contrato: subir contrato firmado por cliente
+  - Firma de contrato: subir contrato firmado completamente + pagar enganche
+
+**Cadena de datos para obtener proyecto de una propiedad:**
+propiedad -> id_edificio_modelo -> edificios_modelos -> edificio -> id_proyecto -> proyecto
+
+**Cadena para obtener inmobiliaria de un email_creador:**
+email_creador -> usuarios (email) -> id_persona -> entidades_relacionadas (tipo=19 Agente) -> id_persona_duena_lead = inmobiliaria persona id
+
+---
+
+### Parte 4: Pagina Dashboard Ejecutivo
+
+**Archivo nuevo: `src/pages/admin/crm/DashboardEjecutivo.tsx`**
+
+Misma logica de filtrado por rol que el Workflow.
+
+**Contenido:**
+- Tarjetas resumen con cantidad de ofertas por etapa
+- Tabla/grafico de ofertas por inmobiliaria (cantidad y quien tiene mas)
+- Valor potencial en dinero: suma de precios de ofertas que ya tienen esquema de pago seleccionado (tomando el mayor precio por propiedad si tiene multiples ofertas)
+- Desglose por agente
+- Desglose por proyecto
+- Ventas cerradas por inmobiliaria: propiedades con estatus Vendido (id=5), cantidad y monto total
+- Se usara la libreria `recharts` (ya instalada) para graficos de barras y pie charts
+
+---
+
+### Parte 5: Detalle Tecnico - Archivos
+
+| Accion | Archivo |
+|---|---|
+| Migracion | SQL: crear menu, submenus, permisos Super Admin, permisos disponibles |
+| Modificar | `src/utils/validRoutes.ts` - 2 rutas nuevas |
+| Modificar | `src/App.tsx` - 2 lazy imports + 2 Route |
+| Modificar | `src/hooks/useDynamicMenus.ts` - iconos para rutas y menu_id 15 |
+| Crear | `src/pages/admin/crm/WorkflowOfertas.tsx` |
+| Crear | `src/pages/admin/crm/DashboardEjecutivo.tsx` |
+
+**Total: 4 archivos modificados, 2 archivos nuevos, 1 migracion SQL**
 
