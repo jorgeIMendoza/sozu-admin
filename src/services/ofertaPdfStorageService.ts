@@ -281,15 +281,16 @@ export class OfertaPdfStorageService {
    */
   async downloadFromUrl(url: string, filename: string): Promise<void> {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { mode: 'cors' });
       if (!response.ok) {
         throw new Error(`Failed to fetch PDF: ${response.status}`);
       }
       const blob = await response.blob();
       this.downloadBlob(blob, filename);
     } catch (error) {
-      console.error('Error downloading from URL:', error);
-      throw error;
+      console.warn('Fetch download failed, opening in new tab:', error);
+      // Fallback: abrir en nueva pestaña si CORS bloquea el fetch
+      window.open(url, '_blank');
     }
   }
 
