@@ -23,6 +23,7 @@ interface OfferFullData {
   clabe_stp_propiedad: string | null;
   proyecto_mostrar_efectivo: boolean | null;
   id_estatus_aprobacion: number | null;
+  id_esquema_pago_seleccionado: number | null;
 }
 
 export class OfertaPdfStorageService {
@@ -59,7 +60,8 @@ export class OfertaPdfStorageService {
         id_propiedad,
         id_producto,
         mostrar_seccion_efectivo_en_oferta,
-        id_estatus_aprobacion
+        id_estatus_aprobacion,
+        id_esquema_pago_seleccionado
       `)
       .eq('id', offerId)
       .single();
@@ -113,6 +115,7 @@ export class OfertaPdfStorageService {
       clabe_stp_propiedad: clabeStp,
       proyecto_mostrar_efectivo: proyectoMostrarEfectivo,
       id_estatus_aprobacion: oferta.id_estatus_aprobacion ?? null,
+      id_esquema_pago_seleccionado: oferta.id_esquema_pago_seleccionado ?? null,
     };
   }
 
@@ -166,7 +169,8 @@ export class OfertaPdfStorageService {
 
     // Caso 3: Si el estatus de aprobación no es el default (2=Aprobada),
     // siempre invalidar ya que no guardamos con qué estatus se generó el PDF
-    if (oferta.id_estatus_aprobacion && oferta.id_estatus_aprobacion !== 2) {
+    // Solo aplica cuando hay esquema de pago seleccionado
+    if (oferta.id_esquema_pago_seleccionado && oferta.id_estatus_aprobacion && oferta.id_estatus_aprobacion !== 2) {
       return { isValid: false, reason: 'El estatus de aprobación ha cambiado y debe reflejarse en el PDF' };
     }
 
