@@ -276,6 +276,11 @@ export default function AdministrarAvisos() {
       }
     }
 
+    if (selectedRoles.length === 0 && destinatarios.length === 0) {
+      toast({ title: "Error", description: "Debes agregar al menos un rol o un destinatario manualmente", variant: "destructive" });
+      return;
+    }
+
     const payload = {
       nombre, asunto, mensaje_html: mensajeHtml, tipo_envio: tipoEnvio,
       cron_expression: tipoEnvio === 'automatico' ? cronExpression : null,
