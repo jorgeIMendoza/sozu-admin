@@ -1,53 +1,58 @@
 
-## Plan: Corregir error de descarga de PDF de ofertas
 
-### Problema
-Al intentar descargar el PDF de la oferta O-001759, el metodo `downloadFromUrl` en `ofertaPdfStorageService.ts` hace un `fetch(url)` directo a la URL publica de Supabase Storage. Esto puede fallar por restricciones CORS del navegador cuando la app corre en el dominio de Lovable (preview/published), ya que el dominio de origen es diferente al de Supabase Storage.
+## Plan: Permitir cambiar estatus de aprobacion desde el badge en modales de ofertas
 
-### Solucion
-Modificar el metodo `downloadFromUrl` para usar una estrategia mas robusta:
-1. Primero intentar con `fetch()` (funciona cuando CORS lo permite)
-2. Si falla, usar un `<a>` tag con `href` directo a la URL (abre en nueva pestana pero siempre funciona)
+### Contexto
+Actualmente el badge de estatus de aprobacion es solo informativo. Se necesita que cuando el estatus sea "Aprobacion pendiente" (ID 1), el badge sea clickeable y abra un dialogo para cambiar a: Aprobada (2), Rechazada (3) o Revisar (4). Para Rechazada y Revisar se debe permitir agregar un comentario.
 
-### Archivo a modificar
+### Tabla de estatus de aprobacion
+| ID | Nombre | Color |
+|----|--------|-------|
+| 1 | Aprobacion pendiente | Amarillo |
+| 2 | Aprobada | Verde |
+| 3 | Rechazada | Rojo |
+| 4 | Revisar | Azul |
 
-**`src/services/ofertaPdfStorageService.ts`** - Metodo `downloadFromUrl` (linea ~282)
+### Cambios
 
-Cambiar de:
-```typescript
-async downloadFromUrl(url: string, filename: string): Promise<void> {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch PDF: ${response.status}`);
-      }
-      const blob = await response.blob();
-      this.downloadBlob(blob, filename);
-    } catch (error) {
-      console.error('Error downloading from URL:', error);
-      throw error;
-    }
-}
+**1. Nuevo componente: `src/components/admin/CambiarEstatusAprobacionDialog.tsx`**
+
+Dialogo que recibe el `offerId` y permite:
+- Seleccionar nuevo estatus (Aprobada, Rechazada, Revisar) mediante botones o radio group
+- Campo de comentario (textarea) que aparece solo cuando se selecciona Rechazada o Revisar
+- Al guardar: actualiza `ofertas.id_estatus_aprobacion` y `ofertas.comentario_justificacion` en Supabase
+- Invalida la URL del PDF (setea `url: null`) para forzar regeneracion con el badge correcto
+
+**2. Modificar `src/pages/admin/Propiedades.tsx`** (2 secciones)
+
+- Seccion de ofertas de propiedad (~linea 5932): Convertir el Badge estático en un boton clickeable cuando `id_estatus_aprobacion === 1`. Al hacer click, abre el nuevo dialogo.
+- Seccion de ofertas de producto (~linea 6315): Mismo cambio.
+
+**3. Modificar `src/pages/admin/inmobiliarias/MisPropiedades.tsx`** (2 secciones)
+
+- Seccion de ofertas de propiedad (~linea 1418): Mismo patron.
+- Seccion de ofertas de producto (~linea 1540): Mismo patron.
+
+### Detalle tecnico
+
+El nuevo dialogo:
+```
+- Props: open, onOpenChange, offerId, onSuccess (callback para refrescar datos)
+- Estado local: nuevoEstatus (number), comentario (string)
+- Al confirmar:
+  supabase.from('ofertas').update({
+    id_estatus_aprobacion: nuevoEstatus,
+    comentario_justificacion: comentario || null,
+    url: null  // forzar regeneracion del PDF
+  }).eq('id', offerId)
+- Validacion: comentario obligatorio si estatus es 3 (Rechazada) o 4 (Revisar)
 ```
 
-A:
-```typescript
-async downloadFromUrl(url: string, filename: string): Promise<void> {
-    try {
-      const response = await fetch(url, { mode: 'cors' });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch PDF: ${response.status}`);
-      }
-      const blob = await response.blob();
-      this.downloadBlob(blob, filename);
-    } catch (error) {
-      console.warn('Fetch download failed, opening in new tab:', error);
-      // Fallback: abrir en nueva pestana si CORS bloquea el fetch
-      window.open(url, '_blank');
-    }
-}
-```
+En las tablas, el badge se renderiza asi:
+- Si `id_estatus_aprobacion === 1`: badge clickeable con cursor pointer que abre el dialogo
+- Otros estatus: badge estatico (sin cambios)
 
-### Resumen
-- 1 archivo modificado: `src/services/ofertaPdfStorageService.ts`
-- El cambio agrega un fallback que abre el PDF en nueva pestana si el fetch directo falla, evitando que el usuario vea un error sin poder descargar el PDF
+### Archivos involucrados
+- 1 archivo nuevo: `src/components/admin/CambiarEstatusAprobacionDialog.tsx`
+- 2 archivos modificados: `Propiedades.tsx` y `MisPropiedades.tsx`
+
