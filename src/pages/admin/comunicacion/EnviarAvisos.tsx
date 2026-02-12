@@ -25,6 +25,9 @@ interface Aviso {
   destinatarios_count: number;
 }
 
+const DIAS_SEMANA: Record<string, string> = { '0': 'domingo', '1': 'lunes', '2': 'martes', '3': 'miércoles', '4': 'jueves', '5': 'viernes', '6': 'sábado', '7': 'domingo' };
+const MESES: Record<string, string> = { '1': 'enero', '2': 'febrero', '3': 'marzo', '4': 'abril', '5': 'mayo', '6': 'junio', '7': 'julio', '8': 'agosto', '9': 'septiembre', '10': 'octubre', '11': 'noviembre', '12': 'diciembre' };
+
 const countUniqueEmails = (roles: AvisoRolDestinatario[]): number => {
   const emailSet = new Set<string>();
   for (const row of roles) {
@@ -35,6 +38,129 @@ const countUniqueEmails = (roles: AvisoRolDestinatario[]): number => {
   }
   return emailSet.size;
 };
+
+function validateCronField(field: string, min: number, max: number): boolean {
+  if (field === '*') return true;
+  const stepMatch = field.match(/^(.+)\/(\d+)$/);
+  let base = field;
+  if (stepMatch) {
+    const step = parseInt(stepMatch[2], 10);
+    if (isNaN(step) || step < 1) return false;
+    base = stepMatch[1];
+    if (base === '*') return true;
+  }
+  const parts = base.split(',');
+  for (const part of parts) {
+    if (part.includes('-')) {
+      const [a, b] = part.split('-');
+      const na = parseInt(a, 10), nb = parseInt(b, 10);
+      if (isNaN(na) || isNaN(nb)) return false;
+      if (na < min || na > max || nb < min || nb > max) return false;
+      if (na > nb) return false;
+    } else {
+      const n = parseInt(part, 10);
+      if (isNaN(n)) return false;
+      if (n < min || n > max) return false;
+    }
+  }
+  return true;
+}
+
+function validateCron(expr: string): boolean {
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const ranges = [{ min: 0, max: 59 }, { min: 0, max: 23 }, { min: 1, max: 31 }, { min: 1, max: 12 }, { min: 0, max: 7 }];
+  for (let i = 0; i < 5; i++) {
+    if (!validateCronField(parts[i], ranges[i].min, ranges[i].max)) return false;
+  }
+  return true;
+}
+
+function formatList(items: string[], joinWord = 'y'): string {
+  if (items.length <= 1) return items.join('');
+  return items.slice(0, -1).join(', ') + ` ${joinWord} ` + items[items.length - 1];
+}
+
+function describeCron(expr: string): string {
+  if (!validateCron(expr)) return 'Expresión cron inválida';
+
+  const parts = expr.trim().split(/\s+/);
+  const [min, hour, dom, mon, dow] = parts;
+
+  let time = '';
+  if (min.startsWith('*/') && hour === '*') {
+    time = `cada ${min.slice(2)} minutos`;
+  } else if (min.startsWith('*/') && hour !== '*' && !hour.startsWith('*/') && !hour.includes('-')) {
+    const step = min.slice(2);
+    time = `cada ${step} minutos de ${hour}:00 a ${hour}:59`;
+  } else if (min.includes(',') && hour !== '*' && !hour.startsWith('*/') && !hour.includes('-')) {
+    const mins = min.split(',').map(m => `${hour}:${m.padStart(2, '0')}`);
+    time = `a las ${formatList(mins)}`;
+  } else if (min.includes('-') && min.includes('/') && hour !== '*' && !hour.startsWith('*/') && !hour.includes('-')) {
+    const [range, step] = min.split('/');
+    const [minStart, minEnd] = range.split('-');
+    time = `cada ${step} minutos de ${hour}:${minStart.padStart(2, '0')} a ${hour}:${minEnd.padStart(2, '0')}`;
+  } else if (hour.startsWith('*/') && min === '*') {
+    time = `cada ${hour.slice(2)} horas`;
+  } else if (hour.includes('-') && !hour.startsWith('*/')) {
+    const [startHour, endHour] = hour.split('-');
+    if (min !== '*' && !min.includes('*') && !min.includes(',') && !min.includes('-')) {
+      time = `a las ${startHour}:${min.padStart(2, '0')} a ${endHour}:${min.padStart(2, '0')}`;
+    } else if (min.startsWith('*/')) {
+      const step = min.slice(2);
+      time = `cada ${step} minutos de ${startHour}:00 a ${endHour}:59`;
+    } else {
+      time = `de las ${startHour}:00 a ${endHour}:59`;
+    }
+  } else if (min !== '*' && hour !== '*') {
+    time = `a las ${hour}:${min.padStart(2, '0')}`;
+  } else if (hour !== '*') {
+    time = `a las ${hour}:00`;
+  } else if (min !== '*') {
+    time = `en el minuto ${min}`;
+  }
+
+  let when = '';
+  if (dow !== '*') {
+    const dayParts = dow.replace(/\/\d+$/, '').split(',').map(d => {
+      if (d.includes('-')) {
+        const [a, b] = d.split('-');
+        return `${DIAS_SEMANA[a] || a} a ${DIAS_SEMANA[b] || b}`;
+      }
+      return DIAS_SEMANA[d] || d;
+    });
+    when = `los ${formatList(dayParts)}`;
+  }
+
+  if (dom !== '*') {
+    const domParts = dom.replace(/\/\d+$/, '').split(',').map(d => {
+      if (d.includes('-')) { const [a, b] = d.split('-'); return `${a} al ${b}`; }
+      return d;
+    });
+    const domStr = domParts.length === 1 && !dom.includes('-')
+      ? `el día ${domParts[0]} del mes`
+      : `los días ${formatList(domParts)} del mes`;
+    when += (when ? ' y ' : '') + domStr;
+  }
+
+  if (mon !== '*') {
+    const monParts = mon.replace(/\/\d+$/, '').split(',').map(m => {
+      if (m.includes('-')) {
+        const [a, b] = m.split('-');
+        const na = MESES[a] || a, nb = MESES[b] || b;
+        const diff = parseInt(b, 10) - parseInt(a, 10);
+        return diff === 1 ? `${na} y ${nb}` : `${na} a ${nb}`;
+      }
+      return MESES[m] || m;
+    });
+    when += (when ? ' en ' : 'en ') + formatList(monParts);
+  }
+
+  if (!when && !time) return 'Cada minuto';
+  if (!when && (min.startsWith('*/') || hour.startsWith('*/'))) return time.charAt(0).toUpperCase() + time.slice(1);
+  if (!when) return `Todos los días ${time}`;
+  return `${when.charAt(0).toUpperCase() + when.slice(1)} ${time}`.trim();
+}
 
 export default function EnviarAvisos() {
   const { isLoading: permLoading } = usePagePermissions('/admin/comunicacion/enviar-avisos');
@@ -87,16 +213,6 @@ export default function EnviarAvisos() {
     }
   };
 
-  const describeCron = (cron: string): string => {
-    const presets: Record<string, string> = {
-      '0 * * * *': 'Cada hora',
-      '0 9 * * *': 'Cada día a las 9am',
-      '0 9 * * 1-5': 'Lun-Vie a las 9am',
-      '0 9 * * 1': 'Cada lunes a las 9am',
-      '0 9 1 * *': 'Primer día del mes 9am',
-    };
-    return presets[cron] || cron;
-  };
 
   const filtered = avisos.filter(a => a.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
 
