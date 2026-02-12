@@ -62,7 +62,13 @@ export default function RegistroInmobiliaria() {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        let message = "Error al registrar la inmobiliaria";
+        if (data?.message) {
+          message = data.message;
+        }
+        throw new Error(message);
+      }
       if (!data.success) throw new Error(data.message || "Error al registrar");
 
       return data;
@@ -79,7 +85,7 @@ export default function RegistroInmobiliaria() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.razon_social.trim()) {
@@ -114,6 +120,32 @@ export default function RegistroInmobiliaria() {
         title: "Campo requerido",
         description: "Debes agregar un representante legal",
         variant: "destructive",
+      });
+      return;
+    }
+
+    // Verificar si el email ya existe en personas o usuarios
+    const emailLower = formData.email.trim().toLowerCase();
+
+    const { data: existingPersona } = await supabase
+      .from('personas')
+      .select('id')
+      .ilike('email', emailLower)
+      .eq('activo', true)
+      .maybeSingle();
+
+    const { data: existingUsuario } = await supabase
+      .from('usuarios')
+      .select('id')
+      .ilike('email', emailLower)
+      .maybeSingle();
+
+    if (existingPersona || existingUsuario) {
+      toast({
+        title: "Correo ya registrado",
+        description: "Este correo ya está registrado. Por favor, contacta al administrador.",
+        variant: "destructive",
+        duration: 8000,
       });
       return;
     }
