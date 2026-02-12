@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { AvisoDestinatariosSection } from "@/components/admin/AvisoDestinatariosSection";
@@ -380,9 +381,22 @@ export default function AdministrarAvisos() {
               <TableRow key={aviso.id}>
                 <TableCell className="font-medium">{aviso.nombre}</TableCell>
                 <TableCell>
-                  <Badge variant={aviso.tipo_envio === 'automatico' ? 'default' : 'secondary'}>
-                    {aviso.tipo_envio}
-                  </Badge>
+                  {aviso.tipo_envio === 'automatico' && aviso.cron_expression ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Badge variant="default" className="cursor-pointer hover:opacity-80">
+                          automático
+                        </Badge>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto max-w-xs text-sm">
+                        <p className="font-medium mb-1">Programación</p>
+                        <p className="text-muted-foreground">{describeCron(aviso.cron_expression)}</p>
+                        <p className="text-xs text-muted-foreground mt-1 font-mono">{aviso.cron_expression}</p>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <Badge variant="secondary">{aviso.tipo_envio}</Badge>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Switch checked={aviso.activo} onCheckedChange={() => canUpdate && toggleActivo(aviso)} disabled={!canUpdate} />
