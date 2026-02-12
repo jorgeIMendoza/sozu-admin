@@ -1,71 +1,79 @@
 
 
-## Plan: Edge Function para Estado de Cuenta de Mantenimiento + Integracion UI
+# Validacion de email duplicado en Registro de Inmobiliaria
 
-### Objetivo
-Crear una Edge Function `generar-estado-cuenta-mantenimiento` que genere el PDF en el servidor (usando `pdf-lib`, igual que `generar-estado-cuenta`) y actualizar los botones existentes en la UI para que la usen en lugar del servicio client-side con jsPDF.
+## Problema
+Cuando el usuario intenta registrar una inmobiliaria con un email que ya existe, el edge function `registro-inmobiliaria-publica` ya valida esto y retorna un error 400 con mensaje personalizado. Sin embargo, el cliente no muestra correctamente ese mensaje porque `supabase.functions.invoke` encapsula las respuestas no-2xx en un objeto de error generico, perdiendo el mensaje personalizado.
 
-### Arquitectura
+## Solucion
 
-La nueva Edge Function seguira exactamente el mismo patron que `generar-estado-cuenta`:
-1. Recibe `{ id_cuenta }` por POST
-2. Consulta datos con service_role key
-3. Genera PDF con `pdf-lib`
-4. Sube a storage `documentos/estados_cuenta_temp/` con TTL de 1 minuto
-5. Retorna `{ success, url_estado_cuenta }`
+### 1. Agregar validacion client-side antes de enviar
+En `src/pages/public/RegistroInmobiliaria.tsx`, dentro de `handleSubmit`, antes de llamar a `registerMutation.mutate()`, hacer una consulta directa a las tablas `personas` y `usuarios` para verificar si el email ya existe. Si existe, mostrar un toast con el mensaje:
 
-### Archivos a crear
+> "Este correo ya esta registrado. Por favor, contacta al administrador."
 
-**1. `supabase/functions/generar-estado-cuenta-mantenimiento/index.ts`**
-- Endpoint POST que recibe `{ id_cuenta }`
-- Valida que la cuenta tenga `id_cuenta_cobranza_padre` (es mantenimiento)
-- Consulta: cuenta padre, compradores, proyecto/propiedad, acuerdos de pago (ultimos 12 meses), aplicaciones, pagos reales
-- Calcula: pago mensual acumulado, total pagado real, excedente, saldo pendiente (misma logica del servicio actual)
-- Genera PDF con `pdf-lib` replicando el mismo diseno del servicio actual (header, meta info, summary cards, tabla de acuerdos, footer con CLABE)
-- Sube PDF a `documentos/estados_cuenta_temp/` y retorna URL publica
-- CORS headers completos
+Y no permitir continuar.
 
-**2. `src/services/estadoCuentaMantenimientoEdgeFunctionService.ts`**
-- Clase `EstadoCuentaMantenimientoEdgeFunctionService` con metodo `generateEstadoCuenta({ id_cuenta })`
-- Llama a la Edge Function via `supabase.functions.invoke('generar-estado-cuenta-mantenimiento')`
-- Abre el PDF en nueva pestana
-- Misma interfaz que `EstadoCuentaEdgeFunctionService`
+### 2. Mejorar el manejo de errores del edge function
+En el `mutationFn`, cuando `supabase.functions.invoke` retorna un error (status no-2xx), extraer el body de la respuesta para obtener el mensaje personalizado del edge function en lugar de mostrar un error generico.
 
-### Archivos a modificar
+---
 
-**3. `supabase/config.toml`**
-- Agregar seccion `[functions.generar-estado-cuenta-mantenimiento]` con `verify_jwt = false`
+## Detalles tecnicos
 
-**4. `src/pages/admin/CuentasMantenimiento.tsx`**
-- Cambiar import de `EstadoCuentaMantenimientoService` a `EstadoCuentaMantenimientoEdgeFunctionService`
-- Actualizar la llamada en el boton de descarga
+### Archivo: `src/pages/public/RegistroInmobiliaria.tsx`
 
-**5. `src/pages/admin/DetalleCuentaMantenimiento.tsx`**
-- Mismo cambio: usar el nuevo servicio Edge Function en lugar del client-side
+**Cambio 1 - Validacion pre-submit (en `handleSubmit`)**:
+Despues de las validaciones existentes y antes de `registerMutation.mutate()`, agregar:
 
-### Seccion tecnica
+```typescript
+// Verificar si el email ya existe en personas o usuarios
+const emailLower = formData.email.trim().toLowerCase();
 
-**Logica de calculo (replicada del servicio actual):**
+const { data: existingPersona } = await supabase
+  .from('personas')
+  .select('id')
+  .ilike('email', emailLower)
+  .eq('activo', true)
+  .maybeSingle();
+
+const { data: existingUsuario } = await supabase
+  .from('usuarios')
+  .select('id')
+  .ilike('email', emailLower)
+  .maybeSingle();
+
+if (existingPersona || existingUsuario) {
+  toast({
+    title: "Correo ya registrado",
+    description: "Este correo ya esta registrado. Por favor, contacta al administrador.",
+    variant: "destructive",
+    duration: 8000,
+  });
+  return;
+}
 ```
-pagoAcumulado = SUM(acuerdos.monto) -- ultimos 12 meses
-totalAplicado = SUM(aplicaciones_pago.monto WHERE !es_multa)
-totalPagadoReal = SUM(pagos.monto)
-excedente = totalPagadoReal - totalAplicado
-saldoPendienteBruto = pagoAcumulado - totalAplicado
-saldoPendienteReal = saldoPendienteBruto - excedente
+
+Nota: `handleSubmit` pasara a ser `async`.
+
+**Cambio 2 - Mejorar error handling en `mutationFn`**:
+Cuando el edge function retorna un error, parsear el contexto del error para extraer el mensaje:
+
+```typescript
+if (error) {
+  // Intentar extraer mensaje del body de respuesta
+  let message = "Error al registrar la inmobiliaria";
+  try {
+    if (error.context?.body) {
+      const reader = error.context.body.getReader();
+      // parse response body for custom message
+    }
+  } catch {}
+  if (data?.message) message = data.message;
+  throw new Error(message);
+}
 ```
 
-**Estructura del PDF (misma que el actual):**
-- Header: nombre proyecto, direccion, numero cuenta CM-XXXXXX, propiedad, cliente
-- Meta info: tipo "Mantenimiento", periodo 12 meses, fecha emision
-- Summary cards: Pago Mensual Acumulado, Total Pagado, Saldo Pendiente/A Favor
-- Tabla: acuerdos de pago con concepto, fecha, monto, pagado, pendiente, estado
-- Footer: notas + CLABE STP
-
-**API externa:**
-```
-POST /functions/v1/generar-estado-cuenta-mantenimiento
-Body: { "id_cuenta": 123 }
-Response: { "success": true, "url_estado_cuenta": "https://...", "expiresIn": "1 minute" }
-```
+**Cambio 3 - Mensaje en `onError`**:
+Asegurar que el mensaje de error del toast incluya la indicacion de contactar al administrador cuando corresponda.
 
