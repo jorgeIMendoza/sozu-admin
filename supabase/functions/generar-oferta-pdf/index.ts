@@ -880,7 +880,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
         });
         
         // Draw approval status badge
-        if (oferta.id_estatus_aprobacion && estatus_aprobacion_nombre) {
+        if (oferta.id_esquema_pago_seleccionado && oferta.id_estatus_aprobacion && estatus_aprobacion_nombre) {
           const statusColorsMap: Record<number, { bg: { r: number; g: number; b: number }; text: { r: number; g: number; b: number } }> = {
             1: { bg: { r: 1, g: 0.953, b: 0.804 }, text: { r: 0.522, g: 0.392, b: 0.016 } },
             2: { bg: { r: 0.831, g: 0.929, b: 0.855 }, text: { r: 0.082, g: 0.341, b: 0.141 } },
@@ -1757,7 +1757,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprob
         });
         
         // Draw approval status badge
-        if (oferta.id_estatus_aprobacion && estatus_aprobacion_nombre) {
+        if (oferta.id_esquema_pago_seleccionado && oferta.id_estatus_aprobacion && estatus_aprobacion_nombre) {
           const statusColorsMap: Record<number, { bg: { r: number; g: number; b: number }; text: { r: number; g: number; b: number } }> = {
             1: { bg: { r: 1, g: 0.953, b: 0.804 }, text: { r: 0.522, g: 0.392, b: 0.016 } },
             2: { bg: { r: 0.831, g: 0.929, b: 0.855 }, text: { r: 0.082, g: 0.341, b: 0.141 } },

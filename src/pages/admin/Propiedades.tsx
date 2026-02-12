@@ -5930,7 +5930,7 @@ const Propiedades = () => {
                             )}
                           </TableCell>
                           <TableCell>
-                            {offer.id_estatus_aprobacion ? (() => {
+                            {offer.esquema_id && offer.id_estatus_aprobacion ? (() => {
                               const estatusColors: Record<number, string> = {
                                 1: "bg-yellow-100 text-yellow-800 border-yellow-300",
                                 2: "bg-green-100 text-green-800 border-green-300",
@@ -6313,7 +6313,7 @@ const Propiedades = () => {
                           )}
                         </TableCell>
                         <TableCell>
-                          {offer.id_estatus_aprobacion ? (() => {
+                          {offer.id_esquema_pago_seleccionado && offer.id_estatus_aprobacion ? (() => {
                             const estatusColors: Record<number, string> = {
                               1: "bg-yellow-100 text-yellow-800 border-yellow-300",
                               2: "bg-green-100 text-green-800 border-green-300",
