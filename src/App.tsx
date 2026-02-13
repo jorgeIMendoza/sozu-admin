@@ -97,6 +97,8 @@ const queryClient = new QueryClient({
   },
 });
 
+const isRegistroSubdomain = window.location.hostname === 'registro.sozu.com';
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider 
@@ -113,7 +115,7 @@ const App = () => (
           <AuthProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               <Routes>
-                <Route path="/" element={<Navigate to="/admin" replace />} />
+                <Route path="/" element={isRegistroSubdomain ? <RegistroInmobiliaria /> : <Navigate to="/admin" replace />} />
                 <Route path="/welcome" element={<Index />} />
                 
                 {/* Auth Routes */}
