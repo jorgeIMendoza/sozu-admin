@@ -957,6 +957,34 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     enabled: !!propiedadDetalle
   });
 
+  // Get inmobiliaria name for the project (Type 5 = Inmobiliaria)
+  const { data: inmobiliariaProyecto } = useQuery({
+    queryKey: ["inmobiliaria_proyecto_comision", propiedadDetalle?.id_entidad_relacionada_dueno],
+    queryFn: async () => {
+      if (!propiedadDetalle?.id_entidad_relacionada_dueno) return null;
+      
+      const { data: entidad } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_proyecto')
+        .eq('id', propiedadDetalle.id_entidad_relacionada_dueno)
+        .single();
+        
+      if (!entidad?.id_proyecto) return null;
+
+      const { data: inmobiliaria } = await supabase
+        .from('entidades_relacionadas')
+        .select('personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
+        .eq('id_proyecto', entidad.id_proyecto)
+        .eq('id_tipo_entidad', 5)
+        .eq('activo', true)
+        .single();
+
+      const persona = inmobiliaria?.personas as any;
+      return persona?.nombre_comercial || persona?.nombre_legal || null;
+    },
+    enabled: !!propiedadDetalle?.id_entidad_relacionada_dueno
+  });
+
   // Get notarios
   const { data: notarios } = useQuery({
     queryKey: ["notarios"],
@@ -4843,7 +4871,12 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
-                      <Label htmlFor="porcentajeComision">Porcentaje de Comisión por Venta (%)</Label>
+                      <Label htmlFor="porcentajeComision" className="flex items-center gap-2 flex-wrap">
+                        <span>Porcentaje de Comisión por Venta{inmobiliariaProyecto ? ` para ${inmobiliariaProyecto}` : ''} (%)</span>
+                        {inmobiliariaProyecto && (
+                          <Badge variant="secondary" className="text-xs">{inmobiliariaProyecto}</Badge>
+                        )}
+                      </Label>
                       <Input 
                         id="porcentajeComision"
                         type="number"
