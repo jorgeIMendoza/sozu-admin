@@ -1,0 +1,1 @@
+UPDATE entidades_relacionadas SET porcentaje_comision = 2 WHERE id_tipo_entidad = 5 AND activo = true AND (porcentaje_comision IS NULL OR porcentaje_comision = 0);
