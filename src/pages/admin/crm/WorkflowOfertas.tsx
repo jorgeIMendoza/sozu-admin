@@ -24,6 +24,7 @@ interface OfertaCard {
   comentario_justificacion: string | null;
   activo: boolean;
   id_propiedad: number | null;
+  id_producto: number | null;
   id_persona_lead: number | null;
   // Enriched
   propiedad_nombre?: string;
@@ -201,7 +202,7 @@ export default function WorkflowOfertas() {
     try {
       let query = supabase
         .from('ofertas')
-        .select('id, email_creador, fecha_generacion, fecha_creacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, comentario_justificacion, activo, id_propiedad, id_persona_lead')
+        .select('id, email_creador, fecha_generacion, fecha_creacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, comentario_justificacion, activo, id_propiedad, id_persona_lead, id_producto')
         .eq('activo', true)
         .gte('fecha_generacion', MIN_DATE)
         .order('fecha_generacion', { ascending: false });
@@ -224,7 +225,7 @@ export default function WorkflowOfertas() {
 
       const [propRes, leadsRes, cuentasRes, cuentasSinDocRes] = await Promise.all([
         propiedadIds.length > 0
-          ? (supabase.from('propiedades').select('id, numero, precio_lista, id_estatus_disponibilidad, id_edificio_modelo').in('id', propiedadIds) as any)
+          ? (supabase.from('propiedades').select('id, numero_propiedad, precio_lista, id_estatus_disponibilidad, id_edificio_modelo').in('id', propiedadIds) as any)
           : { data: [] },
         personaLeadIds.length > 0
           ? (supabase.from('personas' as any).select('id, nombre_legal, nombre_comercial').in('id', personaLeadIds))
@@ -364,8 +365,9 @@ export default function WorkflowOfertas() {
           comentario_justificacion: o.comentario_justificacion,
           activo: o.activo,
           id_propiedad: o.id_propiedad,
+          id_producto: o.id_producto || null,
           id_persona_lead: o.id_persona_lead,
-          propiedad_nombre: prop ? prop.numero : `Propiedad ${o.id_propiedad}`,
+          propiedad_nombre: prop ? prop.numero_propiedad : `${o.id_propiedad}`,
           proyecto_nombre: proy?.nombre || '',
           proyecto_id: proyId,
           lead_nombre: o.id_persona_lead ? (leadMap.get(o.id_persona_lead) || 'Sin nombre') : 'Sin prospecto',
@@ -631,8 +633,14 @@ export default function WorkflowOfertas() {
                 {STAGES.find(s => s.key === selectedOferta?.stage)?.label}
               </Badge>
             </div>
-            <DialogTitle>Detalle de Oferta #{selectedOferta?.id}</DialogTitle>
-            <DialogDescription>{selectedOferta?.propiedad_nombre}</DialogDescription>
+            <DialogTitle>
+              {selectedOferta?.id_producto
+                ? `Detalle de Oferta OP-${String(selectedOferta?.id).padStart(6, '0')}`
+                : `Detalle de Oferta O-${String(selectedOferta?.id).padStart(6, '0')}`}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedOferta?.proyecto_nombre ? `${selectedOferta.proyecto_nombre} - ${selectedOferta.propiedad_nombre}` : selectedOferta?.propiedad_nombre}
+            </DialogDescription>
           </DialogHeader>
           {selectedOferta && (() => {
             const fechaCreacion = new Date(selectedOferta.fecha_creacion);
@@ -656,13 +664,10 @@ export default function WorkflowOfertas() {
                   </div>
                 </div>
 
-                <div>
-                  <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><Building2 className="h-4 w-4" /> Propiedad</h4>
-                  <div className="text-sm space-y-0.5 pl-5">
-                    <p><span className="text-muted-foreground">Nombre:</span> {selectedOferta.propiedad_nombre}</p>
-                    <p><span className="text-muted-foreground">Proyecto:</span> {selectedOferta.proyecto_nombre}</p>
-                    {selectedOferta.precio != null && <p><span className="text-muted-foreground">Precio de lista:</span> ${selectedOferta.precio.toLocaleString('es-MX')}</p>}
-                  </div>
+                <div className="text-sm space-y-0.5">
+                  <p><span className="text-muted-foreground">Propiedad:</span> {selectedOferta.propiedad_nombre}</p>
+                  <p><span className="text-muted-foreground">Proyecto:</span> {selectedOferta.proyecto_nombre}</p>
+                  {selectedOferta.precio != null && <p><span className="text-muted-foreground">Precio de lista:</span> ${selectedOferta.precio.toLocaleString('es-MX')}</p>}
                 </div>
                 <div>
                   <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><User className="h-4 w-4" /> Prospecto</h4>
