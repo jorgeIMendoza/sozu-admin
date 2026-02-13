@@ -323,12 +323,20 @@ export default function RegistroInmobiliaria() {
                 )}
               </Button>
 
+              <div className="text-center pt-2">
+                <a 
+                  href="https://admin.sozu.com/auth/login" 
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  ¿Ya tienes cuenta? Inicia sesión
+                </a>
+              </div>
             </form>
-          </CardContent>
+           </CardContent>
         </Card>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Al registrarte, aceptas nuestros términos y condiciones
+           Al registrarte, aceptas nuestros términos y condiciones
         </p>
       </div>
 
