@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building, Loader2, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { PersonForm } from "@/components/admin/PersonForm";
@@ -75,6 +76,22 @@ export default function MiInformacion() {
   // Check data completion status
   const { isDataComplete, missingFields, isLoading: isLoadingStatus } = useInmobiliariaDataStatus(inmobiliariaId);
 
+  // Fetch porcentaje_comision from entidades_relacionadas
+  const { data: comisionData } = useQuery({
+    queryKey: ['mi-informacion-comision', inmobiliariaId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('entidades_relacionadas')
+        .select('porcentaje_comision')
+        .eq('id_persona', inmobiliariaId!)
+        .eq('id_tipo_entidad', 5)
+        .eq('activo', true)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!inmobiliariaId,
+  });
+
   // Fetch inmobiliaria data
   const { data: inmobiliariaData, isLoading: loadingData } = useQuery({
     queryKey: ['mi-informacion-inmobiliaria', inmobiliariaId],
@@ -141,7 +158,7 @@ export default function MiInformacion() {
   // Update inmobiliaria mutation
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
-      const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId: _inmobId, tempBankAccounts, tempBeneficiaries, pendingDocuments, ...cleanPersonData } = personData;
+      const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId: _inmobId, tempBankAccounts, tempBeneficiaries, pendingDocuments, porcentaje_comision, ...cleanPersonData } = personData;
 
       // Update persona data
       const { error: updateError } = await supabase
@@ -237,10 +254,17 @@ export default function MiInformacion() {
 
       <Card className="border-0 shadow-md">
         <CardHeader className="pb-4">
-          <CardTitle className="text-xl flex items-center gap-2">
-            <Building className="h-5 w-5 text-primary" />
-            Mi información
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Building className="h-5 w-5 text-primary" />
+              Mi información
+            </CardTitle>
+            {comisionData?.porcentaje_comision != null && (
+              <Badge variant="secondary" className="text-sm px-3 py-1">
+                Comisión: {comisionData.porcentaje_comision}%
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Alert for missing data */}
@@ -274,6 +298,7 @@ export default function MiInformacion() {
                 entityType="inmobiliaria"
                 fixedEntityType={true}
                 documentsReadOnly={true}
+                hideComision={true}
               />
             ) : (
               <div className="text-center py-8 text-muted-foreground">
