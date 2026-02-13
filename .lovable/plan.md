@@ -1,27 +1,30 @@
 
-## Columnas colapsables en Workflow de Ofertas
 
-### Comportamiento deseado
-- Todas las columnas del Kanban pueden contraerse/expandirse manualmente
-- **Expiradas**: contraida por defecto (ya funciona asi parcialmente)
-- **Columnas vacias** (0 ofertas): contraidas automaticamente
-- **Columnas con ofertas**: expandidas automaticamente
-- Al hacer clic en una columna contraida, se expande y viceversa
+## Plan: Subdomain-based routing for registro.sozu.com
 
-### Cambios tecnicos
+### Problem
+When accessing `registro.sozu.com`, the app redirects to `/admin` (line in App.tsx: `<Route path="/" element={<Navigate to="/admin" replace />} />`), which triggers authentication and sends the user to login.
 
-**Archivo**: `src/pages/admin/crm/WorkflowOfertas.tsx`
+### Solution
+Add a hostname check at the top of the `App` component. If `window.location.hostname` is `registro.sozu.com`, change the root route (`/`) to render `RegistroInmobiliaria` directly instead of redirecting to `/admin`.
 
-1. **Reemplazar `showExpiradas` por un estado de conjunto** (`collapsedStages: Set<string>`) que rastree cuales columnas estan contraidas
-2. **Inicializar el estado** despues de cargar ofertas:
-   - "expiradas" siempre inicia contraida
-   - Columnas con 0 ofertas inician contraidas
-   - Columnas con ofertas inician expandidas
-3. **Actualizar automaticamente** cuando cambian las ofertas (via `useEffect` sobre `ofertasByStage`): si una columna pasa de 0 a tener ofertas, se expande; si pasa a 0, se contrae (excepto si el usuario la expandio manualmente)
-4. **Vista contraida**: mostrar un boton vertical angosto (similar al actual de "expiradas") con el nombre de la etapa rotado y el conteo, usando el color de la etapa
-5. **Boton de toggle** en el header de cada columna expandida para poder contraerla manualmente (icono ChevronLeft o similar)
+### Changes
 
-### Resultado visual
-- Columnas contraidas: boton vertical delgado con nombre rotado, badge de conteo y color de la etapa
-- Columnas expandidas: igual que ahora pero con un boton para contraer en el header
-- Transicion fluida al expandir/contraer
+**File: `src/App.tsx`**
+
+1. Detect the hostname at render time:
+   ```typescript
+   const isRegistroSubdomain = window.location.hostname === 'registro.sozu.com';
+   ```
+
+2. Change the root route conditionally:
+   ```tsx
+   <Route path="/" element={
+     isRegistroSubdomain 
+       ? <RegistroInmobiliaria /> 
+       : <Navigate to="/admin" replace />
+   } />
+   ```
+
+This is minimal and non-invasive. The `/registro-inmobiliaria` route remains available on all domains. The `admin.sozu.com` domain continues working exactly as before since its hostname won't match the check.
+
