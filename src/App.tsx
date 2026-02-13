@@ -83,8 +83,7 @@ const EjecucionesAvisos = lazy(() => import("./pages/admin/comunicacion/Ejecucio
 const WorkflowOfertas = lazy(() => import("./pages/admin/crm/WorkflowOfertas"));
 const DashboardEjecutivo = lazy(() => import("./pages/admin/crm/DashboardEjecutivo"));
 
-// Public pages
-const RegistroInmobiliaria = lazy(() => import("./pages/public/RegistroInmobiliaria"));
+const Registro = lazy(() => import("./pages/public/Registro"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -116,7 +115,7 @@ const App = () => (
           <AuthProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               <Routes>
-                <Route path="/" element={isRegistroSubdomain ? <RegistroInmobiliaria /> : <Navigate to="/admin" replace />} />
+                <Route path="/" element={isRegistroSubdomain ? <Registro /> : <Navigate to="/admin" replace />} />
                 <Route path="/welcome" element={<Index />} />
                 
                 {/* Auth Routes */}
@@ -124,7 +123,7 @@ const App = () => (
                 <Route path="/auth/change-password" element={<ChangePassword />} />
                 
                 {/* Public Routes */}
-                <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
+                <Route path="/registro" element={<Registro />} />
                 
                 {/* Admin Routes - Protected by Auth and Permissions */}
                 <Route path="/admin" element={
