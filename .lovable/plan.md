@@ -1,30 +1,38 @@
 
 
-## Plan: Subdomain-based routing for registro.sozu.com
+## Changes
 
-### Problem
-When accessing `registro.sozu.com`, the app redirects to `/admin` (line in App.tsx: `<Route path="/" element={<Navigate to="/admin" replace />} />`), which triggers authentication and sends the user to login.
+### 1. `src/App.tsx` - Add `inmobiliarias.sozu.com` subdomain check
 
-### Solution
-Add a hostname check at the top of the `App` component. If `window.location.hostname` is `registro.sozu.com`, change the root route (`/`) to render `RegistroInmobiliaria` directly instead of redirecting to `/admin`.
+Update the hostname detection to also recognize `inmobiliarias.sozu.com`. When the hostname is `inmobiliarias.sozu.com`, the root route (`/`) should redirect to `/auth/login` (same behavior as `admin.sozu.com`).
 
-### Changes
+```typescript
+const isRegistroSubdomain = window.location.hostname === 'registro.sozu.com';
+const isInmobiliariasSubdomain = window.location.hostname === 'inmobiliarias.sozu.com';
+```
 
-**File: `src/App.tsx`**
+No route change needed for `inmobiliarias.sozu.com` since the default behavior already redirects `/` to `/admin` which goes to login. It will work as-is.
 
-1. Detect the hostname at render time:
-   ```typescript
-   const isRegistroSubdomain = window.location.hostname === 'registro.sozu.com';
-   ```
+### 2. `src/pages/public/RegistroInmobiliaria.tsx` - Two changes
 
-2. Change the root route conditionally:
-   ```tsx
-   <Route path="/" element={
-     isRegistroSubdomain 
-       ? <RegistroInmobiliaria /> 
-       : <Navigate to="/admin" replace />
-   } />
-   ```
+**a) Remove the "Ya tienes cuenta?" link** (around line 230-235):
+Delete the entire `<div className="text-center pt-2">` block containing the "Ya tienes cuenta? Inicia sesion" link.
 
-This is minimal and non-invasive. The `/registro-inmobiliaria` route remains available on all domains. The `admin.sozu.com` domain continues working exactly as before since its hostname won't match the check.
+**b) Update the success screen redirect**: Change the "Volver al inicio de sesion" link in the success screen (around line 145) from `/auth/login` to the absolute URL `https://inmobiliarias.sozu.com/auth/login`:
+
+```tsx
+<a href="https://inmobiliarias.sozu.com/auth/login">
+  <Button variant="outline">
+    <ArrowLeft className="w-4 h-4 mr-2" />
+    Volver al inicio de sesión
+  </Button>
+</a>
+```
+
+This uses an `<a>` tag instead of React Router's `<Link>` since it navigates to a different subdomain.
+
+### Summary
+- The "Ya tienes cuenta?" link is removed from the registration form
+- After successful registration, the button redirects to `inmobiliarias.sozu.com/auth/login`
+- `inmobiliarias.sozu.com` works like `admin.sozu.com` (redirects to login) with no code changes needed since the default routing already handles it
 
