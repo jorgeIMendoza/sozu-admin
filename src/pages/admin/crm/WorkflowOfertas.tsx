@@ -644,11 +644,9 @@ export default function WorkflowOfertas() {
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                               <User className="h-3 w-3" /><span className="truncate">{oferta.lead_nombre}</span>
                             </div>
-                            {oferta.agente_nombre && oferta.agente_nombre !== oferta.lead_nombre && (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Building2 className="h-3 w-3" /><span className="truncate">{oferta.agente_nombre}</span>
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Building2 className="h-3 w-3" /><span className="truncate">Agente: {oferta.agente_nombre || oferta.email_creador}</span>
+                            </div>
                             {oferta.inmobiliaria_nombre && (
                               <div className="flex items-center gap-1 text-xs">
                                 <Building2 className="h-3 w-3" />
