@@ -634,7 +634,7 @@ export default function WorkflowOfertas() {
                         <Card key={oferta.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedOferta(oferta)}>
                           <CardContent className="p-3 space-y-1.5">
                             <p className="text-[10px] text-muted-foreground font-mono">
-                              {oferta.id_producto ? `OP-${String(oferta.id).padStart(6, '0')}` : `O-${String(oferta.id).padStart(6, '0')}`}
+                              Oferta: {oferta.id_producto ? `OP-${String(oferta.id).padStart(6, '0')}` : `O-${String(oferta.id).padStart(6, '0')}`}
                             </p>
                             <p className="font-medium text-sm truncate">
                               {oferta.id_producto
@@ -644,9 +644,11 @@ export default function WorkflowOfertas() {
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                               <User className="h-3 w-3" /><span className="truncate">{oferta.lead_nombre}</span>
                             </div>
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Building2 className="h-3 w-3" /><span className="truncate">{oferta.agente_nombre || oferta.email_creador}</span>
-                            </div>
+                            {oferta.agente_nombre && oferta.agente_nombre !== oferta.lead_nombre && (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Building2 className="h-3 w-3" /><span className="truncate">{oferta.agente_nombre}</span>
+                              </div>
+                            )}
                             {oferta.inmobiliaria_nombre && (
                               <div className="flex items-center gap-1 text-xs">
                                 <Building2 className="h-3 w-3" />
@@ -661,7 +663,7 @@ export default function WorkflowOfertas() {
                             )}
                             {oferta.precio != null && oferta.precio > 0 && (
                               <div className="flex items-center gap-1 text-xs font-semibold">
-                                <DollarSign className="h-3 w-3" /><span>{oferta.precio.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</span>
+                                <span>{oferta.precio.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</span>
                               </div>
                             )}
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
