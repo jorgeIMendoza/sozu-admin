@@ -56,6 +56,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [idRepresentanteLegal, setIdRepresentanteLegal] = useState(initialData?.id_entidad_relacionada_rep_leg || '');
   const [idRepresentanteComercial, setIdRepresentanteComercial] = useState(initialData?.id_entidad_relacionada_rep_com || '');
   const [idInmobiliaria, setIdInmobiliaria] = useState(initialData?.id_inmobiliaria?.toString() || '');
+  const [porcentajeComision, setPorcentajeComision] = useState(initialData?.porcentaje_comision ?? 2.00);
   
   // Project selection for prospects (clients with tipo_entidad = 7)
   const [idProyecto, setIdProyecto] = useState(
@@ -835,6 +836,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         representativeId: idRepresentanteLegal === 'none' || !idRepresentanteLegal ? null : parseInt(idRepresentanteLegal),
         commercialRepresentativeId: idRepresentanteComercial === 'none' || !idRepresentanteComercial ? null : parseInt(idRepresentanteComercial),
         inmobiliariaId: entityType === 'agente' && idInmobiliaria && idInmobiliaria !== 'none' ? parseInt(idInmobiliaria) : null,
+        porcentaje_comision: entityType === 'inmobiliaria' ? parseFloat(porcentajeComision) || 2.00 : undefined,
       };
       onSubmit(extendedFormData);
     }
@@ -1050,6 +1052,23 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                       <RepresentanteLegalSelector
                         value={idRepresentanteLegal?.toString() || ''}
                         onValueChange={setIdRepresentanteLegal}
+                      />
+                    </div>
+                  )}
+
+                  {/* Porcentaje de Comisión - solo para inmobiliarias */}
+                  {entityType === 'inmobiliaria' && (
+                    <div>
+                      <Label htmlFor="porcentajeComision">Porcentaje de Comisión (%)</Label>
+                      <Input
+                        id="porcentajeComision"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        value={porcentajeComision}
+                        onChange={(e) => setPorcentajeComision(e.target.value)}
+                        placeholder="2.00"
                       />
                     </div>
                   )}

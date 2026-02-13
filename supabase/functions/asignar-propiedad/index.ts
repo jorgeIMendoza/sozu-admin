@@ -264,13 +264,55 @@ serve(async (req) => {
 
     console.log('✅ Oferta creada:', oferta.id);
 
-    // 7. Crear cuenta de cobranza
+    // 7. Buscar porcentaje de comisión de la inmobiliaria del agente vendedor
+    let porcentajeComisionVenta = 0;
+    try {
+      // Buscar el usuario por email
+      const { data: usuarioData } = await supabase
+        .from('usuarios')
+        .select('id_persona')
+        .eq('email', email_usuario)
+        .eq('activo', true)
+        .maybeSingle();
+
+      if (usuarioData?.id_persona) {
+        // Buscar si es agente (tipo 19) y obtener su inmobiliaria (id_persona_duena_lead)
+        const { data: agenteData } = await supabase
+          .from('entidades_relacionadas')
+          .select('id_persona_duena_lead')
+          .eq('id_persona', usuarioData.id_persona)
+          .eq('id_tipo_entidad', 19)
+          .eq('activo', true)
+          .maybeSingle();
+
+        if (agenteData?.id_persona_duena_lead) {
+          // Buscar la inmobiliaria (tipo 5) para obtener porcentaje_comision
+          const { data: inmobiliariaData } = await supabase
+            .from('entidades_relacionadas')
+            .select('porcentaje_comision')
+            .eq('id_persona', agenteData.id_persona_duena_lead)
+            .eq('id_tipo_entidad', 5)
+            .eq('activo', true)
+            .maybeSingle();
+
+          if (inmobiliariaData?.porcentaje_comision != null) {
+            porcentajeComisionVenta = inmobiliariaData.porcentaje_comision;
+            console.log('📊 Porcentaje de comisión de inmobiliaria:', porcentajeComisionVenta);
+          }
+        }
+      }
+    } catch (comisionError) {
+      console.error('⚠️ Error al buscar comisión de inmobiliaria:', comisionError);
+      // Continue with 0 if lookup fails
+    }
+
+    // 8. Crear cuenta de cobranza
     const { data: cuentaCobranza, error: cuentaError } = await supabase
       .from('cuentas_cobranza')
       .insert({
         id_oferta: oferta.id,
         precio_final: 0,
-        porcentaje_comision_venta: 0,
+        porcentaje_comision_venta: porcentajeComisionVenta,
         valor_uma: null,
         clabe_stp: null,
         es_aprobado: true,

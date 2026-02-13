@@ -411,6 +411,7 @@ export default function Inmobiliarias() {
         .insert([{
           id_persona: personResult.id,
           id_tipo_entidad: tipoEntidad.id,
+          porcentaje_comision: personData.porcentaje_comision ?? 2.00,
           activo: true
         }]);
       
@@ -798,6 +799,18 @@ export default function Inmobiliarias() {
           
         if (repError) throw repError;
       }
+
+      // Update porcentaje_comision in entidades_relacionadas if provided
+      if (personData.porcentaje_comision !== undefined && editingEntity?.entidad_relacionada_id) {
+        const { error: comisionError } = await supabase
+          .from('entidades_relacionadas')
+          .update({ porcentaje_comision: personData.porcentaje_comision })
+          .eq('id', editingEntity.entidad_relacionada_id);
+        
+        if (comisionError) {
+          console.error('Error updating porcentaje_comision:', comisionError);
+        }
+      }
     },
     onSuccess: (_, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ['inmobiliarias'] });
@@ -1184,10 +1197,18 @@ export default function Inmobiliarias() {
       
       if (error) throw error;
       
+      // Fetch porcentaje_comision from entidades_relacionadas
+      const { data: entidadData } = await supabase
+        .from('entidades_relacionadas')
+        .select('porcentaje_comision')
+        .eq('id', inmobiliaria.entidad_relacionada_id)
+        .single();
+
       // Merge with inmobiliaria data (to keep additional computed fields like entidad_relacionada_id)
       setEditingEntity({
         ...inmobiliaria,
         ...fullPersonaData,
+        porcentaje_comision: entidadData?.porcentaje_comision ?? 2.00,
       } as Inmobiliaria);
       setIsEditDialogOpen(true);
     } catch (error) {
