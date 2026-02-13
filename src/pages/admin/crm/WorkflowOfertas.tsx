@@ -18,6 +18,7 @@ interface OfertaCard {
   id: number;
   email_creador: string;
   fecha_generacion: string;
+  fecha_creacion: string;
   id_esquema_pago_seleccionado: number | null;
   id_estatus_aprobacion: number | null;
   comentario_justificacion: string | null;
@@ -37,6 +38,14 @@ interface OfertaCard {
   tiene_contrato_firmado?: boolean;
   es_manual?: boolean;
   stage?: string;
+  // Esquema details
+  esquema_nombre?: string;
+  esquema_es_manual?: boolean;
+  porcentaje_enganche?: number;
+  porcentaje_mensualidades?: number;
+  porcentaje_entrega?: number;
+  porcentaje_descuento_aumento?: number;
+  numero_mensualidades?: number;
 }
 
 const STAGES = [
@@ -192,7 +201,7 @@ export default function WorkflowOfertas() {
     try {
       let query = supabase
         .from('ofertas')
-        .select('id, email_creador, fecha_generacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, comentario_justificacion, activo, id_propiedad, id_persona_lead')
+        .select('id, email_creador, fecha_generacion, fecha_creacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, comentario_justificacion, activo, id_propiedad, id_persona_lead')
         .eq('activo', true)
         .gte('fecha_generacion', MIN_DATE)
         .order('fecha_generacion', { ascending: false });
@@ -327,32 +336,53 @@ export default function WorkflowOfertas() {
         if (!cuentaByProp.has(c.id_propiedad)) cuentaByProp.set(c.id_propiedad, c);
       });
 
+      // Fetch esquemas_pago details
+      const esquemaIds = [...new Set(ofertasData.map((o: any) => o.id_esquema_pago_seleccionado).filter(Boolean))] as number[];
+      const esquemaMap = new Map<number, any>();
+      if (esquemaIds.length > 0) {
+        const { data: esquemas } = await supabase
+          .from('esquemas_pago')
+          .select('id, nombre, es_manual, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, porcentaje_descuento_aumento, numero_mensualidades')
+          .in('id', esquemaIds) as any;
+        (esquemas || []).forEach((e: any) => esquemaMap.set(e.id, e));
+      }
+
       const enriched: OfertaCard[] = ofertasData.map((o: any) => {
         const prop = o.id_propiedad ? propMap.get(o.id_propiedad) : null;
         const cuenta = o.id_propiedad ? cuentaByProp.get(o.id_propiedad) : null;
         const proyId = prop?.id_edificio_modelo ? edModeloToProyecto.get(prop.id_edificio_modelo) : undefined;
         const proy = proyId ? proyectoMap.get(proyId) : undefined;
+        const esquema = o.id_esquema_pago_seleccionado ? esquemaMap.get(o.id_esquema_pago_seleccionado) : null;
 
         const card: OfertaCard = {
           id: o.id,
           email_creador: o.email_creador,
           fecha_generacion: o.fecha_generacion,
+          fecha_creacion: o.fecha_creacion || o.fecha_generacion,
           id_esquema_pago_seleccionado: o.id_esquema_pago_seleccionado,
           id_estatus_aprobacion: o.id_estatus_aprobacion,
           comentario_justificacion: o.comentario_justificacion,
           activo: o.activo,
           id_propiedad: o.id_propiedad,
           id_persona_lead: o.id_persona_lead,
-          propiedad_nombre: prop ? `${proy?.nombre || ''} - ${prop.numero}` : `Propiedad ${o.id_propiedad}`,
+          propiedad_nombre: prop ? prop.numero : `Propiedad ${o.id_propiedad}`,
           proyecto_nombre: proy?.nombre || '',
           proyecto_id: proyId,
-           lead_nombre: o.id_persona_lead ? (leadMap.get(o.id_persona_lead) || 'Sin nombre') : 'Sin prospecto',
-           inmobiliaria_nombre: inmobByEmail.get(o.email_creador) || 'Interno',
+          lead_nombre: o.id_persona_lead ? (leadMap.get(o.id_persona_lead) || 'Sin nombre') : 'Sin prospecto',
+          inmobiliaria_nombre: inmobByEmail.get(o.email_creador) || 'Interno',
           precio: prop?.precio_lista,
           estatus_disponibilidad: prop?.id_estatus_disponibilidad,
           cuenta_cobranza_id: cuenta?.id,
           contrato_draft: cuenta?.contrato_draft,
           tiene_contrato_firmado: cuenta ? cuentaContratoFirmado.has(cuenta.id) : false,
+          // Esquema details
+          esquema_nombre: esquema?.nombre,
+          esquema_es_manual: esquema?.es_manual,
+          porcentaje_enganche: esquema?.porcentaje_enganche,
+          porcentaje_mensualidades: esquema?.porcentaje_mensualidades,
+          porcentaje_entrega: esquema?.porcentaje_entrega,
+          porcentaje_descuento_aumento: esquema?.porcentaje_descuento_aumento,
+          numero_mensualidades: esquema?.numero_mensualidades,
         };
         card.stage = classifyOffer(card);
         return card;
@@ -549,7 +579,7 @@ export default function WorkflowOfertas() {
                       stageOfertas.map(oferta => (
                         <Card key={oferta.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedOferta(oferta)}>
                           <CardContent className="p-3 space-y-1.5">
-                            <p className="font-medium text-sm truncate">{oferta.propiedad_nombre}</p>
+                            <p className="font-medium text-sm truncate">{oferta.proyecto_nombre ? `${oferta.proyecto_nombre} - ${oferta.propiedad_nombre}` : oferta.propiedad_nombre}</p>
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                               <User className="h-3 w-3" /><span className="truncate">{oferta.lead_nombre}</span>
                             </div>
@@ -596,54 +626,95 @@ export default function WorkflowOfertas() {
       <Dialog open={!!selectedOferta} onOpenChange={(open) => !open && setSelectedOferta(null)}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <Badge className={STAGES.find(s => s.key === selectedOferta?.stage)?.color || ''}>
+                {STAGES.find(s => s.key === selectedOferta?.stage)?.label}
+              </Badge>
+            </div>
             <DialogTitle>Detalle de Oferta #{selectedOferta?.id}</DialogTitle>
             <DialogDescription>{selectedOferta?.propiedad_nombre}</DialogDescription>
           </DialogHeader>
-          {selectedOferta && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><Building2 className="h-4 w-4" /> Propiedad</h4>
-                <div className="text-sm space-y-0.5 pl-5">
-                  <p><span className="text-muted-foreground">Nombre:</span> {selectedOferta.propiedad_nombre}</p>
-                  <p><span className="text-muted-foreground">Proyecto:</span> {selectedOferta.proyecto_nombre}</p>
-                  {selectedOferta.precio && <p><span className="text-muted-foreground">Precio:</span> ${selectedOferta.precio.toLocaleString('es-MX')}</p>}
-                </div>
-              </div>
-              <div>
-                <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><User className="h-4 w-4" /> Prospecto</h4>
-                <p className="text-sm pl-5">{selectedOferta.lead_nombre}</p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><User className="h-4 w-4" /> Agente</h4>
-                <p className="text-sm pl-5">{selectedOferta.email_creador}</p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><FileText className="h-4 w-4" /> Deal</h4>
-                <div className="text-sm space-y-0.5 pl-5">
-                  <p><span className="text-muted-foreground">Esquema:</span> {selectedOferta.id_esquema_pago_seleccionado ? `ID ${selectedOferta.id_esquema_pago_seleccionado}` : 'Ninguno'}</p>
-                  <p><span className="text-muted-foreground">Etapa:</span>{' '}
-                    <Badge className={STAGES.find(s => s.key === selectedOferta.stage)?.color || ''}>
-                      {STAGES.find(s => s.key === selectedOferta.stage)?.label}
-                    </Badge>
-                  </p>
-                  {selectedOferta.comentario_justificacion && <p className="italic text-muted-foreground">"{selectedOferta.comentario_justificacion}"</p>}
-                </div>
-              </div>
-              {selectedOferta.stage !== 'cierre' && selectedOferta.stage !== 'expiradas' && (
-                <div>
-                  <h4 className="font-semibold text-sm mb-2 flex items-center gap-1"><AlertCircle className="h-4 w-4" /> Para avanzar</h4>
-                  <div className="space-y-1.5 pl-5">
-                    {getNextStepChecklist(selectedOferta).map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-sm">
-                        {item.done ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Circle className="h-4 w-4 text-muted-foreground" />}
-                        <span className={item.done ? 'line-through text-muted-foreground' : ''}>{item.text}</span>
-                      </div>
-                    ))}
+          {selectedOferta && (() => {
+            const fechaCreacion = new Date(selectedOferta.fecha_creacion);
+            const fechaVigencia = new Date(fechaCreacion);
+            fechaVigencia.setDate(fechaVigencia.getDate() + 5);
+            const precioFinal = selectedOferta.precio || 0;
+            const descAumento = selectedOferta.porcentaje_descuento_aumento || 0;
+            const precioConAjuste = precioFinal * (1 + descAumento / 100);
+
+            return (
+              <div className="space-y-4">
+                {/* Dates */}
+                <div className="flex gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Creación:</span>{' '}
+                    {format(fechaCreacion, 'dd MMM yyyy', { locale: es })}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Vigencia:</span>{' '}
+                    {format(fechaVigencia, 'dd MMM yyyy', { locale: es })}
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                <div>
+                  <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><Building2 className="h-4 w-4" /> Propiedad</h4>
+                  <div className="text-sm space-y-0.5 pl-5">
+                    <p><span className="text-muted-foreground">Nombre:</span> {selectedOferta.propiedad_nombre}</p>
+                    <p><span className="text-muted-foreground">Proyecto:</span> {selectedOferta.proyecto_nombre}</p>
+                    {selectedOferta.precio != null && <p><span className="text-muted-foreground">Precio de lista:</span> ${selectedOferta.precio.toLocaleString('es-MX')}</p>}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><User className="h-4 w-4" /> Prospecto</h4>
+                  <p className="text-sm pl-5">{selectedOferta.lead_nombre}</p>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><User className="h-4 w-4" /> Agente</h4>
+                  <p className="text-sm pl-5">{selectedOferta.email_creador}</p>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm mb-1 flex items-center gap-1"><FileText className="h-4 w-4" /> Esquema de Pago</h4>
+                  <div className="text-sm space-y-0.5 pl-5">
+                    {!selectedOferta.id_esquema_pago_seleccionado ? (
+                      <p className="text-muted-foreground">Sin esquema seleccionado</p>
+                    ) : (
+                      <>
+                        {selectedOferta.esquema_nombre && !selectedOferta.esquema_es_manual && (
+                          <p><span className="text-muted-foreground">Esquema:</span> {selectedOferta.esquema_nombre}</p>
+                        )}
+                        {selectedOferta.porcentaje_enganche != null && selectedOferta.porcentaje_enganche > 0 && (
+                          <p><span className="text-muted-foreground">Enganche:</span> {selectedOferta.porcentaje_enganche}% — ${(precioConAjuste * selectedOferta.porcentaje_enganche / 100).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                        )}
+                        {selectedOferta.porcentaje_mensualidades != null && selectedOferta.porcentaje_mensualidades > 0 && (
+                          <p><span className="text-muted-foreground">Mensualidades:</span> {selectedOferta.porcentaje_mensualidades}% — ${(precioConAjuste * selectedOferta.porcentaje_mensualidades / 100).toLocaleString('es-MX', { maximumFractionDigits: 0 })} ({selectedOferta.numero_mensualidades} meses)</p>
+                        )}
+                        {selectedOferta.porcentaje_entrega != null && selectedOferta.porcentaje_entrega > 0 && (
+                          <p><span className="text-muted-foreground">Entrega:</span> {selectedOferta.porcentaje_entrega}% — ${(precioConAjuste * selectedOferta.porcentaje_entrega / 100).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                        )}
+                        {descAumento !== 0 && (
+                          <p><span className="text-muted-foreground">{descAumento > 0 ? 'Incremento' : 'Descuento'}:</span> {Math.abs(descAumento)}% — ${Math.abs(precioFinal * descAumento / 100).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                        )}
+                      </>
+                    )}
+                    {selectedOferta.comentario_justificacion && <p className="italic text-muted-foreground mt-1">"{selectedOferta.comentario_justificacion}"</p>}
+                  </div>
+                </div>
+                {selectedOferta.stage !== 'cierre' && selectedOferta.stage !== 'expiradas' && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-1"><AlertCircle className="h-4 w-4" /> Para avanzar</h4>
+                    <div className="space-y-1.5 pl-5">
+                      {getNextStepChecklist(selectedOferta).map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm">
+                          {item.done ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Circle className="h-4 w-4 text-muted-foreground" />}
+                          <span className={item.done ? 'line-through text-muted-foreground' : ''}>{item.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
