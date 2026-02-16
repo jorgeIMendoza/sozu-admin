@@ -3018,6 +3018,7 @@ export type Database = {
           cuenta_madre_stp: string | null
           cuenta_stp_comisiones: string | null
           facturar: boolean
+          facturar_comision_sozu: boolean
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
@@ -3035,6 +3036,7 @@ export type Database = {
           cuenta_madre_stp?: string | null
           cuenta_stp_comisiones?: string | null
           facturar?: boolean
+          facturar_comision_sozu?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -3052,6 +3054,7 @@ export type Database = {
           cuenta_madre_stp?: string | null
           cuenta_stp_comisiones?: string | null
           facturar?: boolean
+          facturar_comision_sozu?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number

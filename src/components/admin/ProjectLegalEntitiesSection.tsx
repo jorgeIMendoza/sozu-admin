@@ -924,6 +924,43 @@ export const ProjectLegalEntitiesSection = ({
                                   </Label>
                                 </div>
 
+                                {/* Facturar Comisión Sozu checkbox */}
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`facturar-comision-sozu-${entity.id}`}
+                                    checked={(entity as any).facturar_comision_sozu || false}
+                                    onCheckedChange={async (checked) => {
+                                      try {
+                                        const { error } = await supabase
+                                          .from("entidades_relacionadas")
+                                          .update({ facturar_comision_sozu: checked } as any)
+                                          .eq("id", entity.id);
+                                        if (error) throw error;
+                                        toast({
+                                          title: "Configuración actualizada",
+                                          description: "La configuración de facturación de comisión Sozu se actualizó.",
+                                        });
+                                        await queryClient.refetchQueries({
+                                          queryKey: ["project-legal-entities", projectId],
+                                          exact: true,
+                                        });
+                                      } catch (err: any) {
+                                        toast({
+                                          title: "Error",
+                                          description: err.message || "Error al actualizar.",
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor={`facturar-comision-sozu-${entity.id}`}
+                                    className="text-sm font-medium cursor-pointer"
+                                  >
+                                    Facturar Comisión Sozu
+                                  </Label>
+                                </div>
+
                                 {/* API Key configuration - shown only when facturar is checked */}
                                 {entity.facturar && entity.nombre_api_key && (
                                   <div className="mt-3 p-4 border rounded-lg bg-muted/30">
