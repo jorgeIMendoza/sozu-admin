@@ -198,7 +198,7 @@ Deno.serve(async (req) => {
         id_cuenta_cobranza,
         id_propiedad: propiedad.id,
         id_tipo_documento: 47, // Factura de comision de venta Sozu
-        url: facturaResult.url || null,
+        url: facturaResult.url || 'pendiente',
         id_estatus_verificacion: 1, // Pendiente (es draft)
         activo: true,
         es_draft: true,
