@@ -14,7 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Edit, Loader2, AlertCircle, FileCheck, Upload, Scale, Gavel, X, Save, Info, RefreshCcw } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Edit, Loader2, AlertCircle, FileCheck, Upload, Scale, Gavel, X, Save, Info, RefreshCcw, Stamp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -112,6 +112,8 @@ interface CuentaDetalle {
   // Campos de cancelación
   monto_cobro_cancelacion?: number | null;
   id_tipo_cancelacion?: number | null;
+  id_documento_factura_comision_sozu?: number | null;
+  factura_sozu_doc?: { id: number; es_draft: boolean; url: string | null } | null;
 }
 
 interface OfferData {
@@ -583,6 +585,10 @@ export default function DetalleCuentaCobranza() {
   }>>([]);
   const [isConfirmingAdjustment, setIsConfirmingAdjustment] = useState(false);
   const [isSavingAdjustment, setIsSavingAdjustment] = useState(false);
+  // Factura comisión Sozu states
+  const [generarFacturaLoading, setGenerarFacturaLoading] = useState(false);
+  const [timbrarFacturaDialog, setTimbrarFacturaDialog] = useState(false);
+  const [timbrarFacturaLoading, setTimbrarFacturaLoading] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canUpdate, canDelete, isSuperAdmin } = usePagePermissions('/admin/cuentas-cobranza');
@@ -607,7 +613,8 @@ export default function DetalleCuentaCobranza() {
           valor_uma,
           collection_id,
           monto_cobro_cancelacion,
-          id_tipo_cancelacion
+          id_tipo_cancelacion,
+          id_documento_factura_comision_sozu
         `)
         .eq('id', cuentaId)
         .maybeSingle();
@@ -748,13 +755,28 @@ export default function DetalleCuentaCobranza() {
       const metraje = tipoCuenta === 'Propiedad' ? m2Interiores + m2Exteriores : undefined;
       const precio_por_m2 = tipoCuenta === 'Propiedad' && metraje && metraje > 0 ? (cuenta.precio_final || 0) / metraje : undefined;
 
+      // Fetch factura comisión Sozu document if exists
+      let facturaSozuDoc: { id: number; es_draft: boolean; url: string | null } | null = null;
+      if (cuenta.id_documento_factura_comision_sozu) {
+        const { data: docFactura } = await supabase
+          .from('documentos')
+          .select('id, es_draft, url')
+          .eq('id', cuenta.id_documento_factura_comision_sozu)
+          .eq('id_tipo_documento', 47)
+          .eq('activo', true)
+          .maybeSingle();
+        if (docFactura) {
+          facturaSozuDoc = docFactura;
+        }
+      }
+
       const detalle: CuentaDetalle = {
         id: cuenta.id,
         clabe_stp: cuenta.clabe_stp,
         precio_final: cuenta.precio_final || 0,
         es_aprobado: cuenta.es_aprobado,
         fecha_compra: cuenta.fecha_compra,
-        activo: cuenta.activo, // Add activo field to track if account is cancelled
+        activo: cuenta.activo,
         compradores: compradores?.map(c => ({
           id_persona: c.personas?.id,
           nombre_legal: c.personas?.nombre_legal || '',
@@ -781,9 +803,10 @@ export default function DetalleCuentaCobranza() {
         metraje,
         precio_por_m2,
         detalles_producto: detallesProducto,
-        // Campos de cancelación
         monto_cobro_cancelacion: cuenta.monto_cobro_cancelacion || undefined,
-        id_tipo_cancelacion: cuenta.id_tipo_cancelacion || undefined
+        id_tipo_cancelacion: cuenta.id_tipo_cancelacion || undefined,
+        id_documento_factura_comision_sozu: cuenta.id_documento_factura_comision_sozu,
+        factura_sozu_doc: facturaSozuDoc,
       };
 
       return detalle;
@@ -2808,6 +2831,48 @@ export default function DetalleCuentaCobranza() {
   // Check if property is "En demanda" (id=11) - also makes account read-only
   const isEnDemanda = cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id_estatus_disponibilidad === 11;
 
+  const handleGenerarFacturaSozu = async () => {
+    setGenerarFacturaLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generar-factura-comision-sozu', {
+        body: { id_cuenta_cobranza: cuentaId }
+      });
+      if (error) throw error;
+      if (data?.not_applicable) {
+        toast({ title: "No aplica", description: data.message });
+      } else if (data?.already_exists) {
+        toast({ title: "Ya existe", description: data.message });
+      } else {
+        toast({ title: "Factura generada", description: "Factura draft de comisión generada exitosamente" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
+    } catch (err) {
+      console.error("Error generando factura:", err);
+      toast({ title: "Error", description: "No se pudo generar la factura", variant: "destructive" });
+    } finally {
+      setGenerarFacturaLoading(false);
+    }
+  };
+
+  const handleTimbrarFacturaSozu = async () => {
+    if (!cuentaDetalle?.factura_sozu_doc?.id) return;
+    setTimbrarFacturaLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('timbrar-factura-comision-sozu', {
+        body: { id_cuenta_cobranza: cuentaId, id_documento: cuentaDetalle.factura_sozu_doc.id }
+      });
+      if (error) throw error;
+      toast({ title: "Factura timbrada", description: "La factura se ha timbrado exitosamente" });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
+    } catch (err) {
+      console.error("Error timbrando factura:", err);
+      toast({ title: "Error", description: "No se pudo timbrar la factura", variant: "destructive" });
+    } finally {
+      setTimbrarFacturaLoading(false);
+      setTimbrarFacturaDialog(false);
+    }
+  };
+
   return (
     <div className="space-y-6 relative">
       {/* Diagonal "CANCELADA" stamp for cancelled accounts */}
@@ -2854,6 +2919,16 @@ export default function DetalleCuentaCobranza() {
                   </Tooltip>
                 </TooltipProvider>
               )}
+              {/* Badge Factura Comisión Sozu */}
+              {(() => {
+                const doc = cuentaDetalle.factura_sozu_doc;
+                if (doc) {
+                  return doc.es_draft 
+                    ? <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white">Fact. Comisión: Draft</Badge>
+                    : <Badge className="bg-green-600 hover:bg-green-700 text-white">Fact. Comisión: Timbrada</Badge>;
+                }
+                return <Badge variant="outline" className="text-muted-foreground">Fact. Comisión: No generada</Badge>;
+              })()}
             </div>
             <p className="text-muted-foreground">
               Información detallada de pagos y acuerdos
@@ -2900,7 +2975,50 @@ export default function DetalleCuentaCobranza() {
             </div>
             )}
 
-            {/* Grupo de acciones de cuenta */}
+            {/* Grupo de acciones Factura Comisión Sozu */}
+            {(canUpdate || isSuperAdmin) && (
+            <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
+              {!cuentaDetalle?.id_documento_factura_comision_sozu ? (
+                cuentaDetalle?.id_estatus_disponibilidad === 5 ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-9"
+                    onClick={handleGenerarFacturaSozu}
+                    disabled={generarFacturaLoading}
+                  >
+                    {generarFacturaLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+                    Generar Fact. Comisión
+                  </Button>
+                ) : (
+                  <span className="text-sm text-muted-foreground px-2">Fact. Comisión: No aplica (no vendida)</span>
+                )
+              ) : cuentaDetalle?.factura_sozu_doc?.es_draft ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9"
+                  onClick={() => setTimbrarFacturaDialog(true)}
+                >
+                  <Stamp className="h-4 w-4 mr-2" />
+                  Timbrar Fact. Comisión
+                </Button>
+              ) : (
+                cuentaDetalle?.factura_sozu_doc?.url && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-9"
+                    onClick={() => window.open(cuentaDetalle.factura_sozu_doc!.url!, '_blank')}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Ver Fact. Comisión
+                  </Button>
+                )
+              )}
+            </div>
+            )}
+
             <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
               <Button 
                 onClick={async () => {
@@ -5133,6 +5251,26 @@ export default function DetalleCuentaCobranza() {
               entityType="comprador"
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación para timbrar factura comisión Sozu */}
+      <Dialog open={timbrarFacturaDialog} onOpenChange={setTimbrarFacturaDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Timbrado</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            ¿Estás seguro de que deseas timbrar esta factura de comisión? Esta acción no se puede deshacer.
+          </p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setTimbrarFacturaDialog(false)} disabled={timbrarFacturaLoading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleTimbrarFacturaSozu} disabled={timbrarFacturaLoading}>
+              {timbrarFacturaLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Timbrando...</> : <><Stamp className="h-4 w-4 mr-2" /> Timbrar</>}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -11,9 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { Copy } from "lucide-react";
+import { Copy, Stamp, FileText, Loader2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 export default function Comisiones() {
   const {
     toast
@@ -30,6 +31,9 @@ export default function Comisiones() {
   const [filtroEfectivo, setFiltroEfectivo] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
+  const [generarLoading, setGenerarLoading] = useState<number | null>(null);
+  const [timbrarDialog, setTimbrarDialog] = useState<{ isOpen: boolean; cuentaId: number; docId: number } | null>(null);
+  const [timbrarLoading, setTimbrarLoading] = useState(false);
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({
@@ -99,7 +103,8 @@ export default function Comisiones() {
           fecha_pago_comision,
           es_comision_venta_efectivo,
           es_pagada_comision_venta,
-          id_oferta
+          id_oferta,
+          id_documento_factura_comision_sozu
         `).is("id_cuenta_cobranza_padre", null).order("id", {
         ascending: false
       })) as any;
@@ -156,7 +161,8 @@ export default function Comisiones() {
               id,
               numero_propiedad,
               id_edificio_modelo,
-              id_entidad_relacionada_dueno
+              id_entidad_relacionada_dueno,
+              id_estatus_disponibilidad
             `).in("id", propiedadIds) : {
         data: [],
         error: null
@@ -239,7 +245,17 @@ export default function Comisiones() {
       };
       if (entidadesError) throw entidadesError;
 
-      // Paso 7: Combinar todos los datos
+      // Paso 7: Obtener documentos de factura comisión Sozu (tipo 47)
+      const docIds = cuentasFiltradas
+        .map(c => c.id_documento_factura_comision_sozu)
+        .filter(Boolean);
+      const {
+        data: documentosFactura,
+        error: docsError
+      } = docIds.length > 0 ? await supabase.from("documentos").select("id, es_draft, url").in("id", docIds).eq("id_tipo_documento", 47).eq("activo", true) : { data: [], error: null };
+      if (docsError) throw docsError;
+
+      // Paso 8: Combinar todos los datos
       return cuentasFiltradas.map(cuenta => {
         const oferta = ofertas?.find(o => o.id === cuenta.id_oferta);
         const propiedad = propiedades?.find(p => p.id === oferta?.id_propiedad);
@@ -252,6 +268,9 @@ export default function Comisiones() {
         const entidadDueno = entidadesRelacionadas?.find(e => e.id === propiedad?.id_entidad_relacionada_dueno);
         const cuenta_stp_comisiones = entidadDueno?.cuenta_stp_comisiones;
         const nombre_dueno = entidadDueno?.personas?.nombre_comercial || entidadDueno?.personas?.nombre_legal;
+
+        // Documento de factura comisión Sozu
+        const docFactura = documentosFactura?.find(d => d.id === cuenta.id_documento_factura_comision_sozu);
 
         // Determinar tipo de cuenta
         let tipo: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
@@ -268,7 +287,9 @@ export default function Comisiones() {
           producto_nombre: producto?.nombre,
           tipo: tipo,
           cuenta_stp_comisiones,
-          nombre_dueno
+          nombre_dueno,
+          id_estatus_disponibilidad: propiedad?.id_estatus_disponibilidad,
+          factura_sozu_doc: docFactura || null,
         };
       });
     }
@@ -280,7 +301,49 @@ export default function Comisiones() {
     }).format(monto);
   };
 
-  // Aplicar filtros
+  const handleGenerarFactura = async (cuentaId: number) => {
+    setGenerarLoading(cuentaId);
+    try {
+      const { data, error } = await supabase.functions.invoke('generar-factura-comision-sozu', {
+        body: { id_cuenta_cobranza: cuentaId }
+      });
+      if (error) throw error;
+      if (data?.not_applicable) {
+        toast({ title: "No aplica", description: data.message });
+      } else if (data?.already_exists) {
+        toast({ title: "Ya existe", description: data.message });
+      } else {
+        toast({ title: "Factura generada", description: "Factura draft de comisión generada exitosamente" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["comisiones"] });
+    } catch (err) {
+      console.error("Error generando factura:", err);
+      toast({ title: "Error", description: "No se pudo generar la factura", variant: "destructive" });
+    } finally {
+      setGenerarLoading(null);
+    }
+  };
+
+  const handleTimbrarFactura = async () => {
+    if (!timbrarDialog) return;
+    setTimbrarLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('timbrar-factura-comision-sozu', {
+        body: { id_cuenta_cobranza: timbrarDialog.cuentaId, id_documento: timbrarDialog.docId }
+      });
+      if (error) throw error;
+      toast({ title: "Factura timbrada", description: "La factura se ha timbrado exitosamente" });
+      queryClient.invalidateQueries({ queryKey: ["comisiones"] });
+    } catch (err) {
+      console.error("Error timbrando factura:", err);
+      toast({ title: "Error", description: "No se pudo timbrar la factura", variant: "destructive" });
+    } finally {
+      setTimbrarLoading(false);
+      setTimbrarDialog(null);
+    }
+  };
+
+
   const comisionesFiltradas = comisiones?.filter((comision: any) => {
     // Filtro general
     if (filtroGeneral) {
@@ -493,6 +556,7 @@ export default function Comisiones() {
                 <TableHead>Monto Comisión Pagado</TableHead>
                 <TableHead>Fecha Pago Comisión</TableHead>
                 <TableHead>Comisión En Efectivo</TableHead>
+                <TableHead>Fact. Comisión Sozu</TableHead>
                 <TableHead>Estatus</TableHead>
               </TableRow>
             </TableHeader>
@@ -556,6 +620,54 @@ export default function Comisiones() {
                       {comision.es_comision_venta_efectivo ? <Badge variant="secondary">Sí</Badge> : <Badge variant="outline">No</Badge>}
                     </TableCell>
                     <TableCell>
+                      {(() => {
+                        const doc = comision.factura_sozu_doc;
+                        const esVendida = comision.id_estatus_disponibilidad === 5;
+                        if (!comision.id_documento_factura_comision_sozu) {
+                          // No tiene factura
+                          if (esVendida) {
+                            return (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleGenerarFactura(comision.id)}
+                                disabled={generarLoading === comision.id}
+                              >
+                                {generarLoading === comision.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <FileText className="h-3 w-3 mr-1" />}
+                                Generar
+                              </Button>
+                            );
+                          }
+                          return <span className="text-muted-foreground">-</span>;
+                        }
+                        if (doc?.es_draft) {
+                          return (
+                            <div className="flex items-center gap-1">
+                              <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white">Draft</Badge>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setTimbrarDialog({ isOpen: true, cuentaId: comision.id, docId: doc.id })}
+                              >
+                                <Stamp className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          );
+                        }
+                        // Timbrada
+                        return (
+                          <div className="flex items-center gap-1">
+                            <Badge className="bg-green-600 hover:bg-green-700 text-white">Timbrada</Badge>
+                            {doc?.url && (
+                              <Button size="sm" variant="ghost" onClick={() => window.open(doc.url, '_blank')}>
+                                <Eye className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell>
                       {comision.es_pagada_comision_venta ? <Badge variant="default">Pagado</Badge> : comision.es_comision_venta_efectivo ? <Button size="sm" onClick={() => handlePagarComision(comision)} disabled={pagarComisionMutation.isPending}>
                           {pagarComisionMutation.isPending ? "Pagando..." : "Marcar como Pagado"}
                         </Button> : <Badge variant="destructive">Pendiente</Badge>}
@@ -592,5 +704,25 @@ export default function Comisiones() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog de confirmación para timbrar */}
+      <Dialog open={!!timbrarDialog?.isOpen} onOpenChange={(open) => { if (!open) setTimbrarDialog(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Timbrado</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas timbrar esta factura de comisión? Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTimbrarDialog(null)} disabled={timbrarLoading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleTimbrarFactura} disabled={timbrarLoading}>
+              {timbrarLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Timbrando...</> : <><Stamp className="h-4 w-4 mr-2" /> Timbrar</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>;
 }
