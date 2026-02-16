@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Stamp, FileText, Loader2, Eye } from "lucide-react";
+import { Copy, Stamp, FileText, Loader2, Eye, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -34,6 +34,7 @@ export default function Comisiones() {
   const [generarLoading, setGenerarLoading] = useState<number | null>(null);
   const [timbrarDialog, setTimbrarDialog] = useState<{ isOpen: boolean; cuentaId: number; docId: number } | null>(null);
   const [timbrarLoading, setTimbrarLoading] = useState(false);
+  const [previewDialog, setPreviewDialog] = useState<{ isOpen: boolean; url: string; title: string }>({ isOpen: false, url: '', title: '' });
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({
@@ -646,9 +647,32 @@ export default function Comisiones() {
                           return (
                             <div className="flex items-center gap-1">
                               <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white">Draft</Badge>
+                              {doc?.url && doc.url.startsWith('http') && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6"
+                                  title="Preview"
+                                  onClick={() => setPreviewDialog({ isOpen: true, url: doc.url, title: `Preview Factura Comisión Sozu - Cuenta ${formatCuentaCobranzaId(comision.id, comision.tipo)}` })}
+                                >
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                              )}
                               <Button
-                                size="sm"
+                                size="icon"
                                 variant="ghost"
+                                className="h-6 w-6"
+                                title="Regenerar"
+                                onClick={() => handleGenerarFactura(comision.id)}
+                                disabled={generarLoading === comision.id}
+                              >
+                                {generarLoading === comision.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                title="Timbrar"
                                 onClick={() => setTimbrarDialog({ isOpen: true, cuentaId: comision.id, docId: doc.id })}
                               >
                                 <Stamp className="h-3 w-3" />
@@ -724,6 +748,23 @@ export default function Comisiones() {
               {timbrarLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Timbrando...</> : <><Stamp className="h-4 w-4 mr-2" /> Timbrar</>}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de preview de factura */}
+      <Dialog open={previewDialog.isOpen} onOpenChange={(open) => { if (!open) setPreviewDialog({ isOpen: false, url: '', title: '' }); }}>
+        <DialogContent className="max-w-4xl h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>{previewDialog.title}</DialogTitle>
+            <DialogDescription>Vista previa del documento de factura</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 h-full">
+            <iframe
+              src={previewDialog.url}
+              className="w-full h-full border rounded-md"
+              title="Preview Factura"
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>;
