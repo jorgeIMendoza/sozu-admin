@@ -94,10 +94,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 4. Obtener la entidad dueña y verificar facturar = true
+    // 4. Obtener la entidad dueña y verificar facturar_comision_sozu = true
     const { data: entidadDuena } = await supabase
       .from('entidades_relacionadas')
-      .select('id, facturar, porcentaje_comision, id_persona, id_proyecto')
+      .select('id, facturar_comision_sozu, porcentaje_comision, id_persona, id_proyecto')
       .eq('id', propiedad.id_entidad_relacionada_dueno)
       .single();
 
@@ -105,10 +105,10 @@ Deno.serve(async (req) => {
       throw new Error('No se pudo obtener la entidad dueña');
     }
 
-    if (!entidadDuena.facturar) {
-      console.log(`[generar-factura-comision-sozu] Entidad dueña no tiene facturar = true`);
+    if (!entidadDuena.facturar_comision_sozu) {
+      console.log(`[generar-factura-comision-sozu] Entidad dueña no tiene facturar_comision_sozu = true`);
       return new Response(
-        JSON.stringify({ success: true, message: 'El propietario no requiere facturación', not_applicable: true }),
+        JSON.stringify({ success: true, message: 'El propietario no requiere facturación de comisión Sozu', not_applicable: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

@@ -809,7 +809,7 @@ export default function DetalleCuentaCobranza() {
         id_tipo_cancelacion: cuenta.id_tipo_cancelacion || undefined,
         id_documento_factura_comision_sozu: cuenta.id_documento_factura_comision_sozu,
         factura_sozu_doc: facturaSozuDoc,
-        dueno_facturar: entidadResult.data?.facturar || false,
+        dueno_facturar: (entidadResult.data as any)?.facturar_comision_sozu || false,
       };
 
       return detalle;

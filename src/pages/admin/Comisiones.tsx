@@ -235,7 +235,7 @@ export default function Comisiones() {
       } = entidadIds.length > 0 ? await supabase.from("entidades_relacionadas").select(`
               id,
               cuenta_stp_comisiones,
-              facturar,
+              facturar_comision_sozu,
               personas!fk_entrel_persona(
                 nombre_legal,
                 nombre_comercial
@@ -291,7 +291,7 @@ export default function Comisiones() {
           nombre_dueno,
           id_estatus_disponibilidad: propiedad?.id_estatus_disponibilidad,
           factura_sozu_doc: docFactura || null,
-          dueno_facturar: entidadDueno?.facturar || false,
+          dueno_facturar: (entidadDueno as any)?.facturar_comision_sozu || false,
         };
       });
     }
