@@ -131,7 +131,15 @@ export const ProjectLegalEntitiesSection = ({
             nombre_legal,
             nombre_comercial,
             email,
-            telefono
+            telefono,
+            rfc,
+            direccion_fiscal_calle,
+            direccion_fiscal_num_ext,
+            direccion_fiscal_colonia,
+            direccion_fiscal_codigo_postal,
+            direccion_fiscal_id_pais,
+            direccion_fiscal_id_estado,
+            direccion_fiscal_id_municipio
           ),
           tipos_entidad!entidades_relacionadas_id_tipo_entidad_fkey (
             id,
@@ -925,41 +933,66 @@ export const ProjectLegalEntitiesSection = ({
                                 </div>
 
                                 {/* Facturar Comisión Sozu checkbox */}
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`facturar-comision-sozu-${entity.id}`}
-                                    checked={(entity as any).facturar_comision_sozu || false}
-                                    onCheckedChange={async (checked) => {
-                                      try {
-                                        const { error } = await supabase
-                                          .from("entidades_relacionadas")
-                                          .update({ facturar_comision_sozu: checked } as any)
-                                          .eq("id", entity.id);
-                                        if (error) throw error;
-                                        toast({
-                                          title: "Configuración actualizada",
-                                          description: "La configuración de facturación de comisión Sozu se actualizó.",
-                                        });
-                                        await queryClient.refetchQueries({
-                                          queryKey: ["project-legal-entities", projectId],
-                                          exact: true,
-                                        });
-                                      } catch (err: any) {
-                                        toast({
-                                          title: "Error",
-                                          description: err.message || "Error al actualizar.",
-                                          variant: "destructive",
-                                        });
-                                      }
-                                    }}
-                                  />
-                                  <Label
-                                    htmlFor={`facturar-comision-sozu-${entity.id}`}
-                                    className="text-sm font-medium cursor-pointer"
-                                  >
-                                    Facturar Comisión Sozu
-                                  </Label>
-                                </div>
+                                {(() => {
+                                  const persona = entity.personas as any;
+                                  const hasFiscalData = persona && 
+                                    persona.rfc && 
+                                    persona.direccion_fiscal_calle && 
+                                    persona.direccion_fiscal_colonia && 
+                                    persona.direccion_fiscal_codigo_postal && 
+                                    persona.direccion_fiscal_id_estado && 
+                                    persona.direccion_fiscal_id_municipio;
+                                  const isDisabledComisionSozu = !hasFiscalData && !(entity as any).facturar_comision_sozu;
+
+                                  return (
+                                    <div>
+                                      <div className="flex items-center space-x-2">
+                                        <Checkbox
+                                          id={`facturar-comision-sozu-${entity.id}`}
+                                          checked={(entity as any).facturar_comision_sozu || false}
+                                          disabled={isDisabledComisionSozu}
+                                          onCheckedChange={async (checked) => {
+                                            try {
+                                              const { error } = await supabase
+                                                .from("entidades_relacionadas")
+                                                .update({ facturar_comision_sozu: checked } as any)
+                                                .eq("id", entity.id);
+                                              if (error) throw error;
+                                              toast({
+                                                title: "Configuración actualizada",
+                                                description: "La configuración de facturación de comisión Sozu se actualizó.",
+                                              });
+                                              await queryClient.refetchQueries({
+                                                queryKey: ["project-legal-entities", projectId],
+                                                exact: true,
+                                              });
+                                            } catch (err: any) {
+                                              toast({
+                                                title: "Error",
+                                                description: err.message || "Error al actualizar.",
+                                                variant: "destructive",
+                                              });
+                                            }
+                                          }}
+                                        />
+                                        <Label
+                                          htmlFor={`facturar-comision-sozu-${entity.id}`}
+                                          className={`text-sm font-medium ${isDisabledComisionSozu ? 'text-muted-foreground cursor-not-allowed' : 'cursor-pointer'}`}
+                                        >
+                                          Facturar Comisión Sozu
+                                        </Label>
+                                      </div>
+                                      {isDisabledComisionSozu && (
+                                        <div className="flex items-start gap-2 mt-1.5 ml-6">
+                                          <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                                            Para habilitar esta opción, la entidad debe tener completos el RFC y la dirección fiscal (calle, colonia, código postal, estado y municipio).
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
 
                                 {/* API Key configuration - shown only when facturar is checked */}
                                 {entity.facturar && entity.nombre_api_key && (
