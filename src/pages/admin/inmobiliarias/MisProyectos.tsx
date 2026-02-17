@@ -299,6 +299,15 @@ const MisProyectos = () => {
         </>
       )}
 
+      {/* Global Inventory Button */}
+      <Button
+        className="w-full sm:w-auto gap-2"
+        onClick={() => navigate("/admin/inmobiliarias/inventario")}
+      >
+        <Package className="h-4 w-4" />
+        Ver Todo el Inventario Disponible
+      </Button>
+
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <Building2 className="h-12 w-12 mx-auto mb-3 opacity-40" />
@@ -428,15 +437,6 @@ const MisProyectos = () => {
                     >
                       <Share2 className="h-3 w-3" />
                       Compartir
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs gap-1"
-                      onClick={() => navigate(`/admin/inmobiliarias/mis-proyectos/${project.id}/inventario`)}
-                    >
-                      <Package className="h-3 w-3" />
-                      Inventario
                     </Button>
                   </div>
                 </CardContent>
