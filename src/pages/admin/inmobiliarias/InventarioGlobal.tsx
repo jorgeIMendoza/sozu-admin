@@ -38,7 +38,7 @@ const InventarioGlobal = () => {
                 id, nombre, numero_recamaras, numero_completo_banos, numero_medio_bano
               ),
               propiedades!fk_propiedades_edificio_modelo (
-                id, numero, piso, precio_lista, m2_interiores, m2_exteriores,
+                id, numero_propiedad, numero_piso, precio_lista, m2_interiores, m2_exteriores,
                 id_estatus_disponibilidad,
                 estatus_disponibilidad:id_estatus_disponibilidad (nombre)
               )
@@ -69,6 +69,8 @@ const InventarioGlobal = () => {
             if (p.id_estatus_disponibilidad === 2) {
               props.push({
                 ...p,
+                numero: p.numero_propiedad,
+                piso: p.numero_piso,
                 proyecto_id: project.id,
                 proyecto_nombre: project.nombre,
                 edificio_nombre: e.nombre,
