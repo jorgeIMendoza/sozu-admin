@@ -395,8 +395,8 @@ const MisProyectos = () => {
                       <Building2 className="h-3.5 w-3.5" />
                       <span>{propCount} propiedades</span>
                     </div>
-                    <div className="flex items-center gap-1 text-green-600">
-                      <span>• {getAvailableCount(project)} disponibles</span>
+                    <div className={`flex items-center gap-1 ${getAvailableCount(project) > 0 ? 'text-green-600' : 'text-destructive'}`}>
+                      <span>• {getAvailableCount(project) > 0 ? `${getAvailableCount(project)} disponibles` : 'Agotado'}</span>
                     </div>
                   </div>
 
