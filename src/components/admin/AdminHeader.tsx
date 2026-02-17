@@ -76,26 +76,28 @@ export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
           <div className="flex items-center gap-3 ml-auto">
             {/* User info for simplified roles */}
             {isSimplifiedRole && (
-              <div className="hidden sm:flex flex-col items-end mr-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-foreground leading-tight">
+              <div className="flex flex-col items-end mr-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-foreground leading-tight truncate max-w-[120px] sm:max-w-none">
                     {profile?.nombre || "Usuario"}
                   </span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 text-primary cursor-default">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button type="button">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 text-primary cursor-pointer hover:bg-primary/5">
                           {agentCommission != null ? `${agentCommission} %` : "2.00 %"}
                         </Badge>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Porcentaje de comisión</TooltipContent>
-                  </Tooltip>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto px-3 py-1.5 text-xs">
+                      Porcentaje de comisión
+                    </PopoverContent>
+                  </Popover>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 hidden sm:inline-flex">
                     {profile?.rol_nombre || "Agente"}
                   </Badge>
                 </div>
-                <span className="text-[11px] text-muted-foreground leading-tight">
+                <span className="text-[11px] text-muted-foreground leading-tight hidden sm:block">
                   {profile?.email || user?.email}
                 </span>
               </div>
