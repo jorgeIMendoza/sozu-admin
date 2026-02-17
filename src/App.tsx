@@ -77,6 +77,8 @@ const MisAgentes = lazy(() => import("./pages/admin/inmobiliarias/MisAgentes"));
 const MisPropiedades = lazy(() => import("./pages/admin/inmobiliarias/MisPropiedades"));
 const MisVentas = lazy(() => import("./pages/admin/inmobiliarias/MisVentas"));
 const MisProyectos = lazy(() => import("./pages/admin/inmobiliarias/MisProyectos"));
+const MiProyectoDetalle = lazy(() => import("./pages/admin/inmobiliarias/MiProyectoDetalle"));
+const MiProyectoInventario = lazy(() => import("./pages/admin/inmobiliarias/MiProyectoInventario"));
 const AdministrarMenus = lazy(() => import("./pages/admin/AdministrarMenus"));
 const AdministrarAvisos = lazy(() => import("./pages/admin/comunicacion/AdministrarAvisos"));
 const EnviarAvisos = lazy(() => import("./pages/admin/comunicacion/EnviarAvisos"));
@@ -205,6 +207,8 @@ const App = () => (
                   <Route path="inmobiliarias/mis-propiedades" element={<MisPropiedades />} />
                   <Route path="inmobiliarias/mis-ventas" element={<MisVentas />} />
                   <Route path="inmobiliarias/mis-proyectos" element={<MisProyectos />} />
+                  <Route path="inmobiliarias/mis-proyectos/:id" element={<MiProyectoDetalle />} />
+                  <Route path="inmobiliarias/mis-proyectos/:id/inventario" element={<MiProyectoInventario />} />
                   <Route path="administrar-menus" element={<AdministrarMenus />} />
                   <Route path="comunicacion/administrar-avisos" element={<AdministrarAvisos />} />
                   <Route path="comunicacion/enviar-avisos" element={<EnviarAvisos />} />

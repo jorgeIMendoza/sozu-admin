@@ -4,16 +4,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Building2, MapPin, Loader2, Download, ChevronDown, ChevronUp, BedDouble, Bath, ShowerHead, Share2, Star, ChevronLeft, ChevronRight, Copy, Mail, X, Maximize2 } from "lucide-react";
+import { Building2, MapPin, Loader2, Download, ChevronDown, ChevronUp, BedDouble, Bath, ShowerHead, Share2, Star, ChevronLeft, ChevronRight, Copy, Mail, X, Maximize2, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import useEmblaCarousel from "embla-carousel-react";
 
 const MisProyectos = () => {
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess, hasNoAccess } = useProjectAccess();
+  const { profile } = useAuth();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [expandedCards, setExpandedCards] = useState<Record<number, boolean>>({});
   const [modelosDialog, setModelosDialog] = useState<{ open: boolean; project: any }>({ open: false, project: null });
@@ -276,7 +279,6 @@ const MisProyectos = () => {
     );
   }
 
-  const { profile } = useAuth();
   const isSimplifiedRole = ["Agente Inmobiliario", "Inmobiliaria"].includes(profile?.rol_nombre ?? "");
 
   return (
@@ -318,7 +320,12 @@ const MisProyectos = () => {
                 <ImageCarousel images={images} projectName={project.nombre} badge={getProjectBadge(project)} brochure={brochure} onDownloadBrochure={handleDownloadBrochure} />
 
                 <CardContent className="p-4 space-y-3">
-                  <h3 className="font-bold text-lg text-foreground line-clamp-1">{project.nombre}</h3>
+                  <h3
+                    className="font-bold text-lg text-primary hover:underline cursor-pointer line-clamp-1"
+                    onClick={() => navigate(`/admin/inmobiliarias/mis-proyectos/${project.id}`)}
+                  >
+                    {project.nombre}
+                  </h3>
 
                   {/* Location */}
                   <button
@@ -388,6 +395,9 @@ const MisProyectos = () => {
                       <Building2 className="h-3.5 w-3.5" />
                       <span>{propCount} propiedades</span>
                     </div>
+                    <div className="flex items-center gap-1 text-green-600">
+                      <span>• {getAvailableCount(project)} disponibles</span>
+                    </div>
                   </div>
 
                   {/* Action buttons */}
@@ -418,6 +428,15 @@ const MisProyectos = () => {
                     >
                       <Share2 className="h-3 w-3" />
                       Compartir
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs gap-1"
+                      onClick={() => navigate(`/admin/inmobiliarias/mis-proyectos/${project.id}/inventario`)}
+                    >
+                      <Package className="h-3 w-3" />
+                      Inventario
                     </Button>
                   </div>
                 </CardContent>
