@@ -29,6 +29,8 @@ const MisProyectos = () => {
           publicar,
           latitud,
           longitud,
+          fecha_entrega,
+          fecha_lanzamiento,
           direccion_id_estado,
           direccion_id_municipio,
           id_estatus_proyecto,
@@ -39,6 +41,7 @@ const MisProyectos = () => {
           edificios!fk_edificios_proyecto (
             id,
             nombre,
+            fecha_lanzamiento,
             edificios_modelos!fk_edificios_modelos_edificio (
               id,
               modelos!fk_edificios_modelos_modelo (
@@ -48,7 +51,7 @@ const MisProyectos = () => {
                 numero_completo_banos,
                 numero_medio_bano
               ),
-              propiedades!fk_propiedades_edificio_modelo (id)
+              propiedades!fk_propiedades_edificio_modelo (id, id_estatus_disponibilidad)
             )
           )
         `)
@@ -94,10 +97,66 @@ const MisProyectos = () => {
     p.nombre?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const getPropertyCount = (project: any) =>
-    project.edificios?.reduce((t: number, e: any) =>
-      t + (e.edificios_modelos?.reduce((et: number, m: any) =>
-        et + (m.propiedades?.length || 0), 0) || 0), 0) || 0;
+  const getAllProperties = (project: any) => {
+    const props: any[] = [];
+    project.edificios?.forEach((e: any) => {
+      e.edificios_modelos?.forEach((m: any) => {
+        m.propiedades?.forEach((p: any) => props.push(p));
+      });
+    });
+    return props;
+  };
+
+  const getPropertyCount = (project: any) => getAllProperties(project).length;
+
+  const getAvailableCount = (project: any) =>
+    getAllProperties(project).filter((p: any) => p.id_estatus_disponibilidad === 2).length;
+
+  const getEarliestLaunchDate = (project: any): Date | null => {
+    // Use project-level fecha_lanzamiento first, then earliest from edificios
+    if (project.fecha_lanzamiento) return new Date(project.fecha_lanzamiento);
+    const dates = project.edificios
+      ?.map((e: any) => e.fecha_lanzamiento)
+      .filter(Boolean)
+      .map((d: string) => new Date(d));
+    if (!dates || dates.length === 0) return null;
+    return new Date(Math.min(...dates.map((d: Date) => d.getTime())));
+  };
+
+  const getProjectBadge = (project: any): { label: string; className: string } => {
+    const today = new Date();
+    const totalProps = getPropertyCount(project);
+    const availableProps = getAvailableCount(project);
+    const fechaEntrega = project.fecha_entrega ? new Date(project.fecha_entrega) : null;
+    const fechaLanzamiento = getEarliestLaunchDate(project);
+
+    // 1. Entrega Inmediata
+    if (fechaEntrega && today >= fechaEntrega) {
+      return { label: "Entrega Inmediata", className: "bg-green-600 text-white border-green-600" };
+    }
+
+    // 2. Últimas Unidades
+    if (totalProps > 0 && availableProps > 0 && availableProps <= totalProps * 0.1) {
+      return { label: "Últimas Unidades", className: "bg-destructive text-destructive-foreground border-destructive" };
+    }
+
+    // 3. Nuevo Lanzamiento (within 6 months of launch)
+    if (fechaLanzamiento) {
+      const sixMonthsAfterLaunch = new Date(fechaLanzamiento);
+      sixMonthsAfterLaunch.setMonth(sixMonthsAfterLaunch.getMonth() + 6);
+      if (today >= fechaLanzamiento && today <= sixMonthsAfterLaunch) {
+        return { label: "Nuevo Lanzamiento", className: "bg-blue-600 text-white border-blue-600" };
+      }
+
+      // 4. Preventa Exclusiva (>6 months after launch, before delivery)
+      if (today > sixMonthsAfterLaunch && (!fechaEntrega || today < fechaEntrega)) {
+        return { label: "Preventa Exclusiva", className: "bg-amber-500 text-white border-amber-500" };
+      }
+    }
+
+    // 5. Exclusiva (fallback)
+    return { label: "Exclusiva", className: "bg-purple-600 text-white border-purple-600" };
+  };
 
   const getImageCount = (project: any) =>
     project.multimedias_proyecto?.filter((m: any) => m.es_imagen && m.activo)?.length || 0;
@@ -198,9 +257,14 @@ const MisProyectos = () => {
                       <Building2 className="h-12 w-12 text-muted-foreground/30" />
                     </div>
                   )}
-                  <Badge className="absolute top-3 left-3" variant="default">
-                    {project.estatus_proyecto?.nombre || "Sin estatus"}
-                  </Badge>
+                  {(() => {
+                    const badge = getProjectBadge(project);
+                    return (
+                      <Badge className={`absolute top-3 left-3 ${badge.className}`}>
+                        {badge.label}
+                      </Badge>
+                    );
+                  })()}
                   {brochure && (
                     <Button
                       size="icon"
