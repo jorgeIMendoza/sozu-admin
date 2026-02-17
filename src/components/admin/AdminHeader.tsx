@@ -10,7 +10,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import sozuLogo from "@/assets/sozu-logo-black.png";
+import sozuLogoBlack from "@/assets/sozu-logo-black.png";
+import sozuLogoWhite from "@/assets/sozu-logo-white.png";
+import { useTheme } from "next-themes";
 
 interface AdminHeaderProps {
   onMenuClick: () => void;
@@ -21,6 +23,8 @@ const SIMPLIFIED_ROLES = ["Agente Inmobiliario", "Inmobiliaria"];
 export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { profile, user, signOut } = useAuth();
+  const { resolvedTheme } = useTheme();
+  const sozuLogo = resolvedTheme === "dark" ? sozuLogoWhite : sozuLogoBlack;
   
   const isSimplifiedRole = SIMPLIFIED_ROLES.includes(profile?.rol_nombre ?? "");
 

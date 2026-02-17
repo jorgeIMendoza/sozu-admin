@@ -4,10 +4,14 @@ import { UserPlus, ArrowLeft, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import sozuLogo from "@/assets/sozu-logo-black.png";
+import sozuLogoBlack from "@/assets/sozu-logo-black.png";
+import sozuLogoWhite from "@/assets/sozu-logo-white.png";
+import { useTheme } from "next-themes";
 
 export default function Registro() {
   const { toast } = useToast();
+  const { resolvedTheme } = useTheme();
+  const sozuLogo = resolvedTheme === "dark" ? sozuLogoWhite : sozuLogoBlack;
   const [formData, setFormData] = useState({
     nombre: "",
     email: "",
