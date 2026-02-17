@@ -219,15 +219,57 @@ Deno.serve(async (req) => {
       // User is created but unconfirmed - admin can resend
     }
 
-    const confirmationUrl = linkData?.properties?.action_link;
+    // Extract token from action_link and rebuild URL to ensure redirect goes to our edge function
+    let confirmationUrl = linkData?.properties?.action_link;
+    if (confirmationUrl) {
+      try {
+        const actionUrl = new URL(confirmationUrl);
+        const token = actionUrl.searchParams.get('token');
+        const type = actionUrl.searchParams.get('type');
+        if (token) {
+          // Rebuild the verification URL with our edge function as redirect
+          confirmationUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=${type || 'signup'}&redirect_to=${encodeURIComponent(postConfirmUrl)}`;
+        }
+      } catch (e) {
+        console.error('Error rebuilding confirmation URL:', e);
+      }
+    }
     console.log('Confirmation link generated:', confirmationUrl ? 'yes' : 'no');
 
-    // 6. Send confirmation email via Postmark
+    // 6. Send standalone confirmation email via Postmark (NOT using template to avoid "Notificación" wrapper)
     const POSTMARK_TOKEN = Deno.env.get('POSTMARK_SERVER_TOKEN');
 
     if (POSTMARK_TOKEN && confirmationUrl) {
       try {
-        const confirmRes = await fetch('https://api.postmarkapp.com/email/withTemplate', {
+        const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 0;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#2a9d8f,#264653);padding:30px;text-align:center;">
+          <h1 style="color:#ffffff;margin:0;font-size:24px;">Confirma tu correo electrónico</h1>
+        </td></tr>
+        <tr><td style="padding:30px 40px;">
+          <p style="font-size:16px;color:#333;">Hola <strong>${nombre.trim()}</strong>,</p>
+          <p style="font-size:15px;color:#555;line-height:1.6;">Gracias por registrarte. Para activar tu cuenta y recibir tus credenciales de acceso, confirma tu dirección de email haciendo clic en el siguiente botón:</p>
+          <div style="text-align:center;margin:30px 0;">
+            <a href="${confirmationUrl}" style="display:inline-block;background:linear-gradient(135deg,#2a9d8f,#264653);color:#ffffff;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">Confirmar mi Email</a>
+          </div>
+          <p style="font-size:12px;color:#999;text-align:center;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br/><a href="${confirmationUrl}" style="color:#2a9d8f;word-break:break-all;">${confirmationUrl}</a></p>
+        </td></tr>
+        <tr><td style="background:#f9f9f9;padding:20px;text-align:center;">
+          <p style="font-size:12px;color:#aaa;margin:0;">© Sozu — Este correo fue enviado automáticamente.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+        const confirmRes = await fetch('https://api.postmarkapp.com/email', {
           method: 'POST',
           headers: {
             'Accept': 'application/json',
@@ -237,21 +279,8 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             From: 'Notificaciones Sozu <notificaciones@sozu.com>',
             To: emailLower,
-            TemplateId: 41353048,
-            TemplateModel: {
-              mensaje: {
-                nombre: nombre.trim(),
-                actividad: 'Confirmación de correo electrónico',
-                asunto: 'Confirma tu correo - Sozu',
-                detalles: `
-                  <tr><td colspan="2" style="padding: 15px 0; text-align: center;">
-                    <p style="margin-bottom: 20px;">Gracias por registrarte. Para activar tu cuenta y recibir tus credenciales de acceso, confirma tu dirección de email haciendo clic en el siguiente botón:</p>
-                    <a href="${confirmationUrl}" style="display: inline-block; background: linear-gradient(135deg, hsl(180,60%,55%), hsl(158,64%,38%)); color: white; padding: 14px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Confirmar mi Email</a>
-                    <p style="margin-top: 20px; font-size: 12px; color: #888;">O copia y pega este enlace en tu navegador:<br/><a href="${confirmationUrl}">${confirmationUrl}</a></p>
-                  </td></tr>
-                `,
-              },
-            },
+            Subject: 'Confirma tu correo electrónico - Sozu',
+            HtmlBody: htmlBody,
             MessageStream: 'outbound',
           }),
         });

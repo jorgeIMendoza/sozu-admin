@@ -65,7 +65,21 @@ Deno.serve(async (req) => {
       throw new Error('Error al generar enlace de confirmación');
     }
 
-    const confirmationUrl = linkData?.properties?.action_link;
+    let confirmationUrl = linkData?.properties?.action_link;
+
+    // Rebuild the URL to ensure redirect goes to our edge function instead of Site URL
+    if (confirmationUrl) {
+      try {
+        const actionUrl = new URL(confirmationUrl);
+        const token = actionUrl.searchParams.get('token');
+        const type = actionUrl.searchParams.get('type');
+        if (token) {
+          confirmationUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=${type || 'magiclink'}&redirect_to=${encodeURIComponent(postConfirmUrl)}`;
+        }
+      } catch (e) {
+        console.error('Error rebuilding confirmation URL:', e);
+      }
+    }
 
     if (!confirmationUrl || !POSTMARK_TOKEN) {
       throw new Error('No se pudo generar el enlace o falta configuración de correo');
