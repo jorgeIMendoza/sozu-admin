@@ -53,9 +53,8 @@ Deno.serve(async (req) => {
     const postConfirmUrl = `${supabaseUrl}/functions/v1/post-confirmacion-registro?email=${encodeURIComponent(emailLower)}&nombre=${encodeURIComponent(usuario.nombre || '')}`;
 
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-      type: 'signup',
+      type: 'magiclink',
       email: emailLower,
-      password: 'Temporal123!',
       options: {
         redirectTo: postConfirmUrl,
       },
