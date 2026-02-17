@@ -77,3 +77,9 @@ verify_jwt = false
 
 [functions.timbrar-factura-comision-sozu]
 verify_jwt = false
+
+[functions.registro-publico]
+verify_jwt = false
+
+[functions.post-confirmacion-registro]
+verify_jwt = false

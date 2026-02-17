@@ -123,27 +123,26 @@ Deno.serve(async (req) => {
 
     console.log('Entidad created:', entidad.id);
 
-    // 3. Create auth user
+    // 3. Create auth user with email_confirm = FALSE (requires email confirmation)
     const defaultPassword = 'Temporal123!';
     let authUserId: string;
 
     const { data: authData, error: createAuthError } = await supabase.auth.admin.createUser({
       email: emailLower,
       password: defaultPassword,
-      email_confirm: true,
+      email_confirm: false, // User must confirm email first
       user_metadata: { nombre, rol_id: 3 },
     });
 
     if (createAuthError) {
       console.error('Error creating auth user:', createAuthError);
-      // Rollback
       await supabase.from('entidades_relacionadas').delete().eq('id', entidad.id);
       await supabase.from('personas').delete().eq('id', persona.id);
       throw new Error(`Error al crear usuario de autenticación: ${createAuthError.message}`);
     }
 
     authUserId = authData.user!.id;
-    console.log('Auth user created:', authUserId);
+    console.log('Auth user created (unconfirmed):', authUserId);
 
     // 4. Create usuario record (rol_id = 3 = Agente Inmobiliario)
     const { data: usuario, error: usuarioError } = await supabase
@@ -164,7 +163,6 @@ Deno.serve(async (req) => {
 
     if (usuarioError) {
       console.error('Error creating usuario:', usuarioError);
-      // Rollback
       await supabase.auth.admin.deleteUser(authUserId);
       await supabase.from('entidades_relacionadas').delete().eq('id', entidad.id);
       await supabase.from('personas').delete().eq('id', persona.id);
@@ -203,24 +201,66 @@ Deno.serve(async (req) => {
       console.error('Error in project access assignment:', accessErr);
     }
 
-    // Log the activity
-    try {
-      await supabase.from('logs_actividad').insert({
-        tipo_accion: 'registro_publico',
-        tipo_entidad: 'agente',
-        id_entidad: persona.id,
-        valor_nuevo: JSON.stringify({ nombre: nombre.trim(), email: emailLower }),
-        descripcion: `Registro público de agente: ${nombre.trim()}`,
-      });
-    } catch (logError) {
-      console.error('Error logging activity:', logError);
+    // 5. Generate email confirmation link using Supabase Auth
+    const postConfirmUrl = `${supabaseUrl}/functions/v1/post-confirmacion-registro?email=${encodeURIComponent(emailLower)}&nombre=${encodeURIComponent(nombre.trim())}`;
+    
+    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: 'signup',
+      email: emailLower,
+      password: defaultPassword,
+      options: {
+        redirectTo: postConfirmUrl,
+      },
+    });
+
+    if (linkError) {
+      console.error('Error generating confirmation link:', linkError);
+      // User is created but unconfirmed - admin can resend
     }
 
-    // Send emails directly via Postmark
+    const confirmationUrl = linkData?.properties?.action_link;
+    console.log('Confirmation link generated:', confirmationUrl ? 'yes' : 'no');
+
+    // 6. Send confirmation email via Postmark
     const POSTMARK_TOKEN = Deno.env.get('POSTMARK_SERVER_TOKEN');
-    
-    if (POSTMARK_TOKEN) {
-      // Send admin notification email
+
+    if (POSTMARK_TOKEN && confirmationUrl) {
+      try {
+        const confirmRes = await fetch('https://api.postmarkapp.com/email/withTemplate', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-Postmark-Server-Token': POSTMARK_TOKEN,
+          },
+          body: JSON.stringify({
+            From: 'Notificaciones Sozu <notificaciones@sozu.com>',
+            To: emailLower,
+            TemplateId: 41353048,
+            TemplateModel: {
+              mensaje: {
+                nombre: nombre.trim(),
+                actividad: 'Confirmación de correo electrónico',
+                asunto: 'Confirma tu correo - Sozu',
+                detalles: `
+                  <tr><td colspan="2" style="padding: 15px 0; text-align: center;">
+                    <p style="margin-bottom: 20px;">Gracias por registrarte. Para activar tu cuenta y recibir tus credenciales de acceso, confirma tu dirección de email haciendo clic en el siguiente botón:</p>
+                    <a href="${confirmationUrl}" style="display: inline-block; background: linear-gradient(135deg, hsl(180,60%,55%), hsl(158,64%,38%)); color: white; padding: 14px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Confirmar mi Email</a>
+                    <p style="margin-top: 20px; font-size: 12px; color: #888;">O copia y pega este enlace en tu navegador:<br/><a href="${confirmationUrl}">${confirmationUrl}</a></p>
+                  </td></tr>
+                `,
+              },
+            },
+            MessageStream: 'outbound',
+          }),
+        });
+        const confirmResult = await confirmRes.json();
+        console.log('Confirmation email Postmark response:', confirmRes.status, JSON.stringify(confirmResult).substring(0, 300));
+      } catch (emailError) {
+        console.error('Error sending confirmation email:', emailError);
+      }
+
+      // Send admin notification
       try {
         const { data: superAdmins } = await supabase
           .from('usuarios')
@@ -240,16 +280,16 @@ Deno.serve(async (req) => {
         ].filter(Boolean);
 
         if (adminEmails.length > 0) {
-          const adminMessages = adminEmails.map(email => ({
+          const adminMessages = adminEmails.map(adminEmail => ({
             From: 'Notificaciones Sozu <notificaciones@sozu.com>',
-            To: email,
+            To: adminEmail,
             TemplateId: 41353048,
             TemplateModel: {
               mensaje: {
                 nombre: 'Administrador',
                 actividad: 'Registro de agente desde formulario público',
-                asunto: 'Nuevo Registro de Agente',
-                detalles: `<tr><td class='label'>Nombre:</td><td class='value'>${nombre.trim()}</td></tr><tr><td class='label'>Email:</td><td class='value'>${emailLower}</td></tr><tr><td class='label'>Teléfono:</td><td class='value'>${telefono}</td></tr>`,
+                asunto: 'Nuevo Registro de Agente (Pendiente confirmación)',
+                detalles: `<tr><td class='label'>Nombre:</td><td class='value'>${nombre.trim()}</td></tr><tr><td class='label'>Email:</td><td class='value'>${emailLower}</td></tr><tr><td class='label'>Teléfono:</td><td class='value'>${telefono}</td></tr><tr><td class='label'>Estado:</td><td class='value'>Pendiente de confirmación de correo</td></tr>`,
               },
             },
             MessageStream: 'outbound',
@@ -264,55 +304,32 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify({ Messages: adminMessages }),
           });
-          const adminResult = await adminRes.json();
-          console.log('Admin Postmark response:', adminRes.status, JSON.stringify(adminResult).substring(0, 300));
+          console.log('Admin notification sent:', adminRes.status);
         }
       } catch (notificationError) {
         console.error('Error sending admin notification:', notificationError);
       }
-
-      // Send welcome email to the new agent
-      try {
-        const welcomeRes = await fetch('https://api.postmarkapp.com/email/withTemplate', {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'X-Postmark-Server-Token': POSTMARK_TOKEN,
-          },
-          body: JSON.stringify({
-            From: 'Notificaciones Sozu <notificaciones@sozu.com>',
-            To: emailLower,
-            TemplateId: 41353048,
-            TemplateModel: {
-              mensaje: {
-                nombre: nombre.trim(),
-                actividad: 'Registro exitoso como Agente Inmobiliario',
-                asunto: 'Bienvenido a Sozu - Tu cuenta ha sido creada',
-                detalles: `
-                  <tr><td class='label'>Email de acceso:</td><td class='value'>${emailLower}</td></tr>
-                  <tr><td class='label'>Contraseña temporal:</td><td class='value'>Temporal123!</td></tr>
-                  <tr><td class='label'>Portal de acceso:</td><td class='value'><a href="https://inmobiliarias.sozu.com/auth/login">inmobiliarias.sozu.com</a></td></tr>
-                  <tr><td class='label'>Importante:</td><td class='value'>Deberás cambiar tu contraseña en tu primer inicio de sesión.</td></tr>
-                `,
-              },
-            },
-            MessageStream: 'outbound',
-          }),
-        });
-        const welcomeResult = await welcomeRes.json();
-        console.log('Welcome Postmark response:', welcomeRes.status, JSON.stringify(welcomeResult).substring(0, 300));
-      } catch (welcomeError) {
-        console.error('Error sending welcome email:', welcomeError);
-      }
     } else {
-      console.error('POSTMARK_SERVER_TOKEN not configured, skipping email notifications');
+      console.error('POSTMARK_SERVER_TOKEN not configured or confirmation link not generated');
+    }
+
+    // Log the activity
+    try {
+      await supabase.from('logs_actividad').insert({
+        tipo_accion: 'registro_publico',
+        tipo_entidad: 'agente',
+        id_entidad: persona.id,
+        valor_nuevo: JSON.stringify({ nombre: nombre.trim(), email: emailLower }),
+        descripcion: `Registro público de agente: ${nombre.trim()} (pendiente confirmación)`,
+      });
+    } catch (logError) {
+      console.error('Error logging activity:', logError);
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Registro completado correctamente.',
+        message: 'Se ha enviado un correo de confirmación. Revisa tu bandeja de entrada.',
         data: { persona_id: persona.id, usuario_id: usuario.id }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
