@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, Bell, Settings } from "lucide-react";
+import { Menu, Bell, Settings, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { UserSettingsDialog } from "./UserSettingsDialog";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,7 +20,7 @@ const SIMPLIFIED_ROLES = ["Agente Inmobiliario", "Inmobiliaria"];
 
 export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const { profile, user } = useAuth();
+  const { profile, user, signOut } = useAuth();
   
   const isSimplifiedRole = SIMPLIFIED_ROLES.includes(profile?.rol_nombre ?? "");
 
@@ -81,6 +81,18 @@ export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
                 onClick={() => setIsSettingsOpen(true)}
               >
                 <Settings className="h-5 w-5" />
+              </Button>
+            )}
+
+            {isSimplifiedRole && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Cerrar sesión"
+                onClick={signOut}
+                title="Cerrar sesión"
+              >
+                <LogOut className="h-5 w-5" />
               </Button>
             )}
           </div>
