@@ -24,15 +24,28 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const POSTMARK_TOKEN = Deno.env.get('POSTMARK_SERVER_TOKEN');
 
-    // Verify user exists and is now confirmed
+    // Find the auth user by email
     const { data: authUsers } = await supabase.auth.admin.listUsers();
-    const confirmedUser = authUsers?.users?.find(
-      u => u.email?.toLowerCase() === email.toLowerCase() && u.email_confirmed_at
+    const authUser = authUsers?.users?.find(
+      u => u.email?.toLowerCase() === email.toLowerCase()
     );
 
-    if (!confirmedUser) {
-      console.log('User not confirmed yet or not found:', email);
+    if (!authUser) {
+      console.log('Auth user not found:', email);
       return Response.redirect('https://inmobiliarias.sozu.com/auth/login', 302);
+    }
+
+    // Confirm the email in Auth if not already confirmed
+    if (!authUser.email_confirmed_at) {
+      const { error: confirmError } = await supabase.auth.admin.updateUserById(
+        authUser.id,
+        { email_confirm: true }
+      );
+      if (confirmError) {
+        console.error('Error confirming email in Auth:', confirmError);
+      } else {
+        console.log('Email confirmed in Auth for user:', authUser.id);
+      }
     }
 
     console.log('User confirmed, sending credentials email');
