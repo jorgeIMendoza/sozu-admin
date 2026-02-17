@@ -4337,7 +4337,7 @@ export default function DetalleCuentaCobranza() {
                                                             paymentId: aplicacion.pago.id
                                                           });
                                                         }}
-                                                       disabled={esCuentaCancelada || isReadOnly || isEnDemanda}
+                                                       disabled={esCuentaCancelada || isReadOnly}
                                                     >
                                                       <FileText className="h-3 w-3" />
                                                     </Button>
