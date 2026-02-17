@@ -307,10 +307,11 @@ const MiProyectoDetalle = () => {
         <Button
           className="w-full gap-2"
           size="lg"
+          disabled={availableProps === 0}
           onClick={() => navigate(`/admin/inmobiliarias/mis-proyectos/${projectId}/inventario`)}
         >
           <Package className="h-5 w-5" />
-          Ver Inventario Disponible ({availableProps} unidades)
+          {availableProps === 0 ? "Agotado" : `Ver Inventario Disponible (${availableProps} unidades)`}
         </Button>
       </div>
 
