@@ -4768,7 +4768,7 @@ export default function DetalleCuentaCobranza() {
                                     <Badge variant="secondary" className="text-xs">
                                       {aplicacionesDelPago.length} {aplicacionesDelPago.length === 1 ? 'aplicación' : 'aplicaciones'}
                                     </Badge>
-                                    {!esCuentaCancelada && !isReadOnly && !isEnDemanda && (
+                                    {!esCuentaCancelada && !isReadOnly && (
                                       <>
                                         {(pago.url_cep || pago.url_recibo) && (
                                           <TooltipProvider>
