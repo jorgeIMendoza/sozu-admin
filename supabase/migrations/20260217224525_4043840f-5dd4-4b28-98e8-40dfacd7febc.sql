@@ -1,0 +1,1 @@
+UPDATE entidades_relacionadas SET porcentaje_comision = 2.00 WHERE id_tipo_entidad = 19 AND activo = true AND id_proyecto IS NULL AND porcentaje_comision IS NULL;
