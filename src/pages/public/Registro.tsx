@@ -87,29 +87,32 @@ export default function Registro() {
           <img src={sozuLogo} alt="Sozu" className="h-10 mx-auto mb-10" />
           <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center"
             style={{
-              background: 'linear-gradient(135deg, hsl(180,60%,55%), hsl(158,64%,38%))',
-              boxShadow: '0 8px 24px hsla(158,64%,38%,0.3)',
+              background: 'linear-gradient(135deg, hsl(200,70%,55%), hsl(210,80%,50%))',
+              boxShadow: '0 8px 24px hsla(210,80%,50%,0.3)',
             }}>
-            <CheckCircle className="w-10 h-10 text-white" />
+            <UserPlus className="w-10 h-10 text-white" />
           </div>
           <h2 className="text-2xl font-bold text-[hsl(0,0%,15%)] mb-3">
-            ¡Registro exitoso!
+            ¡Confirma tu correo!
           </h2>
-          <p className="text-[hsl(0,0%,45%)] mb-2 text-sm leading-relaxed">
-            Tu registro ha sido completado.
+          <p className="text-[hsl(0,0%,45%)] mb-3 text-sm leading-relaxed">
+            Hemos enviado un correo de confirmación a:
+          </p>
+          <p className="text-[hsl(0,0%,15%)] font-semibold mb-3 text-base">
+            {formData.email}
           </p>
           <p className="text-[hsl(0,0%,45%)] mb-3 text-sm leading-relaxed">
-            Revisa tu correo electrónico <strong className="text-[hsl(0,0%,25%)]">{formData.email}</strong> donde encontrarás tus credenciales de acceso.
+            Haz clic en el enlace de confirmación que recibiste para activar tu cuenta y recibir tus credenciales de acceso.
           </p>
           <p className="text-[hsl(0,0%,55%)] mb-10 text-xs leading-relaxed">
-            Si no lo encuentras, revisa tu carpeta de spam.
+            Si no lo encuentras, revisa tu carpeta de spam o correo no deseado.
           </p>
           <a href="https://inmobiliarias.sozu.com/auth/login">
             <button
-              className="w-full py-4 rounded-2xl text-white font-semibold text-sm tracking-wide transition-all duration-300"
+              className="w-full py-4 rounded-2xl text-sm font-medium text-[hsl(0,0%,40%)] transition-all duration-200"
               style={{
-                background: 'linear-gradient(135deg, hsl(180,60%,55%), hsl(158,64%,38%))',
-                boxShadow: '0 8px 24px hsla(158,64%,38%,0.3)',
+                background: 'hsl(220,20%,93%)',
+                boxShadow: '6px 6px 12px hsl(220,20%,86%), -6px -6px 12px hsl(0,0%,100%)',
               }}
             >
               Ir a iniciar sesión
