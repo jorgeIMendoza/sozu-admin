@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, Bell, Settings, LogOut } from "lucide-react";
+import { Menu, Bell, Settings, LogOut, Percent } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { UserSettingsDialog } from "./UserSettingsDialog";
@@ -14,6 +14,8 @@ import {
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
 import sozuLogoWhite from "@/assets/sozu-logo-white.png";
 import { useTheme } from "next-themes";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AdminHeaderProps {
   onMenuClick: () => void;
@@ -28,6 +30,24 @@ export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
   const sozuLogo = resolvedTheme === "dark" ? sozuLogoWhite : sozuLogoBlack;
   
   const isSimplifiedRole = SIMPLIFIED_ROLES.includes(profile?.rol_nombre ?? "");
+
+  // Fetch agent commission for simplified roles
+  const { data: agentCommission } = useQuery({
+    queryKey: ["agent-commission", profile?.id_persona],
+    queryFn: async () => {
+      if (!profile?.id_persona) return null;
+      const { data } = await supabase
+        .from("entidades_relacionadas")
+        .select("porcentaje_comision")
+        .eq("id_persona", profile.id_persona)
+        .eq("id_tipo_entidad", 19)
+        .eq("activo", true)
+        .is("id_proyecto", null)
+        .maybeSingle();
+      return data?.porcentaje_comision ?? null;
+    },
+    enabled: isSimplifiedRole && !!profile?.id_persona,
+  });
 
   return (
     <>
@@ -64,9 +84,15 @@ export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
                     {profile?.rol_nombre || "Agente"}
                   </Badge>
                 </div>
-                <span className="text-[11px] text-muted-foreground leading-tight">
-                  {profile?.email || user?.email}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground leading-tight">
+                    {profile?.email || user?.email}
+                  </span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-0.5 border-primary/30 text-primary">
+                    <Percent className="h-2.5 w-2.5" />
+                    {agentCommission != null ? agentCommission : "2.00"}
+                  </Badge>
+                </div>
               </div>
             )}
 
