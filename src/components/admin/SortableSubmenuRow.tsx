@@ -286,12 +286,12 @@ export function SortableSubmenuRow({ submenu, menus, allSubmenus, onUpdate }: So
         disabled={isUpdating}
       />
       
-      <div className="flex items-center gap-1 flex-1">
+      <div className="flex items-center gap-1 flex-1 min-w-0">
         <Input
           value={vistaFrontEnd}
           onChange={(e) => setVistaFrontEnd(e.target.value)}
           onBlur={handleRutaBlur}
-          className="max-w-[180px] h-7 text-sm"
+          className="h-7 text-xs flex-1 min-w-0"
           placeholder="/admin/..."
           disabled={isUpdating}
         />
