@@ -696,7 +696,7 @@ function StepForm({ step, persona, personaId, onSaved }: StepFormProps) {
 
       if (isIncomplete) {
         const stepTitle = STEP_TITLES[step] || step;
-        toast.warning(`Información guardada. El paso "${stepTitle}" no se marcará como completado hasta llenar todos los campos obligatorios (*).`, { duration: 5000 });
+        toast.warning(`Información guardada. El paso "${stepTitle}" no se marcará como completado hasta llenar todos los campos obligatorios (*).`, { duration: 12000 });
       } else {
         toast.success("Información guardada correctamente.");
       }
