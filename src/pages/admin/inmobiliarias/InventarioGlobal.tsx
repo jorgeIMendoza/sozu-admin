@@ -740,12 +740,10 @@ const InventarioGlobal = () => {
                                     <span className="ml-1 font-medium text-foreground">{formatPrice(amounts.entrega)}</span>
                                   </div>
                                 )}
-                                {amounts.precioAjustado !== selectedProperty.precio_lista && (
-                                  <div className="text-[11px]">
-                                    <span className="text-muted-foreground">Precio ajustado:</span>
-                                    <span className="ml-1 font-medium text-foreground">{formatPrice(amounts.precioAjustado)}</span>
-                                  </div>
-                                )}
+                                <div className="text-[11px]">
+                                  <span className="text-muted-foreground">Precio final:</span>
+                                  <span className="ml-1 font-medium text-foreground">{formatPrice(amounts.precioAjustado)}</span>
+                                </div>
                               </div>
                             )}
                           </button>
