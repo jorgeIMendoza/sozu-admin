@@ -9,7 +9,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, DollarSign, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Package, Layers, Car } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import bodegaIcon from "@/assets/icons/bodega.png";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import useEmblaCarousel from "embla-carousel-react";
@@ -387,7 +386,7 @@ const InventarioGlobal = () => {
 
       {/* Filters */}
       <div className="space-y-3">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <MultiSelectFilter
             values={filterProjectNames}
             onValuesChange={setFilterProjectNames}
@@ -422,37 +421,34 @@ const InventarioGlobal = () => {
             searchPlaceholder="Buscar nivel..."
             icon={<Layers className="h-3.5 w-3.5" />}
           />
-        </div>
 
-        {/* Bodega / Estacionamiento toggle filters */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Bodega:</span>
-            <Select value={filterBodega || "todos"} onValueChange={(v) => setFilterBodega(v === "todos" ? null : v)}>
-              <SelectTrigger className="w-[130px] h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="con">Con bodega</SelectItem>
-                <SelectItem value="sin">Sin bodega</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <MultiSelectFilter
+            values={filterBodega ? [filterBodega === "con" ? "Con bodega" : "Sin bodega"] : []}
+            onValuesChange={(vals) => {
+              if (vals.length === 0) setFilterBodega(null);
+              else {
+                const last = vals[vals.length - 1];
+                setFilterBodega(last === "Con bodega" ? "con" : "sin");
+              }
+            }}
+            options={["Con bodega", "Sin bodega"]}
+            placeholder="Bodega"
+            icon={<img src={bodegaIcon} alt="" className="h-3.5 w-3.5 opacity-60" />}
+          />
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Estacionamiento:</span>
-            <Select value={filterEstacionamiento || "todos"} onValueChange={(v) => setFilterEstacionamiento(v === "todos" ? null : v)}>
-              <SelectTrigger className="w-[150px] h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="con">Con estac.</SelectItem>
-                <SelectItem value="sin">Sin estac.</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <MultiSelectFilter
+            values={filterEstacionamiento ? [filterEstacionamiento === "con" ? "Con estac." : "Sin estac."] : []}
+            onValuesChange={(vals) => {
+              if (vals.length === 0) setFilterEstacionamiento(null);
+              else {
+                const last = vals[vals.length - 1];
+                setFilterEstacionamiento(last === "Con estac." ? "con" : "sin");
+              }
+            }}
+            options={["Con estac.", "Sin estac."]}
+            placeholder="Estacionamiento"
+            icon={<Car className="h-3.5 w-3.5" />}
+          />
         </div>
 
         {/* Active filter badges */}
