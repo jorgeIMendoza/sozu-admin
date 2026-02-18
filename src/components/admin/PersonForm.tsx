@@ -738,7 +738,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       curp: curp.trim() || null,
       rfc: rfc.trim() || null,
       uso_cfdi: usoCfdi.trim() || null,
-      regimen: regimen ? parseInt(regimen) : null,
+      regimen: regimen || null,
       id_tipo_identificacion: tipoPersona === 'pf' && idTipoIdentificacion ? parseInt(idTipoIdentificacion) : null,
       sexo: sexo || null,
       fecha_nacimiento: tipoPersona === 'pf' && fechaNacimiento ? fechaNacimiento.toISOString() : null,
