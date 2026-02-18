@@ -105,16 +105,18 @@ export function MultiSelectFilter({
       </PopoverTrigger>
       <PopoverContent className="w-[300px] p-0" align="start">
         <div className="flex flex-col">
-          {/* Search input */}
-          <div className="flex items-center border-b px-3 py-2">
-            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-            <Input
-              placeholder={searchPlaceholder}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-8 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-          </div>
+          {/* Search input - only show when more than 10 options */}
+          {options.length > 10 && (
+            <div className="flex items-center border-b px-3 py-2">
+              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+              <Input
+                placeholder={searchPlaceholder}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+            </div>
+          )}
           
           {/* Selected items badges */}
           {values.length > 0 && (
