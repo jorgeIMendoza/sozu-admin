@@ -48,6 +48,7 @@ interface DocumentsTabProps {
   onGenerateFinalInvoice?: (idPersona: number, idDocumento: number) => Promise<void>; // Callback para generar factura final
   isReadOnly?: boolean; // Modo solo lectura cuando la propiedad está entregada
   hideStatusChange?: boolean; // Ocultar botón de cambiar estatus (pero permitir eliminar)
+  canEditStatus?: boolean; // Permiso para editar estatus de documentos (default: true)
 }
 
 interface TipoDocumento {
@@ -84,7 +85,8 @@ export function DocumentsTab({
   propiedadId,
   onGenerateFinalInvoice,
   isReadOnly = false,
-  hideStatusChange = false
+  hideStatusChange = false,
+  canEditStatus = true
 }: DocumentsTabProps) {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -1419,7 +1421,7 @@ export function DocumentsTab({
                               </Tooltip>
                             </TooltipProvider>
                             
-                            {!isReadOnly && !hideStatusChange && (
+                            {!isReadOnly && !hideStatusChange && canEditStatus && (
                                 <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
