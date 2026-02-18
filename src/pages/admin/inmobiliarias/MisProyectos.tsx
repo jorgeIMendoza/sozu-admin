@@ -305,7 +305,7 @@ const MisProyectos = () => {
         onClick={() => navigate("/admin/inmobiliarias/inventario")}
       >
         <Package className="h-4 w-4" />
-        Ver Todo el Inventario Disponible
+        Explorar inventario
       </Button>
 
       {filtered.length === 0 ? (
