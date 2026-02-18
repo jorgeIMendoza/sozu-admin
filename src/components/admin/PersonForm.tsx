@@ -37,10 +37,11 @@ interface PersonFormProps {
   restrictToBasicTab?: boolean;
   hideEmailField?: boolean;
   documentsReadOnly?: boolean;
+  canEditDocStatus?: boolean;
   hideComision?: boolean;
 }
 
-export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityType = 'user', fixedEntityType = false, restrictToBasicTab = false, hideEmailField = false, documentsReadOnly = false, hideComision = false }: PersonFormProps) {
+export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityType = 'user', fixedEntityType = false, restrictToBasicTab = false, hideEmailField = false, documentsReadOnly = false, canEditDocStatus = true, hideComision = false }: PersonFormProps) {
   // Basic info
   const [nombre, setNombre] = useState(initialData?.nombre || initialData?.nombre_legal || '');
   const [nombreComercial, setNombreComercial] = useState(initialData?.nombre_comercial || '');
@@ -1931,6 +1932,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     toast.success("El documento se ha agregado correctamente.");
                   }}
                   hideStatusChange={documentsReadOnly}
+                  canEditStatus={canEditDocStatus}
                 />
                    </div>
                  </TabsContent>

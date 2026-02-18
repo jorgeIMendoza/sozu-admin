@@ -3641,6 +3641,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       entityType="cuenta_cobranza"
                       shouldAutoGenerateInvoice={shouldGenerateInvoice}
                       isReadOnly={isReadOnly}
+                      canEditStatus={canUpdateCuenta || isSuperAdmin}
                       compradores={compradoresExistentes?.map(c => ({
                         id_persona: c.personas?.id || 0, 
                         nombre_legal: c.personas?.nombre_legal || '' 
@@ -5575,6 +5576,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                 setEditingBuyer(null);
               }}
               entityType="comprador"
+              canEditDocStatus={canUpdateCuenta || isSuperAdmin}
             />
           </DialogContent>
         </Dialog>
