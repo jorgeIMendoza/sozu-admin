@@ -348,8 +348,6 @@ function AgentTrainingStep({ personaId, onSaved }: { personaId: number; onSaved:
   const [fecha, setFecha] = useState('');
   const [horaInicio, setHoraInicio] = useState('');
   const [horaFin, setHoraFin] = useState('');
-  const [ubicacion, setUbicacion] = useState('');
-  const [notas, setNotas] = useState('');
 
   // Fetch existing appointment
   const { data: existingCita } = useQuery({
@@ -373,8 +371,6 @@ function AgentTrainingStep({ personaId, onSaved }: { personaId: number; onSaved:
       setFecha(existingCita.fecha || '');
       setHoraInicio(existingCita.hora_inicio || '');
       setHoraFin(existingCita.hora_fin || '');
-      setUbicacion(existingCita.ubicacion || '');
-      setNotas(existingCita.notas || '');
     }
   }, [existingCita]);
 
@@ -390,14 +386,14 @@ function AgentTrainingStep({ personaId, onSaved }: { personaId: number; onSaved:
   };
 
   const handleSchedule = async () => {
-    if (!fecha || !horaInicio || !horaFin || !ubicacion.trim()) {
-      toast.error("Completa fecha, hora de inicio, hora de fin y ubicación.");
+    if (!fecha || !horaInicio) {
+      toast.error("Completa fecha y hora.");
       return;
     }
-    if (horaFin <= horaInicio) {
-      toast.error("La hora de fin debe ser posterior a la hora de inicio.");
-      return;
-    }
+    // Auto-calculate hora_fin as 1h30m after inicio
+    const [h, m] = horaInicio.split(':').map(Number);
+    const totalMin = h * 60 + m + 90;
+    const autoHoraFin = `${String(Math.floor(totalMin / 60) % 24).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
 
     setSaving(true);
     try {
@@ -415,9 +411,8 @@ function AgentTrainingStep({ personaId, onSaved }: { personaId: number; onSaved:
           id_persona: personaId,
           fecha,
           hora_inicio: horaInicio,
-          hora_fin: horaFin,
-          ubicacion: ubicacion.trim(),
-          notas: notas.trim() || null,
+          hora_fin: autoHoraFin,
+          ubicacion: 'Por confirmar',
           estatus: 'programada',
         });
       if (error) throw error;
@@ -458,23 +453,9 @@ function AgentTrainingStep({ personaId, onSaved }: { personaId: number; onSaved:
             <Label>Fecha *</Label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="mt-1" min={new Date().toISOString().split('T')[0]} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Hora inicio *</Label>
-              <Input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="mt-1" />
-            </div>
-            <div>
-              <Label>Hora fin *</Label>
-              <Input type="time" value={horaFin} onChange={(e) => setHoraFin(e.target.value)} className="mt-1" />
-            </div>
-          </div>
           <div>
-            <Label>Ubicación *</Label>
-            <Input value={ubicacion} onChange={(e) => setUbicacion(e.target.value)} placeholder="Ej. Oficinas Sozu, Piso 3" className="mt-1" />
-          </div>
-          <div>
-            <Label>Notas <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-            <Input value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Algún comentario adicional" className="mt-1" />
+            <Label>Hora *</Label>
+            <Input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="mt-1" />
           </div>
 
           {isProgrammed && (
