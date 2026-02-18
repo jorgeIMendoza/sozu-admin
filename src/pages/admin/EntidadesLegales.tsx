@@ -483,15 +483,24 @@ export default function EntidadesLegales() {
   const updateMutation = useMutation({
     mutationFn: async (personData: any) => {
       // Extract entity type, representatives, and frontend-only fields from personData
-      const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId, tempBankAccounts, tempBeneficiaries, pendingDocuments, ...cleanPersonData } = personData;
+      const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId, tempBankAccounts, tempBeneficiaries, pendingDocuments, porcentaje_comision, id_tipo_entidad, ...cleanPersonData } = personData;
+      
+      console.log('UPDATE MUTATION - editingEntity?.id:', editingEntity?.id);
+      console.log('UPDATE MUTATION - cleanPersonData:', JSON.stringify(cleanPersonData));
       
       // First, update the basic person data
-      const { error: updateError } = await supabase
+      const { data: updateResult, error: updateError } = await supabase
         .from('personas')
         .update(cleanPersonData)
-        .eq('id', editingEntity?.id);
+        .eq('id', editingEntity?.id)
+        .select();
+      
+      console.log('UPDATE MUTATION - result:', updateResult, 'error:', updateError);
       
       if (updateError) throw updateError;
+      if (!updateResult || updateResult.length === 0) {
+        throw new Error('No se actualizó ningún registro. Verifica que el registro existe.');
+      }
       
       // Then, update the representatives if provided
       const repUpdateData: any = {};
@@ -597,6 +606,7 @@ export default function EntidadesLegales() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['entidades_legales'] });
+      queryClient.invalidateQueries({ queryKey: ['entidad-legal-full-edit'] });
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       setIsEditDialogOpen(false);
       setEditingEntity(null);
