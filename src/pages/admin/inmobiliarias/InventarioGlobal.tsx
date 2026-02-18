@@ -7,9 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, DollarSign, FileText, ChevronLeft, ChevronRight, X, Filter } from "lucide-react";
+import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, DollarSign, FileText, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { toast } from "sonner";
 import useEmblaCarousel from "embla-carousel-react";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
@@ -40,7 +39,7 @@ const InventarioGlobal = () => {
               id,
               modelos!fk_edificios_modelos_modelo (
                 id, nombre, numero_recamaras, numero_completo_banos, numero_medio_bano,
-                multimedias_modelo!fk_multimedias_modelo_modelo (id, url, es_imagen, activo)
+                multimedias_modelo!fk_multimedias_modelo_modelo (id, url, es_imagen, activo, ver_como_imagen_de_propiedad)
               ),
               propiedades!fk_propiedades_edificio_modelo (
                 id, numero_propiedad, numero_piso, precio_lista, m2_interiores, m2_exteriores,
@@ -81,17 +80,71 @@ const InventarioGlobal = () => {
     enabled: projectIds.length > 0,
   });
 
+  // Collect all property IDs to fetch their images
+  const allPropertyIds = useMemo(() => {
+    const ids: number[] = [];
+    projects.forEach((project: any) => {
+      project.edificios?.forEach((e: any) => {
+        e.edificios_modelos?.forEach((em: any) => {
+          em.propiedades?.forEach((p: any) => {
+            if (p.id_estatus_disponibilidad === 2) {
+              ids.push(p.id);
+            }
+          });
+        });
+      });
+    });
+    return ids;
+  }, [projects]);
+
+  // Fetch property-specific images
+  const { data: propertyImages = [] } = useQuery({
+    queryKey: ["inventario-property-images", allPropertyIds],
+    queryFn: async () => {
+      if (allPropertyIds.length === 0) return [];
+      // Fetch in batches if needed
+      const batchSize = 500;
+      const results: any[] = [];
+      for (let i = 0; i < allPropertyIds.length; i += batchSize) {
+        const batch = allPropertyIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from("multimedias_propiedad")
+          .select("id, url, es_imagen, activo, id_propiedad")
+          .in("id_propiedad", batch)
+          .eq("activo", true)
+          .eq("es_imagen", true);
+        if (!error && data) results.push(...data);
+      }
+      return results;
+    },
+    enabled: allPropertyIds.length > 0,
+  });
+
+  // Index property images by property id
+  const propertyImagesMap = useMemo(() => {
+    const map = new Map<number, any[]>();
+    propertyImages.forEach((img: any) => {
+      if (!map.has(img.id_propiedad)) map.set(img.id_propiedad, []);
+      map.get(img.id_propiedad)!.push(img);
+    });
+    return map;
+  }, [propertyImages]);
+
   // Flatten all available properties
   const allAvailableProperties = useMemo(() => {
     const props: any[] = [];
     projects.forEach((project: any) => {
       project.edificios?.forEach((e: any) => {
         e.edificios_modelos?.forEach((em: any) => {
-          // Collect model images
-          const modelImages = em.modelos?.multimedias_modelo?.filter((m: any) => m.es_imagen && m.activo) || [];
+          // Collect model images that have ver_como_imagen_de_propiedad = true
+          const modelImages = em.modelos?.multimedias_modelo?.filter((m: any) => m.es_imagen && m.activo && m.ver_como_imagen_de_propiedad) || [];
           
           em.propiedades?.forEach((p: any) => {
             if (p.id_estatus_disponibilidad === 2) {
+              // Property images first, fallback to model images
+              const propImgs = propertyImagesMap.get(p.id) || [];
+              const images = propImgs.length > 0 ? propImgs : modelImages;
+
               props.push({
                 ...p,
                 numero: p.numero_propiedad,
@@ -105,7 +158,7 @@ const InventarioGlobal = () => {
                 banos: em.modelos?.numero_completo_banos,
                 medio_bano: em.modelos?.numero_medio_bano,
                 m2_total: (p.m2_interiores || 0) + (p.m2_exteriores || 0),
-                model_images: modelImages,
+                model_images: images,
               });
             }
           });
@@ -118,7 +171,7 @@ const InventarioGlobal = () => {
       [props[i], props[j]] = [props[j], props[i]];
     }
     return props;
-  }, [projects]);
+  }, [projects, propertyImagesMap]);
 
   // Projects with available properties only
   const projectsWithAvailable = useMemo(() => {

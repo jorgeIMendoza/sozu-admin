@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Check, ChevronsUpDown, Search, X } from "lucide-react";
+import { ChevronsUpDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 
 interface MultiSelectFilterProps {
@@ -38,13 +37,12 @@ export function MultiSelectFilter({
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
 
-  // Filter options based on search - only show when searching
   const filteredOptions = React.useMemo(() => {
-    if (!search.trim()) return options.slice(0, 100); // Show all when no search
+    if (!search.trim()) return options.slice(0, 100);
     const searchLower = search.toLowerCase().trim();
     return options.filter(option => 
       option.toLowerCase().includes(searchLower)
-    ).slice(0, 100); // Limit results for performance
+    ).slice(0, 100);
   }, [options, search]);
 
   const handleToggle = (option: string) => {
@@ -135,7 +133,7 @@ export function MultiSelectFilter({
             </div>
           )}
           
-          {/* Options list */}
+          {/* Options list - color highlight instead of checkboxes */}
           <ScrollArea className="max-h-[250px]">
             {filteredOptions.length === 0 ? (
               <div className="py-6 text-center text-sm text-muted-foreground">
@@ -143,25 +141,23 @@ export function MultiSelectFilter({
               </div>
             ) : (
               <div className="p-1">
-                {filteredOptions.map((option) => (
-                  <div
-                    key={option}
-                    onClick={() => handleToggle(option)}
-                    className={cn(
-                      "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
-                      values.includes(option) && "bg-accent/50"
-                    )}
-                  >
-                    <Checkbox 
-                      checked={values.includes(option)}
-                      className="mr-2 h-4 w-4"
-                    />
-                    <span className="truncate flex-1">{option}</span>
-                    {values.includes(option) && (
-                      <Check className="h-4 w-4 shrink-0 text-primary ml-2" />
-                    )}
-                  </div>
-                ))}
+                {filteredOptions.map((option) => {
+                  const isSelected = values.includes(option);
+                  return (
+                    <div
+                      key={option}
+                      onClick={() => handleToggle(option)}
+                      className={cn(
+                        "relative flex cursor-pointer select-none items-center rounded-md px-3 py-2 text-sm transition-colors",
+                        isSelected
+                          ? "bg-primary text-primary-foreground font-medium"
+                          : "hover:bg-accent hover:text-accent-foreground"
+                      )}
+                    >
+                      <span className="truncate flex-1">{option}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </ScrollArea>

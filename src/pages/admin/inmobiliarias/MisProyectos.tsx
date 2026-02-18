@@ -300,13 +300,14 @@ const MisProyectos = () => {
       )}
 
       {/* Global Inventory Button */}
-      <Button
-        className="w-full sm:w-auto gap-2"
+      <button
         onClick={() => navigate("/admin/inmobiliarias/inventario")}
+        className="group relative w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
       >
-        <Package className="h-4 w-4" />
+        <Package className="h-5 w-5 transition-transform group-hover:scale-110" />
         Explorar inventario
-      </Button>
+        <span className="absolute inset-0 rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+      </button>
 
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">

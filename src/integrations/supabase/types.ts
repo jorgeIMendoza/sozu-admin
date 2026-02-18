@@ -3923,6 +3923,7 @@ export type Database = {
           id: number
           id_modelo: number
           url: string
+          ver_como_imagen_de_propiedad: boolean
           ver_como_ubicacion_en_oferta: boolean
         }
         Insert: {
@@ -3934,6 +3935,7 @@ export type Database = {
           id?: never
           id_modelo: number
           url: string
+          ver_como_imagen_de_propiedad?: boolean
           ver_como_ubicacion_en_oferta?: boolean
         }
         Update: {
@@ -3945,6 +3947,7 @@ export type Database = {
           id?: never
           id_modelo?: number
           url?: string
+          ver_como_imagen_de_propiedad?: boolean
           ver_como_ubicacion_en_oferta?: boolean
         }
         Relationships: [

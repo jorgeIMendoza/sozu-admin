@@ -23,7 +23,8 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
     es_imagen: true,
     url: "",
     descripcion: "",
-    ver_como_ubicacion_en_oferta: false
+    ver_como_ubicacion_en_oferta: false,
+    ver_como_imagen_de_propiedad: false
   });
   const [uploading, setUploading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -58,7 +59,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['modelMultimedia', modelId] });
-      setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false });
+      setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false, ver_como_imagen_de_propiedad: false });
       setIsAdding(false);
       toast({ title: "Multimedia agregado exitosamente" });
     },
@@ -91,6 +92,25 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
     onError: (error) => {
       console.error('Mutation error:', error);
       toast({ title: "Error al actualizar ubicación en oferta", variant: "destructive" });
+    }
+  });
+
+  const updateImagenPropiedadMutation = useMutation({
+    mutationFn: async ({ multimediaId, newValue }: { multimediaId: number; newValue: boolean }) => {
+      const { data, error } = await supabase
+        .from('multimedias_modelo')
+        .update({ ver_como_imagen_de_propiedad: newValue })
+        .eq('id', multimediaId)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modelMultimedia', modelId] });
+      toast({ title: "Imagen de propiedad actualizada exitosamente" });
+    },
+    onError: () => {
+      toast({ title: "Error al actualizar imagen de propiedad", variant: "destructive" });
     }
   });
 
@@ -168,6 +188,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
               url: data.publicUrl,
               descripcion: newMultimedia.descripcion || file.name,
               ver_como_ubicacion_en_oferta: newMultimedia.ver_como_ubicacion_en_oferta,
+              ver_como_imagen_de_propiedad: (newMultimedia as any).ver_como_imagen_de_propiedad || false,
               id_modelo: modelId
             }]);
 
@@ -185,7 +206,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
 
       queryClient.invalidateQueries({ queryKey: ['modelMultimedia', modelId] });
       setSelectedFiles([]);
-      setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false });
+      setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false, ver_como_imagen_de_propiedad: false });
       setIsAdding(false);
       setUploading(false);
 
@@ -364,17 +385,31 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
               )}
 
               {newMultimedia.es_imagen && selectedFiles.length <= 1 && (
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="ver_como_ubicacion_en_oferta"
-                    checked={newMultimedia.ver_como_ubicacion_en_oferta}
-                    onCheckedChange={(checked) => 
-                      setNewMultimedia(prev => ({ ...prev, ver_como_ubicacion_en_oferta: !!checked }))
-                    }
-                  />
-                  <Label htmlFor="ver_como_ubicacion_en_oferta" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Ver como ubicacion en oferta
-                  </Label>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="ver_como_ubicacion_en_oferta"
+                      checked={newMultimedia.ver_como_ubicacion_en_oferta}
+                      onCheckedChange={(checked) => 
+                        setNewMultimedia(prev => ({ ...prev, ver_como_ubicacion_en_oferta: !!checked }))
+                      }
+                    />
+                    <Label htmlFor="ver_como_ubicacion_en_oferta" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      Ver como ubicación en oferta
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="ver_como_imagen_de_propiedad"
+                      checked={newMultimedia.ver_como_imagen_de_propiedad}
+                      onCheckedChange={(checked) => 
+                        setNewMultimedia(prev => ({ ...prev, ver_como_imagen_de_propiedad: !!checked }))
+                      }
+                    />
+                    <Label htmlFor="ver_como_imagen_de_propiedad" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      Ver como imagen de propiedad
+                    </Label>
+                  </div>
                 </div>
               )}
 
@@ -392,7 +427,7 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                   onClick={() => {
                     setIsAdding(false);
                     setSelectedFiles([]);
-                    setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false });
+                    setNewMultimedia({ es_imagen: true, url: "", descripcion: "", ver_como_ubicacion_en_oferta: false, ver_como_imagen_de_propiedad: false });
                   }}
                 >
                   Cancelar
@@ -421,6 +456,11 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
                       Ubicación en oferta
                     </Badge>
                   )}
+                  {item.es_imagen && item.ver_como_imagen_de_propiedad && (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                      Imagen propiedad
+                    </Badge>
+                  )}
                 </div>
                 <Button
                   variant="outline"
@@ -446,21 +486,39 @@ export function ModelMultimediaSection({ modelId }: ModelMultimediaSectionProps)
               </div>
               
               {item.es_imagen && item.activo && (
-                <div className="flex items-center space-x-2 mb-2">
-                  <Checkbox
-                    id={`ubicacion_${item.id}`}
-                    checked={item.ver_como_ubicacion_en_oferta}
-                    onCheckedChange={(checked) => 
-                      updateUbicacionMutation.mutate({ 
-                        multimediaId: item.id, 
-                        newValue: !!checked 
-                      })
-                    }
-                    disabled={updateUbicacionMutation.isPending}
-                  />
-                  <Label htmlFor={`ubicacion_${item.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Ver como ubicación en oferta
-                  </Label>
+                <div className="space-y-2 mb-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`ubicacion_${item.id}`}
+                      checked={item.ver_como_ubicacion_en_oferta}
+                      onCheckedChange={(checked) => 
+                        updateUbicacionMutation.mutate({ 
+                          multimediaId: item.id, 
+                          newValue: !!checked 
+                        })
+                      }
+                      disabled={updateUbicacionMutation.isPending}
+                    />
+                    <Label htmlFor={`ubicacion_${item.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      Ver como ubicación en oferta
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`imagen_propiedad_${item.id}`}
+                      checked={item.ver_como_imagen_de_propiedad}
+                      onCheckedChange={(checked) => 
+                        updateImagenPropiedadMutation.mutate({ 
+                          multimediaId: item.id, 
+                          newValue: !!checked 
+                        })
+                      }
+                      disabled={updateImagenPropiedadMutation.isPending}
+                    />
+                    <Label htmlFor={`imagen_propiedad_${item.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      Ver como imagen de propiedad
+                    </Label>
+                  </div>
                 </div>
               )}
               
