@@ -1,105 +1,93 @@
 
-# Plan: RPC para Inventario Global
 
-## Problema actual
+# Plan: Onboarding Gamificado para Agentes
 
-La vista hace **5 queries secuenciales** (waterfall) desde el cliente:
-1. Proyectos con edificios, modelos y propiedades (query pesada con JOINs anidados)
-2. Esquemas de pago por proyecto
-3. Imagenes de propiedades (en batches de 500)
-4. Bodegas por propiedad (en batches de 500)
-5. Estacionamientos por propiedad (en batches de 500)
+## Objetivo
 
-Cada query espera a la anterior, causando ~1 minuto de carga total.
+Agregar un widget de progreso gamificado en la vista de proyectos del agente (`MisProyectos.tsx`) que muestre 5 pasos de onboarding con indicadores visuales de completitud y acceso rapido para editar cada seccion.
 
-## Solucion
+## Diseno Visual (Mobile-First)
 
-Crear **una sola funcion RPC de Postgres** (`get_inventario_disponible`) que devuelva todas las propiedades disponibles ya aplanadas con toda la info necesaria en una sola llamada. El front solo renderiza.
+El widget se mostrara entre el header y el boton "Explorar inventario" como una tarjeta compacta con:
 
-## Paso 1: Crear la migracion SQL
+1. **Barra de progreso circular o lineal** con porcentaje (ej. "60% completado")
+2. **5 pasos** mostrados como iconos circulares conectados (stepper horizontal en desktop, vertical compacto en mobile)
+3. Cada paso completado se pinta en verde con check animado
+4. Cada paso incompleto se pinta en gris con icono del paso
+5. **Boton "Completar"** en cada paso incompleto que abre un Drawer (mobile) o Dialog (desktop) con el formulario correspondiente
+6. Cuando todos esten completos, el widget se colapsa a un badge "Perfil completo" con confetti visual
 
-Funcion `get_inventario_disponible` que recibe:
-- `p_accessible_project_ids` (int[] nullable) - control de acceso por proyecto
+## Pasos del Onboarding
 
-Retorna un JSON array donde cada fila tiene:
-- Datos de propiedad: id, numero_propiedad, numero_piso, precio_lista, m2_interiores, m2_exteriores
-- Datos de proyecto: proyecto_id, proyecto_nombre
-- Datos de edificio: edificio_nombre
-- Datos de modelo: modelo_id, modelo_nombre, numero_recamaras, numero_completo_banos, numero_medio_bano
-- Conteos: bodegas_count, estacionamientos_count
-- Tipos de estacionamiento: estacionamientos_tipos (text[])
-- Imagenes de propiedad: propiedad_imagenes (jsonb[]) - URLs de imagenes propias
-- Imagenes de modelo (fallback): modelo_imagenes (jsonb[]) - URLs de imagenes con ver_como_imagen_de_propiedad
-- Esquemas de pago del proyecto: esquemas_pago (jsonb[])
-
-La funcion filtra solo:
-- `proyectos.activo = true AND proyectos.publicar = true`
-- `propiedades.id_estatus_disponibilidad = 2` (disponible)
-
-Todo en un solo query con JOINs eficientes, subqueries laterales para conteos y arrays.
-
-## Paso 2: Hook React
-
-Crear `src/hooks/useInventarioDisponible.ts`:
-- Llama a `supabase.rpc('get_inventario_disponible', { p_accessible_project_ids })`
-- Usa `useProjectAccess()` para el control de acceso
-- Retorna los datos ya listos para renderizar
-
-## Paso 3: Refactorizar InventarioGlobal.tsx
-
-Reemplazar las 5 queries actuales por una sola llamada al nuevo hook. La logica de:
-- Aplanar propiedades (ya viene aplanado del RPC)
-- Mapear imagenes (ya vienen incluidas)
-- Mapear bodegas/estacionamientos (ya vienen como conteos)
-- Esquemas de pago (ya vienen por proyecto)
-- Shuffling aleatorio (se mantiene en el front)
-- Filtros (se mantienen en el front con useMemo)
-
----
+| Paso | Campos validados | Fuente |
+|------|-----------------|--------|
+| Informacion Basica | nombre_legal, email, telefono | personas |
+| Direccion | calle, num_ext, colonia, cp, pais, estado, municipio | personas |
+| Informacion Fiscal | rfc, regimen, uso_cfdi, direccion fiscal completa | personas |
+| Documentos | INE frente (2), INE reverso (3), Constancia (6), Contrato comercializacion (48) | documentos |
+| Cuentas Bancarias | minimo 1 cuenta bancaria activa | cuentas_bancarias |
 
 ## Seccion Tecnica
 
-### SQL de la funcion RPC
+### Archivos nuevos
+
+**`src/hooks/useAgentOnboardingStatus.ts`**
+- Hook que recibe `personaId` y consulta:
+  - Datos de `personas` (campos basicos, direccion, fiscal)
+  - Documentos del agente (tipos 2, 3, 6, 48)
+  - Cuentas bancarias activas
+- Retorna un objeto con `steps: { id, label, icon, isComplete }[]`, `completedCount`, `totalSteps`, `percentage`
+- Query key: `['agent-onboarding-status', personaId]`
+
+**`src/components/admin/AgentOnboardingWidget.tsx`**
+- Componente del widget gamificado
+- Usa `useAgentOnboardingStatus(profile.id_persona)`
+- Renderiza stepper visual con iconos (User, MapPin, FileText, FolderOpen, Landmark)
+- Cada paso tiene boton "Completar" que abre el drawer/dialog de edicion
+- Animaciones: check bounce en pasos completos, pulse en el siguiente paso pendiente
+- Responsive: en mobile los pasos se apilan verticalmente como lista compacta
+
+**`src/components/admin/AgentOnboardingStepDialog.tsx`**
+- Dialog/Drawer responsivo (Drawer en mobile, Dialog en desktop)
+- Recibe `step` (basic/address/fiscal/documents/bank-accounts) y `personaId`
+- Carga los datos completos de la persona (patron full-fetch)
+- Renderiza formularios especificos por paso (NO reutiliza PersonForm completo, sino secciones individuales extraidas):
+  - **Basico**: nombre, email, telefono, tipo persona
+  - **Direccion**: campos de direccion fisica
+  - **Fiscal**: RFC, regimen, uso CFDI, direccion fiscal (con opcion copiar)
+  - **Documentos**: componente DocumentsTab filtrado a tipos 2, 3, 6, 48
+  - **Cuentas bancarias**: componente BankAccountsSection
+- Boton "Guardar" que actualiza solo los campos del paso y refresca el status
+- Estilo mobile-first con inputs grandes, spacing generoso, scroll suave
+
+### Archivos modificados
+
+**`src/pages/admin/inmobiliarias/MisProyectos.tsx`**
+- Importar y renderizar `AgentOnboardingWidget` entre el header y el boton "Explorar inventario"
+- Solo se muestra para `profile.rol_nombre === "Agente Inmobiliario"` y cuando el perfil no esta 100% completo
+- Se oculta automaticamente cuando el agente completa todo
+
+### Flujo de datos
 
 ```text
-CREATE OR REPLACE FUNCTION get_inventario_disponible(
-  p_accessible_project_ids int[] DEFAULT NULL
-)
-RETURNS jsonb AS $$
-  -- Single query joining:
-  -- proyectos -> edificios -> edificios_modelos -> modelos -> propiedades
-  -- LEFT JOIN lateral para:
-  --   bodegas count
-  --   estacionamientos count + tipos
-  --   multimedias_propiedad (imagenes)
-  --   multimedias_modelo (imagenes fallback)
-  --   esquemas_pago del proyecto
-  -- WHERE propiedades.id_estatus_disponibilidad = 2
-  --   AND proyectos.activo = true AND proyectos.publicar = true
-  --   AND (p_accessible_project_ids IS NULL OR proyectos.id = ANY(p_accessible_project_ids))
-$$ LANGUAGE sql STABLE;
+MisProyectos
+  -> AgentOnboardingWidget
+    -> useAgentOnboardingStatus(profile.id_persona)
+      -> 3 queries paralelas: persona, documentos, cuentas_bancarias
+    -> onClick paso -> AgentOnboardingStepDialog
+      -> full-fetch persona data
+      -> formulario del paso
+      -> guardar -> invalidar 'agent-onboarding-status'
+      -> widget se actualiza automaticamente
 ```
 
-### Estructura del hook
+### Estilo y UX
 
-```text
-useInventarioDisponible({ enabled })
-  -> useProjectAccess()
-  -> supabase.rpc('get_inventario_disponible', { p_accessible_project_ids })
-  -> returns { propiedades, isLoading }
-```
+- Tarjeta con gradiente sutil (`bg-gradient-to-br from-card to-primary/5`)
+- Barra de progreso animada con color que transiciona de rojo (0%) a amarillo (50%) a verde (100%)
+- Iconos circulares: completados = fondo verde + check blanco, pendientes = fondo gris + icono
+- El siguiente paso pendiente tiene un efecto `ring-2 ring-primary animate-pulse` para guiar al usuario
+- En mobile: lista vertical con filas de `icono | nombre | badge status | boton`
+- En desktop: stepper horizontal con lineas conectoras entre iconos
+- Al completar todo: animacion de "felicitacion" con badge dorado "Perfil Completo"
 
-### Cambios en InventarioGlobal.tsx
-
-- Eliminar las 5 queries existentes (lineas 35-170)
-- Eliminar los useMemo de mapeo (bodegasMap, estacionamientosMap, propertyImagesMap)
-- Usar el hook directo, mantener solo los useMemo de filtrado y el shuffle
-- Los esquemas de pago vienen incluidos en cada propiedad (agrupados por proyecto)
-
-### Resultado esperado
-
-| Metrica | Antes | Despues |
-|---------|-------|---------|
-| Queries al servidor | 5+ (waterfall) | 1 |
-| Tiempo de carga | ~60 segundos | < 2 segundos |
-| Datos procesados en cliente | Mucho (maps, batches) | Minimo (solo filtros/shuffle) |
