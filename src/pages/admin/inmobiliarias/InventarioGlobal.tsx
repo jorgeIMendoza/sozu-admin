@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, DollarSign, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Package, Layers, Car, Search, SlidersHorizontal } from "lucide-react";
 import bodegaIcon from "@/assets/icons/bodega.png";
-import { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
@@ -319,19 +319,20 @@ const InventarioGlobal = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-10 px-3">
-      <button
-        onClick={() => navigate("/admin/inmobiliarias/proyectos")}
-        className="group inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 text-primary font-medium text-sm border border-primary/20 shadow-sm hover:shadow-md hover:shadow-primary/10 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 ease-out"
-      >
-        <ArrowLeft className="h-4 w-4 transition-transform duration-300 group-hover:-translate-x-0.5" />
-        <span className="tracking-wide">Volver</span>
-      </button>
-
-      <div className="px-1 space-y-1">
-        <h1 className="text-xl font-bold text-foreground">Inventario Disponible</h1>
-        <p className="text-sm text-muted-foreground">
-          {filteredProperties.length} unidades disponibles
-        </p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="space-y-0.5">
+          <h1 className="text-xl font-bold text-foreground">Inventario Disponible</h1>
+          <p className="text-sm text-muted-foreground">
+            {filteredProperties.length} unidades disponibles
+          </p>
+        </div>
+        <button
+          onClick={() => navigate("/admin/inmobiliarias/proyectos")}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
+        >
+          <Building2 className="h-3.5 w-3.5" />
+          <span>Proyectos</span>
+        </button>
       </div>
 
       {/* Mobile: Airbnb-style search button */}
@@ -846,11 +847,25 @@ const InventarioGlobal = () => {
   );
 };
 
-// Small carousel for property cards - OPTIMIZED: only render first image initially
+// Small carousel for property cards - OPTIMIZED: only render when visible in viewport
 const PropertyCardCarousel = ({ images }: { images: any[] }) => {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, dragFree: false });
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // IntersectionObserver: only start loading images when card scrolls into view
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setIsVisible(true); observer.disconnect(); } },
+      { rootMargin: '200px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
@@ -861,7 +876,6 @@ const PropertyCardCarousel = ({ images }: { images: any[] }) => {
   useEffect(() => {
     if (!emblaApi) return;
     emblaApi.on("select", onSelect);
-    // Mark as interacted on any pointer down to preload remaining slides
     const onPointerDown = () => { if (!hasInteracted) setHasInteracted(true); };
     emblaApi.on("pointerDown", onPointerDown);
     onSelect();
@@ -877,20 +891,26 @@ const PropertyCardCarousel = ({ images }: { images: any[] }) => {
   }
 
   // Only render first image until user interacts, then load up to 5
-  const visibleImages = hasInteracted ? images.slice(0, 5) : images.slice(0, 1);
+  const visibleImages = !isVisible ? [] : hasInteracted ? images.slice(0, 5) : images.slice(0, 1);
 
   return (
-    <div className="relative h-40 bg-muted overflow-hidden" onClick={(e) => e.stopPropagation()}>
-      <div ref={emblaRef} className="h-full overflow-hidden">
-        <div className="flex h-full touch-pan-y">
-          {visibleImages.map((img: any) => (
-            <div key={img.id} className="flex-[0_0_100%] min-w-0 h-full">
-              <img src={img.url} alt="" className="w-full h-full object-cover" loading="lazy" />
-            </div>
-          ))}
+    <div ref={containerRef} className="relative h-40 bg-muted overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      {isVisible ? (
+        <div ref={emblaRef} className="h-full overflow-hidden">
+          <div className="flex h-full touch-pan-y">
+            {visibleImages.map((img: any) => (
+              <div key={img.id} className="flex-[0_0_100%] min-w-0 h-full">
+                <img src={img.url} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-      {images.length > 1 && (
+      ) : (
+        <div className="h-full flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
+        </div>
+      )}
+      {isVisible && images.length > 1 && (
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
           {images.slice(0, 5).map((_: any, i: number) => (
             <span key={i} className={`h-1.5 w-1.5 rounded-full transition-colors ${i === currentIndex ? "bg-white" : "bg-white/40"}`} />
@@ -900,7 +920,6 @@ const PropertyCardCarousel = ({ images }: { images: any[] }) => {
     </div>
   );
 };
-
 // Carousel for detail dialog
 const DetailCarousel = ({ images }: { images: any[] }) => {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true });
