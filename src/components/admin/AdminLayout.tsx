@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminHeader } from "./AdminHeader";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "next-themes";
 
 const SIMPLIFIED_ROLES = ["Agente Inmobiliario", "Inmobiliaria"];
 
@@ -11,8 +12,15 @@ export const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { profile } = useAuth();
+  const { setTheme } = useTheme();
   
   const isSimplifiedRole = SIMPLIFIED_ROLES.includes(profile?.rol_nombre ?? "");
+
+  useEffect(() => {
+    if (isSimplifiedRole) {
+      setTheme("light");
+    }
+  }, [isSimplifiedRole, setTheme]);
 
   return (
     <div className="min-h-screen bg-background">
