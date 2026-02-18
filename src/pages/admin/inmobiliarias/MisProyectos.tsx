@@ -12,6 +12,7 @@ import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import useEmblaCarousel from "embla-carousel-react";
+import { AgentOnboardingWidget } from "@/components/admin/AgentOnboardingWidget";
 
 const MisProyectos = () => {
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess, hasNoAccess } = useProjectAccess();
@@ -297,6 +298,11 @@ const MisProyectos = () => {
             className="max-w-sm"
           />
         </>
+      )}
+
+      {/* Onboarding Widget for Agents */}
+      {isSimplifiedRole && profile?.rol_nombre === "Agente Inmobiliario" && profile?.id_persona && (
+        <AgentOnboardingWidget personaId={profile.id_persona} />
       )}
 
       {/* Global Inventory Button */}
