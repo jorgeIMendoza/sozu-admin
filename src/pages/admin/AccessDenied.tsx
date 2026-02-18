@@ -17,7 +17,7 @@ const AccessDenied = () => {
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center py-12">
+    <div className="flex items-center justify-center min-h-[60vh] w-full py-12">
       <div className="text-center space-y-6 max-w-md px-6">
         {/* Icono */}
         <div className="flex items-center justify-center">
