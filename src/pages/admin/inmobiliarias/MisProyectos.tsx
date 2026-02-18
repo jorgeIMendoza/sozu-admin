@@ -12,7 +12,7 @@ import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import useEmblaCarousel from "embla-carousel-react";
-import { AgentOnboardingWidget } from "@/components/admin/AgentOnboardingWidget";
+
 
 const MisProyectos = () => {
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess, hasNoAccess } = useProjectAccess();
@@ -300,10 +300,7 @@ const MisProyectos = () => {
         </>
       )}
 
-      {/* Onboarding Widget for Agents */}
-      {isSimplifiedRole && profile?.rol_nombre === "Agente Inmobiliario" && profile?.id_persona && (
-        <AgentOnboardingWidget personaId={profile.id_persona} />
-      )}
+      {/* Onboarding widget moved to AdminLayout header */}
 
       {/* Global Inventory Button */}
       <button
@@ -331,7 +328,7 @@ const MisProyectos = () => {
             const isExpanded = expandedCards[project.id] || false;
 
             return (
-              <Card key={project.id} className="overflow-hidden border shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 rounded-2xl">
+              <Card key={project.id} className="overflow-hidden border shadow-sm hover:shadow-2xl hover:-translate-y-3 hover:scale-[1.02] transition-all duration-300 rounded-2xl cursor-pointer">
                 {/* Image Carousel */}
                 <ImageCarousel images={images} projectName={project.nombre} badge={getProjectBadge(project)} brochure={brochure} onDownloadBrochure={handleDownloadBrochure} />
 

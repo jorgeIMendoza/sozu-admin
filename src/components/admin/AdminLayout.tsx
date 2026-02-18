@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminHeader } from "./AdminHeader";
+import { AgentOnboardingWidget } from "./AgentOnboardingWidget";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -13,6 +14,7 @@ export const AdminLayout = () => {
   const { profile } = useAuth();
   
   const isSimplifiedRole = SIMPLIFIED_ROLES.includes(profile?.rol_nombre ?? "");
+  const isAgent = profile?.rol_nombre === "Agente Inmobiliario";
 
   return (
     <div className="min-h-screen bg-background">
@@ -31,6 +33,11 @@ export const AdminLayout = () => {
         <AdminHeader 
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}
         />
+
+        {/* Agent onboarding bar - always visible in header area */}
+        {isAgent && profile?.id_persona && (
+          <AgentOnboardingWidget personaId={profile.id_persona} />
+        )}
         
         <main className="flex-1 p-6">
           <Outlet />
