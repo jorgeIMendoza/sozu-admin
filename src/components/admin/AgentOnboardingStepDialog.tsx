@@ -8,13 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2 } from "lucide-react";
+import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, Download, FileText } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { DocumentsTab } from "./DocumentsTab";
 import { BankAccountsSection } from "./BankAccountsSection";
 import { validateRFC } from "@/utils/fiscalDataValidation";
+import { Badge } from "@/components/ui/badge";
 import type { OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 
 interface AgentOnboardingStepDialogProps {
@@ -39,6 +39,9 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   documents: 'INE, Constancia y Contrato de comercialización',
   'bank-accounts': 'Agrega al menos una cuenta bancaria',
 };
+
+// Required document types for onboarding
+const REQUIRED_DOC_TYPES = [2, 3, 6, 48];
 
 export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange }: AgentOnboardingStepDialogProps) {
   const isMobile = useIsMobile();
@@ -76,9 +79,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
     </div>
   ) : step === 'documents' ? (
     <div className="px-1">
-      <DocumentsTab entityId={personaId} entityType="persona" tipoPersona="pf" onDocumentAdded={() => {
-        queryClient.invalidateQueries({ queryKey: ['agent-onboarding-docs'] });
-      }} />
+      <AgentDocumentsStep personaId={personaId} />
     </div>
   ) : step === 'bank-accounts' ? (
     <div className="px-1">
@@ -114,6 +115,200 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
         {content}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------- Agent Documents Step ----------
+
+function AgentDocumentsStep({ personaId }: { personaId: number }) {
+  const queryClient = useQueryClient();
+
+  // Fetch doc type names from DB
+  const { data: docTypes = [] } = useQuery({
+    queryKey: ['agent-doc-types'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tipos_documento')
+        .select('id, nombre')
+        .in('id', REQUIRED_DOC_TYPES)
+        .eq('activo', true);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch existing documents for this persona
+  const { data: existingDocs = [], refetch: refetchDocs } = useQuery({
+    queryKey: ['agent-onboarding-docs-detail', personaId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('documentos')
+        .select('id, id_tipo_documento, url, id_estatus_verificacion, fecha_creacion')
+        .eq('id_persona', personaId)
+        .eq('activo', true)
+        .in('id_tipo_documento', REQUIRED_DOC_TYPES);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const [uploading, setUploading] = useState<number | null>(null);
+
+  const getDocForType = (typeId: number) => {
+    return existingDocs
+      .filter((d: any) => d.id_tipo_documento === typeId)
+      .sort((a: any, b: any) => new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime())[0];
+  };
+
+  const getStatusInfo = (doc: any) => {
+    if (!doc) return { label: 'Sin subir', color: 'text-muted-foreground', bg: 'bg-muted', icon: Upload };
+    switch (doc.id_estatus_verificacion) {
+      case 2: return { label: 'Validado', color: 'text-emerald-600', bg: 'bg-emerald-500/10', icon: CheckCircle2 };
+      case 3: return { label: 'Rechazado', color: 'text-destructive', bg: 'bg-destructive/10', icon: RefreshCw };
+      default: return { label: 'Pendiente', color: 'text-amber-600', bg: 'bg-amber-500/10', icon: Clock };
+    }
+  };
+
+  const handleUpload = async (typeId: number, file: File) => {
+    setUploading(typeId);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `persona_${personaId}_doctype${typeId}_${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('documentos')
+        .upload(fileName, file);
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('documentos')
+        .getPublicUrl(fileName);
+
+      // Deactivate previous documents of same type
+      await supabase
+        .from('documentos')
+        .update({ activo: false })
+        .eq('id_persona', personaId)
+        .eq('id_tipo_documento', typeId)
+        .eq('activo', true);
+
+      // Insert new
+      const { error: insertError } = await supabase
+        .from('documentos')
+        .insert({
+          url: urlData.publicUrl,
+          id_tipo_documento: typeId,
+          id_persona: personaId,
+          activo: true,
+          id_estatus_verificacion: 1, // Pendiente
+        });
+      if (insertError) throw insertError;
+
+      toast.success("Documento subido correctamente");
+      refetchDocs();
+      queryClient.invalidateQueries({ queryKey: ['agent-onboarding-docs'] });
+    } catch (err: any) {
+      toast.error("Error al subir documento: " + (err.message || "Error"));
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handleFileSelect = (typeId: number) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,.jpg,.jpeg,.png,.webp';
+    input.onchange = (e: any) => {
+      const file = e.target.files?.[0];
+      if (file) handleUpload(typeId, file);
+    };
+    input.click();
+  };
+
+  return (
+    <div className="space-y-3 pb-4">
+      {REQUIRED_DOC_TYPES.map((typeId) => {
+        const docType = docTypes.find((d: any) => d.id === typeId);
+        const doc = getDocForType(typeId);
+        const status = getStatusInfo(doc);
+        const StatusIcon = status.icon;
+        const isValidated = doc?.id_estatus_verificacion === 2;
+        const isUploading = uploading === typeId;
+
+        return (
+          <div
+            key={typeId}
+            className={`rounded-xl border-2 transition-all duration-300 ${
+              isValidated
+                ? 'border-emerald-500/30 bg-emerald-500/5'
+                : doc
+                ? 'border-amber-500/30 bg-amber-500/5'
+                : 'border-dashed border-muted-foreground/20 bg-muted/30'
+            }`}
+          >
+            <div className="p-4 space-y-3">
+              {/* Doc name + status */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm font-medium text-foreground truncate">
+                    {docType?.nombre || `Documento ${typeId}`}
+                  </span>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] px-2 py-0.5 shrink-0 ${status.color} ${status.bg} border-0`}
+                >
+                  <StatusIcon className="h-3 w-3 mr-1" />
+                  {status.label}
+                </Badge>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2">
+                {/* Upload/Update button */}
+                {!isValidated && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isUploading}
+                    onClick={() => handleFileSelect(typeId)}
+                    className="flex-1 h-10 rounded-xl shadow-[0_4px_14px_-3px_hsl(var(--primary)/0.25)] hover:shadow-[0_6px_20px_-3px_hsl(var(--primary)/0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5"
+                  >
+                    {isUploading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : doc ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Actualizar
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-3.5 w-3.5" />
+                        Subir
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                {/* Download button for validated */}
+                {isValidated && doc?.url && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(doc.url, '_blank')}
+                    className="flex-1 h-10 rounded-xl shadow-[0_4px_14px_-3px_hsl(142_76%_36%/0.25)] hover:shadow-[0_6px_20px_-3px_hsl(142_76%_36%/0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5 text-emerald-600 border-emerald-200"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Descargar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -492,7 +687,11 @@ function StepForm({ step, persona, personaId, onSaved }: StepFormProps) {
         </div>
       )}
 
-      <Button onClick={handleSave} disabled={saving} className="w-full h-12 text-base font-semibold">
+      <Button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full h-12 text-base font-semibold rounded-xl shadow-[0_6px_20px_-4px_hsl(var(--primary)/0.4)] hover:shadow-[0_8px_28px_-4px_hsl(var(--primary)/0.5)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+      >
         {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Guardando...</> : "Guardar"}
       </Button>
     </div>

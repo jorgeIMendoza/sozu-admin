@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { User, MapPin, FileText, FolderOpen, Landmark, Check, Trophy, Loader2 } from "lucide-react";
 import { useAgentOnboardingStatus, type OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
@@ -32,26 +31,20 @@ export function AgentOnboardingWidget({ personaId }: AgentOnboardingWidgetProps)
 
   if (isLoading) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
+      <div className="bg-card border-b px-4 py-2 flex items-center justify-center">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      </div>
     );
   }
 
-  // All complete - show badge
+  // All complete - show slim badge
   if (percentage === 100) {
     return (
-      <Card className="border-0 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent">
-        <CardContent className="flex items-center gap-3 py-3 px-4">
-          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-emerald-500 text-white shrink-0">
-            <Trophy className="h-4 w-4" />
-          </div>
-          <p className="font-semibold text-sm text-foreground flex-1">¡Perfil completo!</p>
-          <Badge className="bg-emerald-500 text-white border-0 shrink-0">100%</Badge>
-        </CardContent>
-      </Card>
+      <div className="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border-b px-4 py-2 flex items-center gap-2 justify-center">
+        <Trophy className="h-4 w-4 text-emerald-500" />
+        <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">¡Perfil completo!</span>
+        <Badge className="bg-emerald-500 text-white border-0 text-[10px] px-1.5 py-0">100%</Badge>
+      </div>
     );
   }
 
@@ -59,65 +52,76 @@ export function AgentOnboardingWidget({ personaId }: AgentOnboardingWidgetProps)
 
   return (
     <>
-      <Card className="overflow-hidden border shadow-sm">
-        <CardContent className="p-4 space-y-3">
-          {/* Header with percentage */}
-          <div className="text-center space-y-0.5">
-            <p className="font-bold text-sm text-foreground">¡Completa tu perfil!</p>
-            <p className="text-xs text-muted-foreground">{percentage}% completado</p>
-          </div>
+      <div className="bg-card border-b px-3 py-2.5">
+        {/* Title row */}
+        <div className="flex items-center justify-between mb-2 px-1">
+          <span className="text-xs font-bold text-foreground">¡Completa tu perfil!</span>
+          <span className="text-[10px] text-muted-foreground">{percentage}%</span>
+        </div>
 
-          {/* Horizontal stepper */}
-          <div className="flex items-center justify-between gap-0">
-            {steps.map((step, index) => {
-              const Icon = STEP_ICONS[step.id];
-              const isNext = nextIncomplete?.id === step.id;
-              const num = STEP_NUMBERS[step.id];
+        {/* Progress bar */}
+        <div className="h-1 bg-muted rounded-full mb-2.5 mx-1 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700 ease-out"
+            style={{
+              width: `${percentage}%`,
+              background: percentage < 40
+                ? 'hsl(var(--destructive))'
+                : percentage < 70
+                ? 'hsl(45 93% 47%)'
+                : 'hsl(142 76% 36%)',
+            }}
+          />
+        </div>
 
-              return (
-                <div key={step.id} className="flex items-center flex-1 last:flex-none">
-                  {/* Step circle + label */}
-                  <button
-                    onClick={() => setActiveStep(step.id)}
-                    className="flex flex-col items-center gap-1 group"
-                  >
-                    <div
-                      className={cn(
-                        "flex items-center justify-center h-9 w-9 rounded-full text-xs font-bold transition-all border-2",
-                        step.isComplete
-                          ? "bg-emerald-500 border-emerald-500 text-white"
-                          : isNext
-                          ? "bg-primary border-primary text-primary-foreground ring-2 ring-primary/30 ring-offset-1"
-                          : "bg-muted border-muted-foreground/20 text-muted-foreground"
-                      )}
-                    >
-                      {step.isComplete ? <Check className="h-4 w-4" /> : num}
-                    </div>
-                    <span className={cn(
-                      "text-[10px] leading-tight font-medium text-center max-w-[60px]",
+        {/* Horizontal stepper - compact */}
+        <div className="flex items-center justify-between gap-0">
+          {steps.map((step, index) => {
+            const isNext = nextIncomplete?.id === step.id;
+            const num = STEP_NUMBERS[step.id];
+
+            return (
+              <div key={step.id} className="flex items-center flex-1 last:flex-none">
+                <button
+                  onClick={() => setActiveStep(step.id)}
+                  className="flex flex-col items-center gap-0.5 group"
+                >
+                  <div
+                    className={cn(
+                      "flex items-center justify-center h-7 w-7 rounded-full text-[10px] font-bold transition-all border-2",
                       step.isComplete
-                        ? "text-emerald-600 dark:text-emerald-400"
+                        ? "bg-emerald-500 border-emerald-500 text-white scale-100"
                         : isNext
-                        ? "text-primary"
-                        : "text-muted-foreground"
-                    )}>
-                      {step.label}
-                    </span>
-                  </button>
+                        ? "bg-primary border-primary text-primary-foreground ring-2 ring-primary/30 ring-offset-1 animate-pulse"
+                        : "bg-muted border-muted-foreground/20 text-muted-foreground"
+                    )}
+                  >
+                    {step.isComplete ? <Check className="h-3.5 w-3.5" /> : num}
+                  </div>
+                  <span className={cn(
+                    "text-[9px] leading-tight font-medium text-center max-w-[52px]",
+                    step.isComplete
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : isNext
+                      ? "text-primary"
+                      : "text-muted-foreground"
+                  )}>
+                    {step.label}
+                  </span>
+                </button>
 
-                  {/* Connector line */}
-                  {index < steps.length - 1 && (
-                    <div className={cn(
-                      "flex-1 h-0.5 mx-1 mt-[-16px] rounded-full",
-                      step.isComplete ? "bg-emerald-500" : "bg-muted-foreground/15"
-                    )} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                {/* Connector */}
+                {index < steps.length - 1 && (
+                  <div className={cn(
+                    "flex-1 h-0.5 mx-0.5 mt-[-12px] rounded-full",
+                    step.isComplete ? "bg-emerald-500" : "bg-muted-foreground/15"
+                  )} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Step Dialog */}
       {activeStep && (
