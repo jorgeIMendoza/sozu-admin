@@ -205,7 +205,7 @@ const App = () => (
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
                   <Route path="inmobiliarias/mi-informacion" element={<MiInformacion />} />
                   <Route path="inmobiliarias/mis-agentes" element={<MisAgentes />} />
-                  <Route path="inmobiliarias/mis-propiedades" element={<MisPropiedades />} />
+                  <Route path="inmobiliarias/mis-propiedades" element={<Navigate to="/admin/inmobiliarias/inventario" replace />} />
                   <Route path="inmobiliarias/mis-ventas" element={<MisVentas />} />
                   <Route path="inmobiliarias/mis-proyectos" element={<MisProyectos />} />
                   <Route path="inmobiliarias/mis-proyectos/:id" element={<MiProyectoDetalle />} />

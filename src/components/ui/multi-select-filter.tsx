@@ -40,7 +40,7 @@ export function MultiSelectFilter({
 
   // Filter options based on search - only show when searching
   const filteredOptions = React.useMemo(() => {
-    if (search.length < 2) return []; // Don't show options until user types at least 2 chars
+    if (!search.trim()) return options.slice(0, 100); // Show all when no search
     const searchLower = search.toLowerCase().trim();
     return options.filter(option => 
       option.toLowerCase().includes(searchLower)
