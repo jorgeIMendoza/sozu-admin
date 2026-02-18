@@ -49,10 +49,8 @@ export function AgentOnboardingWidget({ personaId, variant = 'default' }: AgentO
               className="h-full rounded-full transition-all duration-700 ease-out"
               style={{
                 width: `${percentage}%`,
-                background: percentage < 40
-                  ? 'hsl(var(--destructive))'
-                  : percentage < 70
-                  ? 'hsl(45 93% 47%)'
+                background: percentage < 70
+                  ? 'hsl(var(--primary))'
                   : 'hsl(142 76% 36%)',
               }}
             />
@@ -74,8 +72,8 @@ export function AgentOnboardingWidget({ personaId, variant = 'default' }: AgentO
                 >
                   <div
                     className={cn(
-                      "flex items-center justify-center rounded-full text-[9px] font-bold transition-all border-2",
-                      isInline ? "h-5 w-5" : "h-7 w-7 text-[10px]",
+                      "flex items-center justify-center rounded-full font-bold transition-all border-2",
+                      isInline ? "h-6 w-6 text-[10px]" : "h-9 w-9 text-xs",
                       step.isComplete
                         ? "bg-emerald-500 border-emerald-500 text-white"
                         : isSelected
