@@ -9,7 +9,7 @@ interface PermissionRouteProps {
 }
 
 export function PermissionRoute({ children }: PermissionRouteProps) {
-  const { isPathAllowed, isLoading, isSuperAdmin } = useAllowedMenus();
+  const { isPathAllowed, isLoading, isSuperAdmin, allowedPaths } = useAllowedMenus();
   const { menuItems, isLoading: isMenuLoading } = useDynamicMenus();
   const location = useLocation();
 
@@ -44,15 +44,17 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <>{children}</>;
   }
 
-  // User doesn't have permission - if on /admin (dashboard), redirect to first allowed menu
-  if (currentPath === '/admin' || currentPath === '/admin/') {
-    const firstAllowedPath = getFirstAllowedPath(menuItems);
-    if (firstAllowedPath) {
+  // User doesn't have permission to this specific route
+  // Try to redirect to the first allowed menu item instead of showing access denied
+  const firstAllowedPath = getFirstAllowedPath(menuItems);
+  if (firstAllowedPath) {
+    // Only redirect if the target is different from current path to avoid loops
+    if (firstAllowedPath !== currentPath) {
       return <Navigate to={firstAllowedPath} replace />;
     }
   }
 
-  // User doesn't have permission to this route - show access denied
+  // No allowed paths at all - show access denied
   return <Navigate to="/admin/access-denied" replace />;
 }
 
