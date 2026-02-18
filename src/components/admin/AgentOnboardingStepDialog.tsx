@@ -515,6 +515,7 @@ function StepForm({ step, persona, personaId, onSaved }: StepFormProps) {
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
   const [curp, setCurp] = useState('');
+  const [sexo, setSexo] = useState('');
 
   // Address fields
   const [calle, setCalle] = useState('');
@@ -547,6 +548,7 @@ function StepForm({ step, persona, personaId, onSaved }: StepFormProps) {
     setEmail(persona.email || '');
     setTelefono(persona.telefono || '');
     setCurp(persona.curp || '');
+    setSexo(persona.sexo || '');
     setCalle(persona.direccion_calle || '');
     setNumExt(persona.direccion_num_ext || '');
     setNumInt(persona.direccion_num_int || '');
@@ -659,6 +661,7 @@ function StepForm({ step, persona, personaId, onSaved }: StepFormProps) {
           email: email.trim(),
           telefono: telefono.trim(),
           curp: curp.trim().toUpperCase() || null,
+          sexo: sexo || null,
         };
       } else if (step === 'address') {
         if (!calle.trim() || !numExt.trim() || !colonia.trim() || !cp.trim() || !idPais || !idEstado || !idMunicipio) {
@@ -695,7 +698,7 @@ function StepForm({ step, persona, personaId, onSaved }: StepFormProps) {
         }
         updateData = {
           rfc: rfc.trim().toUpperCase(),
-          regimen: parseInt(regimen),
+          regimen: regimen,
           uso_cfdi: usoCfdi,
           direccion_fiscal_calle: fCalle.trim() || null,
           direccion_fiscal_num_ext: fNumExt.trim() || null,
@@ -822,6 +825,20 @@ function StepForm({ step, persona, personaId, onSaved }: StepFormProps) {
           <div>
             <Label>CURP <span className="text-muted-foreground text-xs">(opcional)</span></Label>
             <Input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={18} placeholder="Ej. GARC850101HDFRRL09" className="mt-1" />
+          </div>
+          <div>
+            <Label>Tipo de Persona</Label>
+            <Input value="Persona Física" disabled className="mt-1 bg-muted" />
+          </div>
+          <div>
+            <Label>Sexo <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+            <Select value={sexo} onValueChange={setSexo}>
+              <SelectTrigger className="mt-1"><SelectValue placeholder="Selecciona sexo" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="M">Masculino</SelectItem>
+                <SelectItem value="F">Femenino</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       )}

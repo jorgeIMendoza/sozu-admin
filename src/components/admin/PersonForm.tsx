@@ -1020,6 +1020,21 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                     </div>
                   )}
 
+                  {tipoPersona === 'pf' && (
+                    <div>
+                      <Label htmlFor="sexo">Sexo</Label>
+                      <Select value={sexo} onValueChange={setSexo}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona sexo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="M">Masculino</SelectItem>
+                          <SelectItem value="F">Femenino</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   {/* Tipo de Entidad Legal - solo para entidades legales */}
                   {(entityType === 'legal' || entityType === 'desarrollador' || entityType === 'inmobiliaria') && (
                     <div>
@@ -1542,20 +1557,6 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                         </Select>
                       </div>
 
-                      {tipoPersona === 'pf' && (
-                        <div>
-                          <Label htmlFor="sexo">Sexo</Label>
-                          <Select value={sexo} onValueChange={setSexo}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona sexo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="M">Masculino</SelectItem>
-                              <SelectItem value="F">Femenino</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
 
                        <div>
                          <Label htmlFor="regimen">Régimen</Label>
