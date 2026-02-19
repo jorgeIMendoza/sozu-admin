@@ -477,8 +477,8 @@ const InventarioGlobal = () => {
               onClick={() => setFiltersDrawerOpen(true)}
               className="flex-1 flex items-center gap-2 px-3 py-2 rounded-full border border-border/80 bg-card shadow-sm hover:shadow-md transition-shadow"
             >
-              <Search className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className="text-xs font-medium text-foreground whitespace-nowrap">Buscar</span>
+              <Search className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">Buscador</span>
               {hasActiveFilters && (
                 <Badge className="text-[10px] px-1.5 py-0 ml-auto bg-emerald-500 text-white border-0 hover:bg-emerald-600">
                   {activeFilterCount}
@@ -496,30 +496,7 @@ const InventarioGlobal = () => {
               }`}
               title={sortLabel}
             >
-              <SortIcon className="h-3.5 w-3.5" />
-            </button>
-
-            {/* Action buttons */}
-            <button
-              onClick={() => { track({ page: "inventario", elementId: "btn_desarrollos" }); navigate('/admin/inmobiliarias/proyectos'); }}
-              className="h-8 w-8 rounded-full flex items-center justify-center bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 transition-colors shrink-0"
-              title="Desarrollos"
-            >
-              <Building2 className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => { track({ page: "inventario", elementId: "btn_agregar_prospecto" }); setAddProspectoOpen(true); }}
-              className="h-8 w-8 rounded-full flex items-center justify-center bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 transition-colors shrink-0"
-              title="Agregar prospecto"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => { track({ page: "inventario", elementId: "btn_agendar_cita" }); setAgendarCitaOpen(true); }}
-              className="h-8 w-8 rounded-full flex items-center justify-center bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 transition-colors shrink-0"
-              title="Agendar cita al showroom"
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
+              <SortIcon className="h-4 w-4" />
             </button>
 
             {/* Profile button */}
@@ -767,33 +744,33 @@ const InventarioGlobal = () => {
             className="h-12 w-12 rounded-full bg-emerald-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
             title="Desarrollos"
           >
-            <Building2 className="h-5 w-5" />
+            <Building2 className="h-4 w-4" />
           </button>
           <button
             onClick={() => { track({ page: "inventario", elementId: "btn_agregar_prospecto" }); setAddProspectoOpen(true); }}
             className="h-12 w-12 rounded-full bg-emerald-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
             title="Agregar prospecto"
           >
-            <UserPlus className="h-5 w-5" />
+            <UserPlus className="h-4 w-4" />
           </button>
           <button
             onClick={() => { track({ page: "inventario", elementId: "btn_agendar_cita" }); setAgendarCitaOpen(true); }}
             className="h-12 w-12 rounded-full bg-emerald-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
             title="Agendar cita al showroom"
           >
-            <CalendarDays className="h-5 w-5" />
+            <CalendarDays className="h-4 w-4" />
           </button>
 
           {/* Divider */}
           <div className="h-6 w-px bg-white/30" />
 
-          {/* Existing filter/sort buttons */}
+          {/* Search/sort buttons */}
           <button
             onClick={() => setFiltersDrawerOpen(true)}
             className="h-12 px-5 rounded-full bg-foreground text-background shadow-xl flex items-center gap-2 font-medium text-sm hover:scale-105 transition-transform"
           >
-            <SlidersHorizontal className="h-4 w-4" />
-            Filtros
+            <Search className="h-4 w-4" />
+            Buscador
             {hasActiveFilters && (
               <span className="h-5 w-5 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center font-bold">{activeFilterCount}</span>
             )}
@@ -806,7 +783,7 @@ const InventarioGlobal = () => {
                 : "bg-foreground text-background"
             }`}
           >
-            <SortIcon className="h-5 w-5" />
+            <SortIcon className="h-4 w-4" />
           </button>
         </div>
       )}
