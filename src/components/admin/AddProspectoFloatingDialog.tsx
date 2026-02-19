@@ -20,7 +20,7 @@ interface AddProspectoFloatingDialogProps {
 export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoFloatingDialogProps) {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
-  const { accessibleProjectIds, hasUnrestrictedAccess } = useProjectAccess();
+  const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess } = useProjectAccess();
 
   const [proyectoId, setProyectoId] = useState("");
   const [tipoPersona, setTipoPersona] = useState("pf");
@@ -35,26 +35,26 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
   const { data: proyectos = [] } = useQuery({
     queryKey: ["desarrollos-activos-floating", accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
-      // Start from user's accessible projects (small set), not from 41K+ propiedades
+      // Step 1: Get user's accessible projects
       let candidateQuery = supabase
         .from("proyectos")
         .select("id, nombre")
         .eq("activo", true)
         .order("nombre");
 
-      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+      if (!hasUnrestrictedAccess) {
+        if (accessibleProjectIds.length === 0) return [];
         candidateQuery = candidateQuery.in("id", accessibleProjectIds);
-      } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
-        return [];
       }
 
       const { data: candidates, error } = await candidateQuery;
       if (error) throw error;
       if (!candidates || candidates.length === 0) return [];
 
+      // Step 2: For each candidate project, check if it has available properties via SQL count
       const candidateIds = candidates.map(c => c.id);
-
-      // Get edificios for these projects
+      
+      // Use a simple RPC-like approach: query edificios scoped to these projects
       const { data: edificios } = await supabase
         .from('edificios')
         .select('id, id_proyecto')
@@ -63,37 +63,37 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
 
       if (!edificios || edificios.length === 0) return [];
 
-      // Get edificios_modelos for these edificios
+      const edificioIds = edificios.map(e => e.id);
+
       const { data: ems } = await supabase
         .from('edificios_modelos')
         .select('id, id_edificio')
         .eq('activo', true)
-        .in('id_edificio', edificios.map(e => e.id));
+        .in('id_edificio', edificioIds);
 
       if (!ems || ems.length === 0) return [];
 
-      // Check which have available properties
+      const emIds = ems.map(em => em.id);
+
+      // Query available propiedades scoped to these edificio_modelos only (small set)
       const { data: availProps } = await supabase
         .from('propiedades')
         .select('id_edificio_modelo')
         .eq('id_estatus_disponibilidad', 2)
         .eq('activo', true)
-        .in('id_edificio_modelo', ems.map(em => em.id));
+        .in('id_edificio_modelo', emIds)
+        .limit(1000);
 
       if (!availProps || availProps.length === 0) return [];
 
-      // Map back: available em IDs → edificio IDs → project IDs
-      const availEmIds = new Set(availProps.map(p => p.id_edificio_modelo));
-      const availEdIds = new Set(
-        ems.filter(em => availEmIds.has(em.id)).map(em => em.id_edificio)
-      );
-      const projIdsWithInventory = new Set(
-        edificios.filter(e => availEdIds.has(e.id)).map(e => e.id_proyecto)
-      );
+      // Map back to project IDs
+      const availEmSet = new Set(availProps.map(p => p.id_edificio_modelo));
+      const availEdSet = new Set(ems.filter(em => availEmSet.has(em.id)).map(em => em.id_edificio));
+      const availProjSet = new Set(edificios.filter(e => availEdSet.has(e.id)).map(e => e.id_proyecto));
 
-      return candidates.filter(c => projIdsWithInventory.has(c.id));
+      return candidates.filter(c => availProjSet.has(c.id));
     },
-    enabled: open,
+    enabled: open && !isLoadingAccess,
   });
 
   const showSearch = proyectos.length > 10;
