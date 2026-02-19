@@ -291,6 +291,7 @@ const InventarioGlobalB = () => {
                 {canGenerateOffer ? (
                   <div onClick={(e) => e.stopPropagation()}>
                     <NewOfferDialog propertyId={selectedProperty.id} propertyNumber={selectedProperty.numero || `${selectedProperty.id}`} hideManualMode hidePdfOptions preSelectedSchemeId={selectedSchemeId}
+                      onTrackSubmit={() => track({ page: PAGE, elementId: "btn_generar_oferta_modal", elementLabel: "Generar Oferta (Modal)", metadata: { propertyId: selectedProperty.id, schemeId: selectedSchemeId } })}
                       customTrigger={
                         <button onClick={() => track({ page: PAGE, elementId: "generate_offer", elementLabel: "Generar Oferta", metadata: { propertyId: selectedProperty.id, schemeId: selectedSchemeId } })}
                           className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-gradient-to-br from-primary via-primary/90 to-primary/70 text-primary-foreground font-semibold text-sm shadow-[0_8px_30px_-4px_hsl(var(--primary)/0.45)] hover:shadow-[0_12px_40px_-4px_hsl(var(--primary)/0.55)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 border border-white/20">

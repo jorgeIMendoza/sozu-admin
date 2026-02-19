@@ -144,10 +144,12 @@ const MedicionesCTA = () => {
   const elementCounts = useMemo(() => {
     const map = new Map<string, { count: number; label: string; page: string }>();
     events.forEach((e: any) => {
-      const key = `${e.page}::${e.element_id}`;
+      // Use element_label in key when available to distinguish e.g. "Depto 1002" vs "Depto 1012"
+      const label = e.element_label || e.element_id;
+      const key = `${e.page}::${label}`;
       const existing = map.get(key);
       if (existing) existing.count++;
-      else map.set(key, { count: 1, label: e.element_label || e.element_id, page: e.page });
+      else map.set(key, { count: 1, label, page: e.page });
     });
     return Array.from(map.values()).sort((a, b) => b.count - a.count);
   }, [events]);

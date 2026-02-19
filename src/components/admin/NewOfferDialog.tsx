@@ -185,9 +185,10 @@ interface NewOfferDialogProps {
   hidePdfOptions?: boolean; // Hide PDF visualization options (for inmobiliarias portal)
   customTrigger?: React.ReactNode; // Optional custom trigger element
   preSelectedSchemeId?: number | null; // Pre-selected payment scheme from inventory detail
+  onTrackSubmit?: () => void; // Optional callback to track "Generar Oferta" submit inside modal
 }
 
-export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = false, hideManualMode = false, hidePdfOptions = false, customTrigger, preSelectedSchemeId }: NewOfferDialogProps) {
+export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = false, hideManualMode = false, hidePdfOptions = false, customTrigger, preSelectedSchemeId, onTrackSubmit }: NewOfferDialogProps) {
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -1169,6 +1170,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
 
   const onSubmit = (data: FormData) => {
     console.log("Form submitted successfully!");
+    onTrackSubmit?.();
     
     // If there are products with price > 0, show confirmation dialog
     if (productsWithPriceInfo.total > 0) {
