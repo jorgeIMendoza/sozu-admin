@@ -69,12 +69,16 @@ const ABTests = () => {
       const { data: pageViews, error: pvErr } = await supabase.from("cta_events").select("user_email, page").eq("element_id", "page_view");
       if (pvErr) throw pvErr;
 
+      // Normalize page paths for matching (e.g. "/admin/inmobiliarias/inventario" -> "inventario")
+      const normalizePageForMatch = (p: string) => p.replace(/^\//, "").split("/").pop() || p;
+
       const counts: Record<number, Record<string, number>> = {};
       (pageViews || []).forEach((pv: any) => {
-        // Match to each test by page
+        // Match to each test by page (normalized)
+        const pvNorm = normalizePageForMatch(pv.page);
         Object.entries(pageByTest).forEach(([testIdStr, pagina]) => {
           const testId = Number(testIdStr);
-          if (pv.page === pagina && userVariantMap[testId]?.[pv.user_email]) {
+          if (pvNorm === normalizePageForMatch(pagina) && userVariantMap[testId]?.[pv.user_email]) {
             const variant = userVariantMap[testId][pv.user_email];
             if (!counts[testId]) counts[testId] = {};
             counts[testId][variant] = (counts[testId][variant] || 0) + 1;
