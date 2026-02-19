@@ -281,14 +281,27 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
           {/* Search existing prospects */}
           <div className="space-y-2">
             <Label className="text-muted-foreground text-xs">Buscar prospecto existente</Label>
-            <Combobox
-              value={selectedProspectoId?.toString() || ""}
-              onValueChange={handleSelectProspecto}
-              options={prospectoOptions}
-              placeholder="Buscar por nombre..."
-              searchPlaceholder="Escribir nombre del prospecto..."
-              emptyText="No se encontró el prospecto"
-            />
+            {prospectoOptions.length >= 10 ? (
+              <Combobox
+                value={selectedProspectoId?.toString() || ""}
+                onValueChange={handleSelectProspecto}
+                options={prospectoOptions}
+                placeholder="Buscar por nombre..."
+                searchPlaceholder="Escribir nombre del prospecto..."
+                emptyText="No se encontró el prospecto"
+              />
+            ) : (
+              <Select value={selectedProspectoId?.toString() || ""} onValueChange={handleSelectProspecto}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar prospecto..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {prospectoOptions.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Desarrollo de Interés */}
