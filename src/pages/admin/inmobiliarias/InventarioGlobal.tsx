@@ -777,14 +777,13 @@ const InventarioGlobal = () => {
           </button>
           <button
             onClick={cycleSortOrder}
-            className={`h-12 px-5 rounded-full shadow-xl flex items-center gap-2 font-medium text-sm hover:scale-105 transition-transform ${
+            className={`h-12 w-12 rounded-full shadow-xl flex items-center justify-center hover:scale-105 transition-transform ${
               sortOrder !== "none"
                 ? "bg-emerald-500 text-white"
                 : "bg-foreground text-background"
             }`}
           >
-            <SortIcon className="h-4 w-4" />
-            {sortOrder !== "none" ? sortLabel : "Precio"}
+            <SortIcon className="h-5 w-5" />
           </button>
         </div>
       )}
