@@ -137,15 +137,18 @@ const MedicionesCTA = () => {
       const key = e.element_label || e.element_id;
       map.set(key, (map.get(key) || 0) + 1);
     });
-    return Array.from(map.entries()).map(([name, clicks]) => ({ name: name.length > 25 ? name.slice(0, 22) + "…" : name, clicks })).sort((a, b) => b.clicks - a.clicks).slice(0, 12);
+    return Array.from(map.entries()).map(([name, clicks]) => ({ name: name.length > 25 ? name.slice(0, 22) + "…" : name, clicks })).sort((a, b) => b.clicks - a.clicks).slice(0, 5);
   };
 
   // Heatmap data
   const elementCounts = useMemo(() => {
     const map = new Map<string, { count: number; label: string; page: string }>();
     events.forEach((e: any) => {
-      // Use element_label in key when available to distinguish e.g. "Depto 1002" vs "Depto 1012"
-      const label = e.element_label || e.element_id;
+      const rawLabel = e.element_label || e.element_id;
+      // Aggregate all "Depto XXXX" clicks into a single "Detalle Depto." label
+      const label = /^Depto\s+\d+/i.test(rawLabel) ? "Detalle Depto." : rawLabel;
+      // Skip redundant "Generar Oferta" from detail (btn_generar_oferta_detalle) — only keep modal one
+      if (e.element_id === "btn_generar_oferta_detalle" || e.element_id === "generate_offer") return;
       const key = `${e.page}::${label}`;
       const existing = map.get(key);
       if (existing) existing.count++;
