@@ -4,7 +4,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Building2, MapPin, Loader2, Download, ChevronDown, ChevronUp, BedDouble, Bath, ShowerHead, Share2, Star, ChevronLeft, ChevronRight, Copy, Mail, X, Maximize2, Package } from "lucide-react";
+import { Building2, MapPin, Loader2, Download, ChevronDown, ChevronUp, BedDouble, Bath, ShowerHead, Share2, Star, ChevronLeft, ChevronRight, Copy, Mail, X, Maximize2, Package, Search, ArrowUpDown, UserPlus, CalendarDays } from "lucide-react";
+import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
+import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -23,6 +25,17 @@ const MisProyectos = () => {
   const [modelosDialog, setModelosDialog] = useState<{ open: boolean; project: any }>({ open: false, project: null });
   const [amenidadesDialog, setAmenidadesDialog] = useState<{ open: boolean; projectId: number | null }>({ open: false, projectId: null });
   const [shareDialog, setShareDialog] = useState<{ open: boolean; project: any }>({ open: false, project: null });
+  const [addProspectoOpen, setAddProspectoOpen] = useState(false);
+  const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
+  const [showFloatingButtons, setShowFloatingButtons] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowFloatingButtons(window.scrollY > 100);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["mis-proyectos", accessibleProjectIds],
@@ -300,17 +313,42 @@ const MisProyectos = () => {
         </>
       )}
 
-      {/* Onboarding widget moved to AdminLayout header */}
-
-      {/* Global Inventory Button */}
-      <button
-        onClick={() => navigate("/admin/inmobiliarias/inventario")}
-        className="group relative w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-3.5 rounded-full bg-gradient-to-br from-primary via-primary/90 to-primary/70 text-primary-foreground font-semibold text-sm shadow-[0_8px_30px_-4px_hsl(var(--primary)/0.45)] hover:shadow-[0_12px_40px_-4px_hsl(var(--primary)/0.55)] hover:-translate-y-1 active:translate-y-0 active:shadow-[0_4px_20px_-4px_hsl(var(--primary)/0.4)] transition-all duration-300 ease-out backdrop-blur-sm border border-white/20"
-      >
-        <Package className="h-5 w-5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6" />
-        <span className="tracking-wide">Explorar inventario</span>
-        <span className="absolute inset-0 rounded-full bg-gradient-to-t from-transparent to-white/15 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-      </button>
+      {/* Simplified role header bar */}
+      {isSimplifiedRole && (
+        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b px-4 py-3 -mx-4 -mt-4 sm:-mx-6 sm:-mt-6 flex items-center gap-2">
+          <div className="flex-1 flex items-center gap-2 bg-muted rounded-full px-4 py-2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Buscar desarrollos"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-transparent text-sm outline-none flex-1 placeholder:text-muted-foreground"
+            />
+          </div>
+          <button
+            onClick={() => navigate("/admin/inmobiliarias/inventario")}
+            className="h-10 w-10 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform"
+            title="Inventario"
+          >
+            <Package className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => setAddProspectoOpen(true)}
+            className="h-10 w-10 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform"
+            title="Agregar prospecto"
+          >
+            <UserPlus className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => setAgendarCitaOpen(true)}
+            className="h-10 w-10 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform"
+            title="Agendar cita"
+          >
+            <CalendarDays className="h-5 w-5" />
+          </button>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
@@ -328,27 +366,26 @@ const MisProyectos = () => {
             const isExpanded = expandedCards[project.id] || false;
 
             return (
-              <Card key={project.id} className="overflow-hidden border shadow-sm hover:shadow-2xl hover:-translate-y-3 hover:scale-[1.02] transition-all duration-300 rounded-2xl cursor-pointer">
+              <Card
+                key={project.id}
+                className="overflow-hidden border shadow-sm hover:shadow-2xl hover:-translate-y-3 hover:scale-[1.02] transition-all duration-300 rounded-2xl cursor-pointer"
+                onClick={() => navigate(`/admin/inmobiliarias/proyectos/${project.id}`)}
+              >
                 {/* Image Carousel */}
-                <ImageCarousel images={images} projectName={project.nombre} badge={getProjectBadge(project)} brochure={brochure} onDownloadBrochure={handleDownloadBrochure} />
+                <div onClick={(e) => e.stopPropagation()}>
+                  <ImageCarousel images={images} projectName={project.nombre} badge={getProjectBadge(project)} brochure={brochure} onDownloadBrochure={handleDownloadBrochure} />
+                </div>
 
                 <CardContent className="p-4 space-y-3">
-                  <h3
-                    className="font-bold text-lg text-primary hover:underline cursor-pointer line-clamp-1"
-                    onClick={() => navigate(`/admin/inmobiliarias/proyectos/${project.id}`)}
-                  >
+                  <h3 className="font-bold text-lg text-primary line-clamp-1">
                     {project.nombre}
                   </h3>
 
                   {/* Location */}
-                  <button
-                    onClick={() => handleOpenMaps(project)}
-                    className="flex items-center gap-1.5 text-sm text-primary hover:underline cursor-pointer"
-                    title="Ver en Google Maps"
-                  >
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
                     <span className="line-clamp-1">{location}</span>
-                  </button>
+                  </div>
 
                   {/* Description */}
                   {project.descripcion && (
@@ -414,7 +451,7 @@ const MisProyectos = () => {
                   </div>
 
                   {/* Action buttons */}
-                  <div className="flex flex-wrap gap-2 pt-1">
+                  <div className="flex flex-wrap gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="outline"
                       size="sm"
@@ -542,6 +579,37 @@ const MisProyectos = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Floating action buttons */}
+      {isSimplifiedRole && showFloatingButtons && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <button
+            onClick={() => navigate("/admin/inmobiliarias/inventario")}
+            className="h-12 w-12 rounded-full bg-emerald-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
+            title="Inventario"
+          >
+            <Package className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => setAddProspectoOpen(true)}
+            className="h-12 w-12 rounded-full bg-emerald-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
+            title="Agregar prospecto"
+          >
+            <UserPlus className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => setAgendarCitaOpen(true)}
+            className="h-12 w-12 rounded-full bg-emerald-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
+            title="Agendar cita"
+          >
+            <CalendarDays className="h-5 w-5" />
+          </button>
+        </div>
+      )}
+
+      {/* Prospecto & Cita dialogs */}
+      <AddProspectoFloatingDialog open={addProspectoOpen} onOpenChange={setAddProspectoOpen} />
+      <AgendarCitaShowroomDialog open={agendarCitaOpen} onOpenChange={setAgendarCitaOpen} />
     </div>
   );
 };
