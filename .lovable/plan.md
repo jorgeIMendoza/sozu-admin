@@ -1,53 +1,76 @@
 
 
-# Plan: Asignacion Alternada A/B + Variante Ganadora
+## Plan: Unificar botones de Header y Flotantes en Inventario, Proyectos y Detalle de Proyecto
 
-## Cambio en la logica de asignacion
+### Resumen
 
-Reemplazar el `Math.random()` actual en `useAbTest.ts` con una logica de alternancia simple:
+Estandarizar los botones que aparecen en el header sticky y en los botones flotantes (que aparecen al hacer scroll) para las 4 paginas de agentes: Inventario A, Inventario B, Proyectos y Detalle de Proyecto. Ademas, igualar el tamano de los iconos entre header y flotantes.
 
-1. Consultar el ultimo registro en `ab_test_assignments` para ese `ab_test_id`, ordenado por `created_at DESC`
-2. Si el ultimo fue "A", asignar "B". Si fue "B", asignar "A". Si no hay registros, asignar "A".
-3. Insertar el nuevo registro como ya se hace actualmente.
+---
 
-Esto permite que:
-- La distribucion sea naturalmente 50/50
-- Se pueda corregir manualmente desde la BD si se necesita (cambiar la variante de un usuario)
-- El usuario siempre ve lo mismo una vez asignado (ya funciona asi, se consulta primero si ya tiene asignacion)
+### Cambios por pagina
 
-## Variante ganadora
+#### 1. Inventario A y B (`InventarioGlobal.tsx`, `InventarioGlobalB.tsx`)
 
-Agregar columna `variante_ganadora` a `ab_tests` para que cuando un test se desactive, todos vean la variante ganadora.
+**Header (actualmente):** Buscador ("Buscar") + Ordenar + Desarrollos + Prospecto + Cita + Perfil
+**Header (nuevo):** Buscador ("Buscador") + Ordenar + Perfil
+- Quitar: boton Desarrollos, boton Prospecto, boton Cita
+- Renombrar: "Buscar" a "Buscador"
 
-### Cambios en base de datos
-- `ALTER TABLE ab_tests ADD COLUMN variante_ganadora TEXT DEFAULT NULL`
+**Flotantes (actualmente):** Desarrollos + Prospecto + Cita + separador + Filtros + Ordenar
+**Flotantes (nuevo):** Desarrollos + Prospecto + Cita + separador + Buscador + Ordenar
+- Renombrar: "Filtros" a "Buscador" (misma funcionalidad: abre el drawer de filtros)
+- Cambiar icono: de `SlidersHorizontal` a `Search`
 
-### Logica en useAbTest.ts
+**Tamano de iconos:** Igualar header y flotantes a `h-4 w-4` (actualmente header usa `h-3.5 w-3.5` y flotantes usan `h-5 w-5`; se estandariza a `h-4 w-4`)
 
-```text
-Usuario visita pagina con test configurado
-  |
-  +-- Test ACTIVO?
-  |     +-- Ya tiene asignacion? -> devolver su variante
-  |     +-- No tiene? -> ver ultimo registro, asignar el opuesto, insertar
-  |
-  +-- Test INACTIVO + variante_ganadora definida?
-  |     +-- Devolver variante_ganadora (todos ven lo mismo)
-  |
-  +-- No hay test o inactivo sin ganadora?
-        +-- Devolver "A"
-```
+#### 2. Proyectos (`MisProyectos.tsx`)
 
-### Cambios en ABTests.tsx (panel admin)
+**Header (actualmente):** Buscador ("Propiedades") + Prospecto + Cita + Perfil
+**Header (nuevo):** Buscador ("Buscador") + Perfil
+- Quitar: boton Prospecto, boton Cita
+- Renombrar: "Propiedades" a "Buscador"
 
-- Al hacer clic en "Finalizar", mostrar un dialogo preguntando cual variante gano (A o B)
-- Guardar `variante_ganadora` y `activo = false`
-- Mostrar badge de variante ganadora en tests finalizados
-- Permitir editar la ganadora en tests finalizados
+**Flotantes (actualmente):** Prospecto + Cita + separador + Filtros
+**Flotantes (nuevo):** Prospecto + Cita + separador + Buscador
+- Renombrar: "Filtros" a "Buscador"
+- Cambiar icono: de `SlidersHorizontal` a `Search`
 
-## Archivos a modificar
+**Tamano de iconos:** Igualar a `h-4 w-4`
 
-1. **`src/hooks/useAbTest.ts`** -- cambiar random por alternancia, agregar logica de ganadora
-2. **`src/pages/admin/ABTests.tsx`** -- dialogo de seleccion de ganadora al finalizar, badge
-3. **Migracion SQL** -- agregar columna `variante_ganadora`
+#### 3. Detalle de Proyecto (`MiProyectoDetalle.tsx`)
+
+**Header (actualmente):** Buscador ("Propiedades") + Desarrollos + Prospecto + Cita + Perfil
+**Header (nuevo):** Buscador ("Buscador") + Perfil
+- Quitar: boton Desarrollos, boton Prospecto, boton Cita
+- Renombrar: "Propiedades" a "Buscador"
+
+**Flotantes (actualmente):** Desarrollos + Prospecto + Cita + separador + Filtros
+**Flotantes (nuevo):** Desarrollos + Prospecto + Cita + separador + Buscador
+- Renombrar: "Filtros" a "Buscador"
+- Cambiar icono: de `SlidersHorizontal` a `Search`
+
+**Tamano de iconos:** Igualar a `h-4 w-4`
+
+---
+
+### Detalle tecnico
+
+**Archivos a modificar (4):**
+
+1. **`src/pages/admin/inmobiliarias/InventarioGlobal.tsx`**
+   - Header (lineas ~474-527): Quitar botones de Desarrollos, Prospecto y Cita. Cambiar texto "Buscar" a "Buscador". Ajustar iconos a `h-4 w-4`.
+   - Flotantes (lineas ~761-811): Cambiar "Filtros" a "Buscador", icono `SlidersHorizontal` a `Search`. Ajustar iconos a `h-4 w-4`.
+
+2. **`src/pages/admin/inmobiliarias/InventarioGlobalB.tsx`**
+   - Header (lineas ~290-307): Mismos cambios que Variante A.
+   - Flotantes (lineas ~429-443): Mismos cambios que Variante A.
+
+3. **`src/pages/admin/inmobiliarias/MisProyectos.tsx`**
+   - Header (lineas ~458-484): Quitar Prospecto y Cita. Cambiar "Propiedades" a "Buscador". Iconos a `h-4 w-4`.
+   - Flotantes (lineas ~721-745): Cambiar "Filtros" a "Buscador", icono a `Search`. Iconos a `h-4 w-4`.
+
+4. **`src/pages/admin/inmobiliarias/MiProyectoDetalle.tsx`**
+   - Header (lineas ~293-315): Quitar Desarrollos, Prospecto y Cita. Cambiar "Propiedades" a "Buscador". Iconos a `h-4 w-4`.
+   - Flotantes (lineas ~510-529): Cambiar "Filtros" a "Buscador", icono a `Search`. Iconos a `h-4 w-4`.
 
