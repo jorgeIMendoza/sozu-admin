@@ -169,11 +169,11 @@ const InventarioGlobal = () => {
     const handleScroll = () => {
       const currentY = window.scrollY;
       if (currentY > lastScrollY.current && currentY > 60) {
-        // Scrolling DOWN → show header bar, hide floating
-        setShowHeaderBar(true);
-      } else if (currentY < lastScrollY.current) {
-        // Scrolling UP → hide header bar, show floating
+        // Scrolling DOWN → hide header bar, show floating
         setShowHeaderBar(false);
+      } else if (currentY < lastScrollY.current) {
+        // Scrolling UP → show header bar, hide floating
+        setShowHeaderBar(true);
       }
       lastScrollY.current = currentY;
     };
