@@ -35,54 +35,63 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
   const { data: proyectos = [] } = useQuery({
     queryKey: ["desarrollos-activos-floating", accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
-      // Step 1: Get edificio_modelo IDs with available properties
-      const { data: props } = await supabase
-        .from('propiedades')
-        .select('id_edificio_modelo')
-        .eq('id_estatus_disponibilidad', 2)
-        .eq('activo', true);
-
-      if (!props || props.length === 0) return [];
-      const emIds = [...new Set(props.map(p => p.id_edificio_modelo).filter(Boolean))];
-
-      // Step 2: Get edificio IDs from edificios_modelos
-      const { data: ems } = await supabase
-        .from('edificios_modelos')
-        .select('id_edificio')
-        .eq('activo', true)
-        .in('id', emIds);
-
-      if (!ems || ems.length === 0) return [];
-      const edIds = [...new Set(ems.map(e => e.id_edificio).filter(Boolean))];
-
-      // Step 3: Get project IDs from edificios
-      const { data: eds } = await supabase
-        .from('edificios')
-        .select('id_proyecto')
-        .eq('activo', true)
-        .in('id', edIds);
-
-      if (!eds || eds.length === 0) return [];
-      const availableProjectIds = [...new Set(eds.map(e => e.id_proyecto).filter(Boolean))] as number[];
-
-      if (availableProjectIds.length === 0) return [];
-
-      let query = supabase
+      // Start from user's accessible projects (small set), not from 41K+ propiedades
+      let candidateQuery = supabase
         .from("proyectos")
         .select("id, nombre")
         .eq("activo", true)
-        .in("id", availableProjectIds)
         .order("nombre");
 
       if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
-        query = query.in("id", accessibleProjectIds);
+        candidateQuery = candidateQuery.in("id", accessibleProjectIds);
       } else if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
         return [];
       }
 
-      const { data, error } = await query;
+      const { data: candidates, error } = await candidateQuery;
       if (error) throw error;
-      return data || [];
+      if (!candidates || candidates.length === 0) return [];
+
+      const candidateIds = candidates.map(c => c.id);
+
+      // Get edificios for these projects
+      const { data: edificios } = await supabase
+        .from('edificios')
+        .select('id, id_proyecto')
+        .eq('activo', true)
+        .in('id_proyecto', candidateIds);
+
+      if (!edificios || edificios.length === 0) return [];
+
+      // Get edificios_modelos for these edificios
+      const { data: ems } = await supabase
+        .from('edificios_modelos')
+        .select('id, id_edificio')
+        .eq('activo', true)
+        .in('id_edificio', edificios.map(e => e.id));
+
+      if (!ems || ems.length === 0) return [];
+
+      // Check which have available properties
+      const { data: availProps } = await supabase
+        .from('propiedades')
+        .select('id_edificio_modelo')
+        .eq('id_estatus_disponibilidad', 2)
+        .eq('activo', true)
+        .in('id_edificio_modelo', ems.map(em => em.id));
+
+      if (!availProps || availProps.length === 0) return [];
+
+      // Map back: available em IDs → edificio IDs → project IDs
+      const availEmIds = new Set(availProps.map(p => p.id_edificio_modelo));
+      const availEdIds = new Set(
+        ems.filter(em => availEmIds.has(em.id)).map(em => em.id_edificio)
+      );
+      const projIdsWithInventory = new Set(
+        edificios.filter(e => availEdIds.has(e.id)).map(e => e.id_proyecto)
+      );
+
+      return candidates.filter(c => projIdsWithInventory.has(c.id));
     },
     enabled: open,
   });
