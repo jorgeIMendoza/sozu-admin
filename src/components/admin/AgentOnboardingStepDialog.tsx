@@ -98,16 +98,16 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="max-h-[92vh] rounded-t-3xl overflow-hidden">
-          <DrawerHeader className="text-left pb-2">
+        <DrawerContent className="max-h-[92vh] rounded-t-3xl overflow-hidden max-w-[100vw]">
+          <DrawerHeader className="text-left pb-2 px-4">
             <DrawerTitle className="text-lg">{title}</DrawerTitle>
             <DrawerDescription className="text-xs">{description}</DrawerDescription>
           </DrawerHeader>
-          <ScrollArea className="px-4 pb-6 overflow-y-auto overflow-x-hidden" style={{ maxHeight: 'calc(92vh - 100px)' }}>
-            <div className="pr-2">
+          <div className="px-4 pb-6 overflow-y-auto overflow-x-hidden w-full" style={{ maxHeight: 'calc(92vh - 100px)' }}>
+            <div className="w-full max-w-full overflow-hidden">
               {content}
             </div>
-          </ScrollArea>
+          </div>
         </DrawerContent>
       </Drawer>
     );
