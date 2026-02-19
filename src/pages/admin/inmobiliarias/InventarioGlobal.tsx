@@ -935,7 +935,7 @@ const PropertyCardCarousel = ({ images }: { images: any[] }) => {
   const visibleImages = !isVisible ? [] : hasInteracted ? images.slice(0, 5) : images.slice(0, 1);
 
   return (
-    <div ref={containerRef} className="relative h-40 bg-muted overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div ref={containerRef} className="relative h-40 bg-muted overflow-hidden">
       {isVisible ? (
         <div ref={emblaRef} className="h-full overflow-hidden">
           <div className="flex h-full touch-pan-y">
