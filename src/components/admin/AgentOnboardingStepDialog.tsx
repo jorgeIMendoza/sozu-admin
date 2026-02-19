@@ -471,7 +471,7 @@ function AgentTrainingStep({ personaId, onSaved }: { personaId: number; onSaved:
           <button
             onClick={handleSchedule}
             disabled={saving}
-            className="w-full py-4 btn-gradient-primary flex items-center justify-center gap-2 disabled:opacity-60"
+            className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : isProgrammed ? "Reagendar Cita" : "Agendar Cita"}
           </button>
@@ -868,7 +868,7 @@ function StepForm({ step, persona, personaId, onSaved }: StepFormProps) {
       <button
         onClick={handleSave}
         disabled={saving}
-        className="w-full py-4 btn-gradient-primary flex items-center justify-center gap-2 disabled:opacity-60"
+        className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
       >
         {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Guardar"}
       </button>

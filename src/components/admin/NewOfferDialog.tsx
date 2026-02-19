@@ -2266,7 +2266,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               <button
                 type="submit"
                 disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
-                className="px-6 py-2.5 btn-gradient-primary flex items-center justify-center gap-2 disabled:opacity-60"
+                className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {createOfferMutation.isPending ? "Generando..." : "Generar Oferta"}
               </button>

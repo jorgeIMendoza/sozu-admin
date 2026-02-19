@@ -452,7 +452,7 @@ const InventarioGlobal = () => {
               <Search className="h-4 w-4 text-primary shrink-0" />
               <span className="text-sm font-medium text-foreground">Buscar propiedades</span>
               {hasActiveFilters && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-auto">
+                <Badge className="text-[10px] px-1.5 py-0 ml-auto bg-emerald-500 text-white border-0 hover:bg-emerald-600">
                   {activeFilterCount}
                 </Badge>
               )}
@@ -463,7 +463,7 @@ const InventarioGlobal = () => {
               onClick={cycleSortOrder}
               className={`h-10 w-10 rounded-full flex items-center justify-center border transition-colors shrink-0 ${
                 sortOrder !== "none"
-                  ? "bg-primary text-primary-foreground border-primary shadow-md"
+                  ? "bg-emerald-500 text-white border-emerald-500 shadow-md"
                   : "bg-card border-border/80 text-muted-foreground hover:bg-muted"
               }`}
               title={sortLabel}
@@ -525,7 +525,7 @@ const InventarioGlobal = () => {
               <div className="relative">
                 <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
                 {hasActiveFilters && (
-                  <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">{activeFilterCount}</span>
+                  <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center font-bold">{activeFilterCount}</span>
                 )}
               </div>
             </button>
@@ -533,7 +533,7 @@ const InventarioGlobal = () => {
               onClick={cycleSortOrder}
               className={`h-12 px-4 rounded-full flex items-center gap-2 border transition-colors shrink-0 ${
                 sortOrder !== "none"
-                  ? "bg-primary text-primary-foreground border-primary"
+                  ? "bg-emerald-500 text-white border-emerald-500"
                   : "bg-card border-border/80 text-muted-foreground hover:bg-muted"
               }`}
             >
@@ -714,14 +714,14 @@ const InventarioGlobal = () => {
             <SlidersHorizontal className="h-4 w-4" />
             Filtros
             {hasActiveFilters && (
-              <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">{activeFilterCount}</span>
+              <span className="h-5 w-5 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center font-bold">{activeFilterCount}</span>
             )}
           </button>
           <button
             onClick={cycleSortOrder}
             className={`h-12 px-5 rounded-full shadow-xl flex items-center gap-2 font-medium text-sm hover:scale-105 transition-transform ${
               sortOrder !== "none"
-                ? "bg-primary text-primary-foreground"
+                ? "bg-emerald-500 text-white"
                 : "bg-foreground text-background"
             }`}
           >
@@ -863,7 +863,7 @@ const InventarioGlobal = () => {
                       hidePdfOptions={true}
                       preSelectedSchemeId={selectedSchemeId}
                       customTrigger={
-                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-gradient-to-br from-primary via-primary/90 to-primary/70 text-primary-foreground font-semibold text-sm shadow-[0_8px_30px_-4px_hsl(var(--primary)/0.45)] hover:shadow-[0_12px_40px_-4px_hsl(var(--primary)/0.55)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 ease-out border border-white/20">
+                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:bg-primary/90 hover:-translate-y-1 active:translate-y-0 transition-all duration-300 ease-out">
                           <FileText className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
                           <span className="tracking-wide">
                             Generar Oferta
@@ -871,7 +871,6 @@ const InventarioGlobal = () => {
                               <span className="ml-1 text-xs opacity-80">({getSchemesForProperty(selectedProperty).find((s: any) => s.id === selectedSchemeId)?.nombre})</span>
                             )}
                           </span>
-                          <span className="absolute inset-0 rounded-full bg-gradient-to-t from-transparent to-white/15 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                         </button>
                       }
                     />
