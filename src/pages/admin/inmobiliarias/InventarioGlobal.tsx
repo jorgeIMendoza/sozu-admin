@@ -105,7 +105,7 @@ const ProfileMenu = ({ onLogout }: { onLogout: () => void }) => {
                           step.isComplete
                             ? "bg-emerald-500 text-white"
                             : step.hasPartialData
-                            ? "bg-blue-400 text-white"
+                            ? "border-2 border-emerald-500 text-emerald-600 bg-transparent"
                             : "bg-muted text-muted-foreground hover:bg-muted-foreground/10"
                         }`}
                         title={step.label}
