@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, DollarSign, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Package, Layers, Car, Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, User, Bell, LogOut, Trophy } from "lucide-react";
+import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, DollarSign, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Package, Layers, Car, Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, User, Bell, LogOut, Trophy, Check } from "lucide-react";
 import bodegaIcon from "@/assets/icons/bodega.png";
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import useEmblaCarousel from "embla-carousel-react";
@@ -60,8 +60,10 @@ const ProfileMenu = ({ onLogout }: { onLogout: () => void }) => {
     enabled: !!personaId,
   });
 
-  const { percentage, isLoading: onboardingLoading } = useAgentOnboardingStatus(personaId ?? 0);
+  const { steps, percentage, isLoading: onboardingLoading } = useAgentOnboardingStatus(personaId ?? 0);
   const [activeStep, setActiveStep] = useState<OnboardingStep['id'] | null>(null);
+
+  const STEP_IDS: OnboardingStep['id'][] = ['basic', 'address', 'fiscal', 'documents', 'bank-accounts', 'training'];
 
   return (
     <>
@@ -87,22 +89,35 @@ const ProfileMenu = ({ onLogout }: { onLogout: () => void }) => {
               </Badge>
             </div>
 
-            {/* Profile progress */}
+            {/* Profile progress as step circles */}
             {personaId && !onboardingLoading && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Perfil completado</span>
+                  <span className="text-xs text-muted-foreground">Perfil</span>
                   <span className="text-xs font-bold text-foreground">{percentage}%</span>
                 </div>
-                <Progress value={percentage} className="h-2" />
-                {percentage < 100 && (
-                  <button
-                    onClick={() => setActiveStep('basic')}
-                    className="text-[11px] text-primary font-medium hover:underline"
-                  >
-                    Completar perfil →
-                  </button>
-                )}
+                <div className="flex items-center gap-1">
+                  {steps.map((step, i) => (
+                    <React.Fragment key={step.id}>
+                      <button
+                        onClick={() => setActiveStep(step.id)}
+                        className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all shrink-0 ${
+                          step.isComplete
+                            ? "bg-emerald-500 text-white"
+                            : step.hasPartialData
+                            ? "bg-blue-400 text-white"
+                            : "bg-muted text-muted-foreground hover:bg-muted-foreground/10"
+                        }`}
+                        title={step.label}
+                      >
+                        {step.isComplete ? <Check className="h-3 w-3" strokeWidth={3} /> : i + 1}
+                      </button>
+                      {i < steps.length - 1 && (
+                        <div className={`flex-1 h-0.5 rounded-full ${step.isComplete ? "bg-emerald-400" : "bg-muted"}`} />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
               </div>
             )}
 
