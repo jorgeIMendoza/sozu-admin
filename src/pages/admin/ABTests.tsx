@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Plus, FlaskConical, BarChart3, Users, Calendar, Trophy } from "lucide-react";
+import { Loader2, Plus, FlaskConical, BarChart3, Users, Calendar, Trophy, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -215,6 +216,15 @@ const TestCard = ({ test, assignments, visits, onFinalizar, onReactivar, onUpdat
               <span>Página: <span className="font-medium text-foreground">{test.pagina}</span></span>
               <span>Inicio: {format(new Date(test.fecha_inicio), "dd MMM yyyy", { locale: es })}</span>
               {test.fecha_fin && <span>Fin: {format(new Date(test.fecha_fin), "dd MMM yyyy", { locale: es })}</span>}
+            </div>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-xs text-muted-foreground">Ver:</span>
+              <Link to={`${test.pagina}?ab_force=A`} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                Variante A <ExternalLink className="h-3 w-3" />
+              </Link>
+              <Link to={`${test.pagina}?ab_force=B`} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                Variante B <ExternalLink className="h-3 w-3" />
+              </Link>
             </div>
           </div>
           <div className="flex items-center gap-2">

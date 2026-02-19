@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSearchParams } from "react-router-dom";
 
 /**
  * Hook to determine which A/B test variant a user is assigned to.
@@ -10,10 +11,16 @@ import { useAuth } from "@/contexts/AuthContext";
  */
 export function useAbTest(pagina: string) {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const forceVariant = searchParams.get("ab_force");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["ab-test-variant", pagina, user?.id],
+    queryKey: ["ab-test-variant", pagina, user?.id, forceVariant],
     queryFn: async () => {
+      // Allow admin override via query param
+      if (forceVariant === "A" || forceVariant === "B") {
+        return { variant: forceVariant, testId: null };
+      }
       if (!user?.id || !user?.email) return { variant: "A", testId: null };
 
       // 1. Check for active test
