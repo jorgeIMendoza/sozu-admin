@@ -462,22 +462,8 @@ const MisProyectos = () => {
               className="flex-1 min-w-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/80 bg-card shadow-sm hover:shadow-md transition-shadow"
               onClick={() => navigate("/admin/inmobiliarias/inventario?openFilters=true")}
             >
-              <Search className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className="text-xs font-medium text-foreground truncate">Propiedades</span>
-            </button>
-            <button
-              onClick={() => { track({ page: "desarrollos", elementId: "btn_agregar_prospecto" }); setAddProspectoOpen(true); }}
-              className="h-8 w-8 rounded-full flex items-center justify-center bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 transition-colors shrink-0"
-              title="Agregar prospecto"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => { track({ page: "desarrollos", elementId: "btn_agendar_cita" }); setAgendarCitaOpen(true); }}
-              className="h-8 w-8 rounded-full flex items-center justify-center bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 transition-colors shrink-0"
-              title="Agendar cita"
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
+              <Search className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-xs font-medium text-foreground truncate">Buscador</span>
             </button>
             <ProjectsProfileMenu onLogout={signOut} onTrack={() => track({ page: "desarrollos", elementId: "btn_perfil_usuario" })} />
           </div>
@@ -725,22 +711,22 @@ const MisProyectos = () => {
             className="h-12 w-12 rounded-full bg-emerald-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
             title="Agregar prospecto"
           >
-            <UserPlus className="h-5 w-5" />
+            <UserPlus className="h-4 w-4" />
           </button>
           <button
             onClick={() => { track({ page: "desarrollos", elementId: "btn_agendar_cita" }); setAgendarCitaOpen(true); }}
             className="h-12 w-12 rounded-full bg-emerald-500 text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
             title="Agendar cita"
           >
-            <CalendarDays className="h-5 w-5" />
+            <CalendarDays className="h-4 w-4" />
           </button>
           <div className="h-6 w-px bg-white/30" />
           <button
             onClick={() => navigate("/admin/inmobiliarias/inventario?openFilters=true")}
             className="h-12 px-5 rounded-full bg-foreground text-background shadow-xl flex items-center gap-2 font-medium text-sm hover:scale-105 transition-transform"
           >
-            <SlidersHorizontal className="h-4 w-4" />
-            Filtros
+            <Search className="h-4 w-4" />
+            Buscador
           </button>
         </div>
       )}
