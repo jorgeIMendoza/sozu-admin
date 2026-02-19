@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { User, Mail, Shield, Key, Eye, EyeOff, CheckCircle, Building2, UserCog } from "lucide-react";
+import { APP_VERSION } from "@/lib/config";
 import { PersonForm } from "./PersonForm";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 
@@ -610,6 +611,9 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
             )}
           </div>
         </div>
+
+          {/* Version */}
+          <p className="text-[10px] text-muted-foreground/50 text-center pt-2">{APP_VERSION}</p>
       </DialogContent>
     </Dialog>
   );
