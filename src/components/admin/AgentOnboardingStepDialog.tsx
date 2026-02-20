@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
@@ -8,13 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, Download, FileText } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, Download, FileText, CalendarDays } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BankAccountsSection } from "./BankAccountsSection";
 import { validateRFC } from "@/utils/fiscalDataValidation";
 import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import type { OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 
@@ -378,9 +381,8 @@ interface StepFormProps {
 function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange }: { personaId: number; onSaved: () => void; onTrackSave?: () => void; onTrackFieldChange?: () => void }) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
-  const [fecha, setFecha] = useState('');
-  const [horaInicio, setHoraInicio] = useState('');
-  const [horaFin, setHoraFin] = useState('');
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedSlot, setSelectedSlot] = useState('');
 
   // Fetch existing appointment
   const { data: existingCita } = useQuery({
@@ -399,11 +401,32 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     },
   });
 
+  // Fetch available slots when date changes
+  const fechaStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
+  const { data: availableSlots, isLoading: loadingSlots } = useQuery({
+    queryKey: ['training-available-slots', fechaStr],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('agendar-capacitacion', {
+        body: { action: 'check-availability', fecha: fechaStr },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return (data?.available_slots || []) as string[];
+    },
+    enabled: !!fechaStr,
+  });
+
+  // Reset slot when date changes
+  useEffect(() => {
+    setSelectedSlot('');
+  }, [fechaStr]);
+
   useEffect(() => {
     if (existingCita) {
-      setFecha(existingCita.fecha || '');
-      setHoraInicio(existingCita.hora_inicio || '');
-      setHoraFin(existingCita.hora_fin || '');
+      // Pre-select the existing date
+      if (existingCita.fecha) {
+        setSelectedDate(new Date(existingCita.fecha + 'T12:00:00'));
+      }
     }
   }, [existingCita]);
 
@@ -420,21 +443,19 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
   const handleSchedule = async () => {
     onTrackSave?.();
-    if (!fecha || !horaInicio) {
-      toast.error("Completa fecha y hora.");
+    if (!selectedDate || !selectedSlot) {
+      toast.error("Selecciona fecha y hora.");
       return;
     }
 
     setSaving(true);
     try {
-      // Get agent email for the calendar invite
       const { data: persona } = await supabase
         .from('personas')
         .select('email')
         .eq('id', personaId)
         .single();
 
-      // Get showroom data from showrooms_proyecto table
       const { data: entRel } = await supabase
         .from('entidades_relacionadas')
         .select('id_proyecto')
@@ -457,8 +478,8 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
       const { data, error } = await supabase.functions.invoke('agendar-capacitacion', {
         body: {
-          fecha,
-          hora_inicio: horaInicio,
+          fecha: fechaStr,
+          hora_inicio: selectedSlot,
           id_persona: personaId,
           agent_email: persona?.email || '',
           direccion_showroom: showroomData?.descripcion_direccion || null,
@@ -468,20 +489,15 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       });
 
       if (error) throw error;
-      
       if (data?.error === 'no_disponible') {
-        toast.error(data.message || "El horario no está disponible. Selecciona otra fecha u hora.");
+        toast.error(data.message || "El horario no está disponible.");
+        // Refresh slots
+        queryClient.invalidateQueries({ queryKey: ['training-available-slots', fechaStr] });
         return;
       }
-
       if (data?.error) throw new Error(data.error);
 
-      const meetLink = data?.meet_link;
-      toast.success(
-        meetLink 
-          ? "Cita agendada con Google Meet. Revisa tu correo para la invitación." 
-          : "Cita de capacitación agendada correctamente."
-      );
+      toast.success("Cita de capacitación agendada correctamente.");
       queryClient.invalidateQueries({ queryKey: ['agent-onboarding-training'] });
       queryClient.invalidateQueries({ queryKey: ['agent-training-cita'] });
       onSaved();
@@ -514,17 +530,92 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         </div>
       ) : (
         <>
+          {/* Styled Calendar */}
           <div>
-            <Label className="text-sm font-semibold">Fecha *</Label>
-            <Input type="date" value={fecha} onChange={(e) => { setFecha(e.target.value); onTrackFieldChange?.(); }} className="mt-1.5 neu-input h-auto" min={new Date().toISOString().split('T')[0]} />
-          </div>
-          <div>
-            <Label className="text-sm font-semibold">Hora *</Label>
-            <Input type="time" value={horaInicio} onChange={(e) => { setHoraInicio(e.target.value); onTrackFieldChange?.(); }} className="mt-1.5 neu-input h-auto" />
+            <Label className="text-sm font-semibold flex items-center gap-1.5 mb-2">
+              <CalendarDays className="h-4 w-4 text-primary" />
+              Selecciona una fecha
+            </Label>
+            <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(d) => { setSelectedDate(d); onTrackFieldChange?.(); }}
+                disabled={(date) => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  return date < today || date.getDay() === 0 || date.getDay() === 6;
+                }}
+                locale={es}
+                className="w-full"
+                classNames={{
+                  months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+                  month: "space-y-4 w-full",
+                  caption: "flex justify-center pt-1 relative items-center text-sm font-semibold text-foreground",
+                  caption_label: "text-sm font-semibold capitalize",
+                  nav: "space-x-1 flex items-center",
+                  nav_button: "h-8 w-8 bg-transparent p-0 opacity-60 hover:opacity-100 transition-opacity inline-flex items-center justify-center",
+                  table: "w-full border-collapse",
+                  head_row: "flex w-full",
+                  head_cell: "text-muted-foreground rounded-md w-full font-medium text-[0.7rem] uppercase tracking-wider",
+                  row: "flex w-full mt-1",
+                  cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 w-full",
+                  day: "h-10 w-full rounded-xl font-medium transition-all duration-200 hover:bg-primary/10 hover:text-primary inline-flex items-center justify-center",
+                  day_range_end: "day-range-end",
+                  day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground shadow-md",
+                  day_today: "bg-accent text-accent-foreground font-bold",
+                  day_outside: "text-muted-foreground/40",
+                  day_disabled: "text-muted-foreground/30 cursor-not-allowed",
+                  day_hidden: "invisible",
+                }}
+              />
+            </div>
+            {selectedDate && (
+              <p className="text-xs text-muted-foreground text-center mt-2 capitalize">
+                {format(selectedDate, "EEEE d 'de' MMMM 'de' yyyy", { locale: es })}
+              </p>
+            )}
           </div>
 
+          {/* Time Slots */}
+          {selectedDate && (
+            <div>
+              <Label className="text-sm font-semibold flex items-center gap-1.5 mb-2">
+                <Clock className="h-4 w-4 text-primary" />
+                Horarios disponibles
+              </Label>
+              {loadingSlots ? (
+                <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Consultando disponibilidad...</span>
+                </div>
+              ) : availableSlots && availableSlots.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {availableSlots.map((slot) => (
+                    <button
+                      key={slot}
+                      onClick={() => { setSelectedSlot(slot); onTrackFieldChange?.(); }}
+                      className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border ${
+                        selectedSlot === slot
+                          ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
+                          : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 rounded-xl border border-border/60 bg-muted/30">
+                  <p className="text-sm text-muted-foreground">No hay horarios disponibles para esta fecha.</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">Selecciona otra fecha.</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {isProgrammed && (
-            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3">
               <p className="text-xs text-amber-700 dark:text-amber-400">
                 Ya tienes una cita programada. Si reagendas, se cancelará la anterior.
               </p>
@@ -533,7 +624,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
           <button
             onClick={handleSchedule}
-            disabled={saving}
+            disabled={saving || !selectedDate || !selectedSlot}
             className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : isProgrammed ? "Reagendar Cita" : "Agendar Cita"}
@@ -543,7 +634,6 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     </div>
   );
 }
-
 // ---------- Step Form ----------
 
 interface StepFormProps {
