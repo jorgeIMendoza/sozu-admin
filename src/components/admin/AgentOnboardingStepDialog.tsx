@@ -514,8 +514,11 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       if (data?.error) throw new Error(data.error);
 
       toast.success("Cita de capacitación agendada correctamente.");
+      // Reset so the UI re-initializes from the updated cita
+      initializedFromCita.current = false;
       queryClient.invalidateQueries({ queryKey: ['agent-onboarding-training'] });
-      queryClient.invalidateQueries({ queryKey: ['agent-training-cita'] });
+      queryClient.invalidateQueries({ queryKey: ['agent-training-cita', personaId] });
+      queryClient.invalidateQueries({ queryKey: ['training-available-slots'] });
       onSaved();
     } catch (err: any) {
       console.error("Error scheduling:", err);
