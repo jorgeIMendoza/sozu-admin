@@ -1261,28 +1261,27 @@ const Proyectos = () => {
                   )}
 
                   {/* Action buttons */}
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2"
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
                       onClick={() => window.open(googleMapsUrl, '_blank')}
                     >
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-3.5 w-3.5" />
                       Ver en Google Maps
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2"
+                    </button>
+                    <span className="text-muted-foreground/40">|</span>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
                       onClick={() => {
                         navigator.clipboard.writeText(current?.descripcion_direccion || `${current?.latitud}, ${current?.longitud}`);
                         toast.success("Ubicación copiada");
                       }}
                     >
-                      <Copy className="h-4 w-4" />
+                      <Copy className="h-3.5 w-3.5" />
                       Copiar ubicación
-                    </Button>
+                    </button>
                   </div>
 
                   {/* Collapsible map */}

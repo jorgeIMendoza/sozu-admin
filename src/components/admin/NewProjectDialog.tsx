@@ -801,14 +801,10 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                           <div>
                             <label className="text-sm text-muted-foreground">Dirección</label>
                             <Input
-                              placeholder="Ej: Av. Chapultepec 123, Col. Americana"
+                              placeholder="Se llenará automáticamente al buscar en el mapa"
                               value={showroom.descripcion_direccion}
-                              onChange={(e) => {
-                                const updated = [...showrooms];
-                                updated[idx] = { ...updated[idx], descripcion_direccion: e.target.value };
-                                setShowrooms(updated);
-                              }}
-                              className="mt-1"
+                              readOnly
+                              className="mt-1 bg-muted cursor-default"
                             />
                           </div>
                           <div className="space-y-2">
@@ -817,6 +813,11 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                               onLocationSelect={(loc) => {
                                 const updated = [...showrooms];
                                 updated[idx] = { ...updated[idx], latitud: loc.lat, longitud: loc.lng };
+                                setShowrooms(updated);
+                              }}
+                              onAddressSelect={(address) => {
+                                const updated = [...showrooms];
+                                updated[idx] = { ...updated[idx], descripcion_direccion: address };
                                 setShowrooms(updated);
                               }}
                               initialLocation={showroom.latitud && showroom.longitud ? { lat: showroom.latitud, lng: showroom.longitud } : undefined}
