@@ -299,7 +299,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
         <div className="space-y-4">
           {/* Search existing prospects */}
           <div className="space-y-2">
-            <Label className="text-muted-foreground text-xs">Buscar prospecto existente</Label>
+            <Label className="text-muted-foreground text-xs">Buscar prospecto existente para editar</Label>
             {prospectoOptions.length >= 10 ? (
               <Combobox
                 value={selectedProspectoId?.toString() || ""}
