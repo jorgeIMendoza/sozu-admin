@@ -105,7 +105,7 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
             autocomplete.setFields(["geometry", "formatted_address", "name"]);
           }}
           onPlaceChanged={onPlaceChanged}
-          options={{ componentRestrictions: { country: "mx" }, types: ["address"] }}
+          options={{ componentRestrictions: { country: "mx" } }}
         >
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
