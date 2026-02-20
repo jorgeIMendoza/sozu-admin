@@ -1,5 +1,7 @@
-import { useCallback, useState } from "react";
-import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
+import { useCallback, useState, useRef } from "react";
+import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from "@react-google-maps/api";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
 
 // Move libraries array outside component to prevent recreation
 const libraries: ("places")[] = ["places"];
@@ -25,6 +27,8 @@ interface GoogleMapComponentProps {
 
 export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialLocation }: GoogleMapComponentProps) {
   const [markerPosition, setMarkerPosition] = useState(initialLocation || null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -53,6 +57,35 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
     }
   }, [onLocationSelect, onAddressSelect]);
 
+  const onPlaceChanged = useCallback(() => {
+    const autocomplete = autocompleteRef.current;
+    if (autocomplete) {
+      const place = autocomplete.getPlace();
+      if (place.geometry?.location) {
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        const newPosition = { lat, lng };
+        
+        setMarkerPosition(newPosition);
+        onLocationSelect(newPosition);
+        
+        if (onAddressSelect && place.formatted_address) {
+          onAddressSelect(place.formatted_address);
+        }
+        
+        // Pan and zoom the map to the selected place
+        if (mapInstance) {
+          mapInstance.panTo(newPosition);
+          mapInstance.setZoom(15);
+        }
+      }
+    }
+  }, [onLocationSelect, onAddressSelect, mapInstance]);
+
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    setMapInstance(map);
+  }, []);
+
   if (!isLoaded) {
     return (
       <div className="w-full h-[300px] flex items-center justify-center bg-muted rounded-lg border">
@@ -62,25 +95,44 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
   }
 
   return (
-    <div className="w-full h-[300px] rounded-lg overflow-hidden border">
-      <GoogleMap
-        mapContainerStyle={containerStyle}
-        center={markerPosition || defaultCenter}
-        zoom={markerPosition ? 15 : 10}
-        onClick={onMapClick}
-        options={{
-          streetViewControl: false,
-          mapTypeControl: false,
-          fullscreenControl: false,
-        }}
+    <div className="w-full space-y-2">
+      {/* Search bar */}
+      <Autocomplete
+        onLoad={(autocomplete) => { autocompleteRef.current = autocomplete; }}
+        onPlaceChanged={onPlaceChanged}
+        options={{ componentRestrictions: { country: "mx" } }}
       >
-        {markerPosition && (
-          <Marker
-            position={markerPosition}
-            animation={google.maps.Animation.DROP}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar dirección..."
+            className="pl-8"
           />
-        )}
-      </GoogleMap>
+        </div>
+      </Autocomplete>
+      
+      {/* Map */}
+      <div className="w-full h-[300px] rounded-lg overflow-hidden border">
+        <GoogleMap
+          mapContainerStyle={containerStyle}
+          center={markerPosition || defaultCenter}
+          zoom={markerPosition ? 15 : 10}
+          onClick={onMapClick}
+          onLoad={onMapLoad}
+          options={{
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: false,
+          }}
+        >
+          {markerPosition && (
+            <Marker
+              position={markerPosition}
+              animation={google.maps.Animation.DROP}
+            />
+          )}
+        </GoogleMap>
+      </div>
     </div>
   );
 }

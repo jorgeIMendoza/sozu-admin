@@ -808,9 +808,29 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                               initialLocation={showroom.latitud && showroom.longitud ? { lat: showroom.latitud, lng: showroom.longitud } : undefined}
                             />
                             {showroom.latitud && showroom.longitud && (
-                              <p className="text-xs text-muted-foreground">
-                                Coordenadas: {showroom.latitud.toFixed(6)}, {showroom.longitud.toFixed(6)}
-                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex-1 grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-xs text-muted-foreground">Latitud</label>
+                                    <Input value={showroom.latitud.toFixed(6)} readOnly className="text-xs h-8 bg-muted cursor-default" />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-muted-foreground">Longitud</label>
+                                    <Input value={showroom.longitud.toFixed(6)} readOnly className="text-xs h-8 bg-muted cursor-default" />
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="mt-4"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(`${showroom.latitud!.toFixed(6)}, ${showroom.longitud!.toFixed(6)}`);
+                                  }}
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             )}
                           </div>
                           {(showroom.descripcion_direccion && (!showroom.latitud || !showroom.longitud)) || (!showroom.descripcion_direccion && showroom.latitud && showroom.longitud) ? (
