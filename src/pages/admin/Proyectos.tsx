@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
-import { Search, Edit, Trash2, Eye, Image, Video, MapPin, Lock, Building2 } from "lucide-react";
+import { Search, Edit, Trash2, Eye, Image, Video, MapPin, Lock, Building2, Copy, ExternalLink, Map } from "lucide-react";
 import { Dialog as ShowroomDialog, DialogContent as ShowroomDialogContent, DialogHeader as ShowroomDialogHeader, DialogTitle as ShowroomDialogTitle } from "@/components/ui/dialog";
 import { GoogleMapComponent } from "@/components/admin/GoogleMapComponent";
 import { toast } from "sonner";
@@ -1227,7 +1227,10 @@ const Proyectos = () => {
                   Showrooms — {showroomDetail?.projectName}
                 </ShowroomDialogTitle>
               </ShowroomDialogHeader>
-              {showroomDetail && showroomDetail.showrooms.length > 0 && (
+              {showroomDetail && showroomDetail.showrooms.length > 0 && (() => {
+                const current = showroomDetail.showrooms[selectedShowroomIndex];
+                const googleMapsUrl = current ? `https://www.google.com/maps?q=${current.latitud},${current.longitud}` : '';
+                return (
                 <div className="space-y-4">
                   {showroomDetail.showrooms.length > 1 && (
                     <div className="flex gap-2 flex-wrap">
@@ -1243,28 +1246,65 @@ const Proyectos = () => {
                       ))}
                     </div>
                   )}
-                  {showroomDetail.showrooms[selectedShowroomIndex]?.nombre && (
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Nombre</p>
-                      <p className="text-sm">{showroomDetail.showrooms[selectedShowroomIndex]?.nombre}</p>
+
+                  {/* Showroom Name */}
+                  <h3 className="text-lg font-semibold">
+                    {current?.nombre || `Showroom ${selectedShowroomIndex + 1}`}
+                  </h3>
+
+                  {/* Address with icon */}
+                  {current?.descripcion_direccion && (
+                    <div className="flex items-start gap-2">
+                      <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <p className="text-sm text-muted-foreground">{current.descripcion_direccion}</p>
                     </div>
                   )}
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Dirección</p>
-                    <p className="text-sm">{showroomDetail.showrooms[selectedShowroomIndex]?.descripcion_direccion}</p>
-                  </div>
-                  <div className="rounded-lg overflow-hidden border">
-                    <GoogleMapComponent
-                      onLocationSelect={() => {}}
-                      initialLocation={{ 
-                        lat: showroomDetail.showrooms[selectedShowroomIndex]?.latitud, 
-                        lng: showroomDetail.showrooms[selectedShowroomIndex]?.longitud 
+
+                  {/* Action buttons */}
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start gap-2"
+                      onClick={() => window.open(googleMapsUrl, '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Ver en Google Maps
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start gap-2"
+                      onClick={() => {
+                        navigator.clipboard.writeText(current?.descripcion_direccion || `${current?.latitud}, ${current?.longitud}`);
+                        toast.success("Ubicación copiada");
                       }}
-                      readOnly
-                    />
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copiar ubicación
+                    </Button>
                   </div>
+
+                  {/* Collapsible map */}
+                  <details className="group">
+                    <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-primary hover:underline list-none">
+                      <Map className="h-4 w-4" />
+                      Ver en el mapa
+                    </summary>
+                    <div className="mt-2 rounded-lg overflow-hidden border">
+                      <GoogleMapComponent
+                        onLocationSelect={() => {}}
+                        initialLocation={{ 
+                          lat: current?.latitud, 
+                          lng: current?.longitud 
+                        }}
+                        readOnly
+                      />
+                    </div>
+                  </details>
                 </div>
-              )}
+                );
+              })()}
             </ShowroomDialogContent>
           </ShowroomDialog>
         </>
