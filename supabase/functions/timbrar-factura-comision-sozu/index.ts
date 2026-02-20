@@ -112,8 +112,8 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { id_cuenta_cobranza, environment: envFromBody } = await req.json();
-    const environment = envFromBody || 'produccion';
+    const { id_cuenta_cobranza } = await req.json();
+    const environment = 'produccion';
 
     if (!id_cuenta_cobranza) {
       return new Response(
@@ -133,8 +133,8 @@ Deno.serve(async (req) => {
 
     if (!cuenta) throw new Error('Cuenta de cobranza no encontrada');
 
-    if (!cuenta.url_factura_comision) {
-      throw new Error('No existe factura draft para timbrar');
+    if (!cuenta.url_factura_comision || !cuenta.url_factura_comision.startsWith('http')) {
+      throw new Error('No existe factura draft válida para timbrar. La URL actual no es una URL real.');
     }
 
     if (cuenta.es_draft_factura_comision === false) {
@@ -178,14 +178,28 @@ Deno.serve(async (req) => {
       facturaResult = { url: responseText };
     }
 
+    // Tolerant N8N response handling
+    const n8nAceptado = facturaResult.status === 'ok' || (facturaResult.message && facturaResult.message.toLowerCase().includes('cargada'));
+    const docUrl = facturaResult.url || facturaResult.document_url || '';
+
+    const updateData: any = {
+      fecha_actualizacion: new Date().toISOString(),
+    };
+
+    if (docUrl && docUrl.startsWith('http')) {
+      updateData.es_draft_factura_comision = false;
+      updateData.url_factura_comision = docUrl;
+    } else if (n8nAceptado) {
+      updateData.es_draft_factura_comision = false;
+      // Keep existing URL since N8N confirmed success
+    } else {
+      throw new Error(`N8N no devolvió una URL válida ni confirmación de timbrado. Respuesta: ${responseText}`);
+    }
+
     // 6. Actualizar cuenta
     const { error: updateError } = await supabase
       .from('cuentas_cobranza')
-      .update({
-        es_draft_factura_comision: false,
-        url_factura_comision: facturaResult.url || cuenta.url_factura_comision,
-        fecha_actualizacion: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', id_cuenta_cobranza);
 
     if (updateError) {
