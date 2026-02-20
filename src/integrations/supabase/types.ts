@@ -5381,7 +5381,6 @@ export type Database = {
           activo: boolean
           costo_mantenimiento_m2: number
           descripcion: string | null
-          descripcion_direccion_showroom: string | null
           direccion: string | null
           direccion_id_estado: number | null
           direccion_id_municipio: number | null
@@ -5397,9 +5396,7 @@ export type Database = {
           id_estatus_proyecto: number | null
           id_tipo_uso: number | null
           latitud: number | null
-          latitud_showroom: number | null
           longitud: number | null
-          longitud_showroom: number | null
           monto_garantia_renta: number
           monto_mensual_cuota_extraordinaria: number
           mostrar_piso_en_oferta: boolean
@@ -5417,7 +5414,6 @@ export type Database = {
           activo?: boolean
           costo_mantenimiento_m2?: number
           descripcion?: string | null
-          descripcion_direccion_showroom?: string | null
           direccion?: string | null
           direccion_id_estado?: number | null
           direccion_id_municipio?: number | null
@@ -5433,9 +5429,7 @@ export type Database = {
           id_estatus_proyecto?: number | null
           id_tipo_uso?: number | null
           latitud?: number | null
-          latitud_showroom?: number | null
           longitud?: number | null
-          longitud_showroom?: number | null
           monto_garantia_renta?: number
           monto_mensual_cuota_extraordinaria?: number
           mostrar_piso_en_oferta?: boolean
@@ -5453,7 +5447,6 @@ export type Database = {
           activo?: boolean
           costo_mantenimiento_m2?: number
           descripcion?: string | null
-          descripcion_direccion_showroom?: string | null
           direccion?: string | null
           direccion_id_estado?: number | null
           direccion_id_municipio?: number | null
@@ -5469,9 +5462,7 @@ export type Database = {
           id_estatus_proyecto?: number | null
           id_tipo_uso?: number | null
           latitud?: number | null
-          latitud_showroom?: number | null
           longitud?: number | null
-          longitud_showroom?: number | null
           monto_garantia_renta?: number
           monto_mensual_cuota_extraordinaria?: number
           mostrar_piso_en_oferta?: boolean
@@ -5881,6 +5872,47 @@ export type Database = {
             columns: ["rol_id"]
             isOneToOne: false
             referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      showrooms_proyecto: {
+        Row: {
+          activo: boolean
+          descripcion_direccion: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_proyecto: number
+          latitud: number
+          longitud: number
+        }
+        Insert: {
+          activo?: boolean
+          descripcion_direccion: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_proyecto: number
+          latitud: number
+          longitud: number
+        }
+        Update: {
+          activo?: boolean
+          descripcion_direccion?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_proyecto?: number
+          latitud?: number
+          longitud?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "showrooms_proyecto_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
         ]
