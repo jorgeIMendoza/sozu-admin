@@ -112,6 +112,18 @@ async function createCalendarEvent(token: string, fecha: string, horaInicio: str
   return await res.json();
 }
 
+async function deleteCalendarEvent(token: string, eventId: string) {
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`,
+    { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok && res.status !== 404) {
+    console.error(`Failed to delete calendar event ${eventId}: ${await res.text()}`);
+  } else {
+    console.log(`Deleted calendar event: ${eventId}`);
+  }
+}
+
 // ---------- Handler ----------
 
 Deno.serve(async (req) => {
@@ -159,6 +171,21 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Delete old Google Calendar events and deactivate old citas
+    const { data: oldCitas } = await supabase
+      .from("citas_capacitacion")
+      .select("google_calendar_event_id")
+      .eq("id_persona", id_persona)
+      .eq("activo", true);
+
+    if (oldCitas && oldCitas.length > 0) {
+      for (const old of oldCitas) {
+        if (old.google_calendar_event_id) {
+          await deleteCalendarEvent(token, old.google_calendar_event_id);
+        }
+      }
+    }
 
     await supabase.from("citas_capacitacion").update({ activo: false }).eq("id_persona", id_persona).eq("activo", true);
 

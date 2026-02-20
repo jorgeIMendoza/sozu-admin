@@ -553,6 +553,17 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
               Selecciona una fecha
             </Label>
             <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+              <style>{`
+                .cita-existing-day:not(.day-selected) {
+                  background-color: rgb(245 158 11 / 0.15) !important;
+                  border: 1.5px solid rgb(245 158 11 / 0.5) !important;
+                  color: rgb(180 83 9) !important;
+                  font-weight: 700 !important;
+                }
+                .dark .cita-existing-day:not(.day-selected) {
+                  color: rgb(251 191 36) !important;
+                }
+              `}</style>
               <Calendar
                 mode="single"
                 selected={selectedDate}
@@ -561,6 +572,15 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
                   return date < today || date.getDay() === 0 || date.getDay() === 6;
+                }}
+                modifiers={existingCita?.fecha ? {
+                  citaExisting: (() => {
+                    const [y, m, d] = existingCita.fecha.split('-').map(Number);
+                    return new Date(y, m - 1, d);
+                  })(),
+                } : {}}
+                modifiersClassNames={{
+                  citaExisting: 'cita-existing-day',
                 }}
                 locale={es}
                 className="w-full"
@@ -578,7 +598,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                   cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 w-full",
                   day: "h-10 w-full rounded-xl font-medium transition-all duration-200 hover:bg-primary/10 hover:text-primary inline-flex items-center justify-center",
                   day_range_end: "day-range-end",
-                  day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground shadow-md",
+                  day_selected: "day-selected bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground shadow-md",
                   day_today: "bg-accent text-accent-foreground font-bold",
                   day_outside: "text-muted-foreground/40",
                   day_disabled: "text-muted-foreground/30 cursor-not-allowed",
