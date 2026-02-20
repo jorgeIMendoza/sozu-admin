@@ -2791,6 +2791,7 @@ export type Database = {
           fecha_creacion: string
           hora: number
           id: number
+          id_tipo_cita: number | null
           id_usuario_email: string
         }
         Insert: {
@@ -2800,6 +2801,7 @@ export type Database = {
           fecha_creacion?: string
           hora: number
           id?: number
+          id_tipo_cita?: number | null
           id_usuario_email: string
         }
         Update: {
@@ -2809,9 +2811,59 @@ export type Database = {
           fecha_creacion?: string
           hora?: number
           id?: number
+          id_tipo_cita?: number | null
           id_usuario_email?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "configuracion_citas_horarios_id_tipo_cita_fkey"
+            columns: ["id_tipo_cita"]
+            isOneToOne: false
+            referencedRelation: "tipos_cita"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      configuracion_citas_usuarios: {
+        Row: {
+          activo: boolean
+          calendario_email: string | null
+          duracion_minutos: number
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_tipo_cita: number
+          id_usuario_email: string
+        }
+        Insert: {
+          activo?: boolean
+          calendario_email?: string | null
+          duracion_minutos?: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_tipo_cita: number
+          id_usuario_email: string
+        }
+        Update: {
+          activo?: boolean
+          calendario_email?: string | null
+          duracion_minutos?: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_tipo_cita?: number
+          id_usuario_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configuracion_citas_usuarios_id_tipo_cita_fkey"
+            columns: ["id_tipo_cita"]
+            isOneToOne: false
+            referencedRelation: "tipos_cita"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cta_events: {
         Row: {
@@ -6252,6 +6304,27 @@ export type Database = {
           activo?: boolean | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          id?: number
+          nombre?: string
+        }
+        Relationships: []
+      }
+      tipos_cita: {
+        Row: {
+          activo: boolean
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_creacion?: string
+          id?: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_creacion?: string
           id?: number
           nombre?: string
         }

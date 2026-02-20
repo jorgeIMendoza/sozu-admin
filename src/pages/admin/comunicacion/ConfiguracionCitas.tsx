@@ -5,12 +5,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Loader2, Save, CalendarClock, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 const DIAS_SEMANA = [
   { id: 1, nombre: "Lunes", short: "Lun" },
   { id: 2, nombre: "Martes", short: "Mar" },
@@ -20,11 +24,19 @@ const DIAS_SEMANA = [
   { id: 6, nombre: "Sábado", short: "Sáb" },
 ];
 
-const HORAS = Array.from({ length: 12 }, (_, i) => i + 9); // 9 to 20
+// Slots every 30 min from 09:00 to 20:00
+const HORAS_SLOTS = Array.from({ length: 23 }, (_, i) => {
+  const h = Math.floor(i / 2) + 9;
+  const m = (i % 2) * 30;
+  return { hour: h, minute: m, label: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` };
+});
 
-function formatHora(h: number): string {
-  return `${String(h).padStart(2, "0")}:00`;
-}
+const DURACIONES = [
+  { value: 30, label: "30 min" },
+  { value: 60, label: "1 hora" },
+  { value: 90, label: "1 hr 30 min" },
+  { value: 120, label: "2 horas" },
+];
 
 export default function ConfiguracionCitas() {
   const { profile } = useAuth();
@@ -32,17 +44,40 @@ export default function ConfiguracionCitas() {
   const isSuperAdmin = profile?.rol_nombre === "Super Administrador";
 
   const [selectedUserEmail, setSelectedUserEmail] = useState<string>("");
+  const [selectedTipoCita, setSelectedTipoCita] = useState<string>("");
   const [selectedDays, setSelectedDays] = useState<Set<number>>(new Set());
-  const [selectedSlots, setSelectedSlots] = useState<Map<number, Set<number>>>(new Map()); // dia -> Set<hora>
+  const [selectedSlots, setSelectedSlots] = useState<Map<number, Set<string>>>(new Map()); // dia -> Set<"HH:MM">
+  const [duracionMinutos, setDuracionMinutos] = useState<number>(60);
+  const [calendarioEmail, setCalendarioEmail] = useState<string>("");
   const [userSelectorOpen, setUserSelectorOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Auto-select logged in user if not super admin
   useEffect(() => {
     if (!isSuperAdmin && profile?.email) {
       setSelectedUserEmail(profile.email);
     }
   }, [isSuperAdmin, profile?.email]);
+
+  // Fetch tipos de cita
+  const { data: tiposCita = [] } = useQuery({
+    queryKey: ["tipos-cita"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tipos_cita")
+        .select("*")
+        .eq("activo", true)
+        .order("id");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Auto-select first tipo when loaded
+  useEffect(() => {
+    if (tiposCita.length > 0 && !selectedTipoCita) {
+      setSelectedTipoCita(tiposCita[0].id.toString());
+    }
+  }, [tiposCita, selectedTipoCita]);
 
   // Fetch users with configurar_citas role
   const { data: usersWithCitas = [] } = useQuery({
@@ -62,31 +97,50 @@ export default function ConfiguracionCitas() {
     },
   });
 
-  // Fetch existing config for selected user
+  // Fetch existing horarios config for selected user + tipo cita
   const { data: existingConfig = [], isLoading: loadingConfig } = useQuery({
-    queryKey: ["config-citas-horarios", selectedUserEmail],
+    queryKey: ["config-citas-horarios", selectedUserEmail, selectedTipoCita],
     queryFn: async () => {
-      if (!selectedUserEmail) return [];
+      if (!selectedUserEmail || !selectedTipoCita) return [];
       const { data, error } = await supabase
         .from("configuracion_citas_horarios")
         .select("*")
         .eq("id_usuario_email", selectedUserEmail)
+        .eq("id_tipo_cita", parseInt(selectedTipoCita))
         .eq("activo", true);
       if (error) throw error;
       return data || [];
     },
-    enabled: !!selectedUserEmail,
+    enabled: !!selectedUserEmail && !!selectedTipoCita,
+  });
+
+  // Fetch user config (duracion, calendario) for selected user + tipo cita
+  const { data: userConfig } = useQuery({
+    queryKey: ["config-citas-usuarios", selectedUserEmail, selectedTipoCita],
+    queryFn: async () => {
+      if (!selectedUserEmail || !selectedTipoCita) return null;
+      const { data, error } = await supabase
+        .from("configuracion_citas_usuarios")
+        .select("*")
+        .eq("id_usuario_email", selectedUserEmail)
+        .eq("id_tipo_cita", parseInt(selectedTipoCita))
+        .eq("activo", true)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedUserEmail && !!selectedTipoCita,
   });
 
   // Initialize from existing config
   useEffect(() => {
     const days = new Set<number>();
-    const slots = new Map<number, Set<number>>();
+    const slots = new Map<number, Set<string>>();
 
     existingConfig.forEach((c: any) => {
       days.add(c.dia_semana);
       if (!slots.has(c.dia_semana)) slots.set(c.dia_semana, new Set());
-      slots.get(c.dia_semana)!.add(c.hora);
+      slots.get(c.dia_semana)!.add(`${String(c.hora).padStart(2, "0")}:${String(c.minuto || 0).padStart(2, "0")}`);
     });
 
     setSelectedDays(days);
@@ -94,12 +148,22 @@ export default function ConfiguracionCitas() {
     setHasChanges(false);
   }, [existingConfig]);
 
+  // Initialize duracion and calendario from userConfig
+  useEffect(() => {
+    if (userConfig) {
+      setDuracionMinutos(userConfig.duracion_minutos || 60);
+      setCalendarioEmail(userConfig.calendario_email || "");
+    } else {
+      setDuracionMinutos(60);
+      setCalendarioEmail("");
+    }
+  }, [userConfig]);
+
   const toggleDay = (dayId: number) => {
     setSelectedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dayId)) {
         next.delete(dayId);
-        // Also clear slots for this day
         setSelectedSlots((prevSlots) => {
           const nextSlots = new Map(prevSlots);
           nextSlots.delete(dayId);
@@ -113,15 +177,15 @@ export default function ConfiguracionCitas() {
     setHasChanges(true);
   };
 
-  const toggleSlot = (dayId: number, hora: number) => {
+  const toggleSlot = (dayId: number, slotLabel: string) => {
     setSelectedSlots((prev) => {
       const next = new Map(prev);
       if (!next.has(dayId)) next.set(dayId, new Set());
       const daySlots = new Set(next.get(dayId)!);
-      if (daySlots.has(hora)) {
-        daySlots.delete(hora);
+      if (daySlots.has(slotLabel)) {
+        daySlots.delete(slotLabel);
       } else {
-        daySlots.add(hora);
+        daySlots.add(slotLabel);
       }
       next.set(dayId, daySlots);
       return next;
@@ -131,20 +195,42 @@ export default function ConfiguracionCitas() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedUserEmail) throw new Error("No user selected");
+      if (!selectedUserEmail || !selectedTipoCita) throw new Error("No user or type selected");
+      const tipoCitaId = parseInt(selectedTipoCita);
 
-      // Delete all existing
+      // 1. Upsert configuracion_citas_usuarios
+      const { error: upsertError } = await supabase
+        .from("configuracion_citas_usuarios")
+        .upsert({
+          id_usuario_email: selectedUserEmail,
+          id_tipo_cita: tipoCitaId,
+          duracion_minutos: duracionMinutos,
+          calendario_email: calendarioEmail || null,
+          activo: true,
+          fecha_actualizacion: new Date().toISOString(),
+        }, { onConflict: "id_usuario_email,id_tipo_cita" });
+      if (upsertError) throw upsertError;
+
+      // 2. Delete existing horarios for this user + tipo
       await supabase
         .from("configuracion_citas_horarios")
         .delete()
-        .eq("id_usuario_email", selectedUserEmail);
+        .eq("id_usuario_email", selectedUserEmail)
+        .eq("id_tipo_cita", tipoCitaId);
 
-      // Build new records
-      const records: { id_usuario_email: string; dia_semana: number; hora: number; activo: boolean }[] = [];
-      for (const [dia, horas] of selectedSlots) {
+      // 3. Insert new horarios
+      const records: any[] = [];
+      for (const [dia, slotsSet] of selectedSlots) {
         if (!selectedDays.has(dia)) continue;
-        for (const hora of horas) {
-          records.push({ id_usuario_email: selectedUserEmail, dia_semana: dia, hora, activo: true });
+        for (const slotLabel of slotsSet) {
+          const [h, m] = slotLabel.split(":").map(Number);
+          records.push({
+            id_usuario_email: selectedUserEmail,
+            dia_semana: dia,
+            hora: h,
+            id_tipo_cita: tipoCitaId,
+            activo: true,
+          });
         }
       }
 
@@ -154,7 +240,8 @@ export default function ConfiguracionCitas() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["config-citas-horarios", selectedUserEmail] });
+      queryClient.invalidateQueries({ queryKey: ["config-citas-horarios", selectedUserEmail, selectedTipoCita] });
+      queryClient.invalidateQueries({ queryKey: ["config-citas-usuarios", selectedUserEmail, selectedTipoCita] });
       toast.success("Configuración de citas guardada");
       setHasChanges(false);
     },
@@ -172,7 +259,7 @@ export default function ConfiguracionCitas() {
             Configuración de Citas
           </h1>
           <p className="text-muted-foreground">
-            Configura los días y horarios disponibles para agendar citas
+            Configura los días, horarios, duración y calendario por tipo de cita
           </p>
         </div>
         {hasChanges && (
@@ -253,89 +340,139 @@ export default function ConfiguracionCitas() {
         </CardContent>
       </Card>
 
-      {selectedUserEmail && (
-        <>
-          {loadingConfig ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          ) : (
-            <>
-              {/* Day selector */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Días disponibles</CardTitle>
-                  <CardDescription>Selecciona los días en los que se pueden agendar citas</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-3">
-                    {DIAS_SEMANA.map((dia) => (
-                      <button
-                        key={dia.id}
-                        onClick={() => toggleDay(dia.id)}
-                        className={cn(
-                          "flex flex-col items-center justify-center w-16 h-16 rounded-full border-2 transition-all text-sm font-medium",
-                          selectedDays.has(dia.id)
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <span className="text-xs">{dia.short}</span>
-                      </button>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+      {selectedUserEmail && tiposCita.length > 0 && (
+        <Tabs value={selectedTipoCita} onValueChange={(v) => { setSelectedTipoCita(v); setHasChanges(false); }}>
+          <TabsList>
+            {tiposCita.map((tc: any) => (
+              <TabsTrigger key={tc.id} value={tc.id.toString()}>{tc.nombre}</TabsTrigger>
+            ))}
+          </TabsList>
 
-              {/* Time slots per day */}
-              {Array.from(selectedDays)
-                .sort()
-                .map((dayId) => {
-                  const dia = DIAS_SEMANA.find((d) => d.id === dayId);
-                  const daySlots = selectedSlots.get(dayId) || new Set();
-
-                  return (
-                    <Card key={dayId}>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base flex items-center gap-2">
-                          {dia?.nombre}
-                          <Badge variant="secondary" className="text-xs">
-                            {daySlots.size} {daySlots.size === 1 ? "horario" : "horarios"}
-                          </Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex flex-wrap gap-2">
-                          {HORAS.map((hora) => (
-                            <button
-                              key={hora}
-                              onClick={() => toggleSlot(dayId, hora)}
-                              className={cn(
-                                "px-3 py-2 rounded-md border text-sm font-medium transition-all",
-                                daySlots.has(hora)
-                                  ? "border-primary bg-primary text-primary-foreground"
-                                  : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
-                              )}
-                            >
-                              {formatHora(hora)}
-                            </button>
-                          ))}
+          {tiposCita.map((tc: any) => (
+            <TabsContent key={tc.id} value={tc.id.toString()}>
+              {loadingConfig ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Duration & Calendar config */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Configuración general</CardTitle>
+                      <CardDescription>Duración de la cita y calendario destino para {tc.nombre}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Duración de la cita</Label>
+                          <Select
+                            value={duracionMinutos.toString()}
+                            onValueChange={(v) => { setDuracionMinutos(parseInt(v)); setHasChanges(true); }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DURACIONES.map((d) => (
+                                <SelectItem key={d.value} value={d.value.toString()}>{d.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
+                        <div className="space-y-2">
+                          <Label>Email del calendario Google</Label>
+                          <Input
+                            type="email"
+                            placeholder="ejemplo@dominio.com"
+                            value={calendarioEmail}
+                            onChange={(e) => { setCalendarioEmail(e.target.value); setHasChanges(true); }}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Calendario donde se agendan las citas de este tipo
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Day selector */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Días disponibles</CardTitle>
+                      <CardDescription>Selecciona los días en los que se pueden agendar citas</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-3">
+                        {DIAS_SEMANA.map((dia) => (
+                          <button
+                            key={dia.id}
+                            onClick={() => toggleDay(dia.id)}
+                            className={cn(
+                              "flex flex-col items-center justify-center w-16 h-16 rounded-full border-2 transition-all text-sm font-medium",
+                              selectedDays.has(dia.id)
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            <span className="text-xs">{dia.short}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Time slots per day */}
+                  {Array.from(selectedDays)
+                    .sort()
+                    .map((dayId) => {
+                      const dia = DIAS_SEMANA.find((d) => d.id === dayId);
+                      const daySlots = selectedSlots.get(dayId) || new Set();
+
+                      return (
+                        <Card key={dayId}>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              {dia?.nombre}
+                              <Badge variant="secondary" className="text-xs">
+                                {daySlots.size} {daySlots.size === 1 ? "horario" : "horarios"}
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="flex flex-wrap gap-2">
+                              {HORAS_SLOTS.map((slot) => (
+                                <button
+                                  key={slot.label}
+                                  onClick={() => toggleSlot(dayId, slot.label)}
+                                  className={cn(
+                                    "px-3 py-2 rounded-md border text-sm font-medium transition-all",
+                                    daySlots.has(slot.label)
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
+                                  )}
+                                >
+                                  {slot.label}
+                                </button>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+
+                  {selectedDays.size === 0 && (
+                    <Card>
+                      <CardContent className="py-8 text-center text-muted-foreground">
+                        Selecciona al menos un día para configurar los horarios disponibles
                       </CardContent>
                     </Card>
-                  );
-                })}
-
-              {selectedDays.size === 0 && (
-                <Card>
-                  <CardContent className="py-8 text-center text-muted-foreground">
-                    Selecciona al menos un día para configurar los horarios disponibles
-                  </CardContent>
-                </Card>
+                  )}
+                </div>
               )}
-            </>
-          )}
-        </>
+            </TabsContent>
+          ))}
+        </Tabs>
       )}
     </div>
   );
