@@ -211,13 +211,15 @@ const InventarioGlobalB = () => {
     }
   }, [hasMorePages, isFetching]);
 
-  // Auto-load more if there are projects with 0 loaded properties
+  // Auto-load more if any project has fewer loaded properties than its server count
   useEffect(() => {
     if (!hasLoadedInitial || !hasMorePages || isFetching) return;
-    const loadedProjectNames = new Set(allProperties.map(p => p.proyecto_nombre));
-    const allProjectNames = Object.keys(data.projectCounts);
-    const hasEmptyProjects = allProjectNames.some(name => !loadedProjectNames.has(name));
-    if (hasEmptyProjects) {
+    const loadedCounts: Record<string, number> = {};
+    allProperties.forEach(p => { loadedCounts[p.proyecto_nombre] = (loadedCounts[p.proyecto_nombre] || 0) + 1; });
+    const hasIncompleteProjects = Object.entries(data.projectCounts).some(
+      ([name, total]) => (loadedCounts[name] || 0) < total
+    );
+    if (hasIncompleteProjects) {
       setPage(p => p + 1);
     }
   }, [hasLoadedInitial, hasMorePages, isFetching, allProperties, data.projectCounts]);
