@@ -1,6 +1,6 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
-import { useInventarioDisponible, InventarioPropiedad } from "@/hooks/useInventarioDisponible";
+import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,15 +32,6 @@ import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroo
 const SIMPLIFIED_ROLES = ["Agente Inmobiliario", "Inmobiliaria", "Super Administrador", "Administrador de Proyecto"];
 
 const PAGE = "inventario";
-
-function shuffleArray<T>(arr: T[]): T[] {
-  const result = [...arr];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
 
 type SortOrder = "none" | "asc" | "desc";
 
@@ -125,7 +116,6 @@ const InventarioGlobalB = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { canGenerateOffer } = usePagePermissions('/admin/inmobiliarias/inventario');
-  const { propiedades: rawPropiedades, isLoading } = useInventarioDisponible();
   const isMobile = useIsMobile();
   const { profile, signOut } = useAuth();
   const isSimplifiedRole = SIMPLIFIED_ROLES.includes(profile?.rol_nombre ?? "");
@@ -155,6 +145,7 @@ const InventarioGlobalB = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>("none");
   const [addProspectoOpen, setAddProspectoOpen] = useState(false);
   const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
+  const [page, setPage] = useState(0);
 
   const [showHeaderBar, setShowHeaderBar] = useState(true);
   const lastScrollY = useRef(0);
@@ -170,11 +161,30 @@ const InventarioGlobalB = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const allAvailableProperties = useMemo(() => {
-    return rawPropiedades.map((p: InventarioPropiedad) => {
+  // Convert filter state to paginated hook format
+  const bedroomNumbers = useMemo(() => filterBedrooms.map(b => parseInt(b)).filter(n => !isNaN(n)), [filterBedrooms]);
+
+  const { data, isLoading, isFetching } = useInventarioDisponiblePaginado({
+    projectNames: filterProjectNames.length > 0 ? filterProjectNames : undefined,
+    modelNames: filterModelNames.length > 0 ? filterModelNames : undefined,
+    bedrooms: bedroomNumbers.length > 0 ? bedroomNumbers : undefined,
+    levels: filterLevels.length > 0 ? filterLevels : undefined,
+    hasBodega: filterBodega === "con" ? true : filterBodega === "sin" ? false : null,
+    hasEstacionamiento: filterEstacionamiento === "con" ? true : filterEstacionamiento === "sin" ? false : null,
+    sortPrice: sortOrder === "none" ? null : sortOrder,
+    page,
+    pageSize: 30,
+  });
+
+  // Reset page when filters change
+  useEffect(() => { setPage(0); }, [filterProjectNames, filterModelNames, filterBedrooms, filterLevels, filterBodega, filterEstacionamiento, sortOrder]);
+
+  // Map server data to UI format
+  const displayProperties = useMemo(() => {
+    return data.propiedades.map((p) => {
       const propImgs = p.propiedad_imagenes || [];
       const modelImgs = p.modelo_imagenes || [];
-      const rawImages = shuffleArray(propImgs.length > 0 ? propImgs : modelImgs);
+      const rawImages = propImgs.length > 0 ? propImgs : modelImgs;
       return {
         id: p.id, numero_propiedad: p.numero_propiedad, numero: p.numero_propiedad, piso: p.numero_piso,
         precio_lista: p.precio_lista, m2_interiores: p.m2_interiores, m2_exteriores: p.m2_exteriores,
@@ -187,47 +197,23 @@ const InventarioGlobalB = () => {
         model_images: rawImages, esquemas_pago: p.esquemas_pago || [],
       };
     });
-  }, [rawPropiedades]);
+  }, [data.propiedades]);
 
-  const projectsWithAvailable = useMemo(() => [...new Set(allAvailableProperties.map(p => p.proyecto_nombre))].sort(), [allAvailableProperties]);
-  const availableModelNames = useMemo(() => {
-    let source = allAvailableProperties;
-    if (filterProjectNames.length > 0) source = source.filter(p => filterProjectNames.includes(p.proyecto_nombre));
-    return [...new Set(source.map(p => p.modelo_nombre).filter(Boolean))].sort();
-  }, [allAvailableProperties, filterProjectNames]);
-  const availableBedroomOptions = useMemo(() => [...new Set(allAvailableProperties.filter(p => p.recamaras > 0).map(p => `${p.recamaras} recámara${p.recamaras > 1 ? "s" : ""}`))].sort(), [allAvailableProperties]);
-  const availableLevelOptions = useMemo(() => {
-    const levels = [...new Set(allAvailableProperties.filter(p => p.piso).map(p => p.piso!))];
-    return levels.sort((a, b) => { const na = parseInt(a), nb = parseInt(b); if (!isNaN(na) && !isNaN(nb)) return na - nb; return a.localeCompare(b); });
-  }, [allAvailableProperties]);
-
-  const filteredProperties = useMemo(() => {
-    let result = allAvailableProperties;
-    if (filterProjectNames.length > 0) result = result.filter(p => filterProjectNames.includes(p.proyecto_nombre));
-    if (filterModelNames.length > 0) result = result.filter(p => filterModelNames.includes(p.modelo_nombre));
-    if (filterBedrooms.length > 0) { const bedNums = filterBedrooms.map(b => parseInt(b)); result = result.filter(p => bedNums.includes(p.recamaras)); }
-    if (filterLevels.length > 0) result = result.filter(p => p.piso && filterLevels.includes(p.piso));
-    if (filterBodega === "con") result = result.filter(p => p.bodegas_count > 0);
-    else if (filterBodega === "sin") result = result.filter(p => p.bodegas_count === 0);
-    if (filterEstacionamiento === "con") result = result.filter(p => p.estacionamientos_count > 0);
-    else if (filterEstacionamiento === "sin") result = result.filter(p => p.estacionamientos_count === 0);
-    return result;
-  }, [allAvailableProperties, filterProjectNames, filterModelNames, filterBedrooms, filterLevels, filterBodega, filterEstacionamiento]);
-
-  const sortedProperties = useMemo(() => {
-    if (sortOrder === "none") return filteredProperties;
-    return [...filteredProperties].sort((a, b) => sortOrder === "asc" ? a.precio_lista - b.precio_lista : b.precio_lista - a.precio_lista);
-  }, [filteredProperties, sortOrder]);
+  // Filter options come from the server
+  const projectsWithAvailable = data.filterOptions.proyectos;
+  const availableModelNames = data.filterOptions.modelos;
+  const availableBedroomOptions = useMemo(() => data.filterOptions.recamaras.map(n => `${n} recámara${n > 1 ? "s" : ""}`), [data.filterOptions.recamaras]);
+  const availableLevelOptions = data.filterOptions.niveles;
 
   // Group by project for carousel layout
   const groupedByProject = useMemo(() => {
     const map = new Map<string, any[]>();
-    sortedProperties.forEach(p => {
+    displayProperties.forEach(p => {
       if (!map.has(p.proyecto_nombre)) map.set(p.proyecto_nombre, []);
       map.get(p.proyecto_nombre)!.push(p);
     });
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [sortedProperties]);
+  }, [displayProperties]);
 
   const hasActiveFilters = filterProjectNames.length > 0 || filterModelNames.length > 0 || filterBedrooms.length > 0 || filterLevels.length > 0 || filterBodega !== null || filterEstacionamiento !== null;
   const activeFilterCount = filterProjectNames.length + filterModelNames.length + filterBedrooms.length + filterLevels.length + (filterBodega ? 1 : 0) + (filterEstacionamiento ? 1 : 0);
@@ -307,7 +293,7 @@ const InventarioGlobalB = () => {
           <div className="flex items-center justify-between gap-2">
             <div className="space-y-0.5">
               <h1 className="text-xl font-bold text-foreground">Inventario Disponible</h1>
-              <p className="text-sm text-muted-foreground">{sortedProperties.length} unidades disponibles</p>
+              <p className="text-sm text-muted-foreground">{data.totalCount} unidades disponibles</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => navigate("/admin/inmobiliarias/proyectos")} className="rounded-full gap-1.5 text-xs font-medium border-primary/30 text-primary hover:bg-primary/5">
               <Building2 className="h-3.5 w-3.5" /> Proyectos
@@ -320,7 +306,10 @@ const InventarioGlobalB = () => {
       {/* Count + sort label for simplified */}
       {isSimplifiedRole && (
         <div className="flex items-center justify-between pt-3 pb-1">
-          <p className="text-sm text-muted-foreground">{sortedProperties.length} unidades</p>
+          <p className="text-sm text-muted-foreground">
+            {data.totalCount} unidades
+            {isFetching && <Loader2 className="inline ml-2 h-3 w-3 animate-spin" />}
+          </p>
           {sortOrder !== "none" && (
             <button onClick={cycleSortOrder} className="text-xs text-primary font-medium flex items-center gap-1">
               <SortIcon className="h-3 w-3" /> {sortLabel} <X className="h-3 w-3 ml-0.5" />
@@ -388,7 +377,7 @@ const InventarioGlobalB = () => {
           <div className="overflow-y-auto px-4 pb-6 max-h-[65vh]">{filterContent}</div>
           <div className="px-4 py-3 border-t">
             <Button className="w-full rounded-full gap-2" onClick={() => setFiltersDrawerOpen(false)}>
-              <Search className="h-4 w-4" /> Ver {sortedProperties.length} resultados
+              <Search className="h-4 w-4" /> Ver {data.totalCount} resultados
             </Button>
           </div>
         </DrawerContent>
@@ -407,7 +396,7 @@ const InventarioGlobalB = () => {
               <div className="flex items-center gap-3 px-1">
                 <Building2 className="h-5 w-5 text-primary" />
                 <h2 className="text-lg font-bold text-foreground">{projectName}</h2>
-                <Badge variant="secondary" className="text-xs">{props.length} disponibles</Badge>
+                <Badge variant="secondary" className="text-xs">{props.length}</Badge>
               </div>
               <ProjectSwipeCarousel
                 properties={props}
@@ -420,6 +409,21 @@ const InventarioGlobalB = () => {
               />
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {data.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-8">
+          <Button variant="outline" size="sm" disabled={page === 0} onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Página {page + 1} de {data.totalPages}
+          </span>
+          <Button variant="outline" size="sm" disabled={page >= data.totalPages - 1} onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       )}
 
@@ -556,7 +560,7 @@ const InventarioGlobalB = () => {
 };
 
 // Swipe carousel per project — no arrows, swipe only. Cards identical to Variant A
-const ProjectSwipeCarousel = ({ properties, formatPrice, onSelectProperty, onSwipe }: { properties: any[]; formatPrice: (n: number) => string; onSelectProperty: (p: any) => void; onSwipe: () => void }) => {
+const ProjectSwipeCarousel = React.memo(({ properties, formatPrice, onSelectProperty, onSwipe }: { properties: any[]; formatPrice: (n: number) => string; onSelectProperty: (p: any) => void; onSwipe: () => void }) => {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, dragFree: true, align: "start", containScroll: "trimSnaps" });
   const swiped = useRef(false);
 
@@ -602,10 +606,10 @@ const ProjectSwipeCarousel = ({ properties, formatPrice, onSelectProperty, onSwi
       </div>
     </div>
   );
-};
+});
 
-// Single image for card (same visual as Variant A card image area)
-const PropertyCardImage = ({ images }: { images: any[] }) => {
+// Single image for card — optimized: simple img for 1 image, Embla only for 2+
+const PropertyCardImage = React.memo(({ images }: { images: any[] }) => {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, dragFree: false });
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -637,6 +641,19 @@ const PropertyCardImage = ({ images }: { images: any[] }) => {
 
   if (images.length === 0) return <div className="h-40 bg-muted/60 flex items-center justify-center"><Package className="h-10 w-10 text-muted-foreground/30" /></div>;
 
+  // Single image — no carousel needed
+  if (images.length === 1) {
+    return (
+      <div ref={containerRef} className="relative h-40 bg-muted overflow-hidden">
+        {isVisible ? (
+          <img src={images[0].url} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+        ) : (
+          <div className="h-full flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" /></div>
+        )}
+      </div>
+    );
+  }
+
   const visibleImages = !isVisible ? [] : hasInteracted ? images.slice(0, 5) : images.slice(0, 1);
 
   return (
@@ -663,7 +680,7 @@ const PropertyCardImage = ({ images }: { images: any[] }) => {
       )}
     </div>
   );
-};
+});
 
 // Detail dialog carousel
 const DetailCarousel = ({ images }: { images: any[] }) => {

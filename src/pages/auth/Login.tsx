@@ -93,33 +93,22 @@ export default function Login() {
     }
   };
 
-  const neuInputStyle = {
-    background: 'hsl(220,20%,93%)',
-    boxShadow: 'inset 4px 4px 8px hsl(220,20%,86%), inset -4px -4px 8px hsl(0,0%,100%)',
-  };
-
   if (isBlocked) {
     return (
-      <div className="min-h-screen bg-[hsl(220,20%,93%)] flex items-center justify-center p-4">
-        <div className="w-full max-w-sm text-center">
+      <div className="login-page">
+        <div className="login-bg-gradient" />
+        <div className="relative w-full max-w-sm text-center z-10">
           <img src={sozuLogo} alt="Sozu" className="h-10 mx-auto mb-10" />
-          <ShieldAlert className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-[hsl(0,0%,15%)] mb-3">
+          <ShieldAlert className="h-16 w-16 mx-auto mb-4" style={{ color: 'hsl(0 84% 60%)' }} />
+          <h1 className="text-xl font-black text-[hsl(0_0%_5%)] mb-3 tracking-tight">
             Acceso No Autorizado
           </h1>
-          <p className="text-[hsl(0,0%,45%)] text-sm mb-8">
+          <p className="text-sm mb-8" style={{ color: 'hsl(0 0% 45%)' }}>
             Tu tipo de usuario no tiene acceso a este sistema.
             Contacta al administrador si crees que esto es un error.
           </p>
-          <button
-            onClick={handleGoToLogin}
-            className="w-full py-4 rounded-2xl text-white font-semibold text-sm transition-all duration-300"
-            style={{
-              background: 'linear-gradient(135deg, hsl(0,70%,55%), hsl(0,60%,45%))',
-              boxShadow: '0 8px 24px hsla(0,60%,45%,0.3)',
-            }}
-          >
-            <LogIn className="inline mr-2 h-4 w-4" />
+          <button onClick={handleGoToLogin} className="login-btn-primary flex items-center justify-center gap-2">
+            <LogIn className="h-4 w-4" />
             Iniciar Sesión
           </button>
         </div>
@@ -128,47 +117,40 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[hsl(220,20%,93%)] flex flex-col items-center justify-center p-4">
-      <div
-        className="w-full max-w-md bg-white rounded-3xl px-8 py-10 sm:px-10"
-        style={{
-          boxShadow: '12px 12px 30px hsl(220,20%,84%), -12px -12px 30px hsl(0,0%,100%)',
-        }}
-      >
+    <div className="login-page">
+      <div className="login-bg-gradient" />
+      <div className="login-card relative z-10">
         {/* Logo */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-7">
           <img src={sozuLogo} alt="Sozu" className="h-10 mx-auto" />
         </div>
 
         {/* Title */}
-        <h1 className="text-2xl font-bold text-center text-[hsl(0,0%,15%)] mb-2">
+        <h1 className="text-2xl font-black text-center text-[hsl(0_0%_5%)] mb-1.5" style={{ letterSpacing: '-0.02em' }}>
           Iniciar Sesión
         </h1>
-        <p className="text-sm text-[hsl(0,0%,55%)] text-center mb-8">
+        <p className="text-sm text-center mb-7" style={{ color: 'hsl(0 0% 45%)' }}>
           Ingresa tus credenciales para acceder al sistema
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Alerts */}
           {inactivityLogout && !error && !isUpdating && (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm text-amber-700 bg-amber-50/80"
-              style={{ boxShadow: '4px 4px 10px hsl(220,20%,86%), -4px -4px 10px hsl(0,0%,100%)' }}>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm" style={{ color: 'hsl(43 80% 30%)', background: 'hsl(43 80% 95%)' }}>
               <Clock className="h-4 w-4 flex-shrink-0" />
               <span>Tu sesión expiró por inactividad.</span>
             </div>
           )}
           
           {isUpdating && (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm text-blue-700 bg-blue-50/80"
-              style={{ boxShadow: '4px 4px 10px hsl(220,20%,86%), -4px -4px 10px hsl(0,0%,100%)' }}>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm" style={{ color: 'hsl(210 80% 40%)', background: 'hsl(210 80% 95%)' }}>
               <RefreshCw className="h-4 w-4 flex-shrink-0 animate-spin" />
               <span>Actualizando a la última versión...</span>
             </div>
           )}
           
           {error && (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm text-red-600 bg-red-50/80"
-              style={{ boxShadow: '4px 4px 10px hsl(220,20%,86%), -4px -4px 10px hsl(0,0%,100%)' }}>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm" style={{ color: 'hsl(0 84% 40%)', background: 'hsl(0 84% 97%)' }}>
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
@@ -176,7 +158,7 @@ export default function Login() {
 
           {/* Email */}
           <div>
-            <label className="block text-sm font-semibold text-[hsl(0,0%,15%)] mb-2">Email</label>
+            <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Email</label>
             <input
               type="email"
               placeholder="tu@email.com"
@@ -185,14 +167,13 @@ export default function Login() {
               disabled={isLoading}
               autoComplete="email"
               required
-              className="w-full px-5 py-4 rounded-2xl text-sm text-[hsl(0,0%,15%)] placeholder:text-[hsl(0,0%,60%)] outline-none transition-all duration-200 focus:ring-2 focus:ring-[hsl(158,64%,38%)]/30 disabled:opacity-50 border border-[hsl(220,20%,88%)]"
-              style={neuInputStyle}
+              className="login-input w-full"
             />
           </div>
           
           {/* Password */}
           <div>
-            <label className="block text-sm font-semibold text-[hsl(0,0%,15%)] mb-2">Contraseña</label>
+            <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Contraseña</label>
             <input
               type="password"
               placeholder="••••••••"
@@ -201,8 +182,7 @@ export default function Login() {
               disabled={isLoading}
               autoComplete="current-password"
               required
-              className="w-full px-5 py-4 rounded-2xl text-sm text-[hsl(0,0%,15%)] placeholder:text-[hsl(0,0%,60%)] outline-none transition-all duration-200 focus:ring-2 focus:ring-[hsl(158,64%,38%)]/30 disabled:opacity-50 border border-[hsl(220,20%,88%)]"
-              style={neuInputStyle}
+              className="login-input w-full"
             />
           </div>
 
@@ -210,11 +190,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={isLoading || isUpdating}
-            className="w-full py-4 rounded-2xl text-white font-semibold text-sm tracking-wide transition-all duration-300 disabled:opacity-60 flex items-center justify-center gap-2"
-            style={{
-              background: 'linear-gradient(135deg, hsl(180,60%,55%), hsl(158,64%,38%))',
-              boxShadow: '0 8px 24px hsla(158,64%,38%,0.3)',
-            }}
+            className="login-btn-primary flex items-center justify-center gap-2"
           >
             {isLoading ? (
               <>
@@ -235,9 +211,9 @@ export default function Login() {
           </button>
         </form>
         
-        <p className="text-xs text-[hsl(0,0%,55%)] text-center mt-8">
-          {APP_VERSION}
-        </p>
+        <div className="login-separator mt-7 text-center">
+          <span className="login-version">{APP_VERSION}</span>
+        </div>
       </div>
     </div>
   );

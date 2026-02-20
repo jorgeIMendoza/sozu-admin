@@ -171,7 +171,7 @@ All colors MUST be HSL.
     box-shadow: inset 2px 2px 6px hsl(222 84% 3%), inset -2px -2px 6px hsl(217 33% 22%);
   }
 
-  /* Gradient primary button (login-like) */
+/* Gradient primary button (login-like) */
   .btn-gradient-primary {
     @apply rounded-2xl text-white font-semibold text-sm tracking-wide transition-all duration-300 disabled:opacity-60;
     background: linear-gradient(135deg, hsl(180 60% 55%), hsl(158 64% 38%));
@@ -183,6 +183,109 @@ All colors MUST be HSL.
   }
   .btn-gradient-primary:active {
     transform: translateY(0);
+  }
+
+  /* ── Login / Registration shared styles ── */
+  .login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    position: relative;
+    overflow: hidden;
+    background: hsl(0 0% 100%);
+  }
+
+  .login-bg-gradient {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 50% 30%, hsl(145 40% 96% / 0.6) 0%, transparent 70%),
+      hsl(0 0% 100%);
+  }
+
+  .login-card {
+    width: 100%;
+    max-width: 24rem;
+    border-radius: 1rem;
+    border: 1px solid hsl(0 0% 91%);
+    padding: 1.75rem;
+    background: hsl(0 0% 100%);
+    box-shadow: 0 16px 48px -8px hsl(0 0% 0% / 0.08);
+  }
+
+  .login-input {
+    height: 3rem;
+    border-radius: 0.75rem;
+    border: none;
+    background: hsl(0 0% 97%);
+    font-size: 0.875rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    outline: none;
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.05);
+    transition: box-shadow 0.2s;
+    color: hsl(0 0% 5%);
+  }
+  .login-input::placeholder {
+    color: hsl(0 0% 60%);
+  }
+  .login-input:focus {
+    box-shadow: 0 0 0 2px hsl(145 35% 51% / 0.25);
+  }
+  .login-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .login-btn-primary {
+    width: 100%;
+    height: 3rem;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: white;
+    border: none;
+    cursor: pointer;
+    background: linear-gradient(135deg, hsl(145 38% 46%), hsl(152 40% 54%));
+    box-shadow: 0 6px 24px -4px hsl(145 35% 51% / 0.30);
+    transition: opacity 0.2s;
+  }
+  .login-btn-primary:hover {
+    opacity: 0.9;
+  }
+  .login-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .login-btn-outline {
+    width: 100%;
+    height: 3rem;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 2px solid hsl(0 0% 91%);
+    background: transparent;
+    color: hsl(0 0% 5%);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .login-btn-outline:hover {
+    border-color: hsl(145 35% 51%);
+    color: hsl(145 35% 51%);
+  }
+
+  .login-separator {
+    border-top: 1px solid hsl(0 0% 93%);
+    padding-top: 0.75rem;
+  }
+
+  .login-version {
+    font-size: 10px;
+    font-family: monospace;
+    color: hsl(0 0% 45% / 0.4);
   }
 
   /* Custom badge variants for availability status */
