@@ -211,6 +211,17 @@ const InventarioGlobalB = () => {
     }
   }, [hasMorePages, isFetching]);
 
+  // Auto-load more if there are projects with 0 loaded properties
+  useEffect(() => {
+    if (!hasLoadedInitial || !hasMorePages || isFetching) return;
+    const loadedProjectNames = new Set(allProperties.map(p => p.proyecto_nombre));
+    const allProjectNames = Object.keys(data.projectCounts);
+    const hasEmptyProjects = allProjectNames.some(name => !loadedProjectNames.has(name));
+    if (hasEmptyProjects) {
+      setPage(p => p + 1);
+    }
+  }, [hasLoadedInitial, hasMorePages, isFetching, allProperties, data.projectCounts]);
+
   // Map accumulated data to UI format
   const displayProperties = useMemo(() => {
     return allProperties.map((p) => {
@@ -243,12 +254,16 @@ const InventarioGlobalB = () => {
   // Group by project for carousel layout
   const groupedByProject = useMemo(() => {
     const map = new Map<string, any[]>();
+    // Initialize all projects from server counts so every project shows even if not yet loaded
+    Object.keys(projectCounts).forEach(name => {
+      if (!map.has(name)) map.set(name, []);
+    });
     displayProperties.forEach(p => {
       if (!map.has(p.proyecto_nombre)) map.set(p.proyecto_nombre, []);
       map.get(p.proyecto_nombre)!.push(p);
     });
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [displayProperties]);
+  }, [displayProperties, projectCounts]);
 
   const hasActiveFilters = filterProjectNames.length > 0 || filterModelNames.length > 0 || filterBedrooms.length > 0 || filterLevels.length > 0 || filterBodega !== null || filterEstacionamiento !== null;
   const activeFilterCount = filterProjectNames.length + filterModelNames.length + filterBedrooms.length + filterLevels.length + (filterBodega ? 1 : 0) + (filterEstacionamiento ? 1 : 0);
@@ -433,17 +448,24 @@ const InventarioGlobalB = () => {
                 <h2 className="text-lg font-bold text-foreground">{projectName}</h2>
                 <Badge variant="secondary" className="text-xs">{projectCounts[projectName] ?? props.length}</Badge>
               </div>
-              <ProjectSwipeCarousel
-                properties={props}
-                formatPrice={formatPrice}
-                onSelectProperty={(p) => {
-                  setSelectedProperty(p);
-                  track({ page: "inventario", elementId: "view_property_detail", elementLabel: `Depto ${p.numero || p.id}`, metadata: { propertyId: p.id, project: projectName } });
-                }}
-                onSwipe={() => track({ page: "inventario", elementId: "carousel_swipe", elementLabel: `Swipe ${projectName}`, metadata: { project: projectName } })}
-                onReachEnd={loadNextPage}
-                isLoadingMore={isFetching && hasMorePages}
-              />
+              {props.length === 0 ? (
+                <div className="flex items-center gap-3 py-6 px-2 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-sm">Cargando unidades...</span>
+                </div>
+              ) : (
+                <ProjectSwipeCarousel
+                  properties={props}
+                  formatPrice={formatPrice}
+                  onSelectProperty={(p) => {
+                    setSelectedProperty(p);
+                    track({ page: "inventario", elementId: "view_property_detail", elementLabel: `Depto ${p.numero || p.id}`, metadata: { propertyId: p.id, project: projectName } });
+                  }}
+                  onSwipe={() => track({ page: "inventario", elementId: "carousel_swipe", elementLabel: `Swipe ${projectName}`, metadata: { project: projectName } })}
+                  onReachEnd={loadNextPage}
+                  isLoadingMore={isFetching && hasMorePages}
+                />
+              )}
             </div>
           ))}
           {isFetching && hasMorePages && (

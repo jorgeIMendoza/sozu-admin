@@ -203,7 +203,17 @@ export default function Registro() {
         </form>
 
         <p className="text-center text-xs mt-7 px-4 leading-relaxed" style={{ color: 'hsl(0 0% 55%)' }}>
-          Al registrarte, aceptas nuestros términos contenidos en nuestro{" "}
+          Al registrarte, aceptas nuestros{" "}
+          <a
+            href="https://www.sozu.com/terminos-y-condiciones"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+            style={{ color: 'hsl(145 35% 51%)' }}
+          >
+            Términos y condiciones
+          </a>
+          . Ver{" "}
           <a
             href="https://www.sozu.com/aviso-de-privacidad"
             target="_blank"
