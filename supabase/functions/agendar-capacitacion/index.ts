@@ -85,7 +85,7 @@ async function getAvailableSlots(token: string, fecha: string): Promise<string[]
   return slots;
 }
 
-async function checkAvailability(token: string, fecha: string, horaInicio: string, horaFin: string): Promise<boolean> {
+async function checkAvailability(token: string, fecha: string, horaInicio: string, horaFin: string, excludeEventId?: string): Promise<boolean> {
   const timeMin = `${fecha}T${horaInicio}:00-06:00`;
   const timeMax = `${fecha}T${horaFin}:00-06:00`;
   const res = await fetch(
@@ -94,7 +94,9 @@ async function checkAvailability(token: string, fecha: string, horaInicio: strin
   );
   if (!res.ok) throw new Error(`Calendar API error: ${await res.text()}`);
   const data = await res.json();
-  return (data.items || []).length === 0;
+  // Filter out all-day events (they have .date instead of .dateTime) and optionally exclude the current event being rescheduled
+  const timedEvents = (data.items || []).filter((e: any) => e.start?.dateTime && e.end?.dateTime && e.id !== excludeEventId);
+  return timedEvents.length === 0;
 }
 
 async function createCalendarEvent(token: string, fecha: string, horaInicio: string, horaFin: string, summary: string, agentEmail: string) {
@@ -156,7 +158,22 @@ Deno.serve(async (req) => {
     const totalMin = h * 60 + m + 90;
     const horaFin = `${String(Math.floor(totalMin / 60) % 24).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
 
-    const available = await checkAvailability(token, fecha, hora_inicio, horaFin);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Find existing active cita for this persona
+    const { data: oldCitas } = await supabase
+      .from("citas_capacitacion")
+      .select("id, google_calendar_event_id")
+      .eq("id_persona", id_persona)
+      .eq("activo", true);
+
+    const existingEventId = oldCitas?.[0]?.google_calendar_event_id || undefined;
+    const existingCitaId = oldCitas?.[0]?.id;
+
+    // Check availability excluding the existing event (so rescheduling doesn't conflict with itself)
+    const available = await checkAvailability(token, fecha, hora_inicio, horaFin, existingEventId);
     if (!available) {
       return new Response(JSON.stringify({ error: "no_disponible", message: "El horario seleccionado no está disponible." }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -166,38 +183,38 @@ Deno.serve(async (req) => {
       summary += ` En la direccion: ${direccion_showroom} con la ubicacion ${latitud_showroom},${longitud_showroom}`;
     }
 
-    const calendarEvent = await createCalendarEvent(token, fecha, hora_inicio, horaFin, summary, agent_email || "");
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Delete old Google Calendar events and deactivate old citas
-    const { data: oldCitas } = await supabase
-      .from("citas_capacitacion")
-      .select("google_calendar_event_id")
-      .eq("id_persona", id_persona)
-      .eq("activo", true);
-
-    if (oldCitas && oldCitas.length > 0) {
-      for (const old of oldCitas) {
-        if (old.google_calendar_event_id) {
-          await deleteCalendarEvent(token, old.google_calendar_event_id);
-        }
-      }
+    // Delete old Google Calendar event if it exists
+    if (existingEventId) {
+      await deleteCalendarEvent(token, existingEventId);
     }
 
-    await supabase.from("citas_capacitacion").update({ activo: false }).eq("id_persona", id_persona).eq("activo", true);
+    // Create new calendar event
+    const calendarEvent = await createCalendarEvent(token, fecha, hora_inicio, horaFin, summary, agent_email || "");
 
-    const { data: newCita, error: insertError } = await supabase
-      .from("citas_capacitacion")
-      .insert({ id_persona, fecha, hora_inicio, hora_fin: horaFin, ubicacion: "Presencial", estatus: "programada", google_calendar_event_id: calendarEvent.id, google_meet_link: null })
-      .select()
-      .single();
+    let resultCita;
 
-    if (insertError) console.error("DB insert error:", insertError);
+    if (existingCitaId) {
+      // UPDATE existing cita record
+      const { data: updatedCita, error: updateError } = await supabase
+        .from("citas_capacitacion")
+        .update({ fecha, hora_inicio, hora_fin: horaFin, google_calendar_event_id: calendarEvent.id, estatus: "programada" })
+        .eq("id", existingCitaId)
+        .select()
+        .single();
+      if (updateError) console.error("DB update error:", updateError);
+      resultCita = updatedCita;
+    } else {
+      // Insert new cita only if none exists
+      const { data: newCita, error: insertError } = await supabase
+        .from("citas_capacitacion")
+        .insert({ id_persona, fecha, hora_inicio, hora_fin: horaFin, ubicacion: "Presencial", estatus: "programada", google_calendar_event_id: calendarEvent.id, google_meet_link: null })
+        .select()
+        .single();
+      if (insertError) console.error("DB insert error:", insertError);
+      resultCita = newCita;
+    }
 
-    return new Response(JSON.stringify({ success: true, meet_link: null, event_id: calendarEvent.id, cita: newCita }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true, meet_link: null, event_id: calendarEvent.id, cita: resultCita }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: unknown) {
     console.error("Error in agendar-capacitacion:", error);
