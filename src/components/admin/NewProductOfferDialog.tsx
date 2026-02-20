@@ -649,6 +649,40 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
       
       if (ofertaError) throw ofertaError;
 
+      // Assign prospect to agent (logged-in user) in entidades_relacionadas
+      const projectId = propertyDetails?.entidades_relacionadas?.proyectos?.id;
+      if (projectId && personaId) {
+        const { data: existingRelation } = await supabase
+          .from("entidades_relacionadas")
+          .select("id, id_persona_duena_lead")
+          .eq("id_persona", personaId)
+          .eq("id_proyecto", projectId)
+          .eq("id_tipo_entidad", 7)
+          .eq("activo", true)
+          .maybeSingle();
+
+        if (!existingRelation) {
+          const { error: relationError } = await supabase
+            .from("entidades_relacionadas")
+            .insert({
+              id_persona: personaId,
+              id_proyecto: projectId,
+              id_tipo_entidad: 7,
+              id_estatus_persona: 3,
+              id_persona_duena_lead: profile?.id_persona || null,
+              activo: true,
+            });
+          if (relationError) console.error("Error creating entidades_relacionadas:", relationError);
+          else console.log("Created prospect relation with agent assignment");
+        } else if (!existingRelation.id_persona_duena_lead && profile?.id_persona) {
+          await supabase
+            .from("entidades_relacionadas")
+            .update({ id_persona_duena_lead: profile.id_persona })
+            .eq("id", existingRelation.id);
+          console.log("Assigned agent to existing prospect relation");
+        }
+      }
+
       toast({
         title: "Éxito",
         description: "Oferta de producto/servicio generada correctamente. Descargando PDF...",

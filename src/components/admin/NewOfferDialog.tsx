@@ -747,6 +747,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             id_proyecto: projectId,
             id_tipo_entidad: 7, // Cliente/Lead
             id_estatus_persona: 3, // Abierto
+            id_persona_duena_lead: profile?.id_persona || null,
             activo: true
           };
 
@@ -762,6 +763,25 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           }
         } else {
           console.log("Person already exists in entidades_relacionadas");
+          // If the existing relation doesn't have an agent assigned, assign the current user
+          if (profile?.id_persona) {
+            const { data: currentRelation } = await supabase
+              .from("entidades_relacionadas")
+              .select("id, id_persona_duena_lead")
+              .eq("id_persona", personId)
+              .eq("id_proyecto", projectId)
+              .eq("id_tipo_entidad", 7)
+              .eq("activo", true)
+              .maybeSingle();
+            
+            if (currentRelation && !currentRelation.id_persona_duena_lead) {
+              await supabase
+                .from("entidades_relacionadas")
+                .update({ id_persona_duena_lead: profile.id_persona })
+                .eq("id", currentRelation.id);
+              console.log("Assigned agent to existing prospect relation");
+            }
+          }
         }
       }
 
