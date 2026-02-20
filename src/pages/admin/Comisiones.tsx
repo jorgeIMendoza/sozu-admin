@@ -637,13 +637,13 @@ export default function Comisiones() {
                           return (
                             <div className="flex items-center gap-1">
                               <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white">Draft</Badge>
-                              {urlFactura.startsWith('http') && !urlFactura.includes('pendiente') && (
+                              {urlFactura && (
                                 <Button
                                   size="icon"
                                   variant="ghost"
                                   className="h-6 w-6"
-                                  title="Preview"
-                                  onClick={() => setPreviewDialog({ isOpen: true, url: urlFactura, title: `Preview Factura Comisión Sozu - Cuenta ${formatCuentaCobranzaId(comision.id, comision.tipo)}` })}
+                                  title="Ver factura draft"
+                                  onClick={() => window.open(urlFactura, '_blank')}
                                 >
                                   <Eye className="h-3 w-3" />
                                 </Button>
