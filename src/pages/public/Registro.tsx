@@ -1,17 +1,12 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { UserPlus, ArrowLeft, CheckCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
-import sozuLogoWhite from "@/assets/sozu-logo-white.png";
-import { useTheme } from "next-themes";
 
 export default function Registro() {
   const { toast } = useToast();
-  const { resolvedTheme } = useTheme();
-  const sozuLogo = resolvedTheme === "dark" ? sozuLogoWhite : sozuLogoBlack;
   const [formData, setFormData] = useState({
     nombre: "",
     email: "",
@@ -32,7 +27,6 @@ export default function Registro() {
       });
 
       if (error) {
-        // Try to parse error context for edge function errors (4xx responses)
         let message = "Error al registrar";
         try {
           if (error.context && typeof error.context.json === 'function') {
@@ -80,45 +74,39 @@ export default function Registro() {
       return;
     }
 
-    // Duplicate check is done server-side in the edge function (RLS prevents anon from seeing all users)
     registerMutation.mutate();
   };
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-[hsl(220,20%,93%)] flex items-center justify-center p-4">
-        <div className="w-full max-w-sm text-center">
-          <img src={sozuLogo} alt="Sozu" className="h-10 mx-auto mb-10" />
-          <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center"
+      <div className="login-page">
+        <div className="login-bg-gradient" />
+        <div className="login-card relative z-10 text-center">
+          <img src={sozuLogoBlack} alt="Sozu" className="h-10 mx-auto mb-7" />
+          <div className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center"
             style={{
-              background: 'linear-gradient(135deg, hsl(200,70%,55%), hsl(210,80%,50%))',
-              boxShadow: '0 8px 24px hsla(210,80%,50%,0.3)',
+              background: 'linear-gradient(135deg, hsl(145 38% 46%), hsl(152 40% 54%))',
+              boxShadow: '0 6px 24px -4px hsl(145 35% 51% / 0.30)',
             }}>
-            <UserPlus className="w-10 h-10 text-white" />
+            <UserPlus className="w-8 h-8 text-white" />
           </div>
-          <h2 className="text-2xl font-bold text-[hsl(0,0%,15%)] mb-3">
+          <h2 className="text-2xl font-black text-[hsl(0_0%_5%)] mb-2" style={{ letterSpacing: '-0.02em' }}>
             ¡Confirma tu correo!
           </h2>
-          <p className="text-[hsl(0,0%,45%)] mb-3 text-sm leading-relaxed">
+          <p className="text-sm mb-2" style={{ color: 'hsl(0 0% 45%)' }}>
             Hemos enviado un correo de confirmación a:
           </p>
-          <p className="text-[hsl(0,0%,15%)] font-semibold mb-3 text-base">
+          <p className="text-[hsl(0_0%_5%)] font-semibold mb-2 text-base">
             {formData.email}
           </p>
-          <p className="text-[hsl(0,0%,45%)] mb-3 text-sm leading-relaxed">
+          <p className="text-sm mb-2" style={{ color: 'hsl(0 0% 45%)' }}>
             Haz clic en el enlace de confirmación que recibiste para activar tu cuenta y recibir tus credenciales de acceso.
           </p>
-          <p className="text-[hsl(0,0%,55%)] mb-10 text-xs leading-relaxed">
+          <p className="text-xs mb-7" style={{ color: 'hsl(0 0% 55%)' }}>
             Si no lo encuentras, revisa tu carpeta de spam o correo no deseado.
           </p>
-          <a href="https://inmobiliarias.sozu.com/auth/login">
-            <button
-              className="w-full py-4 rounded-2xl text-sm font-medium text-[hsl(0,0%,40%)] transition-all duration-200"
-              style={{
-                background: 'hsl(220,20%,93%)',
-                boxShadow: '6px 6px 12px hsl(220,20%,86%), -6px -6px 12px hsl(0,0%,100%)',
-              }}
-            >
+          <a href="https://inmobiliarias.sozu.com/auth/login" className="block">
+            <button type="button" className="login-btn-outline">
               Ir a iniciar sesión
             </button>
           </a>
@@ -128,73 +116,57 @@ export default function Registro() {
   }
 
   return (
-    <div className="min-h-screen bg-[hsl(220,20%,93%)] flex flex-col items-center justify-center p-4">
-      <div
-        className="w-full max-w-md bg-white rounded-3xl px-8 py-10 sm:px-10"
-        style={{
-          boxShadow: '12px 12px 30px hsl(220,20%,84%), -12px -12px 30px hsl(0,0%,100%)',
-        }}
-      >
+    <div className="login-page">
+      <div className="login-bg-gradient" />
+      <div className="login-card relative z-10">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <img src={sozuLogo} alt="Sozu" className="h-10 mx-auto" />
+        <div className="text-center mb-7">
+          <img src={sozuLogoBlack} alt="Sozu" className="h-10 mx-auto" />
         </div>
 
         {/* Title */}
-        <h1 className="text-2xl font-bold text-center text-[hsl(0,0%,15%)] mb-2">
+        <h1 className="text-2xl font-black text-center text-[hsl(0_0%_5%)] mb-1.5" style={{ letterSpacing: '-0.02em' }}>
           Registro de Agente
         </h1>
-        <p className="text-sm text-[hsl(0,0%,55%)] text-center mb-8">
+        <p className="text-sm text-center mb-7" style={{ color: 'hsl(0 0% 45%)' }}>
           Completa tus datos para crear tu cuenta
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Nombre */}
           <div>
-            <label className="block text-sm font-semibold text-[hsl(0,0%,15%)] mb-2">Nombre completo</label>
+            <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Nombre completo</label>
             <input
               type="text"
               value={formData.nombre}
               onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
               placeholder="Nombre completo"
               required
-              className="w-full px-5 py-4 rounded-2xl text-sm text-[hsl(0,0%,15%)] placeholder:text-[hsl(0,0%,60%)] outline-none transition-all duration-200 focus:ring-2 focus:ring-[hsl(158,64%,38%)]/30 border border-[hsl(220,20%,88%)]"
-              style={{
-                background: 'hsl(220,20%,93%)',
-                boxShadow: 'inset 4px 4px 8px hsl(220,20%,86%), inset -4px -4px 8px hsl(0,0%,100%)',
-              }}
+              className="login-input w-full"
             />
           </div>
 
           {/* Email */}
           <div>
-            <label className="block text-sm font-semibold text-[hsl(0,0%,15%)] mb-2">Email</label>
+            <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Email</label>
             <input
               type="email"
               value={formData.email}
               onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
               placeholder="tu@email.com"
               required
-              className="w-full px-5 py-4 rounded-2xl text-sm text-[hsl(0,0%,15%)] placeholder:text-[hsl(0,0%,60%)] outline-none transition-all duration-200 focus:ring-2 focus:ring-[hsl(158,64%,38%)]/30 border border-[hsl(220,20%,88%)]"
-              style={{
-                background: 'hsl(220,20%,93%)',
-                boxShadow: 'inset 4px 4px 8px hsl(220,20%,86%), inset -4px -4px 8px hsl(0,0%,100%)',
-              }}
+              className="login-input w-full"
             />
           </div>
 
           {/* Teléfono */}
           <div>
-            <label className="block text-sm font-semibold text-[hsl(0,0%,15%)] mb-2">Teléfono</label>
+            <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Teléfono</label>
             <div className="flex gap-3">
               <select
                 value={formData.clave_pais_telefono}
                 onChange={(e) => setFormData(prev => ({ ...prev, clave_pais_telefono: e.target.value }))}
-                className="w-24 px-3 py-4 rounded-2xl text-sm text-[hsl(0,0%,15%)] outline-none border border-[hsl(220,20%,88%)]"
-                style={{
-                  background: 'hsl(220,20%,93%)',
-                  boxShadow: 'inset 4px 4px 8px hsl(220,20%,86%), inset -4px -4px 8px hsl(0,0%,100%)',
-                }}
+                className="login-input w-24 px-3"
               >
                 <option value="MX">🇲🇽 +52</option>
                 <option value="US">🇺🇸 +1</option>
@@ -208,11 +180,7 @@ export default function Registro() {
                 }}
                 placeholder="10 dígitos"
                 required
-                className="flex-1 px-5 py-4 rounded-2xl text-sm text-[hsl(0,0%,15%)] placeholder:text-[hsl(0,0%,60%)] outline-none transition-all duration-200 focus:ring-2 focus:ring-[hsl(158,64%,38%)]/30 border border-[hsl(220,20%,88%)]"
-                style={{
-                  background: 'hsl(220,20%,93%)',
-                  boxShadow: 'inset 4px 4px 8px hsl(220,20%,86%), inset -4px -4px 8px hsl(0,0%,100%)',
-                }}
+                className="login-input flex-1"
               />
             </div>
           </div>
@@ -221,37 +189,27 @@ export default function Registro() {
           <button
             type="submit"
             disabled={registerMutation.isPending}
-            className="w-full py-4 rounded-2xl text-white font-semibold text-sm tracking-wide transition-all duration-300 disabled:opacity-60"
-            style={{
-              background: 'linear-gradient(135deg, hsl(180,60%,55%), hsl(158,64%,38%))',
-              boxShadow: '0 8px 24px hsla(158,64%,38%,0.3)',
-            }}
+            className="login-btn-primary"
           >
             {registerMutation.isPending ? "Registrando..." : "Registrarme como Agente"}
           </button>
 
           {/* Login link */}
-          <a href="https://inmobiliarias.sozu.com/auth/login" className="block w-full">
-            <button
-              type="button"
-              className="w-full py-4 rounded-2xl text-sm font-medium text-[hsl(0,0%,40%)] transition-all duration-200"
-              style={{
-                background: 'hsl(220,20%,93%)',
-                boxShadow: '6px 6px 12px hsl(220,20%,86%), -6px -6px 12px hsl(0,0%,100%)',
-              }}
-            >
+          <a href="https://inmobiliarias.sozu.com/auth/login" className="block">
+            <button type="button" className="login-btn-outline">
               ¿Ya tienes cuenta? Inicia sesión
             </button>
           </a>
         </form>
 
-        <p className="text-center text-xs text-[hsl(0,0%,55%)] mt-8 px-4 leading-relaxed">
+        <p className="text-center text-xs mt-7 px-4 leading-relaxed" style={{ color: 'hsl(0 0% 55%)' }}>
           Al registrarte, aceptas nuestros términos contenidos en nuestro{" "}
           <a
             href="https://www.sozu.com/aviso-de-privacidad"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[hsl(158,64%,38%)] hover:underline"
+            className="hover:underline"
+            style={{ color: 'hsl(145 35% 51%)' }}
           >
             Aviso de privacidad
           </a>
