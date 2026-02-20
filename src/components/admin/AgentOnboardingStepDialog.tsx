@@ -383,6 +383,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
   const [saving, setSaving] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedSlot, setSelectedSlot] = useState('');
+  const initializedFromCita = useRef(false);
 
   // Fetch existing appointment
   const { data: existingCita } = useQuery({
@@ -416,16 +417,23 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     enabled: !!fechaStr,
   });
 
-  // Reset slot when date changes
+  // Reset slot when user manually changes date (not on initial load from existingCita)
   useEffect(() => {
-    setSelectedSlot('');
+    if (initializedFromCita.current) {
+      // After initial load, any date change resets the slot
+      setSelectedSlot('');
+    }
   }, [fechaStr]);
 
+  // Pre-select date and time from existing appointment
   useEffect(() => {
-    if (existingCita) {
-      // Pre-select the existing date
+    if (existingCita && !initializedFromCita.current) {
+      initializedFromCita.current = true;
       if (existingCita.fecha) {
         setSelectedDate(new Date(existingCita.fecha + 'T12:00:00'));
+      }
+      if (existingCita.hora_inicio) {
+        setSelectedSlot(existingCita.hora_inicio.slice(0, 5));
       }
     }
   }, [existingCita]);
