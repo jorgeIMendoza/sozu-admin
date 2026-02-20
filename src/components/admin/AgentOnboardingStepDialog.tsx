@@ -434,16 +434,26 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         .eq('id', personaId)
         .single();
 
-      // Get showroom data from project if agent has one assigned
+      // Get showroom data from showrooms_proyecto table
       const { data: entRel } = await supabase
         .from('entidades_relacionadas')
-        .select('id_proyecto, proyectos!entidades_relacionadas_id_proyecto_fkey(descripcion_direccion_showroom, latitud_showroom, longitud_showroom)')
+        .select('id_proyecto')
         .eq('id_persona', personaId)
         .eq('activo', true)
         .limit(1)
         .maybeSingle();
 
-      const proyecto = (entRel as any)?.proyectos;
+      let showroomData: any = null;
+      if (entRel?.id_proyecto) {
+        const { data: showroom } = await supabase
+          .from('showrooms_proyecto')
+          .select('descripcion_direccion, latitud, longitud')
+          .eq('id_proyecto', entRel.id_proyecto)
+          .eq('activo', true)
+          .limit(1)
+          .maybeSingle();
+        showroomData = showroom;
+      }
 
       const { data, error } = await supabase.functions.invoke('agendar-capacitacion', {
         body: {
@@ -451,9 +461,9 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
           hora_inicio: horaInicio,
           id_persona: personaId,
           agent_email: persona?.email || '',
-          direccion_showroom: proyecto?.descripcion_direccion_showroom || null,
-          latitud_showroom: proyecto?.latitud_showroom || null,
-          longitud_showroom: proyecto?.longitud_showroom || null,
+          direccion_showroom: showroomData?.descripcion_direccion || null,
+          latitud_showroom: showroomData?.latitud || null,
+          longitud_showroom: showroomData?.longitud || null,
         },
       });
 

@@ -39,6 +39,43 @@ const formatCurrencyFull = (value: number): string => {
   })}`;
 };
 
+// ShowroomCell component that fetches showrooms per project
+const ShowroomCell = ({ projectId, projectName, onShowDetail }: { 
+  projectId: number; 
+  projectName: string; 
+  onShowDetail: (showrooms: Array<{ id: number; descripcion_direccion: string; latitud: number; longitud: number }>) => void;
+}) => {
+  const { data: showrooms = [] } = useQuery({
+    queryKey: ["showrooms-proyecto", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('showrooms_proyecto')
+        .select('id, descripcion_direccion, latitud, longitud')
+        .eq('id_proyecto', projectId)
+        .eq('activo', true);
+      if (error) return [];
+      return data || [];
+    },
+    staleTime: 60000,
+  });
+
+  if (showrooms.length === 0) {
+    return <span className="text-muted-foreground text-sm">—</span>;
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="p-1 h-auto"
+      onClick={() => onShowDetail(showrooms as any)}
+    >
+      <Eye className="h-4 w-4" />
+      {showrooms.length > 1 && <span className="text-xs ml-1">{showrooms.length}</span>}
+    </Button>
+  );
+};
+
 const Proyectos = () => {
   const queryClient = useQueryClient();
   const [inputValue, setInputValue] = useState("");
@@ -49,11 +86,10 @@ const Proyectos = () => {
     projectName: string;
   } | null>(null);
   const [showroomDetail, setShowroomDetail] = useState<{
-    direccion: string;
-    lat: number;
-    lng: number;
+    showrooms: Array<{ id: number; descripcion_direccion: string; latitud: number; longitud: number }>;
     projectName: string;
   } | null>(null);
+  const [selectedShowroomIndex, setSelectedShowroomIndex] = useState(0);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   
@@ -128,9 +164,6 @@ const Proyectos = () => {
           direccion,
           latitud,
           longitud,
-          descripcion_direccion_showroom,
-          latitud_showroom,
-          longitud_showroom,
           activo,
           fecha_inicio_construccion,
           id_tipo_uso,
@@ -857,23 +890,10 @@ const Proyectos = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {project.descripcion_direccion_showroom && project.latitud_showroom && project.longitud_showroom ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="p-1 h-auto"
-                          onClick={() => setShowroomDetail({
-                            direccion: project.descripcion_direccion_showroom,
-                            lat: project.latitud_showroom,
-                            lng: project.longitud_showroom,
-                            projectName: project.nombre,
-                          })}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
+                      <ShowroomCell projectId={project.id} projectName={project.nombre} onShowDetail={(showrooms) => {
+                        setShowroomDetail({ showrooms, projectName: project.nombre });
+                        setSelectedShowroomIndex(0);
+                      }} />
                     </TableCell>
                     <TableCell>
                       <Badge variant={getBadgeVariant(project.estatus_proyecto?.nombre)}>
@@ -1204,19 +1224,36 @@ const Proyectos = () => {
               <ShowroomDialogHeader>
                 <ShowroomDialogTitle className="flex items-center gap-2">
                   <Building2 className="h-5 w-5" />
-                  Showroom — {showroomDetail?.projectName}
+                  Showrooms — {showroomDetail?.projectName}
                 </ShowroomDialogTitle>
               </ShowroomDialogHeader>
-              {showroomDetail && (
+              {showroomDetail && showroomDetail.showrooms.length > 0 && (
                 <div className="space-y-4">
+                  {showroomDetail.showrooms.length > 1 && (
+                    <div className="flex gap-2 flex-wrap">
+                      {showroomDetail.showrooms.map((_, idx) => (
+                        <Button
+                          key={idx}
+                          variant={selectedShowroomIndex === idx ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setSelectedShowroomIndex(idx)}
+                        >
+                          Showroom {idx + 1}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Dirección</p>
-                    <p className="text-sm">{showroomDetail.direccion}</p>
+                    <p className="text-sm">{showroomDetail.showrooms[selectedShowroomIndex]?.descripcion_direccion}</p>
                   </div>
                   <div className="rounded-lg overflow-hidden border">
                     <GoogleMapComponent
                       onLocationSelect={() => {}}
-                      initialLocation={{ lat: showroomDetail.lat, lng: showroomDetail.lng }}
+                      initialLocation={{ 
+                        lat: showroomDetail.showrooms[selectedShowroomIndex]?.latitud, 
+                        lng: showroomDetail.showrooms[selectedShowroomIndex]?.longitud 
+                      }}
                     />
                   </div>
                 </div>

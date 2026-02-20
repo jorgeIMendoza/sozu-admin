@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, MapPin, Copy, Search, CheckCircle, Grid3x3, Building2 } from "lucide-react";
+import { Plus, MapPin, Copy, Search, CheckCircle, Grid3x3, Building2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -90,8 +90,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [paymentSchemes, setPaymentSchemes] = useState<PaymentScheme[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [showroomLocation, setShowroomLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [showroomDireccion, setShowroomDireccion] = useState("");
+  const [showrooms, setShowrooms] = useState<Array<{ descripcion_direccion: string; latitud: number | null; longitud: number | null }>>([]);
   const [amenidadesSearchTerm, setAmenidadesSearchTerm] = useState("");
   const [showOnlySelected, setShowOnlySelected] = useState(false);
   const { toast } = useToast();
@@ -273,9 +272,6 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         fecha_entrega: values.fecha_entrega || null,
         latitud: selectedLocation?.lat || null,
         longitud: selectedLocation?.lng || null,
-        descripcion_direccion_showroom: showroomDireccion || null,
-        latitud_showroom: showroomLocation?.lat || null,
-        longitud_showroom: showroomLocation?.lng || null,
         url_logo: values.url_logo || null,
         url_firma_recibos: values.url_firma_recibos || null,
         nombre_firmante_recibos: values.nombre_firmante_recibos || null,
@@ -307,7 +303,21 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         if (amenityError) throw amenityError;
       }
 
-      // Create buildings if any defined
+      // Create showrooms
+      const validShowrooms = showrooms.filter(s => s.descripcion_direccion && s.latitud && s.longitud);
+      if (validShowrooms.length > 0) {
+        const showroomInserts = validShowrooms.map(s => ({
+          id_proyecto: newProject.id,
+          descripcion_direccion: s.descripcion_direccion,
+          latitud: s.latitud!,
+          longitud: s.longitud!,
+        }));
+        const { error: showroomError } = await supabase
+          .from('showrooms_proyecto')
+          .insert(showroomInserts);
+        if (showroomError) throw showroomError;
+      }
+
       if (values.edificios && values.edificios.length > 0) {
         for (const edificio of values.edificios) {
           if (edificio.nombre.trim()) {
@@ -407,6 +417,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
       setBuildings([]);
       setPaymentSchemes([]);
       setSelectedLocation(null);
+      setShowrooms([]);
       setCreatedProjectId(null);
       onProjectAdded();
     }
@@ -745,36 +756,70 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
 
                     {/* Showroom Section */}
                     <div className="space-y-4 border-t pt-4">
-                      <div className="flex items-center space-x-2">
-                        <Building2 className="w-4 h-4" />
-                        <label className="text-sm font-medium">Showroom</label>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Building2 className="w-4 h-4" />
+                          <label className="text-sm font-medium">Showrooms ({showrooms.length})</label>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowrooms([...showrooms, { descripcion_direccion: '', latitud: null, longitud: null }])}
+                        >
+                          <Plus className="h-4 w-4 mr-1" /> Agregar Showroom
+                        </Button>
                       </div>
-                      <div>
-                        <label className="text-sm text-muted-foreground">Dirección del showroom</label>
-                        <Input
-                          placeholder="Ej: Av. Chapultepec 123, Col. Americana"
-                          value={showroomDireccion}
-                          onChange={(e) => setShowroomDireccion(e.target.value)}
-                          className="mt-1"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm text-muted-foreground">Ubicación del showroom en mapa</label>
-                        <GoogleMapComponent
-                          onLocationSelect={setShowroomLocation}
-                          initialLocation={showroomLocation}
-                        />
-                        {showroomLocation && (
-                          <p className="text-xs text-muted-foreground">
-                            Coordenadas: {showroomLocation.lat.toFixed(6)}, {showroomLocation.lng.toFixed(6)}
-                          </p>
-                        )}
-                      </div>
-                      {((showroomDireccion && !showroomLocation) || (!showroomDireccion && showroomLocation)) && (
-                        <p className="text-xs text-destructive">
-                          Si proporcionas datos de showroom, debes llenar tanto la dirección como la ubicación en el mapa.
-                        </p>
-                      )}
+                      {showrooms.map((showroom, idx) => (
+                        <div key={idx} className="space-y-3 border rounded-lg p-3 relative">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">Showroom {idx + 1}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setShowrooms(showrooms.filter((_, i) => i !== idx))}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div>
+                            <label className="text-sm text-muted-foreground">Dirección</label>
+                            <Input
+                              placeholder="Ej: Av. Chapultepec 123, Col. Americana"
+                              value={showroom.descripcion_direccion}
+                              onChange={(e) => {
+                                const updated = [...showrooms];
+                                updated[idx] = { ...updated[idx], descripcion_direccion: e.target.value };
+                                setShowrooms(updated);
+                              }}
+                              className="mt-1"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm text-muted-foreground">Ubicación en mapa</label>
+                            <GoogleMapComponent
+                              onLocationSelect={(loc) => {
+                                const updated = [...showrooms];
+                                updated[idx] = { ...updated[idx], latitud: loc.lat, longitud: loc.lng };
+                                setShowrooms(updated);
+                              }}
+                              initialLocation={showroom.latitud && showroom.longitud ? { lat: showroom.latitud, lng: showroom.longitud } : undefined}
+                            />
+                            {showroom.latitud && showroom.longitud && (
+                              <p className="text-xs text-muted-foreground">
+                                Coordenadas: {showroom.latitud.toFixed(6)}, {showroom.longitud.toFixed(6)}
+                              </p>
+                            )}
+                          </div>
+                          {(showroom.descripcion_direccion && (!showroom.latitud || !showroom.longitud)) || (!showroom.descripcion_direccion && showroom.latitud && showroom.longitud) ? (
+                            <p className="text-xs text-destructive">
+                              Debes llenar tanto la dirección como la ubicación en el mapa.
+                            </p>
+                          ) : null}
+                        </div>
+                      ))}
                     </div>
 
                 {/* Buildings Section */}

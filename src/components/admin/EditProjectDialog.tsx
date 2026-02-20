@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Edit, Trash2, MapPin, Copy, Search, CheckCircle, Grid3x3, Eye, Building2 } from "lucide-react";
+import { Edit, Trash2, MapPin, Copy, Search, CheckCircle, Grid3x3, Eye, Building2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -71,8 +71,7 @@ interface EditProjectDialogProps {
 export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCreate = true, canUpdate = true, canDelete = true }: EditProjectDialogProps) => {
   const [open, setOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [showroomLocation, setShowroomLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [showroomDireccion, setShowroomDireccion] = useState("");
+  const [showrooms, setShowrooms] = useState<Array<{ id?: number; descripcion_direccion: string; latitud: number | null; longitud: number | null }>>([]);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [amenidadesSearchTerm, setAmenidadesSearchTerm] = useState("");
@@ -174,9 +173,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
           direccion_id_municipio,
           latitud,
           longitud,
-          descripcion_direccion_showroom,
-          latitud_showroom,
-          longitud_showroom,
           url_logo,
           url_firma_recibos,
           nombre_firmante_recibos,
@@ -202,6 +198,35 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
     },
     enabled: open,
   });
+
+  // Query showrooms for this project
+  const { data: projectShowrooms = [] } = useQuery({
+    queryKey: ["showrooms-proyecto", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('showrooms_proyecto')
+        .select('id, descripcion_direccion, latitud, longitud')
+        .eq('id_proyecto', projectId)
+        .eq('activo', true);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: open,
+  });
+
+  // Populate showrooms when data is loaded
+  useEffect(() => {
+    if (projectShowrooms.length > 0) {
+      setShowrooms(projectShowrooms.map(s => ({
+        id: s.id,
+        descripcion_direccion: s.descripcion_direccion,
+        latitud: s.latitud,
+        longitud: s.longitud,
+      })));
+    } else if (project && projectShowrooms.length === 0) {
+      setShowrooms([]);
+    }
+  }, [projectShowrooms, project]);
 
   const { data: vistas } = useQuery({
     queryKey: ["vistas-proyecto", projectId],
@@ -349,10 +374,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
       });
       
       setSelectedCountry(project.direccion_id_pais || "");
-      setShowroomDireccion((project as any).descripcion_direccion_showroom || "");
-      const showroomLat = (project as any).latitud_showroom;
-      const showroomLng = (project as any).longitud_showroom;
-      setShowroomLocation(showroomLat && showroomLng ? { lat: showroomLat, lng: showroomLng } : null);
     }
   }, [project, form]);
 
@@ -377,9 +398,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         direccion_id_municipio: values.direccion_id_municipio ? parseInt(values.direccion_id_municipio) : null,
         latitud: selectedLocation?.lat || null,
         longitud: selectedLocation?.lng || null,
-        descripcion_direccion_showroom: showroomDireccion || null,
-        latitud_showroom: showroomLocation?.lat || null,
-        longitud_showroom: showroomLocation?.lng || null,
         url_logo: values.url_logo || null,
         url_firma_recibos: values.url_firma_recibos || null,
         nombre_firmante_recibos: values.nombre_firmante_recibos || null,
@@ -425,6 +443,29 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
           .insert(amenityRelations);
 
         if (amenityError) throw amenityError;
+      }
+
+      // Update showrooms
+      // Deactivate all existing showrooms
+      await supabase
+        .from('showrooms_proyecto')
+        .update({ activo: false })
+        .eq('id_proyecto', projectId);
+
+      // Insert valid showrooms
+      const validShowrooms = showrooms.filter(s => s.descripcion_direccion && s.latitud && s.longitud);
+      if (validShowrooms.length > 0) {
+        const showroomInserts = validShowrooms.map(s => ({
+          id_proyecto: projectId,
+          descripcion_direccion: s.descripcion_direccion,
+          latitud: s.latitud!,
+          longitud: s.longitud!,
+          activo: true,
+        }));
+        const { error: showroomError } = await supabase
+          .from('showrooms_proyecto')
+          .insert(showroomInserts);
+        if (showroomError) throw showroomError;
       }
 
       toast({
@@ -824,38 +865,72 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                         </div>
                       </div>
 
-                      {/* Showroom Section */}
+                      {/* Showrooms Section */}
                       <div className="space-y-4 border-t pt-4">
-                        <div className="flex items-center space-x-2">
-                          <Building2 className="w-4 h-4" />
-                          <label className="text-sm font-medium">Showroom</label>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <Building2 className="w-4 h-4" />
+                            <label className="text-sm font-medium">Showrooms ({showrooms.length})</label>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowrooms([...showrooms, { descripcion_direccion: '', latitud: null, longitud: null }])}
+                          >
+                            <Plus className="h-4 w-4 mr-1" /> Agregar Showroom
+                          </Button>
                         </div>
-                        <div>
-                          <label className="text-sm text-muted-foreground">Dirección del showroom</label>
-                          <Input
-                            placeholder="Ej: Av. Chapultepec 123, Col. Americana"
-                            value={showroomDireccion}
-                            onChange={(e) => setShowroomDireccion(e.target.value)}
-                            className="mt-1"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm text-muted-foreground">Ubicación del showroom en mapa</label>
-                          <GoogleMapComponent
-                            onLocationSelect={setShowroomLocation}
-                            initialLocation={showroomLocation}
-                          />
-                          {showroomLocation && (
-                            <p className="text-xs text-muted-foreground">
-                              Coordenadas: {showroomLocation.lat.toFixed(6)}, {showroomLocation.lng.toFixed(6)}
-                            </p>
-                          )}
-                        </div>
-                        {((showroomDireccion && !showroomLocation) || (!showroomDireccion && showroomLocation)) && (
-                          <p className="text-xs text-destructive">
-                            Si proporcionas datos de showroom, debes llenar tanto la dirección como la ubicación en el mapa.
-                          </p>
-                        )}
+                        {showrooms.map((showroom, idx) => (
+                          <div key={idx} className="space-y-3 border rounded-lg p-3 relative">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">Showroom {idx + 1}</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setShowrooms(showrooms.filter((_, i) => i !== idx))}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <div>
+                              <label className="text-sm text-muted-foreground">Dirección</label>
+                              <Input
+                                placeholder="Ej: Av. Chapultepec 123, Col. Americana"
+                                value={showroom.descripcion_direccion}
+                                onChange={(e) => {
+                                  const updated = [...showrooms];
+                                  updated[idx] = { ...updated[idx], descripcion_direccion: e.target.value };
+                                  setShowrooms(updated);
+                                }}
+                                className="mt-1"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Ubicación en mapa</label>
+                              <GoogleMapComponent
+                                onLocationSelect={(loc) => {
+                                  const updated = [...showrooms];
+                                  updated[idx] = { ...updated[idx], latitud: loc.lat, longitud: loc.lng };
+                                  setShowrooms(updated);
+                                }}
+                                initialLocation={showroom.latitud && showroom.longitud ? { lat: showroom.latitud, lng: showroom.longitud } : undefined}
+                              />
+                              {showroom.latitud && showroom.longitud && (
+                                <p className="text-xs text-muted-foreground">
+                                  Coordenadas: {showroom.latitud.toFixed(6)}, {showroom.longitud.toFixed(6)}
+                                </p>
+                              )}
+                            </div>
+                            {(showroom.descripcion_direccion && (!showroom.latitud || !showroom.longitud)) || (!showroom.descripcion_direccion && showroom.latitud && showroom.longitud) ? (
+                              <p className="text-xs text-destructive">
+                                Debes llenar tanto la dirección como la ubicación en el mapa.
+                              </p>
+                            ) : null}
+                          </div>
+                        ))}
                       </div>
 
                       {/* Building Management Section */}
