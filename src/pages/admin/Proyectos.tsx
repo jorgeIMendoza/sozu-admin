@@ -1254,6 +1254,7 @@ const Proyectos = () => {
                         lat: showroomDetail.showrooms[selectedShowroomIndex]?.latitud, 
                         lng: showroomDetail.showrooms[selectedShowroomIndex]?.longitud 
                       }}
+                      readOnly
                     />
                   </div>
                 </div>

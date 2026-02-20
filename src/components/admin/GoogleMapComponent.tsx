@@ -23,9 +23,10 @@ interface GoogleMapComponentProps {
   onLocationSelect: (location: { lat: number; lng: number }) => void;
   onAddressSelect?: (address: string) => void;
   initialLocation?: { lat: number; lng: number } | null;
+  readOnly?: boolean;
 }
 
-export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialLocation }: GoogleMapComponentProps) {
+export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialLocation, readOnly = false }: GoogleMapComponentProps) {
   const [markerPosition, setMarkerPosition] = useState(initialLocation || null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
@@ -96,20 +97,22 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
 
   return (
     <div className="w-full space-y-2">
-      {/* Search bar */}
-      <Autocomplete
-        onLoad={(autocomplete) => { autocompleteRef.current = autocomplete; }}
-        onPlaceChanged={onPlaceChanged}
-        options={{ componentRestrictions: { country: "mx" } }}
-      >
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar dirección..."
-            className="pl-8"
-          />
-        </div>
-      </Autocomplete>
+      {/* Search bar - only in edit mode */}
+      {!readOnly && (
+        <Autocomplete
+          onLoad={(autocomplete) => { autocompleteRef.current = autocomplete; }}
+          onPlaceChanged={onPlaceChanged}
+          options={{ componentRestrictions: { country: "mx" } }}
+        >
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar dirección..."
+              className="pl-8"
+            />
+          </div>
+        </Autocomplete>
+      )}
       
       {/* Map */}
       <div className="w-full h-[300px] rounded-lg overflow-hidden border">
@@ -117,12 +120,14 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
           mapContainerStyle={containerStyle}
           center={markerPosition || defaultCenter}
           zoom={markerPosition ? 15 : 10}
-          onClick={onMapClick}
+          onClick={readOnly ? undefined : onMapClick}
           onLoad={onMapLoad}
           options={{
             streetViewControl: false,
             mapTypeControl: false,
             fullscreenControl: false,
+            gestureHandling: readOnly ? "none" : "auto",
+            zoomControl: !readOnly,
           }}
         >
           {markerPosition && (
