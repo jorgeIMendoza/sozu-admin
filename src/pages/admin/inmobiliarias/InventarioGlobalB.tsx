@@ -146,6 +146,8 @@ const InventarioGlobalB = () => {
   const [addProspectoOpen, setAddProspectoOpen] = useState(false);
   const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
   const [page, setPage] = useState(0);
+  const [allProperties, setAllProperties] = useState<any[]>([]);
+  const [hasLoadedInitial, setHasLoadedInitial] = useState(false);
 
   const [showHeaderBar, setShowHeaderBar] = useState(true);
   const lastScrollY = useRef(0);
@@ -176,12 +178,42 @@ const InventarioGlobalB = () => {
     pageSize: 30,
   });
 
-  // Reset page when filters change
-  useEffect(() => { setPage(0); }, [filterProjectNames, filterModelNames, filterBedrooms, filterLevels, filterBodega, filterEstacionamiento, sortOrder]);
+  // Reset accumulated data when filters change
+  const filterKey = useMemo(() => JSON.stringify([filterProjectNames, filterModelNames, filterBedrooms, filterLevels, filterBodega, filterEstacionamiento, sortOrder]), [filterProjectNames, filterModelNames, filterBedrooms, filterLevels, filterBodega, filterEstacionamiento, sortOrder]);
 
-  // Map server data to UI format
+  useEffect(() => {
+    setPage(0);
+    setAllProperties([]);
+    setHasLoadedInitial(false);
+  }, [filterKey]);
+
+  // Accumulate properties as pages load
+  useEffect(() => {
+    if (data.propiedades.length > 0 || page === 0) {
+      if (page === 0) {
+        setAllProperties(data.propiedades);
+      } else {
+        setAllProperties(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newProps = data.propiedades.filter(p => !existingIds.has(p.id));
+          return newProps.length > 0 ? [...prev, ...newProps] : prev;
+        });
+      }
+      setHasLoadedInitial(true);
+    }
+  }, [data.propiedades, page]);
+
+  const hasMorePages = page < data.totalPages - 1;
+
+  const loadNextPage = useCallback(() => {
+    if (hasMorePages && !isFetching) {
+      setPage(p => p + 1);
+    }
+  }, [hasMorePages, isFetching]);
+
+  // Map accumulated data to UI format
   const displayProperties = useMemo(() => {
-    return data.propiedades.map((p) => {
+    return allProperties.map((p) => {
       const propImgs = p.propiedad_imagenes || [];
       const modelImgs = p.modelo_imagenes || [];
       const rawImages = propImgs.length > 0 ? propImgs : modelImgs;
@@ -197,13 +229,16 @@ const InventarioGlobalB = () => {
         model_images: rawImages, esquemas_pago: p.esquemas_pago || [],
       };
     });
-  }, [data.propiedades]);
+  }, [allProperties]);
 
   // Filter options come from the server
   const projectsWithAvailable = data.filterOptions.proyectos;
   const availableModelNames = data.filterOptions.modelos;
   const availableBedroomOptions = useMemo(() => data.filterOptions.recamaras.map(n => `${n} recámara${n > 1 ? "s" : ""}`), [data.filterOptions.recamaras]);
   const availableLevelOptions = data.filterOptions.niveles;
+
+  // Project counts from server (total per project, not just loaded)
+  const projectCounts = data.projectCounts;
 
   // Group by project for carousel layout
   const groupedByProject = useMemo(() => {
@@ -396,7 +431,7 @@ const InventarioGlobalB = () => {
               <div className="flex items-center gap-3 px-1">
                 <Building2 className="h-5 w-5 text-primary" />
                 <h2 className="text-lg font-bold text-foreground">{projectName}</h2>
-                <Badge variant="secondary" className="text-xs">{props.length}</Badge>
+                <Badge variant="secondary" className="text-xs">{projectCounts[projectName] ?? props.length}</Badge>
               </div>
               <ProjectSwipeCarousel
                 properties={props}
@@ -406,24 +441,16 @@ const InventarioGlobalB = () => {
                   track({ page: "inventario", elementId: "view_property_detail", elementLabel: `Depto ${p.numero || p.id}`, metadata: { propertyId: p.id, project: projectName } });
                 }}
                 onSwipe={() => track({ page: "inventario", elementId: "carousel_swipe", elementLabel: `Swipe ${projectName}`, metadata: { project: projectName } })}
+                onReachEnd={loadNextPage}
+                isLoadingMore={isFetching && hasMorePages}
               />
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {data.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 mt-8">
-          <Button variant="outline" size="sm" disabled={page === 0} onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Página {page + 1} de {data.totalPages}
-          </span>
-          <Button variant="outline" size="sm" disabled={page >= data.totalPages - 1} onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          {isFetching && hasMorePages && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          )}
         </div>
       )}
 
@@ -560,16 +587,29 @@ const InventarioGlobalB = () => {
 };
 
 // Swipe carousel per project — no arrows, swipe only. Cards identical to Variant A
-const ProjectSwipeCarousel = React.memo(({ properties, formatPrice, onSelectProperty, onSwipe }: { properties: any[]; formatPrice: (n: number) => string; onSelectProperty: (p: any) => void; onSwipe: () => void }) => {
+const ProjectSwipeCarousel = React.memo(({ properties, formatPrice, onSelectProperty, onSwipe, onReachEnd, isLoadingMore }: { properties: any[]; formatPrice: (n: number) => string; onSelectProperty: (p: any) => void; onSwipe: () => void; onReachEnd?: () => void; isLoadingMore?: boolean }) => {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, dragFree: true, align: "start", containScroll: "trimSnaps" });
   const swiped = useRef(false);
 
   useEffect(() => {
     if (!emblaApi) return;
-    const onScroll = () => { if (!swiped.current) { swiped.current = true; onSwipe(); } };
+    const onScroll = () => {
+      if (!swiped.current) { swiped.current = true; onSwipe(); }
+    };
+    const onSettle = () => {
+      if (!emblaApi.canScrollNext() && onReachEnd) {
+        onReachEnd();
+      }
+    };
     emblaApi.on("scroll", onScroll);
-    return () => { emblaApi.off("scroll", onScroll); };
-  }, [emblaApi, onSwipe]);
+    emblaApi.on("settle", onSettle);
+    return () => { emblaApi.off("scroll", onScroll); emblaApi.off("settle", onSettle); };
+  }, [emblaApi, onSwipe, onReachEnd]);
+
+  // Reindex embla when properties change (new page loaded)
+  useEffect(() => {
+    if (emblaApi) emblaApi.reInit();
+  }, [emblaApi, properties.length]);
 
   return (
     <div ref={emblaRef} className="overflow-hidden">
@@ -603,6 +643,11 @@ const ProjectSwipeCarousel = React.memo(({ properties, formatPrice, onSelectProp
             </Card>
           </div>
         ))}
+        {isLoadingMore && (
+          <div className="flex-[0_0_80px] min-w-0 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        )}
       </div>
     </div>
   );

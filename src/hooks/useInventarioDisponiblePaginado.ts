@@ -19,6 +19,7 @@ export interface InventarioPaginadoResult {
   propiedades: InventarioPropiedad[];
   totalCount: number;
   totalPages: number;
+  projectCounts: Record<string, number>;
   filterOptions: {
     proyectos: string[];
     modelos: string[];
@@ -46,7 +47,7 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
       pageSize,
     ],
     queryFn: async (): Promise<InventarioPaginadoResult> => {
-      if (hasNoAccess) return { propiedades: [], totalCount: 0, totalPages: 0, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [] } };
+      if (hasNoAccess) return { propiedades: [], totalCount: 0, totalPages: 0, projectCounts: {}, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [] } };
 
       const params: Record<string, any> = {
         p_page: filters.page,
@@ -71,7 +72,7 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
 
       if (error) {
         console.error('Error fetching inventario paginado:', error);
-        return { propiedades: [], totalCount: 0, totalPages: 0, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [] } };
+        return { propiedades: [], totalCount: 0, totalPages: 0, projectCounts: {}, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [] } };
       }
 
       const result = data as any;
@@ -79,6 +80,7 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
       const modeloImagenesMap = (result?.modelo_imagenes || {}) as Record<string, { id: number; url: string }[]>;
       const esquemasPagoMap = (result?.esquemas_pago_proyecto || {}) as Record<string, any[]>;
       const totalCount = result?.total_count || 0;
+      const projectCounts = (result?.project_counts || {}) as Record<string, number>;
       const filterOpts = result?.filter_options || {};
 
       const propiedades: InventarioPropiedad[] = rawProps.map((p: any) => ({
@@ -108,6 +110,7 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
         propiedades,
         totalCount,
         totalPages: Math.ceil(totalCount / pageSize),
+        projectCounts,
         filterOptions: {
           proyectos: (filterOpts.proyectos || []) as string[],
           modelos: (filterOpts.modelos || []) as string[],
@@ -122,7 +125,7 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
   });
 
   return {
-    data: data ?? { propiedades: [], totalCount: 0, totalPages: 0, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [] } },
+    data: data ?? { propiedades: [], totalCount: 0, totalPages: 0, projectCounts: {}, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [] } },
     isLoading: isLoadingAccess || isLoadingData,
     isFetching,
     hasNoAccess,
