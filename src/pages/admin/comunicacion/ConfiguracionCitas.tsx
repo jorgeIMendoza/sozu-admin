@@ -5,13 +5,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, CalendarClock } from "lucide-react";
+import { Loader2, Save, CalendarClock, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 const DIAS_SEMANA = [
   { id: 1, nombre: "Lunes", short: "Lun" },
   { id: 2, nombre: "Martes", short: "Mar" },
@@ -51,14 +50,14 @@ export default function ConfiguracionCitas() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("usuarios")
-        .select("email, nombre, apellido_paterno, roles!inner(configurar_citas)")
+        .select("email, nombre, roles!inner(configurar_citas), personas:id_persona(nombre, apellido_paterno)")
         .eq("activo", true)
         .eq("roles.configurar_citas", true)
         .order("nombre");
       if (error) throw error;
       return (data || []).map((u: any) => ({
         email: u.email,
-        nombre: `${u.nombre || ""} ${u.apellido_paterno || ""}`.trim(),
+        nombre: `${u.personas?.nombre || u.nombre || ""} ${u.personas?.apellido_paterno || ""}`.trim(),
       }));
     },
   });
@@ -194,42 +193,57 @@ export default function ConfiguracionCitas() {
         </CardHeader>
         <CardContent>
           {isSuperAdmin ? (
-            <Popover open={userSelectorOpen} onOpenChange={setUserSelectorOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className={cn("w-full justify-between max-w-md", !selectedUserEmail && "text-muted-foreground")}>
-                  {selectedUserEmail
-                    ? usersWithCitas.find((u) => u.email === selectedUserEmail)?.nombre || selectedUserEmail
-                    : "Seleccionar usuario..."}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0 max-w-md" align="start">
-                <Command>
-                  <CommandInput placeholder="Buscar usuario..." />
-                  <CommandList>
-                    <CommandEmpty>No se encontró usuario.</CommandEmpty>
-                    <CommandGroup>
-                      {usersWithCitas.map((u) => (
-                        <CommandItem
-                          key={u.email}
-                          value={`${u.nombre} ${u.email}`}
-                          onSelect={() => {
-                            setSelectedUserEmail(u.email);
-                            setUserSelectorOpen(false);
-                          }}
-                        >
-                          <Check className={cn("mr-2 h-4 w-4", selectedUserEmail === u.email ? "opacity-100" : "opacity-0")} />
-                          <div className="flex flex-col">
-                            <span>{u.nombre}</span>
-                            <span className="text-xs text-muted-foreground">{u.email}</span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            usersWithCitas.length <= 10 ? (
+              <Select value={selectedUserEmail} onValueChange={setSelectedUserEmail}>
+                <SelectTrigger className="max-w-md">
+                  <SelectValue placeholder="Seleccionar usuario..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {usersWithCitas.map((u) => (
+                    <SelectItem key={u.email} value={u.email}>
+                      {u.nombre} <span className="text-muted-foreground ml-1">({u.email})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Popover open={userSelectorOpen} onOpenChange={setUserSelectorOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className={cn("w-full justify-between max-w-md", !selectedUserEmail && "text-muted-foreground")}>
+                    {selectedUserEmail
+                      ? usersWithCitas.find((u) => u.email === selectedUserEmail)?.nombre || selectedUserEmail
+                      : "Seleccionar usuario..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0 max-w-md" align="start">
+                  <Command>
+                    <CommandInput placeholder="Buscar usuario..." />
+                    <CommandList>
+                      <CommandEmpty>No se encontró usuario.</CommandEmpty>
+                      <CommandGroup>
+                        {usersWithCitas.map((u) => (
+                          <CommandItem
+                            key={u.email}
+                            value={`${u.nombre} ${u.email}`}
+                            onSelect={() => {
+                              setSelectedUserEmail(u.email);
+                              setUserSelectorOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", selectedUserEmail === u.email ? "opacity-100" : "opacity-0")} />
+                            <div className="flex flex-col">
+                              <span>{u.nombre}</span>
+                              <span className="text-xs text-muted-foreground">{u.email}</span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            )
           ) : (
             <div className="text-sm">
               <span className="font-medium">{profile?.nombre}</span>
