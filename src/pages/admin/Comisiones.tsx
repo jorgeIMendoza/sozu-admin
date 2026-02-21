@@ -589,7 +589,7 @@ export default function Comisiones() {
                     <TableCell className="min-w-[200px]">
                       <div className="relative">
                         <div className="pr-16">
-                          {(() => {
+                        {(() => {
                         const montoBase = comision.porcentaje_comision_venta / 100 * comision.precio_final;
                         const montoFinal = comision.iva_incluido ? montoBase * 1.16 : montoBase;
                         return <div className="font-medium">
@@ -600,9 +600,9 @@ export default function Comisiones() {
                               </div>;
                       })()}
                         </div>
-                        {comision.iva_incluido && <Badge variant="default" className="absolute top-0 right-0 text-[10px] px-1.5 py-0 bg-green-600 hover:bg-green-700">
-                            IVA Incluido
-                          </Badge>}
+                        <Badge variant={comision.iva_incluido ? "default" : "outline"} className={`absolute top-0 right-0 text-[10px] px-1.5 py-0 ${comision.iva_incluido ? "bg-green-600 hover:bg-green-700" : "text-muted-foreground"}`}>
+                            {comision.iva_incluido ? "IVA Incluido" : "+ IVA"}
+                          </Badge>
                       </div>
                     </TableCell>
                     <TableCell>
