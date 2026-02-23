@@ -264,6 +264,99 @@ Deno.serve(async (req) => {
     const duracionMinutos = userCitaConfig?.duracion_minutos || 90;
     const calendarId = userCitaConfig?.calendario_email || calendarOwnerEmail;
 
+    // ---- Action: create recurring meets ----
+    if (body.action === "create-recurring-meets") {
+      const { slots_config, fecha_fin } = body;
+      // slots_config: Array<{ dia_semana: number, horas: string[] }>
+      // fecha_fin: "YYYY-MM-DD"
+      if (!slots_config || !fecha_fin) {
+        return new Response(JSON.stringify({ error: "Faltan slots_config o fecha_fin" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Fetch tipo_cita description for event summary
+      let tipoCitaDescripcion = "";
+      const { data: tipoCitaData } = await supabase
+        .from("tipos_cita")
+        .select("nombre, descripcion")
+        .eq("id", tipoCitaId)
+        .maybeSingle();
+      tipoCitaDescripcion = tipoCitaData?.descripcion || tipoCitaData?.nombre || "Cita";
+
+      const endDate = new Date(fecha_fin + "T23:59:59-06:00");
+      const today = new Date();
+      const createdEvents: any[] = [];
+      const errors: string[] = [];
+
+      // JS day mapping: dia_semana 1=Mon..6=Sat, JS 0=Sun,1=Mon..6=Sat
+      for (const slotGroup of slots_config) {
+        const { dia_semana, horas } = slotGroup;
+        for (const hora of horas) {
+          // Find next occurrence of this weekday
+          const [h, m] = hora.split(":").map(Number);
+          let nextDate = new Date(today);
+          // Adjust to next occurrence of dia_semana
+          const targetJsDay = dia_semana === 0 ? 0 : dia_semana; // 1=Mon matches JS getDay()=1
+          while (nextDate.getDay() !== targetJsDay) {
+            nextDate.setDate(nextDate.getDate() + 1);
+          }
+          // If today is the target day but time has passed, skip to next week
+          if (nextDate.toDateString() === today.toDateString()) {
+            const nowHours = today.getHours();
+            if (nowHours >= h) {
+              nextDate.setDate(nextDate.getDate() + 7);
+            }
+          }
+
+          if (nextDate > endDate) continue;
+
+          const fechaStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}-${String(nextDate.getDate()).padStart(2, "0")}`;
+          const horaInicio = hora;
+          const totalMinEnd = h * 60 + m + duracionMinutos;
+          const horaFin = `${String(Math.floor(totalMinEnd / 60) % 24).padStart(2, "0")}:${String(totalMinEnd % 60).padStart(2, "0")}`;
+
+          // Build RRULE UNTIL
+          const untilStr = `${fecha_fin.replace(/-/g, "")}T235959Z`;
+          // Map dia_semana to RRULE day
+          const rruleDays = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+          const rruleDay = rruleDays[targetJsDay];
+
+          const event = {
+            summary: tipoCitaDescripcion,
+            start: { dateTime: `${fechaStr}T${horaInicio}:00`, timeZone: "America/Mexico_City" },
+            end: { dateTime: `${fechaStr}T${horaFin}:00`, timeZone: "America/Mexico_City" },
+            recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${rruleDay};UNTIL=${untilStr}`],
+            conferenceData: {
+              createRequest: {
+                requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+                conferenceSolutionKey: { type: "hangoutsMeet" },
+              },
+            },
+          };
+
+          try {
+            const res = await fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`,
+              { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
+            );
+            if (!res.ok) {
+              const errText = await res.text();
+              if (res.status === 403 || res.status === 404 || errText.includes("Not Found") || errText.includes("forbidden")) {
+                return new Response(JSON.stringify({ error: "No se tiene acceso al calendario. Verifique que la cuenta de servicio tenga permisos de 'Realizar cambios en eventos' en la configuración de compartir del Google Calendar." }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+              }
+              errors.push(`${fechaStr} ${horaInicio}: ${errText}`);
+              continue;
+            }
+            const created = await res.json();
+            createdEvents.push({ day: dia_semana, hora, eventId: created.id, meetLink: created.hangoutLink || null });
+          } catch (e: any) {
+            errors.push(`${fechaStr} ${horaInicio}: ${e.message}`);
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, created_events: createdEvents, errors }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // ---- Action: check available slots ----
     if (body.action === "check-availability") {
       if (!body.fecha) {
