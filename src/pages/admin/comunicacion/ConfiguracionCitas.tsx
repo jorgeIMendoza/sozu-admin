@@ -271,6 +271,29 @@ export default function ConfiguracionCitas() {
     }
   }, [userConfig]);
 
+  // When duration changes, remove any selected slots that are no longer valid
+  useEffect(() => {
+    const validLabels = new Set(generateSlots(duracionMinutos).map((s) => s.label));
+    setSelectedSlots((prev) => {
+      const next = new Map<number, Set<string>>();
+      let changed = false;
+      for (const [day, slots] of prev) {
+        const filtered = new Set<string>();
+        for (const s of slots) {
+          if (validLabels.has(s)) {
+            filtered.add(s);
+          } else {
+            changed = true;
+          }
+        }
+        if (filtered.size > 0) next.set(day, filtered);
+        else if (slots.size > 0) changed = true;
+      }
+      if (changed) setHasChanges(true);
+      return changed ? next : prev;
+    });
+  }, [duracionMinutos]);
+
   const toggleDay = (dayId: number) => {
     setSelectedDays((prev) => {
       const next = new Set(prev);
