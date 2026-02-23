@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Save, CalendarClock, Check, ChevronsUpDown, Pencil, Plus, Settings2, Copy, AlertTriangle } from "lucide-react";
+import { Loader2, Save, CalendarClock, Check, ChevronsUpDown, Pencil, Plus, Settings2, Copy, AlertTriangle, CalendarIcon, Video } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,6 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
+import { Calendar } from "@/components/ui/calendar";
+import { format, addMonths } from "date-fns";
+import { es } from "date-fns/locale";
 
 const DIAS_SEMANA = [
   { id: 1, nombre: "Lunes", short: "Lun" },
@@ -66,6 +69,8 @@ export default function ConfiguracionCitas() {
   const [editingTipoId, setEditingTipoId] = useState<number | null>(null);
   const [editingTipoNombre, setEditingTipoNombre] = useState("");
   const [editingTipoDescripcion, setEditingTipoDescripcion] = useState("");
+  const [fechaFinRecurrencia, setFechaFinRecurrencia] = useState<Date>(addMonths(new Date(), 3));
+  const [meetCalendarOpen, setMeetCalendarOpen] = useState(false);
 
   useEffect(() => {
     if (!isSuperAdmin && profile?.email) {
@@ -315,6 +320,50 @@ export default function ConfiguracionCitas() {
     },
     onError: (error) => {
       toast.error(`Error al guardar: ${error.message}`);
+    },
+  });
+
+  const createRecurringMeetsMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedUserEmail || !selectedTipoCita) throw new Error("No user or type selected");
+      if (selectedDays.size === 0) throw new Error("No hay días configurados");
+
+      // Build slots_config from selectedDays + selectedSlots
+      const slotsConfig: { dia_semana: number; horas: string[] }[] = [];
+      for (const dayId of Array.from(selectedDays).sort()) {
+        const daySlots = selectedSlots.get(dayId);
+        if (daySlots && daySlots.size > 0) {
+          slotsConfig.push({ dia_semana: dayId, horas: Array.from(daySlots).sort() });
+        }
+      }
+
+      if (slotsConfig.length === 0) throw new Error("No hay horarios seleccionados");
+
+      const fechaFinStr = `${fechaFinRecurrencia.getFullYear()}-${String(fechaFinRecurrencia.getMonth() + 1).padStart(2, "0")}-${String(fechaFinRecurrencia.getDate()).padStart(2, "0")}`;
+
+      const { data, error } = await supabase.functions.invoke("agendar-capacitacion", {
+        body: {
+          action: "create-recurring-meets",
+          calendar_owner_email: calendarioEmail || selectedUserEmail,
+          tipo_cita_id: parseInt(selectedTipoCita),
+          slots_config: slotsConfig,
+          fecha_fin: fechaFinStr,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      const count = data?.created_events?.length || 0;
+      toast.success(`Se crearon ${count} eventos recurrentes con Meet en Google Calendar`);
+      if (data?.errors?.length > 0) {
+        toast.warning(`${data.errors.length} errores: ${data.errors[0]}`);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Error al crear Meet: ${error.message}`);
     },
   });
 
@@ -662,6 +711,68 @@ export default function ConfiguracionCitas() {
                     <Card>
                       <CardContent className="py-8 text-center text-muted-foreground">
                         Selecciona al menos un día para configurar los horarios disponibles
+                      </CardContent>
+                    </Card>
+                    )}
+
+                  {/* Create recurring Meet events */}
+                  {selectedDays.size > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Video className="h-4 w-4" />
+                          Crear eventos con Google Meet
+                        </CardTitle>
+                        <CardDescription>
+                          Genera eventos recurrentes con enlace de Meet en el Google Calendar configurado
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex flex-col sm:flex-row items-start gap-4">
+                          <div className="space-y-2">
+                            <Label>Fecha límite de recurrencia</Label>
+                            <Popover open={meetCalendarOpen} onOpenChange={setMeetCalendarOpen}>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" className={cn("w-[240px] justify-start text-left font-normal", !fechaFinRecurrencia && "text-muted-foreground")}>
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {fechaFinRecurrencia ? format(fechaFinRecurrencia, "PPP", { locale: es }) : "Seleccionar fecha"}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={fechaFinRecurrencia}
+                                  onSelect={(d) => { if (d) { setFechaFinRecurrencia(d); setMeetCalendarOpen(false); } }}
+                                  disabled={(date) => date < new Date()}
+                                  initialFocus
+                                  className="p-3 pointer-events-auto"
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <p className="text-xs text-muted-foreground">
+                              Los eventos se crearán semanalmente hasta esta fecha (default: 3 meses)
+                            </p>
+                          </div>
+                          <div className="flex items-end h-full pt-6">
+                            <Button
+                              onClick={() => createRecurringMeetsMutation.mutate()}
+                              disabled={createRecurringMeetsMutation.isPending || !calendarioEmail}
+                              className="gap-2"
+                            >
+                              {createRecurringMeetsMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Video className="h-4 w-4" />
+                              )}
+                              Crear Meet en Calendar
+                            </Button>
+                          </div>
+                        </div>
+                        {!calendarioEmail && (
+                          <p className="text-xs text-destructive">
+                            Configure primero el email del calendario Google arriba para poder crear eventos.
+                          </p>
+                        )}
                       </CardContent>
                     </Card>
                   )}
