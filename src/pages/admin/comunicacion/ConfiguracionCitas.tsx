@@ -360,8 +360,12 @@ export default function ConfiguracionCitas() {
       return data;
     },
     onSuccess: (data) => {
-      const count = data?.created_events?.length || 0;
-      toast.success(`Se crearon ${count} eventos recurrentes con Meet en Google Calendar`);
+      const created = data?.created_events?.filter((e: any) => e.action === "created")?.length || 0;
+      const updated = data?.created_events?.filter((e: any) => e.action === "updated")?.length || 0;
+      const parts = [];
+      if (updated > 0) parts.push(`${updated} actualizados`);
+      if (created > 0) parts.push(`${created} creados`);
+      toast.success(`Eventos sincronizados en Google Calendar: ${parts.join(", ") || "sin cambios"}`);
       if (data?.errors?.length > 0) {
         toast.warning(`${data.errors.length} errores: ${data.errors[0]}`);
       }
@@ -719,64 +723,43 @@ export default function ConfiguracionCitas() {
                     </Card>
                     )}
 
-                  {/* Create recurring Meet events */}
-                  {selectedDays.size > 0 && (
+                  {/* Recurrence date limit for calendar sync */}
+                  {selectedDays.size > 0 && calendarioEmail && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-base flex items-center gap-2">
                           <Video className="h-4 w-4" />
-                          Crear eventos con Google Meet
+                          Sincronización con Google Calendar
                         </CardTitle>
                         <CardDescription>
-                          Genera eventos recurrentes con enlace de Meet en el Google Calendar configurado
+                          Al guardar, los eventos recurrentes con Meet se sincronizarán en el calendario configurado
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="flex flex-col sm:flex-row items-start gap-4">
-                          <div className="space-y-2">
-                            <Label>Fecha límite de recurrencia</Label>
-                            <Popover open={meetCalendarOpen} onOpenChange={setMeetCalendarOpen}>
-                              <PopoverTrigger asChild>
-                                <Button variant="outline" className={cn("w-[240px] justify-start text-left font-normal", !fechaFinRecurrencia && "text-muted-foreground")}>
-                                  <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {fechaFinRecurrencia ? format(fechaFinRecurrencia, "PPP", { locale: es }) : "Seleccionar fecha"}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={fechaFinRecurrencia}
-                                  onSelect={(d) => { if (d) { setFechaFinRecurrencia(d); setMeetCalendarOpen(false); } }}
-                                  disabled={(date) => date < new Date()}
-                                  initialFocus
-                                  className="p-3 pointer-events-auto"
-                                />
-                              </PopoverContent>
-                            </Popover>
-                            <p className="text-xs text-muted-foreground">
-                              Los eventos se crearán semanalmente hasta esta fecha (default: 3 meses)
-                            </p>
-                          </div>
-                          <div className="flex items-end h-full pt-6">
-                            <Button
-                              onClick={() => createRecurringMeetsMutation.mutate()}
-                              disabled={createRecurringMeetsMutation.isPending || !calendarioEmail}
-                              className="gap-2"
-                            >
-                              {createRecurringMeetsMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Video className="h-4 w-4" />
-                              )}
-                              Crear Meet en Calendar
-                            </Button>
-                          </div>
-                        </div>
-                        {!calendarioEmail && (
-                          <p className="text-xs text-destructive">
-                            Configure primero el email del calendario Google arriba para poder crear eventos.
+                        <div className="space-y-2">
+                          <Label>Fecha límite de recurrencia</Label>
+                          <Popover open={meetCalendarOpen} onOpenChange={setMeetCalendarOpen}>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className={cn("w-[240px] justify-start text-left font-normal", !fechaFinRecurrencia && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {fechaFinRecurrencia ? format(fechaFinRecurrencia, "PPP", { locale: es }) : "Seleccionar fecha"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={fechaFinRecurrencia}
+                                onSelect={(d) => { if (d) { setFechaFinRecurrencia(d); setMeetCalendarOpen(false); } }}
+                                disabled={(date) => date < new Date()}
+                                initialFocus
+                                className="p-3 pointer-events-auto"
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <p className="text-xs text-muted-foreground">
+                            Los eventos se sincronizarán semanalmente hasta esta fecha (default: 3 meses)
                           </p>
-                        )}
+                        </div>
                       </CardContent>
                     </Card>
                   )}
