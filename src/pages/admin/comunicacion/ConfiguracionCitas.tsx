@@ -92,11 +92,26 @@ export default function ConfiguracionCitas() {
     },
   });
 
-  // Fetch ALL tipos de cita (for CRUD, super admin only)
+  // Fetch ALL tipos de cita (for CRUD, super admin only) with their linked projects
   const { data: allTiposCita = [] } = useQuery({
     queryKey: ["tipos-cita-all"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("tipos_cita").select("*").order("id");
+      const { data, error } = await supabase.from("tipos_cita").select("*, tipos_cita_proyectos(id_proyecto)").order("id");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isSuperAdmin,
+  });
+
+  // Fetch published projects for multi-select
+  const { data: proyectosPublicados = [] } = useQuery({
+    queryKey: ["proyectos-publicados"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("proyectos")
+        .select("id, nombre")
+        .eq("activo", true)
+        .order("nombre");
       if (error) throw error;
       return data || [];
     },
@@ -141,6 +156,30 @@ export default function ConfiguracionCitas() {
       queryClient.invalidateQueries({ queryKey: ["tipos-cita"] });
       queryClient.invalidateQueries({ queryKey: ["tipos-cita-all"] });
       toast.success("Estado actualizado");
+    },
+    onError: (e) => toast.error(`Error: ${e.message}`),
+  });
+
+  const toggleTipoCitaProyectoMutation = useMutation({
+    mutationFn: async ({ tipoCitaId, proyectoId, linked }: { tipoCitaId: number; proyectoId: number; linked: boolean }) => {
+      if (linked) {
+        // Remove
+        const { error } = await supabase
+          .from("tipos_cita_proyectos")
+          .delete()
+          .eq("id_tipo_cita", tipoCitaId)
+          .eq("id_proyecto", proyectoId);
+        if (error) throw error;
+      } else {
+        // Add
+        const { error } = await supabase
+          .from("tipos_cita_proyectos")
+          .insert({ id_tipo_cita: tipoCitaId, id_proyecto: proyectoId });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tipos-cita-all"] });
     },
     onError: (e) => toast.error(`Error: ${e.message}`),
   });
@@ -460,9 +499,29 @@ export default function ConfiguracionCitas() {
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex-1">
+                        <div className="flex-1 space-y-1">
                           <span className={cn("text-sm font-medium", !tc.activo && "text-muted-foreground line-through")}>{tc.nombre}</span>
-                          {tc.descripcion && <p className="text-xs text-muted-foreground mt-0.5">{tc.descripcion}</p>}
+                          {tc.descripcion && <p className="text-xs text-muted-foreground">{tc.descripcion}</p>}
+                          {/* Proyectos linked */}
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {proyectosPublicados.map((p: any) => {
+                              const isLinked = (tc.tipos_cita_proyectos || []).some((tcp: any) => tcp.id_proyecto === p.id);
+                              return (
+                                <button
+                                  key={p.id}
+                                  onClick={() => toggleTipoCitaProyectoMutation.mutate({ tipoCitaId: tc.id, proyectoId: p.id, linked: isLinked })}
+                                  className={cn(
+                                    "text-[11px] px-2 py-0.5 rounded-full border transition-all",
+                                    isLinked
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-border text-muted-foreground hover:border-primary/50"
+                                  )}
+                                >
+                                  {p.nombre}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                       <Switch
@@ -737,7 +796,7 @@ export default function ConfiguracionCitas() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="space-y-2">
-                          <Label>Fecha límite de recurrencia</Label>
+                          <Label>Repetir hasta</Label>
                           <Popover open={meetCalendarOpen} onOpenChange={setMeetCalendarOpen}>
                             <PopoverTrigger asChild>
                               <Button variant="outline" className={cn("w-[240px] justify-start text-left font-normal", !fechaFinRecurrencia && "text-muted-foreground")}>
