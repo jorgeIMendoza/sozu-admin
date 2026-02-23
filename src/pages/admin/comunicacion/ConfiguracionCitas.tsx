@@ -108,9 +108,10 @@ export default function ConfiguracionCitas() {
   const { data: proyectosPublicados = [] } = useQuery({
     queryKey: ["proyectos-publicados"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("proyectos").select("id, nombre").eq("activo", true).order("nombre");
+      const query = supabase.from("proyectos").select("id, nombre").eq("activo", true);
+      const { data, error } = await (query as any).eq("esta_publicado", true).order("nombre");
       if (error) throw error;
-      return data || [];
+      return (data || []) as { id: number; nombre: string }[];
     },
   });
 
@@ -404,6 +405,7 @@ export default function ConfiguracionCitas() {
       const { error: updateError } = await supabase
         .from("configuracion_citas_usuarios")
         .update({
+          nombre: selectedConfig.nombre,
           duracion_minutos: duracionMinutos,
           calendario_email: calendarioEmail || null,
           max_invitados: maxInvitados,
@@ -726,6 +728,21 @@ export default function ConfiguracionCitas() {
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                          <div className="space-y-2">
+                            <Label>Nombre de la cita</Label>
+                            <Input
+                              value={cfg.nombre || ""}
+                              onChange={(e) => {
+                                const newName = e.target.value;
+                                queryClient.setQueryData(["config-citas-usuarios-all", selectedUserEmail], (old: any[]) =>
+                                  old?.map((c: any) => c.id === cfg.id ? { ...c, nombre: newName } : c)
+                                );
+                                setHasChanges(true);
+                              }}
+                              placeholder="Ej: Capacitación Bottura"
+                              className="max-w-md"
+                            />
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label>Duración de la cita</Label>
