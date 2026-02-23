@@ -287,7 +287,8 @@ Deno.serve(async (req) => {
       const createdEvents: any[] = [];
       const errors: string[] = [];
 
-      // --- Delete existing recurring events with same summary ---
+      // --- Fetch existing recurring events with same summary ---
+      let existingRecurringEvents: any[] = [];
       try {
         const searchMin = new Date().toISOString();
         const searchMax = new Date(fecha_fin + "T23:59:59Z").toISOString();
@@ -295,80 +296,142 @@ Deno.serve(async (req) => {
         const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${token}` } });
         if (listRes.ok) {
           const listData = await listRes.json();
-          const matchingEvents = (listData.items || []).filter((e: any) => e.summary === tipoCitaDescripcion && e.recurrence);
-          console.log(`[sync] Found ${matchingEvents.length} existing recurring events with summary "${tipoCitaDescripcion}" to delete`);
-          for (const ev of matchingEvents) {
-            await deleteCalendarEvent(token, calendarId, ev.id);
-          }
+          existingRecurringEvents = (listData.items || []).filter((e: any) => e.summary === tipoCitaDescripcion && e.recurrence);
+          console.log(`[sync] Found ${existingRecurringEvents.length} existing recurring events with summary "${tipoCitaDescripcion}"`);
         }
       } catch (e: any) {
-        console.error("[sync] Error cleaning old events:", e.message);
+        console.error("[sync] Error fetching existing events:", e.message);
       }
 
-      // JS day mapping: dia_semana 1=Mon..6=Sat, JS 0=Sun,1=Mon..6=Sat
+      // Build desired events: one per (dia_semana, hora)
+      const rruleDays = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+      const untilStr = `${fecha_fin.replace(/-/g, "")}T235959Z`;
+      const desiredEvents: { day: number; hora: string; targetJsDay: number; fechaStr: string; horaInicio: string; horaFin: string; rruleDay: string }[] = [];
+
       for (const slotGroup of slots_config) {
         const { dia_semana, horas } = slotGroup;
         for (const hora of horas) {
-          // Find next occurrence of this weekday
           const [h, m] = hora.split(":").map(Number);
           let nextDate = new Date(today);
-          // Adjust to next occurrence of dia_semana
-          const targetJsDay = dia_semana === 0 ? 0 : dia_semana; // 1=Mon matches JS getDay()=1
+          const targetJsDay = dia_semana === 0 ? 0 : dia_semana;
           while (nextDate.getDay() !== targetJsDay) {
             nextDate.setDate(nextDate.getDate() + 1);
           }
-          // If today is the target day but time has passed, skip to next week
           if (nextDate.toDateString() === today.toDateString()) {
-            const nowHours = today.getHours();
-            if (nowHours >= h) {
+            if (today.getHours() >= h) {
               nextDate.setDate(nextDate.getDate() + 7);
             }
           }
-
           if (nextDate > endDate) continue;
 
           const fechaStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}-${String(nextDate.getDate()).padStart(2, "0")}`;
-          const horaInicio = hora;
           const totalMinEnd = h * 60 + m + duracionMinutos;
           const horaFin = `${String(Math.floor(totalMinEnd / 60) % 24).padStart(2, "0")}:${String(totalMinEnd % 60).padStart(2, "0")}`;
-
-          // Build RRULE UNTIL
-          const untilStr = `${fecha_fin.replace(/-/g, "")}T235959Z`;
-          // Map dia_semana to RRULE day
-          const rruleDays = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
           const rruleDay = rruleDays[targetJsDay];
 
-          const event = {
+          desiredEvents.push({ day: dia_semana, hora, targetJsDay, fechaStr, horaInicio: hora, horaFin, rruleDay });
+        }
+      }
+
+      // Match existing events to desired events by BYDAY rule
+      const usedExistingIds = new Set<string>();
+
+      for (const desired of desiredEvents) {
+        // Try to find an existing event on the same BYDAY
+        const matchIdx = existingRecurringEvents.findIndex((ev: any) => {
+          if (usedExistingIds.has(ev.id)) return false;
+          const rrule = (ev.recurrence || []).find((r: string) => r.includes("RRULE:"));
+          return rrule && rrule.includes(`BYDAY=${desired.rruleDay}`);
+        });
+
+        if (matchIdx >= 0) {
+          // UPDATE existing event (preserves attendees)
+          const existingEv = existingRecurringEvents[matchIdx];
+          usedExistingIds.add(existingEv.id);
+          const patchBody: any = {
+            start: { dateTime: `${desired.fechaStr}T${desired.horaInicio}:00`, timeZone: "America/Mexico_City" },
+            end: { dateTime: `${desired.fechaStr}T${desired.horaFin}:00`, timeZone: "America/Mexico_City" },
+            recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${desired.rruleDay};UNTIL=${untilStr}`],
+          };
+          try {
+            const res = await fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(existingEv.id)}`,
+              { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(patchBody) },
+            );
+            if (!res.ok) {
+              const errText = await res.text();
+              errors.push(`UPDATE ${desired.fechaStr} ${desired.horaInicio}: ${errText}`);
+            } else {
+              const updated = await res.json();
+              console.log(`[sync] Updated event ${existingEv.id} to ${desired.rruleDay} ${desired.horaInicio}`);
+              createdEvents.push({ day: desired.day, hora: desired.hora, eventId: updated.id, meetLink: updated.hangoutLink || existingEv.hangoutLink || null, action: "updated" });
+            }
+          } catch (e: any) {
+            errors.push(`UPDATE ${desired.fechaStr} ${desired.horaInicio}: ${e.message}`);
+          }
+        } else {
+          // CREATE new event (no match found)
+          const event: any = {
             summary: tipoCitaDescripcion,
-            start: { dateTime: `${fechaStr}T${horaInicio}:00`, timeZone: "America/Mexico_City" },
-            end: { dateTime: `${fechaStr}T${horaFin}:00`, timeZone: "America/Mexico_City" },
-            recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${rruleDay};UNTIL=${untilStr}`],
-            conferenceData: {
-              createRequest: {
-                requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-                conferenceSolutionKey: { type: "hangoutsMeet" },
-              },
+            start: { dateTime: `${desired.fechaStr}T${desired.horaInicio}:00`, timeZone: "America/Mexico_City" },
+            end: { dateTime: `${desired.fechaStr}T${desired.horaFin}:00`, timeZone: "America/Mexico_City" },
+            recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${desired.rruleDay};UNTIL=${untilStr}`],
+          };
+
+          // Try to create with Meet, fallback without if conference type not supported
+          let createUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`;
+          event.conferenceData = {
+            createRequest: {
+              requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+              conferenceSolutionKey: { type: "hangoutsMeet" },
             },
           };
 
           try {
-            const res = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`,
-              { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
-            );
+            let res = await fetch(createUrl, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+              body: JSON.stringify(event),
+            });
+
+            // If conference type error, retry without conferenceData
             if (!res.ok) {
               const errText = await res.text();
-              if (res.status === 403 || res.status === 404 || errText.includes("Not Found") || errText.includes("forbidden")) {
+              if (res.status === 400 && errText.includes("Invalid conference type")) {
+                console.log(`[sync] Meet not supported on this calendar, creating event without conferenceData`);
+                delete event.conferenceData;
+                res = await fetch(
+                  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+                  { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
+                );
+                if (!res.ok) {
+                  const errText2 = await res.text();
+                  if (res.status === 403 || res.status === 404) {
+                    return new Response(JSON.stringify({ error: "No se tiene acceso al calendario. Verifique que la cuenta de servicio tenga permisos de 'Realizar cambios en eventos' en la configuración de compartir del Google Calendar." }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+                  }
+                  errors.push(`CREATE ${desired.fechaStr} ${desired.horaInicio}: ${errText2}`);
+                  continue;
+                }
+              } else if (res.status === 403 || res.status === 404) {
                 return new Response(JSON.stringify({ error: "No se tiene acceso al calendario. Verifique que la cuenta de servicio tenga permisos de 'Realizar cambios en eventos' en la configuración de compartir del Google Calendar." }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+              } else {
+                errors.push(`CREATE ${desired.fechaStr} ${desired.horaInicio}: ${errText}`);
+                continue;
               }
-              errors.push(`${fechaStr} ${horaInicio}: ${errText}`);
-              continue;
             }
             const created = await res.json();
-            createdEvents.push({ day: dia_semana, hora, eventId: created.id, meetLink: created.hangoutLink || null });
+            createdEvents.push({ day: desired.day, hora: desired.hora, eventId: created.id, meetLink: created.hangoutLink || null, action: "created" });
           } catch (e: any) {
-            errors.push(`${fechaStr} ${horaInicio}: ${e.message}`);
+            errors.push(`CREATE ${desired.fechaStr} ${desired.horaInicio}: ${e.message}`);
           }
+        }
+      }
+
+      // Delete unmatched existing events (slots removed from config)
+      for (const ev of existingRecurringEvents) {
+        if (!usedExistingIds.has(ev.id)) {
+          console.log(`[sync] Deleting unmatched event ${ev.id}`);
+          await deleteCalendarEvent(token, calendarId, ev.id);
         }
       }
 
