@@ -202,13 +202,28 @@ async function createCalendarEvent(token: string, calendarId: string, fecha: str
     start: { dateTime: `${fecha}T${horaInicio}:00`, timeZone: "America/Mexico_City" },
     end: { dateTime: `${fecha}T${horaFin}:00`, timeZone: "America/Mexico_City" },
     description: `Capacitación agendada para: ${agentEmail}`,
+    conferenceData: {
+      createRequest: {
+        requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+        conferenceSolutionKey: { type: "hangoutsMeet" },
+      },
+    },
   };
   const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`,
     { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
   );
-  if (!res.ok) throw new Error(`Failed to create event: ${await res.text()}`);
-  return await res.json();
+  if (!res.ok) {
+    const errText = await res.text();
+    // Detect permission errors and return a friendly message
+    if (res.status === 403 || res.status === 404 || errText.includes("Not Found") || errText.includes("forbidden")) {
+      throw new Error("No se tiene acceso al calendario. Verifique que la cuenta de servicio tenga permisos de 'Realizar cambios en eventos' en la configuración de compartir del Google Calendar.");
+    }
+    throw new Error(`Failed to create event: ${errText}`);
+  }
+  const created = await res.json();
+  console.log(`[createEvent] Meet link: ${created.hangoutLink || 'none'}`);
+  return created;
 }
 
 async function deleteCalendarEvent(token: string, calendarId: string, eventId: string) {
@@ -297,10 +312,12 @@ Deno.serve(async (req) => {
 
     let resultCita;
 
+    const meetLink = calendarEvent.hangoutLink || null;
+
     if (existingCitaId) {
       const { data: updatedCita, error: updateError } = await supabase
         .from("citas_capacitacion")
-        .update({ fecha, hora_inicio, hora_fin: horaFin, google_calendar_event_id: calendarEvent.id, estatus: "programada" })
+        .update({ fecha, hora_inicio, hora_fin: horaFin, google_calendar_event_id: calendarEvent.id, google_meet_link: meetLink, estatus: "programada" })
         .eq("id", existingCitaId)
         .select()
         .single();
@@ -309,14 +326,14 @@ Deno.serve(async (req) => {
     } else {
       const { data: newCita, error: insertError } = await supabase
         .from("citas_capacitacion")
-        .insert({ id_persona, fecha, hora_inicio, hora_fin: horaFin, ubicacion: "Presencial", estatus: "programada", google_calendar_event_id: calendarEvent.id, google_meet_link: null })
+        .insert({ id_persona, fecha, hora_inicio, hora_fin: horaFin, ubicacion: "Presencial", estatus: "programada", google_calendar_event_id: calendarEvent.id, google_meet_link: meetLink })
         .select()
         .single();
       if (insertError) console.error("DB insert error:", insertError);
       resultCita = newCita;
     }
 
-    return new Response(JSON.stringify({ success: true, meet_link: null, event_id: calendarEvent.id, cita: resultCita }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true, meet_link: meetLink, event_id: calendarEvent.id, cita: resultCita }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: unknown) {
     console.error("Error in agendar-capacitacion:", error);

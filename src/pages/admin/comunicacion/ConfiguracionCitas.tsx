@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Save, CalendarClock, Check, ChevronsUpDown, Pencil, Plus, Settings2 } from "lucide-react";
+import { Loader2, Save, CalendarClock, Check, ChevronsUpDown, Pencil, Plus, Settings2, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -26,12 +26,19 @@ const DIAS_SEMANA = [
   { id: 6, nombre: "Sábado", short: "Sáb" },
 ];
 
-// Slots every 30 min from 09:00 to 20:00
-const HORAS_SLOTS = Array.from({ length: 23 }, (_, i) => {
-  const h = Math.floor(i / 2) + 9;
-  const m = (i % 2) * 30;
-  return { hour: h, minute: m, label: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` };
-});
+const SERVICE_ACCOUNT_EMAIL = "cuenta-conexiones-drive@sozu-38755.iam.gserviceaccount.com";
+
+// Generate slots dynamically based on duration
+function generateSlots(duracionMinutos: number) {
+  const slots: { hour: number; minute: number; label: string }[] = [];
+  const stepMinutes = duracionMinutos;
+  for (let totalMin = 9 * 60; totalMin <= 20 * 60; totalMin += stepMinutes) {
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    slots.push({ hour: h, minute: m, label: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` });
+  }
+  return slots;
+}
 
 const DURACIONES = [
   { value: 30, label: "30 min" },
@@ -553,6 +560,34 @@ export default function ConfiguracionCitas() {
                           <p className="text-xs text-muted-foreground">
                             Calendario donde se agendan las citas de este tipo
                           </p>
+                          <div className="mt-2 p-3 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                              <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                                <p className="font-medium">Configuración previa requerida</p>
+                                <p>
+                                  Primero debe otorgar permisos a la cuenta de servicio para <strong>"Realizar cambios en eventos"</strong> dentro de la configuración de compartir del Google Calendar.
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <code className="bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded text-[11px] select-all break-all">
+                                    {SERVICE_ACCOUNT_EMAIL}
+                                  </code>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 shrink-0"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(SERVICE_ACCOUNT_EMAIL);
+                                      toast.success("Email de cuenta de servicio copiado");
+                                    }}
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -603,7 +638,7 @@ export default function ConfiguracionCitas() {
                           </CardHeader>
                           <CardContent>
                             <div className="flex flex-wrap gap-2">
-                              {HORAS_SLOTS.map((slot) => (
+                              {generateSlots(duracionMinutos).map((slot) => (
                                 <button
                                   key={slot.label}
                                   onClick={() => toggleSlot(dayId, slot.label)}
