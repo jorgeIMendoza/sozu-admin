@@ -6333,6 +6333,42 @@ export type Database = {
         }
         Relationships: []
       }
+      tipos_cita_proyectos: {
+        Row: {
+          fecha_creacion: string
+          id: number
+          id_proyecto: number
+          id_tipo_cita: number
+        }
+        Insert: {
+          fecha_creacion?: string
+          id?: number
+          id_proyecto: number
+          id_tipo_cita: number
+        }
+        Update: {
+          fecha_creacion?: string
+          id?: number
+          id_proyecto?: number
+          id_tipo_cita?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipos_cita_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tipos_cita_proyectos_id_tipo_cita_fkey"
+            columns: ["id_tipo_cita"]
+            isOneToOne: false
+            referencedRelation: "tipos_cita"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tipos_documento: {
         Row: {
           activo: boolean
