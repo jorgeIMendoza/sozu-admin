@@ -791,20 +791,19 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                   return (
                     <button
                       key={dateStr}
-                      onClick={() => { if (!isCancelledDate) { setSelectedDate(date); onTrackFieldChange?.(); } }}
-                      disabled={isCancelledDate}
+                      onClick={() => { setSelectedDate(date); onTrackFieldChange?.(); }}
                       className={`py-2 px-3 rounded-xl text-xs font-medium transition-all duration-200 border relative ${
-                        isCancelledDate
-                          ? 'bg-destructive/10 border-destructive/40 text-destructive/70 cursor-not-allowed line-through'
-                          : isSelected
-                            ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
+                        isSelected
+                          ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
+                          : isCancelledDate
+                            ? 'bg-destructive/10 border-destructive/40 text-destructive hover:border-destructive/60'
                             : isExistingDate
                               ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
                               : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
                       }`}
                     >
                       <span className="capitalize">{format(date, "EEE d MMM", { locale: es })}</span>
-                      {isCancelledDate && (
+                      {isCancelledDate && !isSelected && (
                         <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-destructive border-2 border-card" />
                       )}
                       {isExistingDate && !isSelected && !isCancelledDate && (
@@ -846,33 +845,42 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                         <div className="grid grid-cols-2 gap-2">
                           {cfgSlots.map((slot) => {
                             const isExisting = existingCita?.hora_inicio?.slice(0, 5) === slot.hora && existingCita?.fecha === fechaStr;
+                            const isCancelledSlot = citaCancelledExternally && isExisting;
                             const isSelected = selectedSlot === slot.hora && selectedConfigId === slot.config_id;
+                            const isDisabled = slot.is_full || isCancelledSlot;
                             return (
                               <button
                                 key={`${slot.config_id}-${slot.hora}`}
                                 onClick={() => {
-                                  if (!slot.is_full) {
+                                  if (!isDisabled) {
                                     setSelectedSlot(slot.hora);
                                     setSelectedConfigId(slot.config_id);
                                     onTrackFieldChange?.();
                                   }
                                 }}
-                                disabled={slot.is_full}
+                                disabled={isDisabled}
                                 className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border relative ${
-                                  slot.is_full
-                                    ? 'bg-muted/50 border-border/30 text-muted-foreground/50 cursor-not-allowed'
-                                    : isSelected
-                                      ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
-                                      : isExisting
-                                        ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
-                                        : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
+                                  isCancelledSlot
+                                    ? 'bg-destructive/10 border-destructive/40 text-destructive/60 cursor-not-allowed line-through'
+                                    : slot.is_full
+                                      ? 'bg-muted/50 border-border/30 text-muted-foreground/50 cursor-not-allowed'
+                                      : isSelected
+                                        ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
+                                        : isExisting
+                                          ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
+                                          : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
                                 }`}
                               >
                                 <span>{slot.hora}</span>
-                                <span className={`ml-2 text-[10px] ${slot.is_full ? 'text-destructive/60' : 'text-muted-foreground'}`}>
-                                  {slot.attendees}/{slot.max_invitados}
-                                </span>
-                                {isExisting && !isSelected && (
+                                {isCancelledSlot && (
+                                  <span className="ml-2 text-[10px] text-destructive/70">cancelado</span>
+                                )}
+                                {!isCancelledSlot && (
+                                  <span className={`ml-2 text-[10px] ${slot.is_full ? 'text-destructive/60' : 'text-muted-foreground'}`}>
+                                    {slot.attendees}/{slot.max_invitados}
+                                  </span>
+                                )}
+                                {isExisting && !isSelected && !isCancelledSlot && (
                                   <span className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-amber-500 border-2 border-card" />
                                 )}
                               </button>
