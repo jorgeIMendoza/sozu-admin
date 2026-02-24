@@ -821,6 +821,7 @@ Deno.serve(async (req) => {
     let scheduleCorrEnt: string[] = [];
     let scheduleDescInv = "";
 
+    let scheduleCitaNombre = "";
     if (config_id) {
       const { data: cfgData } = await supabase
         .from("configuracion_citas_usuarios")
@@ -835,6 +836,7 @@ Deno.serve(async (req) => {
         scheduleMaxInvitados = cfgData.max_invitados || 1;
         scheduleCorrEnt = cfgData.correos_enterado || [];
         scheduleDescInv = cfgData.descripcion_invitacion || "";
+        scheduleCitaNombre = cfgData.nombre || "";
       }
     } else if (userCitaConfig) {
       scheduleCorrEnt = userCitaConfig.correos_enterado || [];
@@ -941,9 +943,9 @@ Deno.serve(async (req) => {
     } else {
       // No recurring event found, create a standalone event
       console.log(`[schedule] No existing event instance found, creating new event`);
-      let summary = "Capacitación de Sozu para uso de herramienta.";
+      let summary = scheduleCitaNombre || tipoCitaSummary || "Capacitación";
       if (direccion_showroom && latitud_showroom && longitud_showroom) {
-        summary += ` En la direccion: ${direccion_showroom} con la ubicacion ${latitud_showroom},${longitud_showroom}`;
+        summary += ` — ${direccion_showroom}`;
       }
       
       const bookingAttendees: { email: string }[] = [];

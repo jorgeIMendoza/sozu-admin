@@ -418,6 +418,58 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     },
   });
 
+  // Fetch configured days (weekdays that have at least one slot) to generate available dates
+  const { data: availableDates = [], isLoading: loadingDates } = useQuery({
+    queryKey: ['training-available-dates', agentProjectIds, personaId],
+    queryFn: async () => {
+      // 1. Get configs matching agent's projects
+      const { data: allConfigs } = await supabase
+        .from('configuracion_citas_usuarios')
+        .select('id')
+        .eq('id_tipo_cita', 1)
+        .eq('activo', true);
+      if (!allConfigs || allConfigs.length === 0) return [];
+
+      const configIds = allConfigs.map((c: any) => c.id);
+      const { data: configProjects } = await supabase
+        .from('configuracion_citas_proyectos')
+        .select('id_configuracion_cita, id_proyecto')
+        .in('id_configuracion_cita', configIds);
+
+      const matchingConfigIds = configIds.filter((cid: number) => {
+        const projIds = (configProjects || []).filter((cp: any) => cp.id_configuracion_cita === cid).map((cp: any) => cp.id_proyecto);
+        return projIds.some((pid: number) => agentProjectIds.includes(pid));
+      });
+      if (matchingConfigIds.length === 0) return [];
+
+      // 2. Get configured weekdays from horarios
+      const { data: horarios } = await supabase
+        .from('configuracion_citas_horarios')
+        .select('dia_semana')
+        .in('id_configuracion_cita', matchingConfigIds)
+        .eq('activo', true);
+      if (!horarios || horarios.length === 0) return [];
+
+      const configuredDays = new Set(horarios.map((h: any) => h.dia_semana as number));
+
+      // 3. Generate next ~4 weeks of dates that match configured weekdays
+      const dates: Date[] = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const maxDate = new Date(today);
+      maxDate.setDate(maxDate.getDate() + 28);
+
+      for (let d = new Date(today); d <= maxDate; d.setDate(d.getDate() + 1)) {
+        const jsDay = d.getDay(); // 0=Sun, 1=Mon...
+        if (configuredDays.has(jsDay) && d >= today) {
+          dates.push(new Date(d));
+        }
+      }
+      return dates;
+    },
+    enabled: agentProjectIds.length > 0,
+  });
+
   // Fetch available slots grouped by owner when date changes
   const fechaStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
   const { data: groupedSlots, isLoading: loadingSlots } = useQuery({
@@ -437,22 +489,12 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         duracion_minutos: number;
         available_slots: string[];
       }>;
-      // If viewing the same date as the existing cita, inject its slot into matching group
-      if (existingCita?.fecha === fechaStr && existingCita?.hora_inicio) {
-        const citaSlot = existingCita.hora_inicio.slice(0, 5);
-        groups = groups.map(g => {
-          if (!g.available_slots.includes(citaSlot)) {
-            return { ...g, available_slots: [...g.available_slots, citaSlot].sort() };
-          }
-          return g;
-        });
-      }
       return groups;
     },
     enabled: !!fechaStr && agentProjectIds.length > 0,
   });
 
-  // Reset slot when user manually changes date (not on initial load from existingCita)
+  // Reset slot when date changes
   useEffect(() => {
     if (initializedFromCita.current) {
       setSelectedSlot('');
@@ -484,7 +526,6 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
   };
 
-  // Find the selected group config for scheduling
   const selectedGroup = groupedSlots?.find(g => g.config_id === selectedConfigId);
 
   const handleSchedule = async () => {
@@ -579,72 +620,47 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         </div>
       ) : (
         <>
-          {/* Styled Calendar */}
+          {/* Available Dates as chips */}
           <div>
             <Label className="text-sm font-semibold flex items-center gap-1.5 mb-2">
               <CalendarDays className="h-4 w-4 text-primary" />
-              Selecciona una fecha
+              Fechas disponibles
             </Label>
-            <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
-              <style>{`
-                .cita-existing-day {
-                  background-color: rgb(245 158 11 / 0.2) !important;
-                  border: 2px solid rgb(245 158 11 / 0.6) !important;
-                  color: rgb(180 83 9) !important;
-                  font-weight: 700 !important;
-                  box-shadow: 0 0 0 2px rgb(245 158 11 / 0.15) !important;
-                }
-                .dark .cita-existing-day {
-                  color: rgb(251 191 36) !important;
-                  background-color: rgb(245 158 11 / 0.25) !important;
-                }
-              `}</style>
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(d) => { setSelectedDate(d); onTrackFieldChange?.(); }}
-                disabled={(date) => {
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  return date < today || date.getDay() === 0 || date.getDay() === 6;
-                }}
-                modifiers={existingCita?.fecha ? {
-                  citaExisting: (() => {
-                    const [y, m, d] = existingCita.fecha.split('-').map(Number);
-                    return new Date(y, m - 1, d);
-                  })(),
-                } : {}}
-                modifiersClassNames={{
-                  citaExisting: 'cita-existing-day',
-                }}
-                locale={es}
-                className="w-full"
-                classNames={{
-                  months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                  month: "space-y-4 w-full",
-                  caption: "flex justify-center pt-1 relative items-center text-sm font-semibold text-foreground",
-                  caption_label: "text-sm font-semibold capitalize",
-                  nav: "space-x-1 flex items-center",
-                  nav_button: "h-8 w-8 bg-transparent p-0 opacity-60 hover:opacity-100 transition-opacity inline-flex items-center justify-center",
-                  table: "w-full border-collapse",
-                  head_row: "flex w-full",
-                  head_cell: "text-muted-foreground rounded-md w-full font-medium text-[0.7rem] uppercase tracking-wider",
-                  row: "flex w-full mt-1",
-                  cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 w-full",
-                  day: "h-10 w-full rounded-xl font-medium transition-all duration-200 hover:bg-primary/10 hover:text-primary inline-flex items-center justify-center",
-                  day_range_end: "day-range-end",
-                  day_selected: "day-selected bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground shadow-md",
-                  day_today: "bg-accent text-accent-foreground font-bold",
-                  day_outside: "text-muted-foreground/40",
-                  day_disabled: "text-muted-foreground/30 cursor-not-allowed",
-                  day_hidden: "invisible",
-                }}
-              />
-            </div>
-            {selectedDate && (
-              <p className="text-xs text-muted-foreground text-center mt-2 capitalize">
-                {format(selectedDate, "EEEE d 'de' MMMM 'de' yyyy", { locale: es })}
-              </p>
+            {loadingDates ? (
+              <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Cargando fechas...</span>
+              </div>
+            ) : availableDates.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {availableDates.map((date) => {
+                  const dateStr = format(date, 'yyyy-MM-dd');
+                  const isSelected = selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateStr;
+                  const isExistingDate = existingCita?.fecha === dateStr;
+                  return (
+                    <button
+                      key={dateStr}
+                      onClick={() => { setSelectedDate(date); onTrackFieldChange?.(); }}
+                      className={`py-2 px-3 rounded-xl text-xs font-medium transition-all duration-200 border relative ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
+                          : isExistingDate
+                            ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
+                            : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
+                      }`}
+                    >
+                      <span className="capitalize">{format(date, "EEE d MMM", { locale: es })}</span>
+                      {isExistingDate && !isSelected && (
+                        <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-500 border-2 border-card" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 rounded-xl border border-border/60 bg-muted/30">
+                <p className="text-sm text-muted-foreground">No hay fechas disponibles.</p>
+              </div>
             )}
           </div>
 
@@ -653,7 +669,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
             <div>
               <Label className="text-sm font-semibold flex items-center gap-1.5 mb-2">
                 <Clock className="h-4 w-4 text-primary" />
-                Horarios disponibles
+                Horarios disponibles — <span className="capitalize font-normal">{format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}</span>
               </Label>
               {loadingSlots ? (
                 <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
