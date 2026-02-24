@@ -762,7 +762,8 @@ Deno.serve(async (req) => {
         if (!se.calendarData) continue;
         const slotAttendees = buildAttendeesForSlot(se.fecha, se.hora);
         const patchBody: any = { summary: tipoCitaDescripcion };
-        if (eventDescription) patchBody.description = eventDescription;
+        // Always include attendees in description
+        patchBody.description = buildDescriptionWithAttendees(eventDescription, slotAttendees);
         if (slotAttendees.length > 0) patchBody.attendees = [...slotAttendees];
 
         try {
@@ -774,8 +775,7 @@ Deno.serve(async (req) => {
             const errText = await res.text();
             if (res.status === 403 && errText.includes("forbiddenForServiceAccounts")) {
               delete patchBody.attendees;
-              // DWD fallback: include attendee info in description
-              patchBody.description = buildDescriptionWithAttendees(eventDescription, slotAttendees);
+              // Description already has attendees from above
               res = await fetch(
                 `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(se.calendar_email)}/events/${encodeURIComponent(se.google_event_id)}?sendUpdates=all`,
                 { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(patchBody) },
@@ -822,7 +822,8 @@ Deno.serve(async (req) => {
           start: { dateTime: `${eventDate}T${horaStr}:00`, timeZone: "America/Mexico_City" },
           end: { dateTime: `${eventDate}T${horaFin}:00`, timeZone: "America/Mexico_City" },
         };
-        if (eventDescription) event.description = eventDescription;
+        // Always include attendees in description
+        event.description = buildDescriptionWithAttendees(eventDescription, slotAttendees);
         if (slotAttendees.length > 0) event.attendees = [...slotAttendees];
         event.conferenceData = {
           createRequest: {
@@ -840,8 +841,7 @@ Deno.serve(async (req) => {
             const errText = await res.text();
             if (res.status === 403 && errText.includes("forbiddenForServiceAccounts")) {
               delete event.attendees;
-              // DWD fallback: include attendee info in description
-              event.description = buildDescriptionWithAttendees(eventDescription, slotAttendees);
+              // Description already has attendees from above
               res = await fetch(
                 `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`,
                 { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
@@ -950,8 +950,7 @@ Deno.serve(async (req) => {
             end: { dateTime: `${desired.fechaStr}T${desired.horaFin}:00`, timeZone: "America/Mexico_City" },
             recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${desired.rruleDay};UNTIL=${untilStr}`],
           };
-          if (eventDescription) patchBody.description = eventDescription;
-          const slotAttendees4 = buildAttendeesForSlot(desired.fechaStr, parseInt(desired.horaInicio));
+          patchBody.description = buildDescriptionWithAttendees(eventDescription, slotAttendees4);
           if (slotAttendees4.length > 0) patchBody.attendees = [...slotAttendees4];
 
           try {
@@ -963,7 +962,7 @@ Deno.serve(async (req) => {
               const errText = await res.text();
               if (res.status === 403 && errText.includes("forbiddenForServiceAccounts")) {
                 delete patchBody.attendees;
-                patchBody.description = buildDescriptionWithAttendees(eventDescription, slotAttendees4);
+                // Description already has attendees from above
                 res = await fetch(
                   `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(existingEv.id)}?sendUpdates=all`,
                   { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(patchBody) },
@@ -992,8 +991,9 @@ Deno.serve(async (req) => {
             end: { dateTime: `${desired.fechaStr}T${desired.horaFin}:00`, timeZone: "America/Mexico_City" },
             recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${desired.rruleDay};UNTIL=${untilStr}`],
           };
-          if (eventDescription) event.description = eventDescription;
           const createSlotAttendees = buildAttendeesForSlot(desired.fechaStr, parseInt(desired.horaInicio));
+          // Always include attendees in description
+          event.description = buildDescriptionWithAttendees(eventDescription, createSlotAttendees);
           if (createSlotAttendees.length > 0) event.attendees = [...createSlotAttendees];
           event.conferenceData = {
             createRequest: {
@@ -1011,7 +1011,7 @@ Deno.serve(async (req) => {
               const errText = await res.text();
               if (res.status === 403 && errText.includes("forbiddenForServiceAccounts")) {
                 delete event.attendees;
-                event.description = buildDescriptionWithAttendees(eventDescription, createSlotAttendees);
+                // Description already has attendees from above
                 res = await fetch(
                   `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`,
                   { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
