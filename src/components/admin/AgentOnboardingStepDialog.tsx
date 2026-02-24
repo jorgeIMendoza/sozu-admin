@@ -433,7 +433,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       // Get all active training configs (tipo_cita=1)
       const { data: allConfigs } = await supabase
         .from('configuracion_citas_usuarios')
-        .select('id, nombre, id_usuario_email, duracion_minutos, max_invitados, correos_enterado')
+        .select('id, nombre, id_usuario_email, duracion_minutos, max_invitados, correos_enterado, fecha_fin_recurrencia')
         .eq('id_tipo_cita', 1)
         .eq('activo', true);
       if (!allConfigs || allConfigs.length === 0) return [];
@@ -461,12 +461,27 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       if (matchingConfigIds.length === 0) return [];
       const { data: horarios } = await supabase
         .from('configuracion_citas_horarios')
-        .select('dia_semana')
+        .select('id_configuracion_cita, dia_semana')
         .in('id_configuracion_cita', matchingConfigIds)
         .eq('activo', true);
       if (!horarios || horarios.length === 0) return [];
 
-      const configuredDays = new Set(horarios.map((h: any) => h.dia_semana as number));
+      // Build a map of day_of_week → max fecha_fin_recurrencia across configs
+      const dayToMaxEnd = new Map<number, Date>();
+      for (const h of horarios) {
+        const day = h.dia_semana as number;
+        const configId = h.id_configuracion_cita;
+        const config = trainingConfigs.find((c: any) => c.id === configId);
+        const endStr = config?.fecha_fin_recurrencia;
+        const endDate = endStr ? new Date(endStr + 'T23:59:59') : null;
+        if (endDate) {
+          const current = dayToMaxEnd.get(day);
+          if (!current || endDate > current) dayToMaxEnd.set(day, endDate);
+        }
+        // If any config for this day has no end date, treat as unlimited
+        if (!endDate) dayToMaxEnd.set(day, new Date(9999, 11, 31));
+      }
+
       const dates: Date[] = [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -474,8 +489,9 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       maxDate.setDate(maxDate.getDate() + 28);
 
       for (let d = new Date(today); d <= maxDate; d.setDate(d.getDate() + 1)) {
-        const jsDay = d.getDay(); // 0=Sun, 1=Mon... matches DB convention
-        if (configuredDays.has(jsDay) && d >= today) {
+        const jsDay = d.getDay();
+        const endLimit = dayToMaxEnd.get(jsDay);
+        if (endLimit && d >= today && d <= endLimit) {
           dates.push(new Date(d));
         }
       }
@@ -696,6 +712,9 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
               <CalendarDays className="h-4 w-4 text-primary" />
               Fechas disponibles
             </Label>
+            {configName && (
+              <p className="text-xs text-muted-foreground font-medium -mt-1 mb-1">{configName}</p>
+            )}
             {loadingDates || loadingConfigs ? (
               <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
