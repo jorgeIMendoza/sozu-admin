@@ -402,6 +402,9 @@ const InventarioGlobal = () => {
         >
           {profile?.rol_nombre === "Super Administrador" && <AgentImpersonationSelector />}
           <div className="flex items-center gap-1.5">
+            <span className="text-sm text-muted-foreground whitespace-nowrap shrink-0">
+              Hola, <span className="font-medium text-foreground">{profile?.nombre?.split(" ")[0] || "Usuario"}</span>
+            </span>
             <button
               onClick={() => setFiltersDrawerOpen(true)}
               className="flex-1 flex items-center gap-2 px-4 h-12 rounded-full border border-border/80 bg-card shadow-sm hover:shadow-md transition-shadow"

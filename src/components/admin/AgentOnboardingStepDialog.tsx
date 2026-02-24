@@ -665,7 +665,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                   {groupedSlots.filter(g => g.available_slots.length > 0).map((group) => (
                     <div key={group.config_id} className="space-y-2">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        {group.owner_name}
+                        {group.cita_nombre} <span className="normal-case font-normal">— {group.owner_name?.split(" ")[0] || group.owner_name}</span>
                       </p>
                       <div className="grid grid-cols-3 gap-2">
                         {group.available_slots.map((slot) => {
