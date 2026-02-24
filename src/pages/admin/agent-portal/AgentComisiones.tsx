@@ -29,7 +29,7 @@ const AgentComisiones = () => {
       // Get comisionistas for this agent
       const { data: comisionistas } = await (supabase as any)
         .from('comisionistas')
-        .select('id_cuenta_cobranza, monto_comision, id_estatus_comision, fecha_creacion, porcentaje_comision')
+        .select('id_cuenta_cobranza, porcentaje_comision, aprobada, pagada, fecha_creacion')
         .eq('email_usuario', agentEmail)
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
@@ -104,11 +104,16 @@ const AgentComisiones = () => {
 
       return comisionistas.map((c: any) => {
         const cuenta = cuentaMap.get(c.id_cuenta_cobranza);
+        const precioFinal = cuenta?.precio_final || 0;
+        const montoComision = precioFinal * (c.porcentaje_comision || 0) / 100;
+        const statusId = c.pagada ? 3 : c.aprobada ? 2 : 1;
         return {
           ...c,
           proyecto: cuenta?.proyecto || '',
           propiedad: cuenta?.propiedad || '',
-          precio_final: cuenta?.precio_final || 0,
+          precio_final: precioFinal,
+          monto_comision: montoComision,
+          id_estatus_comision: statusId,
         };
       });
     },

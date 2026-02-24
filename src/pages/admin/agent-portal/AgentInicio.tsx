@@ -30,32 +30,49 @@ const AgentInicio = () => {
     queryFn: async () => {
       if (!agentEmail) return null;
 
-      const { data: comisiones } = await (supabase as any)
+      // Fetch comisionistas with their cuentas to calculate monto
+      const { data: comisionistas } = await (supabase as any)
         .from('comisionistas')
-        .select('monto_comision, id_estatus_comision')
-        .eq('email', agentEmail)
+        .select('id_cuenta_cobranza, porcentaje_comision, aprobada, pagada')
+        .eq('email_usuario', agentEmail)
         .eq('activo', true);
+
+      // Get precio_final from cuentas_cobranza
+      const cuentaIds = [...new Set((comisionistas || []).map((c: any) => c.id_cuenta_cobranza).filter(Boolean))];
+      let cuentaMap = new Map<number, number>();
+      if (cuentaIds.length > 0) {
+        const { data: cuentas } = await (supabase as any)
+          .from('cuentas_cobranza')
+          .select('id, precio_final')
+          .in('id', cuentaIds);
+        (cuentas || []).forEach((c: any) => cuentaMap.set(c.id, c.precio_final || 0));
+      }
+
+      const enriched = (comisionistas || []).map((c: any) => {
+        const precio = cuentaMap.get(c.id_cuenta_cobranza) || 0;
+        return { monto: precio * (c.porcentaje_comision || 0) / 100, pagada: c.pagada };
+      });
 
       const { data: ofertas } = await (supabase as any)
         .from('ofertas')
-        .select('id, id_estatus_oferta')
+        .select('id, id_estatus_aprobacion')
         .eq('email_creador', agentEmail)
         .eq('activo', true);
 
-      const comisionPendiente = (comisiones || [])
-        .filter((c: any) => c.id_estatus_comision !== 3)
-        .reduce((sum: number, c: any) => sum + (c.monto_comision || 0), 0);
+      const comisionPendiente = enriched
+        .filter((c: any) => !c.pagada)
+        .reduce((sum: number, c: any) => sum + c.monto, 0);
 
-      const comisionPagada = (comisiones || [])
-        .filter((c: any) => c.id_estatus_comision === 3)
-        .reduce((sum: number, c: any) => sum + (c.monto_comision || 0), 0);
+      const comisionPagada = enriched
+        .filter((c: any) => c.pagada)
+        .reduce((sum: number, c: any) => sum + c.monto, 0);
 
       const ventasActivas = (ofertas || []).filter((o: any) => 
-        o.id_estatus_oferta && ![8, 9, 10].includes(o.id_estatus_oferta)
+        o.id_estatus_aprobacion && ![8, 9, 10].includes(o.id_estatus_aprobacion)
       ).length;
 
       const ventasCerradas = (ofertas || []).filter((o: any) => 
-        o.id_estatus_oferta === 8
+        o.id_estatus_aprobacion === 8
       ).length;
 
       return { comisionPendiente, comisionPagada, ventasActivas, ventasCerradas };
@@ -71,10 +88,10 @@ const AgentInicio = () => {
 
       const { data } = await (supabase as any)
         .from('ofertas')
-        .select('id, id_estatus_oferta, fecha_generacion, id_propiedad, id_persona_lead')
+        .select('id, id_estatus_aprobacion, fecha_generacion, id_propiedad, id_persona_lead')
         .eq('email_creador', agentEmail)
         .eq('activo', true)
-        .in('id_estatus_oferta', [3, 4, 5])
+        .in('id_estatus_aprobacion', [3, 4, 5])
         .order('fecha_generacion', { ascending: false })
         .limit(5);
 
@@ -166,7 +183,7 @@ const AgentInicio = () => {
                     {(item.personas as any)?.nombre_legal || "Cliente"}
                   </p>
                   <p className="text-xs text-[hsl(var(--agent-text-secondary))] truncate">
-                    {getStatusLabel(item.id_estatus_oferta)} · {(item.propiedades as any)?.proyectos?.nombre}
+                    {getStatusLabel(item.id_estatus_aprobacion)} · {(item.propiedades as any)?.proyectos?.nombre}
                   </p>
                 </div>
                 <ChevronRight className="h-4 w-4 text-[hsl(var(--agent-muted))] shrink-0" />
