@@ -988,7 +988,7 @@ export default function ConfiguracionCitas() {
                                   <Calendar
                                     mode="single"
                                     selected={fechaFinRecurrencia}
-                                    onSelect={(d) => { if (d) { setFechaFinRecurrencia(d); setMeetCalendarOpen(false); } }}
+                                    onSelect={(d) => { if (d) { setFechaFinRecurrencia(d); setMeetCalendarOpen(false); setHasChanges(true); } }}
                                     disabled={(date) => date < new Date()}
                                     initialFocus
                                     className="p-3 pointer-events-auto"
