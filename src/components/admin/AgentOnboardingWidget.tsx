@@ -82,6 +82,8 @@ export function AgentOnboardingWidget({ personaId, variant = 'default' }: AgentO
                         isInline ? "h-7 w-7 text-[10px]" : "h-10 w-10 text-sm",
                         step.isComplete
                           ? "bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-[0_3px_12px_-2px_hsla(142,76%,36%,0.5)]"
+                          : step.hasCancelledData
+                          ? "bg-gradient-to-br from-red-400 to-red-600 text-white shadow-[0_3px_12px_-2px_hsla(0,76%,50%,0.5)]"
                           : isSelected
                           ? "bg-gradient-to-br from-blue-400 to-blue-600 text-white shadow-[0_3px_12px_-2px_hsla(210,80%,55%,0.5)] ring-3 ring-blue-400/30 ring-offset-1 ring-offset-background"
                           : step.hasPartialData
@@ -96,6 +98,8 @@ export function AgentOnboardingWidget({ personaId, variant = 'default' }: AgentO
                       isInline ? "text-[8px]" : "text-[9px]",
                       step.isComplete
                         ? "text-emerald-600 dark:text-emerald-400"
+                        : step.hasCancelledData
+                        ? "text-red-600 dark:text-red-400"
                         : isSelected
                         ? "text-blue-600 dark:text-blue-400"
                         : step.hasPartialData

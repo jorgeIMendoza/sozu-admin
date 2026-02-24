@@ -6,6 +6,7 @@ export interface OnboardingStep {
   label: string;
   isComplete: boolean;
   hasPartialData: boolean;
+  hasCancelledData?: boolean;
 }
 
 interface OnboardingStatus {
@@ -122,7 +123,8 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
   const bankComplete = cuentas.length > 0;
 
   const trainingComplete = citasCapacitacion.some((c: any) => c.estatus === 'asistio' && c.activo);
-  const trainingPartial = !trainingComplete && citasCapacitacion.length > 0;
+  const trainingPartial = !trainingComplete && citasCapacitacion.some((c: any) => c.estatus === 'programada' && c.activo);
+  const trainingCancelled = !trainingComplete && !trainingPartial && citasCapacitacion.some((c: any) => c.estatus === 'cancelada' || !c.activo);
 
   const steps: OnboardingStep[] = [
     { id: 'basic', label: 'Info. Básica', isComplete: basicComplete, hasPartialData: basicPartial },
@@ -130,7 +132,7 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     { id: 'fiscal', label: 'Info. Fiscal', isComplete: fiscalComplete, hasPartialData: fiscalPartial },
     { id: 'documents', label: 'Documentos', isComplete: documentsComplete, hasPartialData: documentsPartial },
     { id: 'bank-accounts', label: 'Cuentas', isComplete: bankComplete, hasPartialData: false },
-    { id: 'training', label: 'Capacitación', isComplete: trainingComplete, hasPartialData: trainingPartial },
+    { id: 'training', label: 'Capacitación', isComplete: trainingComplete, hasPartialData: trainingPartial, hasCancelledData: trainingCancelled },
   ];
 
   const completedCount = steps.filter(s => s.isComplete).length;
