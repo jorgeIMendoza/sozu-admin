@@ -1,8 +1,20 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Home, Building2, BarChart3, DollarSign, User } from "lucide-react";
+import { Home, Building2, BarChart3, DollarSign, User, LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
-const TABS = [
+const AGENT_MENU_ID = 16;
+
+const iconMap: Record<string, LucideIcon> = {
+  '/admin/agent/inicio': Home,
+  '/admin/agent/inventario': Building2,
+  '/admin/agent/pipeline': BarChart3,
+  '/admin/agent/comisiones': DollarSign,
+  '/admin/agent/perfil': User,
+};
+
+const FALLBACK_TABS = [
   { path: "/admin/agent/inicio", label: "Inicio", icon: Home },
   { path: "/admin/agent/inventario", label: "Inventario", icon: Building2 },
   { path: "/admin/agent/pipeline", label: "Pipeline", icon: BarChart3 },
@@ -14,19 +26,38 @@ export const AgentPortalLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const { data: tabs = FALLBACK_TABS } = useQuery({
+    queryKey: ['agent-portal-tabs'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('submenus')
+        .select('nombre, vista_front_end, orden')
+        .eq('menu_id', AGENT_MENU_ID)
+        .eq('activo', true)
+        .order('orden');
+
+      if (error || !data || data.length === 0) return FALLBACK_TABS;
+
+      return data.map((s: any) => ({
+        path: s.vista_front_end,
+        label: s.nombre,
+        icon: iconMap[s.vista_front_end] || Home,
+      }));
+    },
+    staleTime: 5 * 60_000,
+  });
+
   const isActive = (path: string) => location.pathname.startsWith(path);
 
   return (
     <div className="agent-portal min-h-screen flex flex-col" style={{ background: "hsl(var(--agent-bg))" }}>
-      {/* Main content area with bottom padding for tab bar */}
       <main className="flex-1 pb-20 overflow-y-auto">
         <Outlet />
       </main>
 
-      {/* Bottom Tab Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
-          {TABS.map((tab) => {
+          {tabs.map((tab) => {
             const active = isActive(tab.path);
             const Icon = tab.icon;
             return (

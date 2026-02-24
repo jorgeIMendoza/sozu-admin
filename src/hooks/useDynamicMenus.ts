@@ -105,6 +105,12 @@
   '/admin/comunicacion/ejecuciones': History,
   '/admin/crm/workflow-ofertas': ClipboardList,
   '/admin/crm/dashboard-ejecutivo': BarChart3,
+  // Agent Portal
+  '/admin/agent/inicio': LayoutDashboard,
+  '/admin/agent/inventario': Building,
+  '/admin/agent/pipeline': Activity,
+  '/admin/agent/comisiones': Banknote,
+  '/admin/agent/perfil': User,
 };
  
  // Mapeo de iconos por menu_id para los grupos
@@ -124,6 +130,7 @@
     13: Activity,        // Configuraciones/Logs
     14: Mail,            // Comunicación
     15: Briefcase,        // CRM
+    16: User,              // Portal Agente
   };
  
  export interface DynamicMenuItem {
