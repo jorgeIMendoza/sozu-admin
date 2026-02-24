@@ -173,36 +173,32 @@ Deno.serve(async (req) => {
 
     console.log('Usuario created:', usuario.id);
 
-    // Assign access only to selected projects
+    // Assign access to ALL published projects
     try {
-      if (proyecto_ids && proyecto_ids.length > 0) {
-        // Validate that all selected projects are actually published
-        const { data: validProjects } = await supabase
-          .from('proyectos')
-          .select('id')
-          .in('id', proyecto_ids)
-          .eq('publicar', true)
-          .eq('activo', true);
+      const { data: publishedProjects } = await supabase
+        .from('proyectos')
+        .select('id')
+        .eq('publicar', true)
+        .eq('activo', true);
 
-        const validIds = validProjects?.map(p => p.id) || [];
+      const validIds = publishedProjects?.map(p => p.id) || [];
 
-        if (validIds.length > 0) {
-          const accessRecords = validIds.map(pid => ({
-            usuario_id: emailLower,
-            proyecto_id: pid,
-            activo: true,
-            id_entidad_relacionada_dueno: null,
-          }));
+      if (validIds.length > 0) {
+        const accessRecords = validIds.map(pid => ({
+          usuario_id: emailLower,
+          proyecto_id: pid,
+          activo: true,
+          id_entidad_relacionada_dueno: null,
+        }));
 
-          const { error: accessError } = await supabase
-            .from('proyectos_acceso')
-            .insert(accessRecords);
+        const { error: accessError } = await supabase
+          .from('proyectos_acceso')
+          .insert(accessRecords);
 
-          if (accessError) {
-            console.error('Error assigning project access:', accessError);
-          } else {
-            console.log(`Assigned access to ${validIds.length} selected projects`);
-          }
+        if (accessError) {
+          console.error('Error assigning project access:', accessError);
+        } else {
+          console.log(`Assigned access to ${validIds.length} published projects`);
         }
       }
     } catch (accessErr) {
