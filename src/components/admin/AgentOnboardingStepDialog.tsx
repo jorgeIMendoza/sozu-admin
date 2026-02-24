@@ -418,14 +418,14 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     },
   });
 
-  // Fetch configured days (weekdays that have at least one slot) to generate available dates
-  const { data: availableDates = [], isLoading: loadingDates } = useQuery({
-    queryKey: ['training-available-dates', agentProjectIds, personaId],
+  // Fetch training configs matching agent's projects (DB-only)
+  const { data: trainingConfigs = [], isLoading: loadingConfigs } = useQuery({
+    queryKey: ['training-configs-for-agent', agentProjectIds],
     queryFn: async () => {
-      // 1. Get configs matching agent's projects
+      // Get all active training configs (tipo_cita=1)
       const { data: allConfigs } = await supabase
         .from('configuracion_citas_usuarios')
-        .select('id')
+        .select('id, nombre, id_usuario_email, duracion_minutos, max_invitados, correos_enterado')
         .eq('id_tipo_cita', 1)
         .eq('activo', true);
       if (!allConfigs || allConfigs.length === 0) return [];
@@ -436,13 +436,21 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         .select('id_configuracion_cita, id_proyecto')
         .in('id_configuracion_cita', configIds);
 
-      const matchingConfigIds = configIds.filter((cid: number) => {
-        const projIds = (configProjects || []).filter((cp: any) => cp.id_configuracion_cita === cid).map((cp: any) => cp.id_proyecto);
+      // Filter to configs that match agent's projects
+      return allConfigs.filter((c: any) => {
+        const projIds = (configProjects || []).filter((cp: any) => cp.id_configuracion_cita === c.id).map((cp: any) => cp.id_proyecto);
         return projIds.some((pid: number) => agentProjectIds.includes(pid));
       });
-      if (matchingConfigIds.length === 0) return [];
+    },
+    enabled: agentProjectIds.length > 0,
+  });
 
-      // 2. Get configured weekdays from horarios
+  // Fetch horarios for matching configs → generate available dates
+  const matchingConfigIds = trainingConfigs.map((c: any) => c.id);
+  const { data: availableDates = [], isLoading: loadingDates } = useQuery({
+    queryKey: ['training-available-dates-db', matchingConfigIds],
+    queryFn: async () => {
+      if (matchingConfigIds.length === 0) return [];
       const { data: horarios } = await supabase
         .from('configuracion_citas_horarios')
         .select('dia_semana')
@@ -451,8 +459,6 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       if (!horarios || horarios.length === 0) return [];
 
       const configuredDays = new Set(horarios.map((h: any) => h.dia_semana as number));
-
-      // 3. Generate next ~4 weeks of dates that match configured weekdays
       const dates: Date[] = [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -460,38 +466,84 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       maxDate.setDate(maxDate.getDate() + 28);
 
       for (let d = new Date(today); d <= maxDate; d.setDate(d.getDate() + 1)) {
-        const jsDay = d.getDay(); // 0=Sun, 1=Mon...
+        const jsDay = d.getDay(); // 0=Sun, 1=Mon... matches DB convention
         if (configuredDays.has(jsDay) && d >= today) {
           dates.push(new Date(d));
         }
       }
       return dates;
     },
-    enabled: agentProjectIds.length > 0,
+    enabled: matchingConfigIds.length > 0,
   });
 
-  // Fetch available slots grouped by owner when date changes
+  // When a date is selected, fetch available slots from DB
   const fechaStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
-  const { data: groupedSlots, isLoading: loadingSlots } = useQuery({
-    queryKey: ['training-available-slots-grouped', fechaStr, agentProjectIds],
+  const dayOfWeek = selectedDate ? selectedDate.getDay() : -1;
+
+  const { data: dbSlots = [], isLoading: loadingSlots } = useQuery({
+    queryKey: ['training-slots-db', fechaStr, matchingConfigIds, personaId],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('agendar-capacitacion', {
-        body: { action: 'check-availability-by-project', fecha: fechaStr, proyecto_ids: agentProjectIds, exclude_persona_id: personaId },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      let groups = (data?.grouped_slots || []) as Array<{
+      if (matchingConfigIds.length === 0 || dayOfWeek < 0) return [];
+
+      // Get configured hours for this weekday
+      const { data: horarios } = await supabase
+        .from('configuracion_citas_horarios')
+        .select('id_configuracion_cita, hora')
+        .in('id_configuracion_cita', matchingConfigIds)
+        .eq('dia_semana', dayOfWeek)
+        .eq('activo', true);
+      if (!horarios || horarios.length === 0) return [];
+
+      // Get existing bookings for this date
+      const { data: bookings } = await supabase
+        .from('citas_capacitacion')
+        .select('id_configuracion_cita, hora_inicio, id_persona')
+        .in('id_configuracion_cita', matchingConfigIds)
+        .eq('fecha', fechaStr)
+        .eq('activo', true)
+        .in('estatus', ['programada']);
+
+      // Build slots grouped by config
+      type SlotInfo = {
         config_id: number;
-        owner_email: string;
+        config_name: string;
         owner_name: string;
-        cita_nombre: string;
-        calendar_id: string;
-        duracion_minutos: number;
-        available_slots: string[];
-      }>;
-      return groups;
+        hora: string;
+        attendees: number;
+        max_invitados: number;
+        is_full: boolean;
+      };
+
+      const result: SlotInfo[] = [];
+      for (const h of horarios) {
+        const config = trainingConfigs.find((c: any) => c.id === h.id_configuracion_cita);
+        if (!config) continue;
+
+        const horaLabel = `${String(h.hora).padStart(2, '0')}:00`;
+        const correosEnteradoCount = Array.isArray(config.correos_enterado) ? config.correos_enterado.length : 0;
+        const maxInvitados = (config.max_invitados || 1);
+
+        // Count bookings for this slot (excluding the current persona so they can reschedule)
+        const slotBookings = (bookings || []).filter((b: any) =>
+          b.id_configuracion_cita === config.id &&
+          b.hora_inicio?.slice(0, 5) === horaLabel &&
+          b.id_persona !== personaId
+        );
+        const attendeeCount = slotBookings.length;
+
+        result.push({
+          config_id: config.id,
+          config_name: config.nombre,
+          owner_name: config.id_usuario_email?.split('@')[0] || '',
+          hora: horaLabel,
+          attendees: attendeeCount,
+          max_invitados: maxInvitados,
+          is_full: attendeeCount >= maxInvitados,
+        });
+      }
+      return result;
     },
-    enabled: !!fechaStr && agentProjectIds.length > 0,
+    enabled: !!fechaStr && matchingConfigIds.length > 0,
   });
 
   // Reset slot when date changes
@@ -526,7 +578,8 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
   };
 
-  const selectedGroup = groupedSlots?.find(g => g.config_id === selectedConfigId);
+  // Get the config name to display as title
+  const configName = trainingConfigs.length === 1 ? trainingConfigs[0].nombre : trainingConfigs.length > 0 ? trainingConfigs.map((c: any) => c.nombre).join(' / ') : 'Capacitación';
 
   const handleSchedule = async () => {
     onTrackSave?.();
@@ -563,13 +616,15 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         showroomData = showroom;
       }
 
+      const selectedConfig = trainingConfigs.find((c: any) => c.id === selectedConfigId);
+
       const { data, error } = await supabase.functions.invoke('agendar-capacitacion', {
         body: {
           fecha: fechaStr,
           hora_inicio: selectedSlot,
           id_persona: personaId,
           agent_email: persona?.email || '',
-          calendar_owner_email: selectedGroup?.owner_email || undefined,
+          calendar_owner_email: selectedConfig?.id_usuario_email || undefined,
           config_id: selectedConfigId,
           direccion_showroom: showroomData?.descripcion_direccion || null,
           latitud_showroom: showroomData?.latitud || null,
@@ -580,7 +635,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       if (error) throw error;
       if (data?.error === 'no_disponible') {
         toast.error(data.message || "El horario no está disponible.");
-        queryClient.invalidateQueries({ queryKey: ['training-available-slots-grouped'] });
+        queryClient.invalidateQueries({ queryKey: ['training-slots-db'] });
         return;
       }
       if (data?.error) throw new Error(data.error);
@@ -589,7 +644,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       initializedFromCita.current = false;
       queryClient.invalidateQueries({ queryKey: ['agent-onboarding-training'] });
       queryClient.invalidateQueries({ queryKey: ['agent-training-cita', personaId] });
-      queryClient.invalidateQueries({ queryKey: ['training-available-slots-grouped'] });
+      queryClient.invalidateQueries({ queryKey: ['training-slots-db'] });
       onSaved();
     } catch (err: any) {
       console.error("Error scheduling:", err);
@@ -602,8 +657,15 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
   const isCompleted = existingCita?.estatus === 'asistio';
   const isProgrammed = existingCita?.estatus === 'programada';
 
+  const availableSlots = dbSlots.filter(s => !s.is_full);
+
   return (
     <div className="space-y-5 pb-4">
+      {/* Config name as subtitle */}
+      {configName && configName !== 'Capacitación' && (
+        <p className="text-xs text-muted-foreground font-medium -mt-2">{configName}</p>
+      )}
+
       {/* Status */}
       {existingCita && (
         <div className="flex items-center justify-between">
@@ -626,7 +688,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
               <CalendarDays className="h-4 w-4 text-primary" />
               Fechas disponibles
             </Label>
-            {loadingDates ? (
+            {loadingDates || loadingConfigs ? (
               <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="text-sm">Cargando fechas...</span>
@@ -664,7 +726,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
             )}
           </div>
 
-          {/* Time Slots grouped by owner */}
+          {/* Time Slots from DB */}
           {selectedDate && (
             <div>
               <Label className="text-sm font-semibold flex items-center gap-1.5 mb-2">
@@ -676,39 +738,55 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span className="text-sm">Consultando disponibilidad...</span>
                 </div>
-              ) : groupedSlots && groupedSlots.some(g => g.available_slots.length > 0) ? (
+              ) : dbSlots.length > 0 ? (
                 <div className="space-y-4">
-                  {groupedSlots.filter(g => g.available_slots.length > 0).map((group) => (
-                    <div key={group.config_id} className="space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        {group.cita_nombre} <span className="normal-case font-normal">— {group.owner_name?.split(" ")[0] || group.owner_name}</span>
-                      </p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {group.available_slots.map((slot) => {
-                          const isExisting = existingCita?.hora_inicio?.slice(0, 5) === slot && existingCita?.fecha === fechaStr;
-                          const isSelected = selectedSlot === slot && selectedConfigId === group.config_id;
-                          return (
-                            <button
-                              key={`${group.config_id}-${slot}`}
-                              onClick={() => { setSelectedSlot(slot); setSelectedConfigId(group.config_id); onTrackFieldChange?.(); }}
-                              className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border relative ${
-                                isSelected
-                                  ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
-                                  : isExisting
-                                    ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
-                                    : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
-                              }`}
-                            >
-                              {slot}
-                              {isExisting && !isSelected && (
-                                <span className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-amber-500 border-2 border-card" />
-                              )}
-                            </button>
-                          );
-                        })}
+                  {/* Group by config */}
+                  {trainingConfigs.filter((cfg: any) => dbSlots.some(s => s.config_id === cfg.id)).map((cfg: any) => {
+                    const cfgSlots = dbSlots.filter(s => s.config_id === cfg.id);
+                    return (
+                      <div key={cfg.id} className="space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          {cfg.nombre}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {cfgSlots.map((slot) => {
+                            const isExisting = existingCita?.hora_inicio?.slice(0, 5) === slot.hora && existingCita?.fecha === fechaStr;
+                            const isSelected = selectedSlot === slot.hora && selectedConfigId === slot.config_id;
+                            return (
+                              <button
+                                key={`${slot.config_id}-${slot.hora}`}
+                                onClick={() => {
+                                  if (!slot.is_full) {
+                                    setSelectedSlot(slot.hora);
+                                    setSelectedConfigId(slot.config_id);
+                                    onTrackFieldChange?.();
+                                  }
+                                }}
+                                disabled={slot.is_full}
+                                className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border relative ${
+                                  slot.is_full
+                                    ? 'bg-muted/50 border-border/30 text-muted-foreground/50 cursor-not-allowed'
+                                    : isSelected
+                                      ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
+                                      : isExisting
+                                        ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
+                                        : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
+                                }`}
+                              >
+                                <span>{slot.hora}</span>
+                                <span className={`ml-2 text-[10px] ${slot.is_full ? 'text-destructive/60' : 'text-muted-foreground'}`}>
+                                  {slot.attendees}/{slot.max_invitados}
+                                </span>
+                                {isExisting && !isSelected && (
+                                  <span className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-amber-500 border-2 border-card" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-6 rounded-xl border border-border/60 bg-muted/30">

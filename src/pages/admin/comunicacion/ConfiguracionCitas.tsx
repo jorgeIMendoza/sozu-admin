@@ -713,11 +713,15 @@ export default function ConfiguracionCitas() {
           {userCitaConfigs.length > 0 ? (
             <Tabs value={selectedConfigId} onValueChange={(v) => { setSelectedConfigId(v); setHasChanges(false); }}>
               <TabsList className="flex-wrap h-auto gap-1">
-                {userCitaConfigs.map((cfg: any) => (
-                  <TabsTrigger key={cfg.id} value={cfg.id.toString()} className="text-xs">
-                    {cfg.nombre}
-                  </TabsTrigger>
-                ))}
+                {userCitaConfigs.map((cfg: any) => {
+                  const tipoCita = tiposCita.find((t: any) => t.id === cfg.id_tipo_cita);
+                  return (
+                    <TabsTrigger key={cfg.id} value={cfg.id.toString()} className="text-xs gap-1.5">
+                      {cfg.nombre}
+                      {tipoCita && <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-normal">{tipoCita.nombre}</Badge>}
+                    </TabsTrigger>
+                  );
+                })}
               </TabsList>
 
               {userCitaConfigs.map((cfg: any) => (
