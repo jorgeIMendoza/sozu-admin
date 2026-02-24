@@ -2872,6 +2872,7 @@ export type Database = {
           activo: boolean
           calendario_email: string | null
           correos_enterado: string[] | null
+          descripcion_invitacion: string | null
           duracion_minutos: number
           fecha_actualizacion: string
           fecha_creacion: string
@@ -2885,6 +2886,7 @@ export type Database = {
           activo?: boolean
           calendario_email?: string | null
           correos_enterado?: string[] | null
+          descripcion_invitacion?: string | null
           duracion_minutos?: number
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -2898,6 +2900,7 @@ export type Database = {
           activo?: boolean
           calendario_email?: string | null
           correos_enterado?: string[] | null
+          descripcion_invitacion?: string | null
           duracion_minutos?: number
           fecha_actualizacion?: string
           fecha_creacion?: string

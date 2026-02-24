@@ -1,0 +1,1 @@
+ALTER TABLE public.configuracion_citas_usuarios ADD COLUMN descripcion_invitacion text;
