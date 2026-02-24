@@ -5,6 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+const SERVICE_ACCOUNT_EMAIL = "cuenta-conexiones-drive@sozu-38755.iam.gserviceaccount.com";
+
 // ---------- Google Auth ----------
 
 async function getAccessToken(sa: any): Promise<string> {
@@ -83,7 +85,6 @@ async function getAvailableSlots(
         .select("hora")
         .eq("activo", true);
       
-      // Prefer filtering by config id if available
       if (configId) {
         query = query.eq("id_configuracion_cita", configId);
       } else {
@@ -98,7 +99,6 @@ async function getAvailableSlots(
         configuredSlots = new Set(configData.map((c: any) => `${String(c.hora).padStart(2, "0")}:00`));
         console.log(`[availability] Configured slots for ${calendarOwnerEmail} on day ${dayOfWeek}:`, Array.from(configuredSlots));
       } else {
-        // Check if any config exists at all
         let checkQuery = supabaseClient
           .from("configuracion_citas_horarios")
           .select("id")
@@ -224,19 +224,64 @@ async function createCalendarEvent(token: string, calendarId: string, fecha: str
   if (attendees && attendees.length > 0) {
     event.attendees = attendees;
   }
-  const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`,
-    { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
-  );
+
+  // Helper to attempt creation with retries for Meet and attendees issues
+  const attemptCreate = async (eventPayload: any, withMeet: boolean): Promise<Response> => {
+    const url = withMeet
+      ? `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`
+      : `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`;
+    return fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(eventPayload),
+    });
+  };
+
+  // Try 1: with Meet + attendees
+  let res = await attemptCreate(event, true);
+
   if (!res.ok) {
     const errText = await res.text();
-    if (res.status === 403 || res.status === 404 || errText.includes("Not Found") || errText.includes("forbidden")) {
-      throw new Error("No se tiene acceso al calendario. Verifique que la cuenta de servicio tenga permisos de 'Realizar cambios en eventos' en la configuración de compartir del Google Calendar.");
+    console.error(`[createEvent] Attempt 1 failed (${res.status}): ${errText}`);
+
+    if (res.status === 400 && errText.includes("Invalid conference type")) {
+      // Meet not supported, retry without
+      console.log(`[createEvent] Meet not supported, retrying without conferenceData`);
+      delete event.conferenceData;
+      res = await attemptCreate(event, false);
+    } else if (res.status === 403 && errText.includes("forbiddenForServiceAccounts")) {
+      // Service account can't invite attendees without Domain-Wide Delegation
+      // Retry without attendees but keep Meet
+      console.log(`[createEvent] Cannot add attendees (no DWD), retrying without attendees`);
+      const savedAttendees = event.attendees;
+      delete event.attendees;
+      res = await attemptCreate(event, true);
+      
+      if (!res.ok) {
+        const errText2 = await res.text();
+        if (res.status === 400 && errText2.includes("Invalid conference type")) {
+          // Also no Meet support
+          delete event.conferenceData;
+          res = await attemptCreate(event, false);
+        }
+      }
+      
+      if (res.ok) {
+        console.log(`[createEvent] Event created without attendees. Attendees that could not be added: ${JSON.stringify(savedAttendees)}`);
+      }
+    } else {
+      throw new Error(`Failed to create event (${res.status}): ${errText}`);
     }
-    throw new Error(`Failed to create event: ${errText}`);
+
+    if (!res.ok) {
+      const finalErr = await res.text();
+      console.error(`[createEvent] All retries failed (${res.status}): ${finalErr}`);
+      throw new Error(`Failed to create event: ${finalErr}`);
+    }
   }
+
   const created = await res.json();
-  console.log(`[createEvent] Meet link: ${created.hangoutLink || 'none'}, attendees: ${event.attendees?.length || 0}`);
+  console.log(`[createEvent] Created event ${created.id}, Meet link: ${created.hangoutLink || 'none'}, attendees: ${JSON.stringify(created.attendees?.map((a: any) => a.email) || [])}`);
   return created;
 }
 
@@ -250,6 +295,38 @@ async function deleteCalendarEvent(token: string, calendarId: string, eventId: s
   } else {
     console.log(`Deleted calendar event: ${eventId}`);
   }
+}
+
+// ---------- Helper: find existing events by summary AND creator (service account) ----------
+
+async function findExistingEventsByServiceAccount(
+  token: string, calendarId: string, summary: string, timeMin: string, timeMax: string
+): Promise<any[]> {
+  const listUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=false&maxResults=2500&q=${encodeURIComponent(summary)}`;
+  const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${token}` } });
+  
+  if (!listRes.ok) {
+    const errText = await listRes.text();
+    console.error(`[findEvents] Error listing events (${listRes.status}): ${errText}`);
+    return [];
+  }
+  
+  const listData = await listRes.json();
+  const allEvents = listData.items || [];
+  
+  // Filter by exact summary AND creator being the service account
+  const filtered = allEvents.filter((e: any) => {
+    const matchesSummary = e.summary === summary;
+    const createdByServiceAccount = e.creator?.email === SERVICE_ACCOUNT_EMAIL || e.organizer?.email === SERVICE_ACCOUNT_EMAIL;
+    return matchesSummary && createdByServiceAccount;
+  });
+  
+  console.log(`[findEvents] Found ${allEvents.length} total events matching query "${summary}", ${filtered.length} created by service account`);
+  filtered.forEach((e: any) => {
+    console.log(`  - Event ${e.id}: "${e.summary}" creator=${e.creator?.email} organizer=${e.organizer?.email} recurrence=${JSON.stringify(e.recurrence)}`);
+  });
+  
+  return filtered;
 }
 
 // ---------- Handler ----------
@@ -277,14 +354,12 @@ Deno.serve(async (req) => {
     const calendarId = userCitaConfig?.calendario_email || calendarOwnerEmail;
 
     // ---- Action: check-availability-by-project ----
-    // Returns slots grouped by calendar owner, filtered by project access
     if (body.action === "check-availability-by-project") {
       if (!body.fecha) {
         return new Response(JSON.stringify({ error: "Falta el campo 'fecha'" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       const proyectoIds: number[] = body.proyecto_ids || [];
       
-      // Find all cita configs of tipoCitaId that have at least one project in common with proyectoIds
       let query = supabase
         .from("configuracion_citas_usuarios")
         .select("id, id_usuario_email, duracion_minutos, calendario_email, nombre")
@@ -296,7 +371,6 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ grouped_slots: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // For each config, check if it has overlapping projects
       const configIds = allConfigs.map((c: any) => c.id);
       const { data: configProjects } = await supabase
         .from("configuracion_citas_proyectos")
@@ -309,10 +383,9 @@ Deno.serve(async (req) => {
         configProjectMap.get(cp.id_configuracion_cita)!.push(cp.id_proyecto);
       });
 
-      // Filter configs that have at least one project in common
       const matchingConfigs = allConfigs.filter((c: any) => {
         const projIds = configProjectMap.get(c.id) || [];
-        if (proyectoIds.length === 0) return projIds.length > 0; // No filter = show all with projects
+        if (proyectoIds.length === 0) return projIds.length > 0;
         return projIds.some((pid: number) => proyectoIds.includes(pid));
       });
 
@@ -320,7 +393,6 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ grouped_slots: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Get owner names from usuarios table
       const ownerEmails = [...new Set(matchingConfigs.map((c: any) => c.id_usuario_email))];
       const { data: ownerUsers } = await supabase
         .from("usuarios")
@@ -332,7 +404,6 @@ Deno.serve(async (req) => {
         ownerNameMap.set(u.email, u.personas?.nombre_legal || u.email);
       });
 
-      // For each matching config, get available slots
       const groupedSlots: any[] = [];
       for (const cfg of matchingConfigs) {
         const cfgCalendarId = cfg.calendario_email || cfg.id_usuario_email;
@@ -374,30 +445,29 @@ Deno.serve(async (req) => {
         .maybeSingle();
       tipoCitaDescripcion = tipoCitaData?.descripcion || tipoCitaData?.nombre || "Cita";
 
-      // Build event description from config
       const eventDescription = descripcion_invitacion || userCitaConfig?.descripcion_invitacion || "";
 
       // Build attendees from correos_enterado
       const attendees = (correos_enterado || userCitaConfig?.correos_enterado || []).map((email: string) => ({ email }));
-      console.log(`[create-recurring-meets] Attendees to add: ${JSON.stringify(attendees)}`);
+      console.log(`[create-recurring-meets] Summary: "${tipoCitaDescripcion}", Attendees: ${JSON.stringify(attendees)}, CalendarId: ${calendarId}`);
 
       const endDate = new Date(fecha_fin + "T23:59:59-06:00");
       const today = new Date();
       const createdEvents: any[] = [];
       const errors: string[] = [];
 
-      // Fetch existing recurring events
+      // Fetch existing recurring events CREATED BY THE SERVICE ACCOUNT with matching summary
+      const searchMin = new Date().toISOString();
+      const searchMax = new Date(fecha_fin + "T23:59:59Z").toISOString();
+      
       let existingRecurringEvents: any[] = [];
       try {
-        const searchMin = new Date().toISOString();
-        const searchMax = new Date(fecha_fin + "T23:59:59Z").toISOString();
-        const listUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?timeMin=${encodeURIComponent(searchMin)}&timeMax=${encodeURIComponent(searchMax)}&singleEvents=false&maxResults=2500&q=${encodeURIComponent(tipoCitaDescripcion)}`;
-        const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${token}` } });
-        if (listRes.ok) {
-          const listData = await listRes.json();
-          existingRecurringEvents = (listData.items || []).filter((e: any) => e.summary === tipoCitaDescripcion && e.recurrence);
-          console.log(`[sync] Found ${existingRecurringEvents.length} existing recurring events with summary "${tipoCitaDescripcion}"`);
-        }
+        existingRecurringEvents = await findExistingEventsByServiceAccount(
+          token, calendarId, tipoCitaDescripcion, searchMin, searchMax
+        );
+        // Only keep those with recurrence
+        existingRecurringEvents = existingRecurringEvents.filter((e: any) => e.recurrence);
+        console.log(`[sync] ${existingRecurringEvents.length} existing recurring events created by service account`);
       } catch (e: any) {
         console.error("[sync] Error fetching existing events:", e.message);
       }
@@ -432,6 +502,7 @@ Deno.serve(async (req) => {
       const usedExistingIds = new Set<string>();
 
       for (const desired of desiredEvents) {
+        // Try to find existing event matching this day (created by service account)
         const matchIdx = existingRecurringEvents.findIndex((ev: any) => {
           if (usedExistingIds.has(ev.id)) return false;
           const rrule = (ev.recurrence || []).find((r: string) => r.includes("RRULE:"));
@@ -439,6 +510,7 @@ Deno.serve(async (req) => {
         });
 
         if (matchIdx >= 0) {
+          // Event exists -> PATCH (modify)
           const existingEv = existingRecurringEvents[matchIdx];
           usedExistingIds.add(existingEv.id);
           const patchBody: any = {
@@ -449,24 +521,46 @@ Deno.serve(async (req) => {
           if (eventDescription) {
             patchBody.description = eventDescription;
           }
-          // Always send the full desired attendee list so removed correos_enterado are also removed from the event
+          // Always send the full desired attendee list
           patchBody.attendees = [...attendees];
+          
           try {
-            const res = await fetch(
+            let res = await fetch(
               `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(existingEv.id)}?sendUpdates=all`,
               { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(patchBody) },
             );
             if (!res.ok) {
-              errors.push(`UPDATE ${desired.fechaStr} ${desired.horaInicio}: ${await res.text()}`);
+              const errText = await res.text();
+              console.error(`[sync] PATCH failed for ${existingEv.id} (${res.status}): ${errText}`);
+              
+              // If attendees forbidden, retry without attendees
+              if (res.status === 403 && errText.includes("forbiddenForServiceAccounts")) {
+                console.log(`[sync] Cannot add attendees (no DWD), retrying PATCH without attendees`);
+                delete patchBody.attendees;
+                res = await fetch(
+                  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(existingEv.id)}?sendUpdates=all`,
+                  { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(patchBody) },
+                );
+                if (!res.ok) {
+                  errors.push(`UPDATE ${desired.fechaStr} ${desired.horaInicio}: ${await res.text()}`);
+                } else {
+                  const updated = await res.json();
+                  console.log(`[sync] Updated event ${existingEv.id} (without attendees)`);
+                  createdEvents.push({ day: desired.day, hora: desired.hora, eventId: updated.id, meetLink: updated.hangoutLink || existingEv.hangoutLink || null, action: "updated" });
+                }
+              } else {
+                errors.push(`UPDATE ${desired.fechaStr} ${desired.horaInicio}: ${errText}`);
+              }
             } else {
               const updated = await res.json();
-              console.log(`[sync] Updated event ${existingEv.id} to ${desired.rruleDay} ${desired.horaInicio}`);
+              console.log(`[sync] Updated event ${existingEv.id} to ${desired.rruleDay} ${desired.horaInicio}, attendees: ${JSON.stringify(updated.attendees?.map((a: any) => a.email) || [])}`);
               createdEvents.push({ day: desired.day, hora: desired.hora, eventId: updated.id, meetLink: updated.hangoutLink || existingEv.hangoutLink || null, action: "updated" });
             }
           } catch (e: any) {
             errors.push(`UPDATE ${desired.fechaStr} ${desired.horaInicio}: ${e.message}`);
           }
         } else {
+          // Event does NOT exist -> CREATE
           const event: any = {
             summary: tipoCitaDescripcion,
             start: { dateTime: `${desired.fechaStr}T${desired.horaInicio}:00`, timeZone: "America/Mexico_City" },
@@ -478,12 +572,12 @@ Deno.serve(async (req) => {
             event.description = eventDescription;
           }
 
-          // Add correos_enterado as attendees
+          // Always add attendees
           if (attendees.length > 0) {
             event.attendees = [...attendees];
           }
 
-          let createUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`;
+          // Try with Google Meet first
           event.conferenceData = {
             createRequest: {
               requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
@@ -492,37 +586,61 @@ Deno.serve(async (req) => {
           };
 
           try {
-            let res = await fetch(createUrl, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-              body: JSON.stringify(event),
-            });
+            let res = await fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`,
+              { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
+            );
 
             if (!res.ok) {
               const errText = await res.text();
-              if (res.status === 400 && errText.includes("Invalid conference type")) {
-                console.log(`[sync] Meet not supported on this calendar, creating event without conferenceData`);
-                delete event.conferenceData;
+              console.error(`[sync] CREATE attempt failed (${res.status}): ${errText}`);
+              
+              if (res.status === 403 && errText.includes("forbiddenForServiceAccounts")) {
+                // Can't add attendees, retry without attendees (keep Meet)
+                console.log(`[sync] Cannot add attendees (no DWD), retrying without attendees`);
+                delete event.attendees;
                 res = await fetch(
-                  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+                  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`,
                   { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
                 );
                 if (!res.ok) {
                   const errText2 = await res.text();
-                  if (res.status === 403 || res.status === 404) {
-                    return new Response(JSON.stringify({ error: "No se tiene acceso al calendario. Verifique que la cuenta de servicio tenga permisos de 'Realizar cambios en eventos' en la configuración de compartir del Google Calendar." }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+                  if (res.status === 400 && errText2.includes("Invalid conference type")) {
+                    delete event.conferenceData;
+                    res = await fetch(
+                      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`,
+                      { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
+                    );
                   }
-                  errors.push(`CREATE ${desired.fechaStr} ${desired.horaInicio}: ${errText2}`);
-                  continue;
                 }
-              } else if (res.status === 403 || res.status === 404) {
-                return new Response(JSON.stringify({ error: "No se tiene acceso al calendario. Verifique que la cuenta de servicio tenga permisos de 'Realizar cambios en eventos' en la configuración de compartir del Google Calendar." }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-              } else {
-                errors.push(`CREATE ${desired.fechaStr} ${desired.horaInicio}: ${errText}`);
+              } else if (res.status === 400 && errText.includes("Invalid conference type")) {
+                // Meet not supported, retry without conferenceData
+                console.log(`[sync] Meet not supported, retrying without conferenceData`);
+                delete event.conferenceData;
+                res = await fetch(
+                  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`,
+                  { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
+                );
+                if (!res.ok) {
+                  const errText2 = await res.text();
+                  if (res.status === 403 && errText2.includes("forbiddenForServiceAccounts")) {
+                    delete event.attendees;
+                    res = await fetch(
+                      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`,
+                      { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
+                    );
+                  }
+                }
+              }
+
+              if (!res.ok) {
+                const finalErr = await res.text();
+                errors.push(`CREATE ${desired.fechaStr} ${desired.horaInicio}: ${finalErr}`);
                 continue;
               }
             }
             const created = await res.json();
+            console.log(`[sync] Created event ${created.id}, Meet: ${created.hangoutLink || 'none'}, attendees: ${JSON.stringify(created.attendees?.map((a: any) => a.email) || [])}`);
             createdEvents.push({ day: desired.day, hora: desired.hora, eventId: created.id, meetLink: created.hangoutLink || null, action: "created" });
           } catch (e: any) {
             errors.push(`CREATE ${desired.fechaStr} ${desired.horaInicio}: ${e.message}`);
@@ -530,7 +648,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Delete unmatched existing events
+      // Delete unmatched existing events (only those created by service account)
       for (const ev of existingRecurringEvents) {
         if (!usedExistingIds.has(ev.id)) {
           console.log(`[sync] Deleting unmatched event ${ev.id}`);
@@ -557,7 +675,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Faltan campos obligatorios: fecha, hora_inicio, id_persona" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Resolve calendar from config_id if provided
     let scheduleCalendarOwner = body.calendar_owner_email || calendarOwnerEmail;
     let scheduleCalendarId = body.calendar_id || calendarId;
     let scheduleDuracion = duracionMinutos;
