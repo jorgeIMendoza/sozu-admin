@@ -412,7 +412,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     staleTime: 0,
   });
 
-  // Fetch existing appointment (only non-cancelled/active ones)
+  // Fetch existing appointment (including cancelled to show warning)
   const { data: existingCita } = useQuery({
     queryKey: ['agent-training-cita', personaId],
     queryFn: async () => {
@@ -420,8 +420,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         .from('reservas_citas')
         .select('*')
         .eq('id_persona', personaId)
-        .eq('activo', true)
-        .in('estatus', ['programada', 'asistio'])
+        .in('estatus', ['programada', 'asistio', 'cancelada'])
         .order('fecha_creacion', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -589,6 +588,12 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
   useEffect(() => {
     if (existingCita && !initializedFromCita.current) {
       initializedFromCita.current = true;
+      // If the cita is cancelled or inactive, mark as externally cancelled
+      if (existingCita.estatus === 'cancelada' || !existingCita.activo) {
+        setCitaCancelledExternally(true);
+        // Don't pre-select the cancelled date/slot
+        return;
+      }
       if (existingCita.fecha) {
         setSelectedDate(new Date(existingCita.fecha + 'T12:00:00'));
       }
@@ -600,7 +605,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
   // Verify if the Google Calendar event still exists for programada citas
   useEffect(() => {
-    if (existingCita?.estatus === 'programada' && existingCita?.google_calendar_event_id && !verifiedEventRef.current) {
+    if (existingCita?.estatus === 'programada' && existingCita?.activo && existingCita?.google_calendar_event_id && !verifiedEventRef.current) {
       verifiedEventRef.current = true;
       const config = trainingConfigs.find((c: any) => c.id === existingCita.id_configuracion_cita);
       supabase.functions.invoke('agendar-capacitacion', {
@@ -613,11 +618,10 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       }).then(({ data }) => {
         if (data && data.exists === false && data.cancelled) {
           setCitaCancelledExternally(true);
-          // Clear pre-selected date/slot so user must pick new ones
           setSelectedDate(undefined);
           setSelectedSlot('');
           setSelectedConfigId(null);
-          // Refresh the existing cita query
+          initializedFromCita.current = true;
           queryClient.invalidateQueries({ queryKey: ['agent-training-cita', personaId] });
           queryClient.invalidateQueries({ queryKey: ['agent-onboarding-training'] });
           queryClient.invalidateQueries({ queryKey: ['training-slots-db'] });
@@ -783,20 +787,27 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                   const dateStr = format(date, 'yyyy-MM-dd');
                   const isSelected = selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateStr;
                   const isExistingDate = existingCita?.fecha === dateStr;
+                  const isCancelledDate = citaCancelledExternally && existingCita?.fecha === dateStr;
                   return (
                     <button
                       key={dateStr}
-                      onClick={() => { setSelectedDate(date); onTrackFieldChange?.(); }}
+                      onClick={() => { if (!isCancelledDate) { setSelectedDate(date); onTrackFieldChange?.(); } }}
+                      disabled={isCancelledDate}
                       className={`py-2 px-3 rounded-xl text-xs font-medium transition-all duration-200 border relative ${
-                        isSelected
-                          ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
-                          : isExistingDate
-                            ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
-                            : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
+                        isCancelledDate
+                          ? 'bg-destructive/10 border-destructive/40 text-destructive/70 cursor-not-allowed line-through'
+                          : isSelected
+                            ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
+                            : isExistingDate
+                              ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
+                              : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
                       }`}
                     >
                       <span className="capitalize">{format(date, "EEE d MMM", { locale: es })}</span>
-                      {isExistingDate && !isSelected && (
+                      {isCancelledDate && (
+                        <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-destructive border-2 border-card" />
+                      )}
+                      {isExistingDate && !isSelected && !isCancelledDate && (
                         <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-500 border-2 border-card" />
                       )}
                     </button>
