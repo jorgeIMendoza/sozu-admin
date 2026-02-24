@@ -84,6 +84,7 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
       return data || [];
     },
     enabled: !!personaId,
+    staleTime: 0,
   });
 
   const isLoading = loadingPersona || loadingDocs || loadingCuentas || loadingCitas;
