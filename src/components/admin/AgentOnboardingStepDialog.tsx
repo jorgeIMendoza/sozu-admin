@@ -451,10 +451,25 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         .in('id_configuracion_cita', configIds);
 
       // Filter to configs that match agent's projects
-      return allConfigs.filter((c: any) => {
+      const filtered = allConfigs.filter((c: any) => {
         const projIds = (configProjects || []).filter((cp: any) => cp.id_configuracion_cita === c.id).map((cp: any) => cp.id_proyecto);
         return projIds.some((pid: number) => agentProjectIds.includes(pid));
       });
+
+      // Fetch trainer names from personas by email
+      const emails = [...new Set(filtered.map((c: any) => c.id_usuario_email).filter(Boolean))];
+      if (emails.length > 0) {
+        const { data: personas } = await supabase
+          .from('personas')
+          .select('email, nombre_legal')
+          .in('email', emails);
+        const emailToName = new Map((personas || []).map((p: any) => [p.email, p.nombre_legal]));
+        filtered.forEach((c: any) => {
+          c.owner_display_name = emailToName.get(c.id_usuario_email) || null;
+        });
+      }
+
+      return filtered;
     },
     enabled: agentProjectIds.length > 0,
     staleTime: 0,
@@ -671,7 +686,8 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
   };
 
   // Get the config name to display as title
-  const configName = trainingConfigs.length === 1 ? trainingConfigs[0].nombre : trainingConfigs.length > 0 ? trainingConfigs.map((c: any) => c.nombre).join(' / ') : 'Capacitación';
+  const formatConfigLabel = (c: any) => c.owner_display_name ? `${c.nombre} (capacitador: ${c.owner_display_name})` : c.nombre;
+  const configName = trainingConfigs.length === 1 ? formatConfigLabel(trainingConfigs[0]) : trainingConfigs.length > 0 ? trainingConfigs.map((c: any) => formatConfigLabel(c)).join(' / ') : 'Capacitación';
 
   const handleSchedule = async () => {
     onTrackSave?.();
@@ -979,7 +995,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                         return (
                           <div key={cfg.id} className="space-y-2">
                             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                              {cfg.nombre}
+                              {cfg.owner_display_name ? `${cfg.nombre} (capacitador: ${cfg.owner_display_name})` : cfg.nombre}
                             </p>
                             <div className="grid grid-cols-2 gap-2">
                               {cfgSlots.map((slot) => {
