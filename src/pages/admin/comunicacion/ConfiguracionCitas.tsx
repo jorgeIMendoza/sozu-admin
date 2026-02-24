@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Save, CalendarClock, Check, ChevronsUpDown, Pencil, Plus, Settings2, Copy, AlertTriangle, CalendarIcon, Video, X, Trash2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -64,6 +65,7 @@ export default function ConfiguracionCitas() {
   const [maxInvitados, setMaxInvitados] = useState<number>(1);
   const [selectedProyectoIds, setSelectedProyectoIds] = useState<number[]>([]);
   const [correosEnterado, setCorreosEnterado] = useState<string[]>([]);
+  const [descripcionInvitacion, setDescripcionInvitacion] = useState<string>("");
   const [nuevoCorreo, setNuevoCorreo] = useState("");
   const [userSelectorOpen, setUserSelectorOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -279,11 +281,13 @@ export default function ConfiguracionCitas() {
       setCalendarioEmail(selectedConfig.calendario_email || "");
       setMaxInvitados(selectedConfig.max_invitados || 1);
       setCorreosEnterado(selectedConfig.correos_enterado || []);
+      setDescripcionInvitacion(selectedConfig.descripcion_invitacion || "");
     } else {
       setDuracionMinutos(60);
       setCalendarioEmail("");
       setMaxInvitados(1);
       setCorreosEnterado([]);
+      setDescripcionInvitacion("");
     }
   }, [selectedConfig]);
 
@@ -422,6 +426,7 @@ export default function ConfiguracionCitas() {
           calendario_email: calendarioEmail || null,
           max_invitados: maxInvitados,
           correos_enterado: correosEnterado,
+          descripcion_invitacion: descripcionInvitacion || null,
           fecha_actualizacion: new Date().toISOString(),
         })
         .eq("id", configId);
@@ -501,6 +506,7 @@ export default function ConfiguracionCitas() {
           slots_config: slotsConfig,
           fecha_fin: fechaFinStr,
           correos_enterado: correosEnterado,
+          descripcion_invitacion: descripcionInvitacion,
         },
       });
 
@@ -857,6 +863,19 @@ export default function ConfiguracionCitas() {
                                 ))}
                               </div>
                             )}
+                          </div>
+
+                          {/* Descripción de la invitación */}
+                          <div className="space-y-2">
+                            <Label>Descripción de la invitación</Label>
+                            <Textarea
+                              placeholder="Texto que se agregará como descripción en la invitación de Google Calendar..."
+                              value={descripcionInvitacion}
+                              onChange={(e) => { setDescripcionInvitacion(e.target.value); setHasChanges(true); }}
+                              rows={3}
+                              className="resize-none"
+                            />
+                            <p className="text-xs text-muted-foreground">Este texto aparecerá en la descripción del evento del calendario</p>
                           </div>
                         </CardContent>
                       </Card>

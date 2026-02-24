@@ -52,7 +52,7 @@ async function getAccessToken(sa: any): Promise<string> {
 async function getUserCitaConfig(supabase: any, calendarOwnerEmail: string, tipoCitaId: number) {
   const { data } = await supabase
     .from("configuracion_citas_usuarios")
-    .select("duracion_minutos, calendario_email, correos_enterado, nombre")
+    .select("duracion_minutos, calendario_email, correos_enterado, nombre, descripcion_invitacion")
     .eq("id_usuario_email", calendarOwnerEmail)
     .eq("id_tipo_cita", tipoCitaId)
     .eq("activo", true)
@@ -208,12 +208,12 @@ async function checkAvailability(
   return timedEvents.length === 0;
 }
 
-async function createCalendarEvent(token: string, calendarId: string, fecha: string, horaInicio: string, horaFin: string, summary: string, agentEmail: string) {
-  const event = {
+async function createCalendarEvent(token: string, calendarId: string, fecha: string, horaInicio: string, horaFin: string, summary: string, agentEmail: string, attendees?: { email: string }[], description?: string) {
+  const event: any = {
     summary,
     start: { dateTime: `${fecha}T${horaInicio}:00`, timeZone: "America/Mexico_City" },
     end: { dateTime: `${fecha}T${horaFin}:00`, timeZone: "America/Mexico_City" },
-    description: `Capacitación agendada para: ${agentEmail}`,
+    description: description || `Capacitación agendada para: ${agentEmail}`,
     conferenceData: {
       createRequest: {
         requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
@@ -221,8 +221,11 @@ async function createCalendarEvent(token: string, calendarId: string, fecha: str
       },
     },
   };
+  if (attendees && attendees.length > 0) {
+    event.attendees = attendees;
+  }
   const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`,
     { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(event) },
   );
   if (!res.ok) {
@@ -233,7 +236,7 @@ async function createCalendarEvent(token: string, calendarId: string, fecha: str
     throw new Error(`Failed to create event: ${errText}`);
   }
   const created = await res.json();
-  console.log(`[createEvent] Meet link: ${created.hangoutLink || 'none'}`);
+  console.log(`[createEvent] Meet link: ${created.hangoutLink || 'none'}, attendees: ${event.attendees?.length || 0}`);
   return created;
 }
 
@@ -358,7 +361,7 @@ Deno.serve(async (req) => {
 
     // ---- Action: create recurring meets ----
     if (body.action === "create-recurring-meets") {
-      const { slots_config, fecha_fin, correos_enterado } = body;
+      const { slots_config, fecha_fin, correos_enterado, descripcion_invitacion } = body;
       if (!slots_config || !fecha_fin) {
         return new Response(JSON.stringify({ error: "Faltan slots_config o fecha_fin" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -371,8 +374,12 @@ Deno.serve(async (req) => {
         .maybeSingle();
       tipoCitaDescripcion = tipoCitaData?.descripcion || tipoCitaData?.nombre || "Cita";
 
+      // Build event description from config
+      const eventDescription = descripcion_invitacion || userCitaConfig?.descripcion_invitacion || "";
+
       // Build attendees from correos_enterado
       const attendees = (correos_enterado || userCitaConfig?.correos_enterado || []).map((email: string) => ({ email }));
+      console.log(`[create-recurring-meets] Attendees to add: ${JSON.stringify(attendees)}`);
 
       const endDate = new Date(fecha_fin + "T23:59:59-06:00");
       const today = new Date();
@@ -439,6 +446,9 @@ Deno.serve(async (req) => {
             end: { dateTime: `${desired.fechaStr}T${desired.horaFin}:00`, timeZone: "America/Mexico_City" },
             recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${desired.rruleDay};UNTIL=${untilStr}`],
           };
+          if (eventDescription) {
+            patchBody.description = eventDescription;
+          }
           // Add correos_enterado as attendees (merge with existing)
           if (attendees.length > 0) {
             const existingAttendees = (existingEv.attendees || []).filter((a: any) => !attendees.some((na: any) => na.email === a.email));
@@ -446,7 +456,7 @@ Deno.serve(async (req) => {
           }
           try {
             const res = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(existingEv.id)}`,
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(existingEv.id)}?sendUpdates=all`,
               { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(patchBody) },
             );
             if (!res.ok) {
@@ -467,12 +477,16 @@ Deno.serve(async (req) => {
             recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${desired.rruleDay};UNTIL=${untilStr}`],
           };
 
+          if (eventDescription) {
+            event.description = eventDescription;
+          }
+
           // Add correos_enterado as attendees
           if (attendees.length > 0) {
             event.attendees = [...attendees];
           }
 
-          let createUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`;
+          let createUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`;
           event.conferenceData = {
             createRequest: {
               requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
@@ -554,7 +568,7 @@ Deno.serve(async (req) => {
     if (config_id) {
       const { data: cfgData } = await supabase
         .from("configuracion_citas_usuarios")
-        .select("id_usuario_email, calendario_email, duracion_minutos, correos_enterado")
+        .select("id_usuario_email, calendario_email, duracion_minutos, correos_enterado, descripcion_invitacion")
         .eq("id", config_id)
         .eq("activo", true)
         .maybeSingle();
@@ -592,7 +606,27 @@ Deno.serve(async (req) => {
       await deleteCalendarEvent(token, scheduleCalendarId, existingEventId);
     }
 
-    const calendarEvent = await createCalendarEvent(token, scheduleCalendarId, fecha, hora_inicio, horaFin, summary, agent_email || "");
+    // Build attendees from config correos_enterado for single booking
+    let bookingAttendees: { email: string }[] = [];
+    let bookingDescription: string | undefined;
+    if (config_id) {
+      const { data: cfgForAttendees } = await supabase
+        .from("configuracion_citas_usuarios")
+        .select("correos_enterado, descripcion_invitacion")
+        .eq("id", config_id)
+        .maybeSingle();
+      if (cfgForAttendees?.correos_enterado) {
+        bookingAttendees = cfgForAttendees.correos_enterado.map((email: string) => ({ email }));
+      }
+      if (cfgForAttendees?.descripcion_invitacion) {
+        bookingDescription = cfgForAttendees.descripcion_invitacion;
+      }
+    } else if (userCitaConfig?.correos_enterado) {
+      bookingAttendees = userCitaConfig.correos_enterado.map((email: string) => ({ email }));
+      bookingDescription = userCitaConfig.descripcion_invitacion || undefined;
+    }
+
+    const calendarEvent = await createCalendarEvent(token, scheduleCalendarId, fecha, hora_inicio, horaFin, summary, agent_email || "", bookingAttendees, bookingDescription);
 
     let resultCita;
     const meetLink = calendarEvent.hangoutLink || null;
