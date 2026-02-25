@@ -111,11 +111,10 @@ const AgentProyectoDetalle = () => {
     queryKey: ["agent-proyecto-multimedia", projectId],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
-        .from("multimedia_proyecto")
+        .from("multimedias_proyecto")
         .select("id, url")
         .eq("id_proyecto", projectId)
-        .eq("activo", true)
-        .order("orden");
+        .eq("activo", true);
       if (error) throw error;
       return data || [];
     },
@@ -127,8 +126,8 @@ const AgentProyectoDetalle = () => {
     queryKey: ["agent-proyecto-videos", projectId],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
-        .from("videos_proyecto")
-        .select("id, url, titulo")
+        .from("videos_youtube")
+        .select("id, link, nombre")
         .eq("id_proyecto", projectId)
         .eq("activo", true);
       if (error) throw error;
@@ -281,7 +280,7 @@ const AgentProyectoDetalle = () => {
           <section>
             <h2 className="text-xs font-semibold text-muted-foreground tracking-widest uppercase mb-3">🎥 Video de avance</h2>
             {videos.map((v: any) => {
-              const embedUrl = getYoutubeEmbedUrl(v.url);
+              const embedUrl = getYoutubeEmbedUrl(v.link);
               if (!embedUrl) return null;
               return (
                 <div key={v.id} className="rounded-xl overflow-hidden border border-gray-100 mb-3">
