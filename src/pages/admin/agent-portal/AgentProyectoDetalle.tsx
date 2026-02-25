@@ -2,13 +2,44 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
-import { Building2, MapPin, ArrowLeft, Calendar, Loader2, Download, Share2, ChevronRight, HardHat, Image as ImageIcon, Maximize2, BedDouble, Bath, Mail, Copy } from "lucide-react";
+import { Building2, MapPin, ArrowLeft, Calendar, Loader2, Download, Share2, ChevronRight, HardHat, Image as ImageIcon, Maximize2, BedDouble, Bath, Mail, Copy, Dumbbell, Car, TreePine, Shield, Coffee, Waves, Warehouse, ShoppingBag, PersonStanding, Clapperboard, Sofa, Dog, Bike, Baby, Utensils, Gamepad2, BookOpen, Wind, Sparkles, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleMapComponent } from "@/components/admin/GoogleMapComponent";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+// Map amenity names to minimalist Lucide icons
+const amenityIconMap: Record<string, any> = {
+  'alberca': Waves, 'piscina': Waves, 'pool': Waves, 'infinity': Waves,
+  'gimnasio': Dumbbell, 'gym': Dumbbell,
+  'estacionamiento': Car, 'parking': Car, 'cajón': Car,
+  'jardín': TreePine, 'jardines': TreePine, 'áreas verdes': TreePine,
+  'seguridad': Shield, 'vigilancia': Shield,
+  'lounge': Coffee, 'bar': Coffee, 'café': Coffee,
+  'bodega': Warehouse, 'almacén': Warehouse,
+  'comercial': ShoppingBag, 'área comercial': ShoppingBag,
+  'yoga': PersonStanding, 'meditación': PersonStanding,
+  'cine': Clapperboard, 'sala de cine': Clapperboard,
+  'coworking': Sofa, 'centro de negocios': Sofa,
+  'pet': Dog, 'mascotas': Dog, 'dog park': Dog,
+  'bicicleta': Bike, 'ciclopista': Bike,
+  'kids': Baby, 'infantil': Baby, 'juegos': Baby,
+  'asador': Utensils, 'grill': Utensils, 'terraza': Utensils,
+  'ludoteca': Gamepad2, 'game': Gamepad2,
+  'biblioteca': BookOpen, 'reading': BookOpen,
+  'lobby': Building2, 'roof': Wind, 'rooftop': Wind,
+  'spa': Sparkles, 'sauna': Sparkles, 'vapor': Sparkles,
+};
+
+function getAmenityIcon(name: string) {
+  const lower = name.toLowerCase();
+  for (const [key, icon] of Object.entries(amenityIconMap)) {
+    if (lower.includes(key)) return icon;
+  }
+  return Star;
+}
 
 const AgentProyectoDetalle = () => {
   const { id } = useParams<{ id: string }>();
@@ -46,7 +77,7 @@ const AgentProyectoDetalle = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("proyectos")
-        .select("id, nombre, descripcion, direccion, url_imagen_portada, fecha_entrega, fecha_inicio_construccion, id_estatus_proyecto, latitud, longitud")
+        .select("id, nombre, descripcion, direccion, url_imagen_portada, fecha_entrega, fecha_entrega_proyecto, fecha_inicio_construccion, id_estatus_proyecto, latitud, longitud")
         .eq("id", projectId)
         .single();
       if (error) throw error;
@@ -337,16 +368,16 @@ const AgentProyectoDetalle = () => {
         )}
 
         {/* Fecha de entrega */}
-        {project.fecha_entrega && (
+        {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
           <section>
-            <div className="flex items-center gap-2 text-sm text-foreground">
-              <div className="h-8 w-8 rounded-full bg-[hsl(var(--agent-primary))]/10 flex items-center justify-center">
-                <Calendar className="h-4 w-4 text-[hsl(var(--agent-primary))]" />
+            <div className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 p-4">
+              <div className="h-10 w-10 rounded-full bg-[hsl(var(--agent-primary))]/10 flex items-center justify-center flex-shrink-0">
+                <Calendar className="h-5 w-5 text-[hsl(var(--agent-primary))]" />
               </div>
               <div>
                 <p className="text-[11px] text-muted-foreground">Fecha de entrega</p>
                 <p className="text-sm font-semibold text-foreground">
-                  {new Date(project.fecha_entrega).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
+                  {new Date(project.fecha_entrega || project.fecha_entrega_proyecto).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
                 </p>
               </div>
             </div>
@@ -358,18 +389,17 @@ const AgentProyectoDetalle = () => {
           <section>
             <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Amenidades</h2>
             <div className="grid grid-cols-3 gap-2">
-              {amenidades.map((a: any) => (
-                <div key={a.id} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">
-                  <div className="h-10 w-10 mx-auto mb-1.5 rounded-full bg-[hsl(var(--agent-primary))]/10 flex items-center justify-center">
-                    {a.url ? (
-                      <img src={a.url} alt={a.nombre} className="h-5 w-5 object-contain" />
-                    ) : (
-                      <Building2 className="h-4 w-4 text-[hsl(var(--agent-primary))]" />
-                    )}
+              {amenidades.map((a: any) => {
+                const AmenityIcon = getAmenityIcon(a.nombre);
+                return (
+                  <div key={a.id} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">
+                    <div className="h-10 w-10 mx-auto mb-1.5 rounded-full bg-[hsl(var(--agent-primary))]/10 flex items-center justify-center">
+                      <AmenityIcon className="h-5 w-5 text-[hsl(var(--agent-primary))]" />
+                    </div>
+                    <p className="text-[11px] text-foreground font-medium leading-tight">{a.nombre}</p>
                   </div>
-                  <p className="text-[11px] text-foreground font-medium leading-tight">{a.nombre}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
