@@ -217,38 +217,33 @@ async function getAvailableSlots(
 async function checkAvailability(
   token: string, fecha: string, horaInicio: string, horaFin: string,
   calendarId: string, excludeEventId?: string, supabaseClient?: any,
-  calendarOwnerEmail?: string, tipoCitaId?: number
+  calendarOwnerEmail?: string, tipoCitaId?: number, configId?: number
 ): Promise<boolean> {
   if (supabaseClient && calendarOwnerEmail) {
     const dayOfWeek = getDayOfWeek(fecha);
-    {
-      const checkQuery = supabaseClient
-        .from("configuracion_citas_horarios")
-        .select("id")
-        .eq("id_usuario_email", calendarOwnerEmail)
-        .eq("activo", true)
-        .limit(1);
-      if (tipoCitaId) checkQuery.eq("id_tipo_cita", tipoCitaId);
-      const { data: anyConfig } = await checkQuery;
 
-      if (anyConfig && anyConfig.length > 0) {
-        const horaNum = parseInt(horaInicio.split(":")[0]);
-        const slotQuery = supabaseClient
-          .from("configuracion_citas_horarios")
-          .select("id")
-          .eq("id_usuario_email", calendarOwnerEmail)
-          .eq("dia_semana", dayOfWeek)
-          .eq("hora", horaNum)
-          .eq("activo", true)
-          .limit(1);
-        if (tipoCitaId) slotQuery.eq("id_tipo_cita", tipoCitaId);
-        const { data: slotConfig } = await slotQuery;
+    // Valida contra la misma fuente de horarios que usa el modal:
+    // si viene configId, validar por id_configuracion_cita; si no, fallback por owner/tipo.
+    let slotQuery = supabaseClient
+      .from("configuracion_citas_horarios")
+      .select("id")
+      .eq("dia_semana", dayOfWeek)
+      .eq("hora", parseInt(horaInicio.split(":")[0]))
+      .eq("activo", true)
+      .limit(1);
 
-        if (!slotConfig || slotConfig.length === 0) {
-          console.log(`[checkAvailability] Slot ${horaInicio} on day ${dayOfWeek} not configured for ${calendarOwnerEmail}`);
-          return false;
-        }
-      }
+    if (configId) {
+      slotQuery = slotQuery.eq("id_configuracion_cita", configId);
+    } else {
+      slotQuery = slotQuery.eq("id_usuario_email", calendarOwnerEmail);
+      if (tipoCitaId) slotQuery = slotQuery.eq("id_tipo_cita", tipoCitaId);
+    }
+
+    const { data: slotConfig } = await slotQuery;
+
+    if (!slotConfig || slotConfig.length === 0) {
+      console.log(`[checkAvailability] Slot ${horaInicio} on day ${dayOfWeek} not configured (configId=${configId || "none"}) for ${calendarOwnerEmail}`);
+      return false;
     }
   }
 
@@ -1246,7 +1241,7 @@ Deno.serve(async (req) => {
     const existingCitaId = oldCitas?.[0]?.id;
 
     // Check availability (only non-service-account events block)
-    const available = await checkAvailability(token, fecha, hora_inicio, horaFin, scheduleCalendarId, existingEventId, supabase, scheduleCalendarOwner, tipoCitaId);
+    const available = await checkAvailability(token, fecha, hora_inicio, horaFin, scheduleCalendarId, existingEventId, supabase, scheduleCalendarOwner, tipoCitaId, config_id);
     if (!available) {
       return new Response(JSON.stringify({ error: "no_disponible", message: "El horario seleccionado no está disponible." }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
