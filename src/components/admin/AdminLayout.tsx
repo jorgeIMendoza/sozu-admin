@@ -23,8 +23,8 @@ export const AdminLayout = () => {
     }
   }, [isSimplifiedRole, setTheme]);
 
-  // Use AgentPortalLayout for agent portal routes
-  if (isSimplifiedRole && location.pathname.startsWith("/admin/agent")) {
+  // Use AgentPortalLayout for agent portal routes (both agent role AND super admin)
+  if (location.pathname.startsWith("/admin/agent") && (isSimplifiedRole || profile?.rol_nombre === 'Super Administrador')) {
     return <AgentPortalLayout />;
   }
 

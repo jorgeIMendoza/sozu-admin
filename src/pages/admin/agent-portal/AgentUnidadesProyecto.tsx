@@ -8,11 +8,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Layers, Car, Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Package } from "lucide-react";
 import bodegaIcon from "@/assets/icons/bodega.png";
 import useEmblaCarousel from "embla-carousel-react";
-import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
@@ -21,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const PAGE_SIZE = 30;
 type SortOrder = "none" | "asc" | "desc";
+type TriState = "todos" | "si" | "no";
 
 const AgentUnidadesProyecto = () => {
   const [searchParams] = useSearchParams();
@@ -36,14 +35,14 @@ const AgentUnidadesProyecto = () => {
 
   // Filters
   const [filterModelNames, setFilterModelNames] = useState<string[]>([]);
-  const [filterBedrooms, setFilterBedrooms] = useState<string[]>([]);
   const [filterLevels, setFilterLevels] = useState<string[]>([]);
-  const [filterBodega, setFilterBodega] = useState<boolean | null>(null);
-  const [filterEstacionamiento, setFilterEstacionamiento] = useState<boolean | null>(null);
+  const [filterBodega, setFilterBodega] = useState<TriState>("todos");
+  const [filterEstacionamiento, setFilterEstacionamiento] = useState<TriState>("todos");
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>("none");
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
-  const [recamarasFilter, setRecamarasFilter] = useState<string | null>(null);
+  const [recamarasFilter, setRecamarasFilter] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Project name state
   const [projectName, setProjectName] = useState<string | null>(null);
@@ -51,10 +50,7 @@ const AgentUnidadesProyecto = () => {
 
   // Fetch project name from query param
   useEffect(() => {
-    if (!proyectoIdParam) {
-      setProjNameLoaded(true);
-      return;
-    }
+    if (!proyectoIdParam) { setProjNameLoaded(true); return; }
     const pid = parseInt(proyectoIdParam);
     if (isNaN(pid)) { setProjNameLoaded(true); return; }
     (supabase as any).from("proyectos").select("nombre").eq("id", pid).maybeSingle().then(({ data }: any) => {
@@ -76,19 +72,25 @@ const AgentUnidadesProyecto = () => {
   }, [modeloIdParam]);
 
   const bedroomsForQuery = useMemo(() => {
-    if (!recamarasFilter) return [];
-    if (recamarasFilter === '4+') return [4, 5, 6, 7, 8, 9, 10];
-    const n = parseInt(recamarasFilter);
-    return isNaN(n) ? [] : [n];
+    if (recamarasFilter.length === 0) return [];
+    const nums: number[] = [];
+    recamarasFilter.forEach(opt => {
+      if (opt === '4+') { nums.push(4, 5, 6, 7, 8, 9, 10); }
+      else { const n = parseInt(opt); if (!isNaN(n)) nums.push(n); }
+    });
+    return nums;
   }, [recamarasFilter]);
+
+  const bodegaValue = filterBodega === "si" ? true : filterBodega === "no" ? false : null;
+  const estacionamientoValue = filterEstacionamiento === "si" ? true : filterEstacionamiento === "no" ? false : null;
 
   const { data: inventarioData, isLoading: isLoadingData, isFetching } = useInventarioDisponiblePaginado({
     projectNames: projectName ? [projectName] : undefined,
     modelNames: filterModelNames.length > 0 ? filterModelNames : undefined,
     bedrooms: bedroomsForQuery,
     levels: filterLevels.length > 0 ? filterLevels : undefined,
-    hasBodega: filterBodega,
-    hasEstacionamiento: filterEstacionamiento,
+    hasBodega: bodegaValue,
+    hasEstacionamiento: estacionamientoValue,
     sortPrice: sortOrder === "none" ? null : sortOrder,
     page,
     pageSize: PAGE_SIZE,
@@ -127,6 +129,7 @@ const AgentUnidadesProyecto = () => {
 
   const availableModelNames = inventarioData?.filterOptions?.modelos || [];
   const availableLevelOptions = inventarioData?.filterOptions?.niveles || [];
+  const availableRecamaras = inventarioData?.filterOptions?.recamaras || [];
   const totalCount = inventarioData?.totalCount || 0;
   const totalPages = inventarioData?.totalPages || 0;
   const isLoading = isLoadingData;
@@ -136,18 +139,18 @@ const AgentUnidadesProyecto = () => {
     const props = inventarioData?.propiedades || [];
     if (props.length === 0) return { min: 0, max: 10000000 };
     const prices = props.map(p => p.precio_lista).filter(Boolean) as number[];
+    if (prices.length === 0) return { min: 0, max: 10000000 };
     return { min: Math.floor(Math.min(...prices)), max: Math.ceil(Math.max(...prices)) };
   }, [inventarioData?.propiedades]);
 
-  const hasActiveFilters = filterModelNames.length > 0 || recamarasFilter !== null || filterLevels.length > 0 || filterBodega !== null || filterEstacionamiento !== null || priceRange !== null;
-  const activeFilterCount = (filterModelNames.length > 0 ? 1 : 0) + (recamarasFilter ? 1 : 0) + (filterLevels.length > 0 ? 1 : 0) + (filterBodega !== null ? 1 : 0) + (filterEstacionamiento !== null ? 1 : 0) + (priceRange ? 1 : 0);
+  const hasActiveFilters = filterModelNames.length > 0 || recamarasFilter.length > 0 || filterLevels.length > 0 || filterBodega !== "todos" || filterEstacionamiento !== "todos" || priceRange !== null;
 
   const clearAllFilters = () => {
     setFilterModelNames([]);
-    setRecamarasFilter(null);
+    setRecamarasFilter([]);
     setFilterLevels([]);
-    setFilterBodega(null);
-    setFilterEstacionamiento(null);
+    setFilterBodega("todos");
+    setFilterEstacionamiento("todos");
     setPriceRange(null);
     setPage(0);
   };
@@ -179,48 +182,79 @@ const AgentUnidadesProyecto = () => {
 
   const SortIcon = sortOrder === "asc" ? ArrowUp : sortOrder === "desc" ? ArrowDown : ArrowUpDown;
 
-  const recamarasOptions = ['1', '2', '3', '4+'];
-
-  // Filter properties by price range client-side
+  // Filter properties by price range and search query (client-side)
   const filteredPageProperties = useMemo(() => {
-    if (!priceRange) return pageProperties;
-    return pageProperties.filter(p => p.precio_lista >= priceRange[0] && p.precio_lista <= priceRange[1]);
-  }, [pageProperties, priceRange]);
+    let result = pageProperties;
+    if (priceRange) {
+      result = result.filter(p => p.precio_lista >= priceRange[0] && p.precio_lista <= priceRange[1]);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(p => String(p.numero_propiedad).toLowerCase().includes(q));
+    }
+    return result;
+  }, [pageProperties, priceRange, searchQuery]);
+
+  // Toggle helper for multi-select chips
+  const toggleChip = <T,>(arr: T[], val: T): T[] =>
+    arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val];
+
+  const recamarasOptions = availableRecamaras.length > 0
+    ? [...new Set([...availableRecamaras.map(n => n <= 3 ? String(n) : '4+')])]
+    : ['1', '2', '3', '4+'];
+
+  const triStateOptions: { value: TriState; label: string }[] = [
+    { value: "todos", label: "Todos" },
+    { value: "si", label: "Sí" },
+    { value: "no", label: "No" },
+  ];
+
+  const chipClass = (active: boolean) =>
+    `px-3.5 py-2 rounded-full text-xs font-medium border transition-colors ${
+      active
+        ? "bg-[hsl(var(--agent-primary))] text-white border-[hsl(var(--agent-primary))]"
+        : "bg-white border-gray-200 text-foreground hover:bg-gray-50"
+    }`;
 
   const filterContent = (
     <div className="space-y-6">
-      {/* Modelo */}
-      <div className="space-y-2">
-        <Label className="text-sm font-semibold">Modelo</Label>
-        <Select
-          value={filterModelNames[0] || "__all__"}
-          onValueChange={(v) => { setFilterModelNames(v === "__all__" ? [] : [v]); setPage(0); }}
-        >
-          <SelectTrigger className="w-full rounded-xl">
-            <SelectValue placeholder="Todos los modelos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todos los modelos</SelectItem>
+      {/* Modelo - multi-select chips */}
+      {availableModelNames.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Modelo</Label>
+          <div className="flex flex-wrap gap-2">
             {availableModelNames.map((m) => (
-              <SelectItem key={m} value={m}>{m}</SelectItem>
+              <button key={m} onClick={() => setFilterModelNames(prev => toggleChip(prev, m))} className={chipClass(filterModelNames.includes(m))}>
+                {m}
+              </button>
             ))}
-          </SelectContent>
-        </Select>
-      </div>
+          </div>
+        </div>
+      )}
 
-      {/* Recámaras - Toggle buttons */}
+      {/* Torre / Nivel - multi-select chips */}
+      {availableLevelOptions.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Torre / Nivel</Label>
+          <div className="flex flex-wrap gap-2">
+            {availableLevelOptions.map((l) => (
+              <button key={l} onClick={() => setFilterLevels(prev => toggleChip(prev, l))} className={chipClass(filterLevels.includes(l))}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recámaras - multi-select chips */}
       <div className="space-y-2">
-        <Label className="text-sm font-semibold">Recámaras</Label>
-        <div className="flex gap-2">
+        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recámaras</Label>
+        <div className="flex flex-wrap gap-2">
           {recamarasOptions.map((opt) => (
             <button
               key={opt}
-              onClick={() => setRecamarasFilter(recamarasFilter === opt ? null : opt)}
-              className={`flex-1 h-10 rounded-xl text-sm font-medium border transition-colors ${
-                recamarasFilter === opt
-                  ? "bg-[hsl(var(--agent-primary))] text-white border-[hsl(var(--agent-primary))]"
-                  : "bg-background border-input hover:bg-accent"
-              }`}
+              onClick={() => setRecamarasFilter(prev => toggleChip(prev, opt))}
+              className={chipClass(recamarasFilter.includes(opt))}
             >
               {opt}
             </button>
@@ -228,52 +262,9 @@ const AgentUnidadesProyecto = () => {
         </div>
       </div>
 
-      {/* Nivel */}
-      <div className="space-y-2">
-        <Label className="text-sm font-semibold">Nivel</Label>
-        <Select
-          value={filterLevels[0] || "__all__"}
-          onValueChange={(v) => { setFilterLevels(v === "__all__" ? [] : [v]); setPage(0); }}
-        >
-          <SelectTrigger className="w-full rounded-xl">
-            <SelectValue placeholder="Todos los niveles" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todos los niveles</SelectItem>
-            {availableLevelOptions.map((l) => (
-              <SelectItem key={l} value={l}>Nivel {l}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Bodega - Switch */}
-      <div className="flex items-center justify-between">
-        <Label className="text-sm font-semibold">Bodega</Label>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{filterBodega === true ? "Con" : filterBodega === false ? "Sin" : "Todos"}</span>
-          <Switch
-            checked={filterBodega === true}
-            onCheckedChange={(checked) => setFilterBodega(checked ? true : null)}
-          />
-        </div>
-      </div>
-
-      {/* Estacionamiento - Switch */}
-      <div className="flex items-center justify-between">
-        <Label className="text-sm font-semibold">Estacionamiento</Label>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{filterEstacionamiento === true ? "Con" : filterEstacionamiento === false ? "Sin" : "Todos"}</span>
-          <Switch
-            checked={filterEstacionamiento === true}
-            onCheckedChange={(checked) => setFilterEstacionamiento(checked ? true : null)}
-          />
-        </div>
-      </div>
-
       {/* Rango de precio - Slider */}
       <div className="space-y-3">
-        <Label className="text-sm font-semibold">Rango de precio</Label>
+        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rango de precio</Label>
         <Slider
           min={priceBounds.min}
           max={priceBounds.max}
@@ -285,6 +276,30 @@ const AgentUnidadesProyecto = () => {
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>{formatPrice(priceRange?.[0] ?? priceBounds.min)}</span>
           <span>{formatPrice(priceRange?.[1] ?? priceBounds.max)}</span>
+        </div>
+      </div>
+
+      {/* Bodega - tri-state chips */}
+      <div className="space-y-2">
+        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Con bodega</Label>
+        <div className="flex gap-2">
+          {triStateOptions.map((opt) => (
+            <button key={opt.value} onClick={() => setFilterBodega(opt.value)} className={chipClass(filterBodega === opt.value)}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Estacionamiento - tri-state chips */}
+      <div className="space-y-2">
+        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Con estacionamiento</Label>
+        <div className="flex gap-2">
+          {triStateOptions.map((opt) => (
+            <button key={opt.value} onClick={() => setFilterEstacionamiento(opt.value)} className={chipClass(filterEstacionamiento === opt.value)}>
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -300,7 +315,7 @@ const AgentUnidadesProyecto = () => {
           </button>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-foreground truncate">{projectName || "Unidades"}</h1>
-            <p className="text-xs text-muted-foreground">{totalCount} unidades disponibles</p>
+            <p className="text-xs text-[hsl(var(--agent-primary))]">{totalCount} unidades disponibles</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -311,14 +326,16 @@ const AgentUnidadesProyecto = () => {
             <SlidersHorizontal className="h-4 w-4" />
             Filtros
             {hasActiveFilters && (
-              <Badge className="text-[10px] px-1.5 py-0 bg-[hsl(var(--agent-primary))] text-white border-0 hover:bg-[hsl(var(--agent-primary))]">
-                {activeFilterCount}
-              </Badge>
+              <span className="ml-0.5 h-5 min-w-[20px] px-1 rounded-full bg-[hsl(var(--agent-primary))] text-white text-[10px] font-bold flex items-center justify-center">
+                {(filterModelNames.length > 0 ? 1 : 0) + (recamarasFilter.length > 0 ? 1 : 0) + (filterLevels.length > 0 ? 1 : 0) + (filterBodega !== "todos" ? 1 : 0) + (filterEstacionamiento !== "todos" ? 1 : 0) + (priceRange ? 1 : 0)}
+              </span>
             )}
           </button>
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-10 pl-9 pr-3 rounded-xl border border-gray-200 bg-white text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[hsl(var(--agent-primary))]/20"
               placeholder="Buscar..."
             />
@@ -330,6 +347,7 @@ const AgentUnidadesProyecto = () => {
                 ? "bg-[hsl(var(--agent-primary))] text-white border-[hsl(var(--agent-primary))]"
                 : "bg-white border-gray-200 text-muted-foreground"
             }`}
+            title={sortOrder === "none" ? "Ordenar por precio" : sortOrder === "asc" ? "Precio: menor a mayor" : "Precio: mayor a menor"}
           >
             <SortIcon className="h-4 w-4" />
           </button>
@@ -341,24 +359,24 @@ const AgentUnidadesProyecto = () => {
                 {name} <X className="h-2.5 w-2.5" />
               </Badge>
             ))}
-            {recamarasFilter && (
-              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setRecamarasFilter(null)}>
-                {recamarasFilter} rec. <X className="h-2.5 w-2.5" />
+            {recamarasFilter.map(opt => (
+              <Badge key={`r-${opt}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setRecamarasFilter(prev => prev.filter(v => v !== opt))}>
+                {opt} rec. <X className="h-2.5 w-2.5" />
               </Badge>
-            )}
+            ))}
             {filterLevels.map(name => (
               <Badge key={`l-${name}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterLevels(prev => prev.filter(n => n !== name))}>
                 Nivel {name} <X className="h-2.5 w-2.5" />
               </Badge>
             ))}
-            {filterBodega !== null && (
-              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterBodega(null)}>
-                {filterBodega ? "Con bodega" : "Sin bodega"} <X className="h-2.5 w-2.5" />
+            {filterBodega !== "todos" && (
+              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterBodega("todos")}>
+                {filterBodega === "si" ? "Con bodega" : "Sin bodega"} <X className="h-2.5 w-2.5" />
               </Badge>
             )}
-            {filterEstacionamiento !== null && (
-              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterEstacionamiento(null)}>
-                {filterEstacionamiento ? "Con estac." : "Sin estac."} <X className="h-2.5 w-2.5" />
+            {filterEstacionamiento !== "todos" && (
+              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterEstacionamiento("todos")}>
+                {filterEstacionamiento === "si" ? "Con estac." : "Sin estac."} <X className="h-2.5 w-2.5" />
               </Badge>
             )}
             {priceRange && (
@@ -385,7 +403,7 @@ const AgentUnidadesProyecto = () => {
           <div className="overflow-y-auto px-4 pb-6 max-h-[65vh]">{filterContent}</div>
           <div className="px-4 py-3 border-t">
             <Button className="w-full rounded-full gap-2 bg-[hsl(var(--agent-primary))] hover:bg-[hsl(var(--agent-primary))]/90" onClick={() => setFiltersDrawerOpen(false)}>
-              <Search className="h-4 w-4" /> Ver {totalCount} resultados
+              <Search className="h-4 w-4" /> Ver {totalCount} unidades
             </Button>
           </div>
         </DrawerContent>
