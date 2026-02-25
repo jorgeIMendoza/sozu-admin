@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -421,8 +422,8 @@ const Propiedades = () => {
   const [modeloSearchInput, setModeloSearchInput] = useState("");
   const [modeloSearchTerm, setModeloSearchTerm] = useState("");
   
-  const [recamarasFilterInput, setRecamarasFilterInput] = useState("");
-  const [recamarasFilter, setRecamarasFilter] = useState("");
+  const [recamarasFilterInput, setRecamarasFilterInput] = useState<string | null>(null);
+  const [recamarasFilter, setRecamarasFilter] = useState<string | null>(null);
   const [banosFilterInput, setBanosFilterInput] = useState("");
   const [banosFilter, setBanosFilter] = useState("");
   const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>([]);
@@ -542,7 +543,7 @@ const Propiedades = () => {
   const hasActiveFilters = 
     selectedProyectos.length > 0 ||
     selectedModelos.length > 0 ||
-    recamarasFilter !== "" ||
+    recamarasFilter !== null ||
     banosFilter !== "" ||
     disponibilidadFilter.length > 0 ||
     tipoTransaccionFilter.length > 0 ||
@@ -693,9 +694,13 @@ const Propiedades = () => {
       }
       
       if (recamarasFilter) {
-        const recamaras = parseInt(recamarasFilter);
-        if (!isNaN(recamaras)) {
-          query = query.eq('edificios_modelos.modelos.numero_recamaras', recamaras);
+        if (recamarasFilter === '4+') {
+          query = query.gte('edificios_modelos.modelos.numero_recamaras', 4);
+        } else {
+          const recamaras = parseInt(recamarasFilter);
+          if (!isNaN(recamaras)) {
+            query = query.eq('edificios_modelos.modelos.numero_recamaras', recamaras);
+          }
         }
       }
       
@@ -930,6 +935,39 @@ const Propiedades = () => {
     },
   });
 
+  // Query para obtener rango dinámico de precios
+  const { data: precioRange } = useQuery({
+    queryKey: ['precio-range-filter', accessibleProjectIds, hasUnrestrictedAccess],
+    queryFn: async () => {
+      let query = supabase
+        .from('propiedades')
+        .select('precio_lista, edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(edificios!edificios_modelos_id_edificio_fkey!inner(proyectos!edificios_id_proyecto_fkey!inner(id, id_tipo_uso)))')
+        .eq('activo', true)
+        .eq('es_aprobado', true)
+        .gt('precio_lista', 0);
+      
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+        query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
+      }
+
+      const { data, error } = await query.order('precio_lista', { ascending: true }).limit(1);
+      const { data: dataMax } = await supabase
+        .from('propiedades')
+        .select('precio_lista')
+        .eq('activo', true)
+        .eq('es_aprobado', true)
+        .gt('precio_lista', 0)
+        .order('precio_lista', { ascending: false })
+        .limit(1);
+
+      const minPrice = data?.[0]?.precio_lista || 0;
+      const maxPrice = dataMax?.[0]?.precio_lista || 100000000;
+      return { min: Math.floor(minPrice), max: Math.ceil(maxPrice) };
+    },
+    enabled: !isLoadingAccess,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Debounce filtros de sliders y búsqueda de modelos
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -945,11 +983,9 @@ const Propiedades = () => {
     return () => clearTimeout(timer);
   }, [precioFilterInput]);
 
+  // Recámaras filter is now instant (toggle buttons), no debounce needed
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setRecamarasFilter(recamarasFilterInput);
-    }, 400);
-    return () => clearTimeout(timer);
+    setRecamarasFilter(recamarasFilterInput);
   }, [recamarasFilterInput]);
 
   useEffect(() => {
@@ -973,6 +1009,14 @@ const Propiedades = () => {
     setModeloSearchInput("");
     setModeloSearchTerm("");
   }, [selectedProyectos]);
+
+  // Initialize price range from dynamic data
+  useEffect(() => {
+    if (precioRange) {
+      setPrecioFilterInput([precioRange.min, precioRange.max]);
+      setPrecioFilter([precioRange.min, precioRange.max]);
+    }
+  }, [precioRange]);
   
   // Paginación
   const [currentPageActive, setCurrentPageActive] = useState(1);
@@ -1970,9 +2014,13 @@ const Propiedades = () => {
             modeloQuery = modeloQuery.in('id', selectedModelos);
           }
           if (recamarasFilter) {
-            const recamaras = parseInt(recamarasFilter);
-            if (!isNaN(recamaras)) {
-              modeloQuery = modeloQuery.eq('numero_recamaras', recamaras);
+            if (recamarasFilter === '4+') {
+              modeloQuery = modeloQuery.gte('numero_recamaras', 4);
+            } else {
+              const recamaras = parseInt(recamarasFilter);
+              if (!isNaN(recamaras)) {
+                modeloQuery = modeloQuery.eq('numero_recamaras', recamaras);
+              }
             }
           }
           if (banosFilter) {
@@ -2387,9 +2435,13 @@ const Propiedades = () => {
             modeloQuery = modeloQuery.in('id', selectedModelos);
           }
           if (recamarasFilter) {
-            const recamaras = parseInt(recamarasFilter);
-            if (!isNaN(recamaras)) {
-              modeloQuery = modeloQuery.eq('numero_recamaras', recamaras);
+            if (recamarasFilter === '4+') {
+              modeloQuery = modeloQuery.gte('numero_recamaras', 4);
+            } else {
+              const recamaras = parseInt(recamarasFilter);
+              if (!isNaN(recamaras)) {
+                modeloQuery = modeloQuery.eq('numero_recamaras', recamaras);
+              }
             }
           }
           if (banosFilter) {
@@ -2800,9 +2852,13 @@ const Propiedades = () => {
             modeloQuery = modeloQuery.in('id', selectedModelos);
           }
           if (recamarasFilter) {
-            const recamaras = parseInt(recamarasFilter);
-            if (!isNaN(recamaras)) {
-              modeloQuery = modeloQuery.eq('numero_recamaras', recamaras);
+            if (recamarasFilter === '4+') {
+              modeloQuery = modeloQuery.gte('numero_recamaras', 4);
+            } else {
+              const recamaras = parseInt(recamarasFilter);
+              if (!isNaN(recamaras)) {
+                modeloQuery = modeloQuery.eq('numero_recamaras', recamaras);
+              }
             }
           }
           if (banosFilter) {
@@ -5059,7 +5115,7 @@ const Propiedades = () => {
             {/* Filtros específicos */}
             <div className="grid grid-cols-1 md:grid-cols-7 gap-4 p-4 bg-muted/50 rounded-lg">
               <div>
-                <label className="text-sm font-medium mb-2 block">Proyecto</label>
+                <label className="text-sm font-medium mb-2 block">Desarrollo</label>
                 <Popover open={isProjectFilterOpen} onOpenChange={setIsProjectFilterOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -5069,19 +5125,19 @@ const Propiedades = () => {
                       className="w-full justify-between font-normal"
                     >
                       {selectedProyectos.length === 0 ? (
-                        "Seleccionar proyectos..."
+                        "Seleccionar desarrollo..."
                       ) : selectedProyectos.length === 1 ? (
                         proyectos?.find(p => p.id === selectedProyectos[0])?.nombre
                       ) : (
-                        `${selectedProyectos.length} proyectos seleccionados`
+                        `${selectedProyectos.length} desarrollos seleccionados`
                       )}
                       <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[300px] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Buscar proyecto..." />
-                      <CommandEmpty>No se encontraron proyectos.</CommandEmpty>
+                      <CommandInput placeholder="Buscar desarrollo..." />
+                      <CommandEmpty>No se encontraron desarrollos.</CommandEmpty>
                       <CommandGroup className="max-h-64 overflow-auto">
                         {proyectos?.map((proyecto) => (
                           <CommandItem
@@ -5134,6 +5190,7 @@ const Propiedades = () => {
                   </PopoverContent>
                 </Popover>
               </div>
+              {selectedProyectos.length > 0 && (
               <div>
                 <label className="text-sm font-medium mb-2 block">Modelo</label>
                 <Popover open={isModeloFilterOpen} onOpenChange={setIsModeloFilterOpen}>
@@ -5164,7 +5221,7 @@ const Propiedades = () => {
                       <CommandEmpty>
                         {selectedProyectos.length > 0 
                           ? "No se encontraron modelos." 
-                          : (modeloSearchTerm ? "No se encontraron modelos." : "Selecciona un proyecto o escribe para buscar modelos.")
+                          : (modeloSearchTerm ? "No se encontraron modelos." : "Selecciona un desarrollo o escribe para buscar modelos.")
                         }
                       </CommandEmpty>
                       <CommandList>
@@ -5229,15 +5286,28 @@ const Propiedades = () => {
                   </PopoverContent>
                 </Popover>
               </div>
+              )}
               {canSeeAdvancedFilters && (
                 <>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Recámaras</label>
-                    <Input
-                      placeholder="Ej: 2, 3..."
-                      value={recamarasFilterInput}
-                      onChange={(e) => setRecamarasFilterInput(e.target.value)}
-                    />
+                    <div className="flex gap-1.5">
+                      {[1, 2, 3, '4+'].map((val) => {
+                        const strVal = String(val);
+                        const isActive = recamarasFilterInput === strVal;
+                        return (
+                          <Button
+                            key={strVal}
+                            variant={isActive ? "default" : "outline"}
+                            size="sm"
+                            className={cn("min-w-[40px]", isActive && "bg-primary text-primary-foreground")}
+                            onClick={() => setRecamarasFilterInput(isActive ? null : strVal)}
+                          >
+                            {strVal}
+                          </Button>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Baños</label>
@@ -5370,28 +5440,18 @@ const Propiedades = () => {
               {canSeeAdvancedFilters && (
                 <>
                   <div>
-                    <label className="text-sm font-medium mb-2 block">Bodegas</label>
-                    <Select value={bodegasFilter} onValueChange={setBodegasFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Filtrar por bodegas..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="con_bodegas">Con Bodegas</SelectItem>
-                        <SelectItem value="sin_bodegas">Sin Bodegas</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <label className="text-sm font-medium mb-2 block">Con bodega</label>
+                    <Switch
+                      checked={bodegasFilter === "con_bodegas"}
+                      onCheckedChange={(checked) => setBodegasFilter(checked ? "con_bodegas" : "")}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-2 block">Estacionamientos</label>
-                    <Select value={estacionamientosFilter} onValueChange={setEstacionamientosFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Filtrar por estacionamientos..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="con_estacionamientos">Con Estacionamientos</SelectItem>
-                        <SelectItem value="sin_estacionamientos">Sin Estacionamientos</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <label className="text-sm font-medium mb-2 block">Con estacionamiento</label>
+                    <Switch
+                      checked={estacionamientosFilter === "con_estacionamientos"}
+                      onCheckedChange={(checked) => setEstacionamientosFilter(checked ? "con_estacionamientos" : "")}
+                    />
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Tiene Cuenta de Cobranza</label>
@@ -5460,22 +5520,23 @@ const Propiedades = () => {
                     />
                   </div>
                   <div className="min-w-[200px]">
-                    <label className="text-sm font-medium mb-2 block whitespace-nowrap">Precio (MXN)</label>
+                    <label className="text-sm font-medium mb-2 block whitespace-nowrap">Rango de precio</label>
                     <div className="flex items-center gap-2 mb-2">
                       <Input
                         type="text"
-                        value={precioFilterInput[0].toLocaleString('es-MX')}
+                        value={`$${precioFilterInput[0].toLocaleString('es-MX')}`}
                         onChange={(e) => {
                           const val = e.target.value.replace(/[^0-9]/g, '');
                           if (val === '') {
-                            setPrecioFilterInput([0, precioFilterInput[1]]);
+                            setPrecioFilterInput([precioRange?.min ?? 0, precioFilterInput[1]]);
                           } else {
                             setPrecioFilterInput([Number(val), precioFilterInput[1]]);
                           }
                         }}
                         onBlur={(e) => {
+                          const maxVal = precioRange?.max ?? 100000000;
                           let val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0;
-                          val = Math.max(0, Math.min(100000000, val));
+                          val = Math.max(0, Math.min(maxVal, val));
                           setPrecioFilterInput([val, Math.max(val, precioFilterInput[1])]);
                         }}
                         className="w-32 h-8 text-xs"
@@ -5483,27 +5544,28 @@ const Propiedades = () => {
                       <span className="text-xs text-muted-foreground">-</span>
                       <Input
                         type="text"
-                        value={precioFilterInput[1].toLocaleString('es-MX')}
+                        value={`$${precioFilterInput[1].toLocaleString('es-MX')}`}
                         onChange={(e) => {
                           const val = e.target.value.replace(/[^0-9]/g, '');
                           if (val === '') {
-                            setPrecioFilterInput([precioFilterInput[0], 100000000]);
+                            setPrecioFilterInput([precioFilterInput[0], precioRange?.max ?? 100000000]);
                           } else {
                             setPrecioFilterInput([precioFilterInput[0], Number(val)]);
                           }
                         }}
                         onBlur={(e) => {
-                          let val = Number(e.target.value.replace(/[^0-9]/g, '')) || 100000000;
-                          val = Math.max(0, Math.min(100000000, val));
+                          const maxVal = precioRange?.max ?? 100000000;
+                          let val = Number(e.target.value.replace(/[^0-9]/g, '')) || maxVal;
+                          val = Math.max(0, Math.min(maxVal, val));
                           setPrecioFilterInput([Math.min(precioFilterInput[0], val), val]);
                         }}
                         className="w-32 h-8 text-xs"
                       />
                     </div>
                     <Slider
-                      min={0}
-                      max={100000000}
-                      step={1000000}
+                      min={precioRange?.min ?? 0}
+                      max={precioRange?.max ?? 100000000}
+                      step={100000}
                       value={precioFilterInput}
                       onValueChange={setPrecioFilterInput}
                       className="mt-1"
@@ -5549,8 +5611,8 @@ const Propiedades = () => {
                   setSelectedModelosLabels({});
                   setModeloSearchInput("");
                   setModeloSearchTerm("");
-                  setRecamarasFilterInput("");
-                  setRecamarasFilter("");
+                  setRecamarasFilterInput(null);
+                  setRecamarasFilter(null);
                   setBanosFilterInput("");
                   setBanosFilter("");
                   setDisponibilidadFilter([]);
@@ -5560,8 +5622,8 @@ const Propiedades = () => {
                   setCuentaCobranzaFilter("");
                   setAreaFilterInput([0, 500]);
                   setAreaFilter([0, 500]);
-                  setPrecioFilterInput([0, 100000000]);
-                  setPrecioFilter([0, 100000000]);
+                  setPrecioFilterInput([precioRange?.min ?? 0, precioRange?.max ?? 100000000]);
+                  setPrecioFilter([precioRange?.min ?? 0, precioRange?.max ?? 100000000]);
                   setSelectedProperties([]);
                   setPrecioSort(null);
                 }}
