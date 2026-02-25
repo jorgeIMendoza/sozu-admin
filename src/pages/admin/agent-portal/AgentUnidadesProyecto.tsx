@@ -12,6 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Layers, Car, Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Package } from "lucide-react";
 import bodegaIcon from "@/assets/icons/bodega.png";
 import useEmblaCarousel from "embla-carousel-react";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,10 +38,12 @@ const AgentUnidadesProyecto = () => {
   const [filterModelNames, setFilterModelNames] = useState<string[]>([]);
   const [filterBedrooms, setFilterBedrooms] = useState<string[]>([]);
   const [filterLevels, setFilterLevels] = useState<string[]>([]);
-  const [filterBodega, setFilterBodega] = useState<string | null>(null);
-  const [filterEstacionamiento, setFilterEstacionamiento] = useState<string | null>(null);
+  const [filterBodega, setFilterBodega] = useState<boolean | null>(null);
+  const [filterEstacionamiento, setFilterEstacionamiento] = useState<boolean | null>(null);
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>("none");
+  const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
+  const [recamarasFilter, setRecamarasFilter] = useState<string | null>(null);
 
   // Project name state
   const [projectName, setProjectName] = useState<string | null>(null);
@@ -70,13 +75,20 @@ const AgentUnidadesProyecto = () => {
     });
   }, [modeloIdParam]);
 
+  const bedroomsForQuery = useMemo(() => {
+    if (!recamarasFilter) return [];
+    if (recamarasFilter === '4+') return [4, 5, 6, 7, 8, 9, 10];
+    const n = parseInt(recamarasFilter);
+    return isNaN(n) ? [] : [n];
+  }, [recamarasFilter]);
+
   const { data: inventarioData, isLoading: isLoadingData, isFetching } = useInventarioDisponiblePaginado({
     projectNames: projectName ? [projectName] : undefined,
     modelNames: filterModelNames.length > 0 ? filterModelNames : undefined,
-    bedrooms: useMemo(() => filterBedrooms.length > 0 ? filterBedrooms.map(b => parseInt(b)).filter(n => !isNaN(n)) : [], [filterBedrooms]),
+    bedrooms: bedroomsForQuery,
     levels: filterLevels.length > 0 ? filterLevels : undefined,
-    hasBodega: filterBodega === "con" ? true : filterBodega === "sin" ? false : null,
-    hasEstacionamiento: filterEstacionamiento === "con" ? true : filterEstacionamiento === "sin" ? false : null,
+    hasBodega: filterBodega,
+    hasEstacionamiento: filterEstacionamiento,
     sortPrice: sortOrder === "none" ? null : sortOrder,
     page,
     pageSize: PAGE_SIZE,
@@ -114,24 +126,29 @@ const AgentUnidadesProyecto = () => {
   }, [inventarioData?.propiedades]);
 
   const availableModelNames = inventarioData?.filterOptions?.modelos || [];
-  const availableBedroomOptions = useMemo(() =>
-    (inventarioData?.filterOptions?.recamaras || []).map(r => ({ value: String(r), label: `${r} recámara${r > 1 ? "s" : ""}` })),
-    [inventarioData?.filterOptions?.recamaras]
-  );
   const availableLevelOptions = inventarioData?.filterOptions?.niveles || [];
   const totalCount = inventarioData?.totalCount || 0;
   const totalPages = inventarioData?.totalPages || 0;
   const isLoading = isLoadingData;
 
-  const hasActiveFilters = filterModelNames.length > 0 || filterBedrooms.length > 0 || filterLevels.length > 0 || filterBodega !== null || filterEstacionamiento !== null;
-  const activeFilterCount = filterModelNames.length + filterBedrooms.length + filterLevels.length + (filterBodega ? 1 : 0) + (filterEstacionamiento ? 1 : 0);
+  // Compute price bounds from current results for slider
+  const priceBounds = useMemo(() => {
+    const props = inventarioData?.propiedades || [];
+    if (props.length === 0) return { min: 0, max: 10000000 };
+    const prices = props.map(p => p.precio_lista).filter(Boolean) as number[];
+    return { min: Math.floor(Math.min(...prices)), max: Math.ceil(Math.max(...prices)) };
+  }, [inventarioData?.propiedades]);
+
+  const hasActiveFilters = filterModelNames.length > 0 || recamarasFilter !== null || filterLevels.length > 0 || filterBodega !== null || filterEstacionamiento !== null || priceRange !== null;
+  const activeFilterCount = (filterModelNames.length > 0 ? 1 : 0) + (recamarasFilter ? 1 : 0) + (filterLevels.length > 0 ? 1 : 0) + (filterBodega !== null ? 1 : 0) + (filterEstacionamiento !== null ? 1 : 0) + (priceRange ? 1 : 0);
 
   const clearAllFilters = () => {
     setFilterModelNames([]);
-    setFilterBedrooms([]);
+    setRecamarasFilter(null);
     setFilterLevels([]);
     setFilterBodega(null);
     setFilterEstacionamiento(null);
+    setPriceRange(null);
     setPage(0);
   };
 
@@ -157,21 +174,24 @@ const AgentUnidadesProyecto = () => {
     return { precioAjustado, enganche, mensualidadesTotal, entrega, mensualidad, numMensualidades };
   };
 
-  useEffect(() => { setPage(0); }, [filterModelNames, filterBedrooms, filterLevels, filterBodega, filterEstacionamiento]);
+  useEffect(() => { setPage(0); }, [filterModelNames, recamarasFilter, filterLevels, filterBodega, filterEstacionamiento, priceRange]);
   useEffect(() => { setSelectedSchemeId(null); setSchemesOpen(false); }, [selectedProperty?.id]);
 
   const SortIcon = sortOrder === "asc" ? ArrowUp : sortOrder === "desc" ? ArrowDown : ArrowUpDown;
 
+  const recamarasOptions = ['1', '2', '3', '4+'];
+
+  // Filter properties by price range client-side
+  const filteredPageProperties = useMemo(() => {
+    if (!priceRange) return pageProperties;
+    return pageProperties.filter(p => p.precio_lista >= priceRange[0] && p.precio_lista <= priceRange[1]);
+  }, [pageProperties, priceRange]);
+
   const filterContent = (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Modelo */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-            <Maximize2 className="h-4 w-4 text-blue-500" />
-          </div>
-          <span className="text-sm font-semibold text-foreground">Modelo</span>
-        </div>
+        <Label className="text-sm font-semibold">Modelo</Label>
         <Select
           value={filterModelNames[0] || "__all__"}
           onValueChange={(v) => { setFilterModelNames(v === "__all__" ? [] : [v]); setPage(0); }}
@@ -188,38 +208,29 @@ const AgentUnidadesProyecto = () => {
         </Select>
       </div>
 
-      {/* Recámaras */}
+      {/* Recámaras - Toggle buttons */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-full bg-violet-100 flex items-center justify-center">
-            <BedDouble className="h-4 w-4 text-violet-500" />
-          </div>
-          <span className="text-sm font-semibold text-foreground">Recámaras</span>
+        <Label className="text-sm font-semibold">Recámaras</Label>
+        <div className="flex gap-2">
+          {recamarasOptions.map((opt) => (
+            <button
+              key={opt}
+              onClick={() => setRecamarasFilter(recamarasFilter === opt ? null : opt)}
+              className={`flex-1 h-10 rounded-xl text-sm font-medium border transition-colors ${
+                recamarasFilter === opt
+                  ? "bg-[hsl(var(--agent-primary))] text-white border-[hsl(var(--agent-primary))]"
+                  : "bg-background border-input hover:bg-accent"
+              }`}
+            >
+              {opt}
+            </button>
+          ))}
         </div>
-        <Select
-          value={filterBedrooms[0] || "__all__"}
-          onValueChange={(v) => { setFilterBedrooms(v === "__all__" ? [] : [v]); setPage(0); }}
-        >
-          <SelectTrigger className="w-full rounded-xl">
-            <SelectValue placeholder="Todas" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todas</SelectItem>
-            {availableBedroomOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       {/* Nivel */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center">
-            <Layers className="h-4 w-4 text-amber-500" />
-          </div>
-          <span className="text-sm font-semibold text-foreground">Nivel</span>
-        </div>
+        <Label className="text-sm font-semibold">Nivel</Label>
         <Select
           value={filterLevels[0] || "__all__"}
           onValueChange={(v) => { setFilterLevels(v === "__all__" ? [] : [v]); setPage(0); }}
@@ -236,50 +247,45 @@ const AgentUnidadesProyecto = () => {
         </Select>
       </div>
 
-      {/* Bodega */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
-            <img src={bodegaIcon} alt="" className="h-4 w-4" />
-          </div>
-          <span className="text-sm font-semibold text-foreground">Bodega</span>
+      {/* Bodega - Switch */}
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-semibold">Bodega</Label>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{filterBodega === true ? "Con" : filterBodega === false ? "Sin" : "Todos"}</span>
+          <Switch
+            checked={filterBodega === true}
+            onCheckedChange={(checked) => setFilterBodega(checked ? true : null)}
+          />
         </div>
-        <Select
-          value={filterBodega || "__all__"}
-          onValueChange={(v) => { setFilterBodega(v === "__all__" ? null : v); setPage(0); }}
-        >
-          <SelectTrigger className="w-full rounded-xl">
-            <SelectValue placeholder="Todas" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todas</SelectItem>
-            <SelectItem value="con">Con bodega</SelectItem>
-            <SelectItem value="sin">Sin bodega</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
-      {/* Estacionamiento */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-full bg-sky-100 flex items-center justify-center">
-            <Car className="h-4 w-4 text-sky-500" />
-          </div>
-          <span className="text-sm font-semibold text-foreground">Estacionamiento</span>
+      {/* Estacionamiento - Switch */}
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-semibold">Estacionamiento</Label>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{filterEstacionamiento === true ? "Con" : filterEstacionamiento === false ? "Sin" : "Todos"}</span>
+          <Switch
+            checked={filterEstacionamiento === true}
+            onCheckedChange={(checked) => setFilterEstacionamiento(checked ? true : null)}
+          />
         </div>
-        <Select
-          value={filterEstacionamiento || "__all__"}
-          onValueChange={(v) => { setFilterEstacionamiento(v === "__all__" ? null : v); setPage(0); }}
-        >
-          <SelectTrigger className="w-full rounded-xl">
-            <SelectValue placeholder="Todos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todos</SelectItem>
-            <SelectItem value="con">Con estacionamiento</SelectItem>
-            <SelectItem value="sin">Sin estacionamiento</SelectItem>
-          </SelectContent>
-        </Select>
+      </div>
+
+      {/* Rango de precio - Slider */}
+      <div className="space-y-3">
+        <Label className="text-sm font-semibold">Rango de precio</Label>
+        <Slider
+          min={priceBounds.min}
+          max={priceBounds.max}
+          step={10000}
+          value={priceRange || [priceBounds.min, priceBounds.max]}
+          onValueChange={(val) => setPriceRange(val as [number, number])}
+          className="w-full"
+        />
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>{formatPrice(priceRange?.[0] ?? priceBounds.min)}</span>
+          <span>{formatPrice(priceRange?.[1] ?? priceBounds.max)}</span>
+        </div>
       </div>
     </div>
   );
@@ -335,24 +341,29 @@ const AgentUnidadesProyecto = () => {
                 {name} <X className="h-2.5 w-2.5" />
               </Badge>
             ))}
-            {filterBedrooms.map(val => (
-              <Badge key={`b-${val}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterBedrooms(prev => prev.filter(n => n !== val))}>
-                {val} rec. <X className="h-2.5 w-2.5" />
+            {recamarasFilter && (
+              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setRecamarasFilter(null)}>
+                {recamarasFilter} rec. <X className="h-2.5 w-2.5" />
               </Badge>
-            ))}
+            )}
             {filterLevels.map(name => (
               <Badge key={`l-${name}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterLevels(prev => prev.filter(n => n !== name))}>
                 Nivel {name} <X className="h-2.5 w-2.5" />
               </Badge>
             ))}
-            {filterBodega && (
+            {filterBodega !== null && (
               <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterBodega(null)}>
-                {filterBodega === "con" ? "Con bodega" : "Sin bodega"} <X className="h-2.5 w-2.5" />
+                {filterBodega ? "Con bodega" : "Sin bodega"} <X className="h-2.5 w-2.5" />
               </Badge>
             )}
-            {filterEstacionamiento && (
+            {filterEstacionamiento !== null && (
               <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterEstacionamiento(null)}>
-                {filterEstacionamiento === "con" ? "Con estac." : "Sin estac."} <X className="h-2.5 w-2.5" />
+                {filterEstacionamiento ? "Con estac." : "Sin estac."} <X className="h-2.5 w-2.5" />
+              </Badge>
+            )}
+            {priceRange && (
+              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setPriceRange(null)}>
+                Precio <X className="h-2.5 w-2.5" />
               </Badge>
             )}
             <button className="text-[10px] text-destructive font-medium px-1" onClick={clearAllFilters}>Limpiar</button>
@@ -386,7 +397,7 @@ const AgentUnidadesProyecto = () => {
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : pageProperties.length === 0 ? (
+        ) : filteredPageProperties.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <Building2 className="h-12 w-12 mx-auto mb-3 opacity-40" />
             <p className="text-sm">No hay unidades disponibles</p>
@@ -394,7 +405,7 @@ const AgentUnidadesProyecto = () => {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pageProperties.map((prop: any) => (
+              {filteredPageProperties.map((prop: any) => (
                 <UnitCard key={prop.id} prop={prop} formatPrice={formatPrice} onClick={() => setSelectedProperty(prop)} />
               ))}
             </div>
