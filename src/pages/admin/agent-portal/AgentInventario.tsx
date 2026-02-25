@@ -202,8 +202,13 @@ function ProjectCard({ proyecto, formatCurrency }: { proyecto: ProyectoCard; for
               <p className="text-xs text-[hsl(var(--agent-text-secondary))]">Sin precio</p>
             )}
           </div>
-          <Badge variant="outline" className="text-[10px] border-[hsl(var(--agent-primary))]/30 text-[hsl(var(--agent-primary))]">
-            {proyecto.unidades_disponibles} disponibles
+          <Badge variant="outline" className={cn(
+            "text-[10px]",
+            proyecto.unidades_disponibles === 0
+              ? "border-destructive/30 text-destructive"
+              : "border-[hsl(var(--agent-primary))]/30 text-[hsl(var(--agent-primary))]"
+          )}>
+            {proyecto.unidades_disponibles === 0 ? "Agotado" : `${proyecto.unidades_disponibles} disponibles`}
           </Badge>
         </div>
 
