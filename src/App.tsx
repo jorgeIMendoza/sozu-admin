@@ -261,7 +261,7 @@ const App = () => (
                   <Route path="agent/pipeline" element={<AgentPipeline />} />
                   <Route path="agent/comisiones" element={<AgentComisiones />} />
                   <Route path="agent/perfil" element={<AgentPerfil />} />
-                  <Route path="agent/inventario/proyecto/:id/unidades" element={<AgentUnidadesProyecto />} />
+                  <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
                   <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />
                 </Route>
                 

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
 import { Badge } from "@/components/ui/badge";
@@ -8,19 +8,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Layers, Car, Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Package } from "lucide-react";
 import bodegaIcon from "@/assets/icons/bodega.png";
 import useEmblaCarousel from "embla-carousel-react";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
-import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { supabase } from "@/integrations/supabase/client";
 
 const PAGE_SIZE = 30;
 type SortOrder = "none" | "asc" | "desc";
 
 const AgentUnidadesProyecto = () => {
-  const { id } = useParams<{ id: string }>();
-  const projectId = parseInt(id || "0");
+  const [searchParams] = useSearchParams();
+  const proyectoIdParam = searchParams.get("proyecto");
+  const modeloIdParam = searchParams.get("modelo");
   const navigate = useNavigate();
   const { canGenerateOffer } = usePagePermissions('/admin/inmobiliarias/inventario');
 
@@ -38,14 +40,40 @@ const AgentUnidadesProyecto = () => {
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>("none");
 
-  // We need to get the project name to filter by it
+  // Project name state
   const [projectName, setProjectName] = useState<string | null>(null);
+  const [projNameLoaded, setProjNameLoaded] = useState(false);
 
-  // First, fetch project name
-  const { data: inventarioData, isLoading, isFetching } = useInventarioDisponiblePaginado({
+  // Fetch project name from query param
+  useEffect(() => {
+    if (!proyectoIdParam) {
+      setProjNameLoaded(true);
+      return;
+    }
+    const pid = parseInt(proyectoIdParam);
+    if (isNaN(pid)) { setProjNameLoaded(true); return; }
+    (supabase as any).from("proyectos").select("nombre").eq("id", pid).maybeSingle().then(({ data }: any) => {
+      if (data?.nombre) setProjectName(data.nombre);
+      setProjNameLoaded(true);
+    });
+  }, [proyectoIdParam]);
+
+  // If modelo query param is present, resolve its name to pre-set filter
+  const [modeloParamResolved, setModeloParamResolved] = useState(false);
+  useEffect(() => {
+    if (!modeloIdParam) { setModeloParamResolved(true); return; }
+    const mid = parseInt(modeloIdParam);
+    if (isNaN(mid)) { setModeloParamResolved(true); return; }
+    (supabase as any).from("modelos").select("nombre").eq("id", mid).maybeSingle().then(({ data }: any) => {
+      if (data?.nombre) setFilterModelNames([data.nombre]);
+      setModeloParamResolved(true);
+    });
+  }, [modeloIdParam]);
+
+  const { data: inventarioData, isLoading: isLoadingData, isFetching } = useInventarioDisponiblePaginado({
     projectNames: projectName ? [projectName] : undefined,
     modelNames: filterModelNames.length > 0 ? filterModelNames : undefined,
-    bedrooms: useMemo(() => filterBedrooms.map(b => parseInt(b)).filter(n => !isNaN(n)), [filterBedrooms]),
+    bedrooms: useMemo(() => filterBedrooms.length > 0 ? filterBedrooms.map(b => parseInt(b)).filter(n => !isNaN(n)) : [], [filterBedrooms]),
     levels: filterLevels.length > 0 ? filterLevels : undefined,
     hasBodega: filterBodega === "con" ? true : filterBodega === "sin" ? false : null,
     hasEstacionamiento: filterEstacionamiento === "con" ? true : filterEstacionamiento === "sin" ? false : null,
@@ -54,30 +82,8 @@ const AgentUnidadesProyecto = () => {
     pageSize: PAGE_SIZE,
   });
 
-  // Get project name from first results or filter options
-  useEffect(() => {
-    if (!projectName && inventarioData.filterOptions.proyectos.length > 0 && !projectId) {
-      // fallback
-    }
-  }, [inventarioData.filterOptions.proyectos, projectName, projectId]);
-
-  // Fetch project name separately
-  const { data: projectInfo } = React.useMemo(() => ({ data: null }), []);
-
-  // We need to fetch the project name from supabase directly
-  const [projNameLoaded, setProjNameLoaded] = useState(false);
-  useEffect(() => {
-    if (projNameLoaded || !projectId) return;
-    import("@/integrations/supabase/client").then(({ supabase }) => {
-      (supabase as any).from("proyectos").select("nombre").eq("id", projectId).maybeSingle().then(({ data }: any) => {
-        if (data?.nombre) setProjectName(data.nombre);
-        setProjNameLoaded(true);
-      });
-    });
-  }, [projectId, projNameLoaded]);
-
   const pageProperties = useMemo(() => {
-    return inventarioData.propiedades.map((p: InventarioPropiedad) => {
+    return (inventarioData?.propiedades || []).map((p: InventarioPropiedad) => {
       const propImgs = p.propiedad_imagenes || [];
       const modelImgs = p.modelo_imagenes || [];
       const images = propImgs.length > 0 ? propImgs : modelImgs;
@@ -105,16 +111,17 @@ const AgentUnidadesProyecto = () => {
         esquemas_pago: p.esquemas_pago || [],
       };
     });
-  }, [inventarioData.propiedades]);
+  }, [inventarioData?.propiedades]);
 
-  const availableModelNames = inventarioData.filterOptions.modelos;
+  const availableModelNames = inventarioData?.filterOptions?.modelos || [];
   const availableBedroomOptions = useMemo(() =>
-    inventarioData.filterOptions.recamaras.map(r => `${r} recámara${r > 1 ? "s" : ""}`),
-    [inventarioData.filterOptions.recamaras]
+    (inventarioData?.filterOptions?.recamaras || []).map(r => ({ value: String(r), label: `${r} recámara${r > 1 ? "s" : ""}` })),
+    [inventarioData?.filterOptions?.recamaras]
   );
-  const availableLevelOptions = inventarioData.filterOptions.niveles;
-  const totalCount = inventarioData.totalCount;
-  const totalPages = inventarioData.totalPages;
+  const availableLevelOptions = inventarioData?.filterOptions?.niveles || [];
+  const totalCount = inventarioData?.totalCount || 0;
+  const totalPages = inventarioData?.totalPages || 0;
+  const isLoading = isLoadingData;
 
   const hasActiveFilters = filterModelNames.length > 0 || filterBedrooms.length > 0 || filterLevels.length > 0 || filterBodega !== null || filterEstacionamiento !== null;
   const activeFilterCount = filterModelNames.length + filterBedrooms.length + filterLevels.length + (filterBodega ? 1 : 0) + (filterEstacionamiento ? 1 : 0);
@@ -154,10 +161,10 @@ const AgentUnidadesProyecto = () => {
   useEffect(() => { setSelectedSchemeId(null); setSchemesOpen(false); }, [selectedProperty?.id]);
 
   const SortIcon = sortOrder === "asc" ? ArrowUp : sortOrder === "desc" ? ArrowDown : ArrowUpDown;
-  const sortLabel = sortOrder === "asc" ? "Menor precio" : sortOrder === "desc" ? "Mayor precio" : "Ordenar";
 
   const filterContent = (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Modelo */}
       <div className="space-y-2">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
@@ -165,8 +172,23 @@ const AgentUnidadesProyecto = () => {
           </div>
           <span className="text-sm font-semibold text-foreground">Modelo</span>
         </div>
-        <MultiSelectFilter values={filterModelNames} onValuesChange={setFilterModelNames} options={availableModelNames} placeholder="Todos los modelos" searchPlaceholder="Buscar modelo..." />
+        <Select
+          value={filterModelNames[0] || "__all__"}
+          onValueChange={(v) => { setFilterModelNames(v === "__all__" ? [] : [v]); setPage(0); }}
+        >
+          <SelectTrigger className="w-full rounded-xl">
+            <SelectValue placeholder="Todos los modelos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todos los modelos</SelectItem>
+            {availableModelNames.map((m) => (
+              <SelectItem key={m} value={m}>{m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* Recámaras */}
       <div className="space-y-2">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-full bg-violet-100 flex items-center justify-center">
@@ -174,8 +196,23 @@ const AgentUnidadesProyecto = () => {
           </div>
           <span className="text-sm font-semibold text-foreground">Recámaras</span>
         </div>
-        <MultiSelectFilter values={filterBedrooms} onValuesChange={setFilterBedrooms} options={availableBedroomOptions} placeholder="Todas" searchPlaceholder="Buscar..." />
+        <Select
+          value={filterBedrooms[0] || "__all__"}
+          onValueChange={(v) => { setFilterBedrooms(v === "__all__" ? [] : [v]); setPage(0); }}
+        >
+          <SelectTrigger className="w-full rounded-xl">
+            <SelectValue placeholder="Todas" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todas</SelectItem>
+            {availableBedroomOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* Nivel */}
       <div className="space-y-2">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center">
@@ -183,8 +220,23 @@ const AgentUnidadesProyecto = () => {
           </div>
           <span className="text-sm font-semibold text-foreground">Nivel</span>
         </div>
-        <MultiSelectFilter values={filterLevels} onValuesChange={setFilterLevels} options={availableLevelOptions} placeholder="Todos los niveles" searchPlaceholder="Buscar nivel..." />
+        <Select
+          value={filterLevels[0] || "__all__"}
+          onValueChange={(v) => { setFilterLevels(v === "__all__" ? [] : [v]); setPage(0); }}
+        >
+          <SelectTrigger className="w-full rounded-xl">
+            <SelectValue placeholder="Todos los niveles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todos los niveles</SelectItem>
+            {availableLevelOptions.map((l) => (
+              <SelectItem key={l} value={l}>Nivel {l}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* Bodega */}
       <div className="space-y-2">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -192,16 +244,22 @@ const AgentUnidadesProyecto = () => {
           </div>
           <span className="text-sm font-semibold text-foreground">Bodega</span>
         </div>
-        <MultiSelectFilter
-          values={filterBodega ? [filterBodega === "con" ? "Con bodega" : "Sin bodega"] : []}
-          onValuesChange={(vals) => {
-            if (vals.length === 0) setFilterBodega(null);
-            else { const last = vals[vals.length - 1]; setFilterBodega(last === "Con bodega" ? "con" : "sin"); }
-          }}
-          options={["Con bodega", "Sin bodega"]}
-          placeholder="Todas"
-        />
+        <Select
+          value={filterBodega || "__all__"}
+          onValueChange={(v) => { setFilterBodega(v === "__all__" ? null : v); setPage(0); }}
+        >
+          <SelectTrigger className="w-full rounded-xl">
+            <SelectValue placeholder="Todas" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todas</SelectItem>
+            <SelectItem value="con">Con bodega</SelectItem>
+            <SelectItem value="sin">Sin bodega</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* Estacionamiento */}
       <div className="space-y-2">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-full bg-sky-100 flex items-center justify-center">
@@ -209,15 +267,19 @@ const AgentUnidadesProyecto = () => {
           </div>
           <span className="text-sm font-semibold text-foreground">Estacionamiento</span>
         </div>
-        <MultiSelectFilter
-          values={filterEstacionamiento ? [filterEstacionamiento === "con" ? "Con estac." : "Sin estac."] : []}
-          onValuesChange={(vals) => {
-            if (vals.length === 0) setFilterEstacionamiento(null);
-            else { const last = vals[vals.length - 1]; setFilterEstacionamiento(last === "Con estac." ? "con" : "sin"); }
-          }}
-          options={["Con estac.", "Sin estac."]}
-          placeholder="Todos"
-        />
+        <Select
+          value={filterEstacionamiento || "__all__"}
+          onValueChange={(v) => { setFilterEstacionamiento(v === "__all__" ? null : v); setPage(0); }}
+        >
+          <SelectTrigger className="w-full rounded-xl">
+            <SelectValue placeholder="Todos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todos</SelectItem>
+            <SelectItem value="con">Con estacionamiento</SelectItem>
+            <SelectItem value="sin">Sin estacionamiento</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );
@@ -273,9 +335,9 @@ const AgentUnidadesProyecto = () => {
                 {name} <X className="h-2.5 w-2.5" />
               </Badge>
             ))}
-            {filterBedrooms.map(name => (
-              <Badge key={`b-${name}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterBedrooms(prev => prev.filter(n => n !== name))}>
-                {name} <X className="h-2.5 w-2.5" />
+            {filterBedrooms.map(val => (
+              <Badge key={`b-${val}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterBedrooms(prev => prev.filter(n => n !== val))}>
+                {val} rec. <X className="h-2.5 w-2.5" />
               </Badge>
             ))}
             {filterLevels.map(name => (
@@ -320,7 +382,7 @@ const AgentUnidadesProyecto = () => {
 
       {/* Properties Grid */}
       <div className="px-4 mt-2">
-        {isLoading || !projNameLoaded ? (
+        {isLoading || !projNameLoaded || !modeloParamResolved ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>

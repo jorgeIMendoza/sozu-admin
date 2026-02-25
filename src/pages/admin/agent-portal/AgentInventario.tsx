@@ -184,7 +184,7 @@ const AgentInventario = () => {
               onViewProject={() => navigate(`/admin/agent/proyecto/${proyecto.id}`)}
               onViewUnits={(e) => {
                 e.stopPropagation();
-                navigate(`/admin/agent/inventario/proyecto/${proyecto.id}/unidades`);
+                navigate(`/admin/agent/inventario/unidades?proyecto=${proyecto.id}`);
               }}
             />
           ))

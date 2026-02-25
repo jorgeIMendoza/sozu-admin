@@ -545,7 +545,7 @@ const AgentProyectoDetalle = () => {
                   </div>
                   <div className="mt-3">
                     <button
-                      onClick={() => navigate(`/admin/agent/inventario/proyecto/${projectId}/unidades?modelo=${m.id}`)}
+                      onClick={() => navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}&modelo=${m.id}`)}
                       className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-foreground hover:bg-gray-50 transition-colors"
                     >
                       Ver unidades
@@ -605,7 +605,7 @@ const AgentProyectoDetalle = () => {
         <section className="bg-[hsl(var(--agent-primary))]/10 rounded-2xl p-5 text-center">
           <p className="text-sm font-semibold text-foreground mb-3">¿Tu cliente está interesado en este proyecto?</p>
           <Button
-            onClick={() => navigate(`/admin/agent/inventario/proyecto/${projectId}/unidades`)}
+            onClick={() => navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}`)}
             className="w-full bg-[hsl(var(--agent-primary))] hover:bg-[hsl(var(--agent-primary))]/90 text-white rounded-xl h-12 text-sm font-semibold"
           >
             <Share2 className="h-4 w-4 mr-2" />
