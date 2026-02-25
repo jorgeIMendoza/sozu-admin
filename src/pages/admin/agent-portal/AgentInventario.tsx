@@ -47,7 +47,8 @@ const AgentInventario = () => {
       const { data: propiedades } = await (supabase as any)
         .from('propiedades')
         .select('id, id_estatus_disponibilidad, precio_lista, id_edificio_modelo')
-        .eq('activo', true);
+        .eq('activo', true)
+        .eq('es_aprobado', true);
 
       // Map edificio_modelo -> proyecto
       const edModeloIds = [...new Set((propiedades || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))];
@@ -80,7 +81,7 @@ const AgentInventario = () => {
         if (!projId || !projIds.includes(projId)) return;
         const stats = projStats.get(projId) || { available: 0, total: 0, minPrice: Infinity };
         stats.total++;
-        if (p.id_estatus_disponibilidad === 1) {
+        if (p.id_estatus_disponibilidad === 2) { // Disponible
           stats.available++;
           if (p.precio_lista && p.precio_lista < stats.minPrice) {
             stats.minPrice = p.precio_lista;
