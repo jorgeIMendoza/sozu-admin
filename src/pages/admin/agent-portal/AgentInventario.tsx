@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, Building2, MapPin, ChevronRight, Download } from "lucide-react";
+import { Loader2, Search, Building2, MapPin, ChevronRight, Download, Eye, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 
 interface ProyectoCard {
@@ -168,7 +169,7 @@ const AgentInventario = () => {
               key={proyecto.id}
               proyecto={proyecto}
               formatCurrency={formatCurrency}
-              onCardClick={() => navigate(`/admin/inmobiliarias/proyectos/${proyecto.id}`)}
+              onViewProject={() => navigate(`/admin/agent/proyecto/${proyecto.id}`)}
               onViewUnits={(e) => {
                 e.stopPropagation();
                 navigate(`/admin/agent/inventario/proyecto/${proyecto.id}/unidades`);
@@ -184,15 +185,16 @@ const AgentInventario = () => {
 function ProjectCard({
   proyecto,
   formatCurrency,
-  onCardClick,
+  onViewProject,
   onViewUnits,
 }: {
   proyecto: ProyectoCard;
   formatCurrency: (v: number) => string;
-  onCardClick: () => void;
+  onViewProject: () => void;
   onViewUnits: (e: React.MouseEvent) => void;
 }) {
   const isAgotado = proyecto.unidades_disponibles === 0;
+  const { toast } = useToast();
 
   const handleBrochureClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -201,11 +203,19 @@ function ProjectCard({
     }
   };
 
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const text = `${proyecto.nombre}\n${proyecto.ubicacion}\nDesde ${proyecto.precio_desde ? formatCurrency(proyecto.precio_desde) : 'consultar'}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: proyecto.nombre, text }); } catch {}
+    } else {
+      await navigator.clipboard.writeText(text);
+      toast({ title: "Copiado", description: "Información del proyecto copiada." });
+    }
+  };
+
   return (
-    <div
-      className="rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden cursor-pointer active:scale-[0.98] transition-transform"
-      onClick={onCardClick}
-    >
+    <div className="rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden">
       {/* Image with overlay */}
       <div className="relative h-44 w-full overflow-hidden">
         {proyecto.imagen_url ? (
@@ -220,10 +230,9 @@ function ProjectCard({
             <Building2 className="h-10 w-10 text-gray-400" />
           </div>
         )}
-        {/* Dark gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
-        {/* Brochure download button */}
+        {/* Brochure download button - inside image */}
         {proyecto.brochure_url && (
           <button
             onClick={handleBrochureClick}
@@ -253,8 +262,8 @@ function ProjectCard({
         </div>
       </div>
 
-      {/* Bottom section - clean minimal layout */}
-      <div className="px-3.5 py-3 flex items-center justify-between">
+      {/* Stats row */}
+      <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-gray-50">
         <div className="flex items-center gap-6">
           <div>
             <p className="text-[11px] text-muted-foreground">Disponibles</p>
@@ -280,6 +289,24 @@ function ProjectCard({
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         )}
+      </div>
+
+      {/* Action buttons */}
+      <div className="px-3.5 py-2.5 flex items-center gap-2">
+        <button
+          onClick={onViewProject}
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          Ver proyecto
+        </button>
+        <button
+          onClick={handleShare}
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-[hsl(var(--agent-primary))] py-2 text-xs font-medium text-white hover:opacity-90 transition-opacity"
+        >
+          <Share2 className="h-3.5 w-3.5" />
+          Compartir
+        </button>
       </div>
     </div>
   );

@@ -5642,6 +5642,44 @@ export type Database = {
           },
         ]
       }
+      puntos_interes_proyecto: {
+        Row: {
+          activo: boolean
+          distancia_km: number
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_proyecto: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          distancia_km?: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_proyecto: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          distancia_km?: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_proyecto?: number
+          nombre?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "puntos_interes_proyecto_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       regimen: {
         Row: {
           activo: boolean | null

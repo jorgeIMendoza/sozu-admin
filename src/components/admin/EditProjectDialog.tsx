@@ -26,6 +26,8 @@ import { EditAmenityDialog } from "./EditAmenityDialog";
 import { ImageUploadField } from "./ImageUploadField";
 import { ProjectLegalNoticesSection } from "./ProjectLegalNoticesSection";
 import { ProjectBrochuresSection } from "./ProjectBrochuresSection";
+import { ProjectFichaTecnicaSection } from "./ProjectFichaTecnicaSection";
+import { ProjectPuntosInteresSection } from "./ProjectPuntosInteresSection";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -549,15 +551,17 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" id="edit-project-form">
               <Tabs defaultValue="information" className="w-full">
-                <TabsList className={`grid w-full ${isSpecialProject ? 'grid-cols-3' : 'grid-cols-8'}`}>
+                <TabsList className={`grid w-full ${isSpecialProject ? 'grid-cols-3' : 'grid-cols-10'}`}>
                   <TabsTrigger value="information">Información</TabsTrigger>
-                  {!isSpecialProject && <TabsTrigger value="images">Configuración general</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="images">Config. general</TabsTrigger>}
                   {!isSpecialProject && <TabsTrigger value="multimedia">Multimedia</TabsTrigger>}
                   <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
-                  {!isSpecialProject && <TabsTrigger value="reservable-spaces">Espacios para reservar</TabsTrigger>}
-                  {!isSpecialProject && <TabsTrigger value="offer-config">Configuración de oferta</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="reservable-spaces">Espacios</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="offer-config">Config. oferta</TabsTrigger>}
                   {!isSpecialProject && <TabsTrigger value="vistas">Vistas</TabsTrigger>}
                   <TabsTrigger value="brochures">Brochures</TabsTrigger>
+                  {!isSpecialProject && <TabsTrigger value="ficha-tecnica">Ficha Técnica</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="puntos-interes">Puntos Interés</TabsTrigger>}
                 </TabsList>
                 
                 <TabsContent value="information" className="mt-6">
@@ -1393,6 +1397,18 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                 <TabsContent value="brochures" className="mt-6">
                   <ProjectBrochuresSection projectId={projectId} />
                 </TabsContent>
+
+                {!isSpecialProject && (
+                  <TabsContent value="ficha-tecnica" className="mt-6">
+                    <ProjectFichaTecnicaSection projectId={projectId} />
+                  </TabsContent>
+                )}
+
+                {!isSpecialProject && (
+                  <TabsContent value="puntos-interes" className="mt-6">
+                    <ProjectPuntosInteresSection projectId={projectId} />
+                  </TabsContent>
+                )}
               </Tabs>
             </form>
           </Form>
