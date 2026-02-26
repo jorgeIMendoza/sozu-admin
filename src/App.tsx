@@ -263,6 +263,7 @@ const App = () => (
                   <Route path="agent/perfil" element={<AgentPerfil />} />
                   <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
                   <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />
+                  <Route path="agent/inventario/proyecto/:id" element={<AgentProyectoDetalle />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

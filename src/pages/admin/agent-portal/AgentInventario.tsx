@@ -181,7 +181,7 @@ const AgentInventario = () => {
               key={proyecto.id}
               proyecto={proyecto}
               formatCurrency={formatCurrency}
-              onViewProject={() => navigate(`/admin/agent/proyecto/${proyecto.id}`)}
+              onViewProject={() => navigate(`/admin/agent/inventario/proyecto/${proyecto.id}`)}
               onViewUnits={(e) => {
                 e.stopPropagation();
                 navigate(`/admin/agent/inventario/unidades?proyecto=${proyecto.id}`);
