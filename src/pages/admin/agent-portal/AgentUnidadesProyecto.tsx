@@ -96,6 +96,8 @@ const AgentUnidadesProyecto = () => {
     hasBodega: bodegaValue,
     hasEstacionamiento: estacionamientoValue,
     sortPrice: sortOrder === "none" ? null : sortOrder,
+    minPrice: priceRange ? priceRange[0] : null,
+    maxPrice: priceRange ? priceRange[1] : null,
     page,
     pageSize: PAGE_SIZE,
   });
@@ -207,18 +209,15 @@ const AgentUnidadesProyecto = () => {
 
   const SortIcon = sortOrder === "asc" ? ArrowUp : sortOrder === "desc" ? ArrowDown : ArrowUpDown;
 
-  // Filter properties by price range and search query (client-side)
+  // Filter properties by search query only (price is now server-side)
   const filteredPageProperties = useMemo(() => {
     let result = pageProperties;
-    if (priceRange) {
-      result = result.filter(p => p.precio_lista >= priceRange[0] && p.precio_lista <= priceRange[1]);
-    }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter(p => String(p.numero_propiedad).toLowerCase().includes(q));
     }
     return result;
-  }, [pageProperties, priceRange, searchQuery]);
+  }, [pageProperties, searchQuery]);
 
   // Toggle helper for multi-select chips
   const toggleChip = <T,>(arr: T[], val: T): T[] =>

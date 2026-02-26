@@ -11,6 +11,8 @@ export interface InventarioPaginadoFilters {
   hasBodega?: boolean | null;
   hasEstacionamiento?: boolean | null;
   sortPrice?: 'asc' | 'desc' | null;
+  minPrice?: number | null;
+  maxPrice?: number | null;
   page: number;
   pageSize?: number;
 }
@@ -43,6 +45,8 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
       filters.hasBodega,
       filters.hasEstacionamiento,
       filters.sortPrice,
+      filters.minPrice,
+      filters.maxPrice,
       filters.page,
       pageSize,
     ],
@@ -64,6 +68,8 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
       if (filters.hasBodega != null) params.p_has_bodega = filters.hasBodega;
       if (filters.hasEstacionamiento != null) params.p_has_estacionamiento = filters.hasEstacionamiento;
       if (filters.sortPrice) params.p_sort_price = filters.sortPrice;
+      if (filters.minPrice != null) params.p_min_price = filters.minPrice;
+      if (filters.maxPrice != null) params.p_max_price = filters.maxPrice;
 
       const { data, error } = await supabase.rpc(
         'get_inventario_disponible_v2' as any,
