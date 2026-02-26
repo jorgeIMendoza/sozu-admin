@@ -14,7 +14,6 @@ import useEmblaCarousel from "embla-carousel-react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
-import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
@@ -32,7 +31,8 @@ const AgentUnidadesProyecto = () => {
   const modeloIdParam = searchParams.get("modelo");
   const openFiltersParam = searchParams.get("openFilters");
   const navigate = useNavigate();
-  const { canGenerateOffer } = usePagePermissions('/admin/inmobiliarias/inventario');
+  const { permissions: agentPerms } = useAgentPortalPermissions();
+  const canGenerateOffer = agentPerms['/admin/agent/inventario']?.canGenerateOffer;
   const { profile } = useAuth();
   const personaId = profile?.id_persona;
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
