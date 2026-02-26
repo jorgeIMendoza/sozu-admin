@@ -40,6 +40,7 @@ const AgentInventario = () => {
   // Log page view
   useEffect(() => {
     registrarVista('/admin/agent/inventario');
+    track({ page: 'agent_inventario', elementId: 'page_view', elementType: 'page' });
   }, []);
 
   // Fetch estatus_proyecto for avance calculation

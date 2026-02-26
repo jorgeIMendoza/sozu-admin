@@ -60,6 +60,7 @@ const AgentPerfil = () => {
   // Log page view
   useEffect(() => {
     registrarVista('/admin/agent/perfil');
+    track({ page: 'agent_perfil', elementId: 'page_view', elementType: 'page' });
   }, []);
 
   // Fire confetti when profile reaches 100%
