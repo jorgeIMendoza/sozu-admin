@@ -2904,6 +2904,7 @@ export type Database = {
           id_banco: number | null
           id_persona: number
           numero_cuenta: string
+          titular: string | null
           url_evidencia: string | null
         }
         Insert: {
@@ -2917,6 +2918,7 @@ export type Database = {
           id_banco?: number | null
           id_persona: number
           numero_cuenta: string
+          titular?: string | null
           url_evidencia?: string | null
         }
         Update: {
@@ -2930,6 +2932,7 @@ export type Database = {
           id_banco?: number | null
           id_persona?: number
           numero_cuenta?: string
+          titular?: string | null
           url_evidencia?: string | null
         }
         Relationships: [

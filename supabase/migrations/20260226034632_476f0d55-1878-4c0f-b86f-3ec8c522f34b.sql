@@ -1,0 +1,1 @@
+ALTER TABLE public.cuentas_bancarias ADD COLUMN titular TEXT;

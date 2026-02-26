@@ -113,7 +113,7 @@ const AgentInicio = () => {
   const isLoading = onboardingLoading || metricsLoading;
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   };
 
   const getStatusLabel = (statusId: number) => {
