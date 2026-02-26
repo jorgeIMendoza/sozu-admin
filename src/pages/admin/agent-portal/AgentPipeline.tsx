@@ -7,10 +7,12 @@ import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Loader2, Plus, User, Clock } from "lucide-react";
+import { Loader2, Plus, User, Clock, Building2, Calendar, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
-import { differenceInDays } from "date-fns";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 const STAGES = [
   { key: 'all', label: 'Todas', color: 'bg-gray-100 text-gray-800', borderColor: 'border-gray-400' },
@@ -25,6 +27,13 @@ const STAGES = [
   { key: 'cierre', label: 'Cierre', color: 'bg-emerald-100 text-emerald-800', borderColor: 'border-emerald-500' },
   { key: 'expiradas', label: 'Expiradas', color: 'bg-gray-100 text-gray-500', borderColor: 'border-gray-300' },
 ] as const;
+
+// Same MIN_DATE as WorkflowOfertas: 1 month
+const MIN_DATE = (() => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 10);
+})();
 
 function isVigente(fechaGeneracion: string): boolean {
   const expira = new Date(fechaGeneracion);
@@ -65,24 +74,22 @@ const AgentPipeline = () => {
     queryFn: async () => {
       if (!agentEmail) return [];
 
-      const minDate = new Date();
-      minDate.setMonth(minDate.getMonth() - 3);
-
       const { data: ofertasData } = await (supabase as any)
         .from('ofertas')
         .select('id, email_creador, fecha_generacion, fecha_creacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, activo, id_propiedad, id_persona_lead, id_producto')
         .eq('email_creador', agentEmail)
         .eq('activo', true)
-        .gte('fecha_generacion', minDate.toISOString().slice(0, 10))
+        .gte('fecha_generacion', MIN_DATE)
         .order('fecha_generacion', { ascending: false });
 
       if (!ofertasData || ofertasData.length === 0) return [];
 
       const propIds = [...new Set(ofertasData.map((o: any) => o.id_propiedad).filter(Boolean))] as number[];
       const leadIds = [...new Set(ofertasData.map((o: any) => o.id_persona_lead).filter(Boolean))] as number[];
+      const productoIds = [...new Set(ofertasData.map((o: any) => o.id_producto).filter(Boolean))] as number[];
       const ofertaIds = ofertasData.map((o: any) => o.id);
 
-      const [propRes, leadRes, cuentaRes] = await Promise.all([
+      const [propRes, leadRes, cuentaRes, productosRes] = await Promise.all([
         propIds.length > 0
           ? (supabase as any).from('propiedades').select('id, numero_propiedad, precio_lista, id_estatus_disponibilidad, id_edificio_modelo').in('id', propIds)
           : { data: [] as any[] },
@@ -92,8 +99,12 @@ const AgentPipeline = () => {
         ofertaIds.length > 0
           ? (supabase as any).from('cuentas_cobranza').select('id, id_oferta, contrato_draft').in('id_oferta', ofertaIds).eq('activo', true)
           : { data: [] as any[] },
-      ]) as [{ data: any[] }, { data: any[] }, { data: any[] }];
+        productoIds.length > 0
+          ? (supabase as any).from('productos_servicios').select('id, nombre, precio_lista, id_proyecto').in('id', productoIds)
+          : { data: [] as any[] },
+      ]) as [{ data: any[] }, { data: any[] }, { data: any[] }, { data: any[] }];
 
+      // Build proyecto map from propiedades (edificios_modelos -> edificios -> proyectos)
       const edModeloIds = [...new Set((propRes.data || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))];
       let propToProject = new Map<number, string>();
 
@@ -121,6 +132,16 @@ const AgentPipeline = () => {
         }
       }
 
+      // Also get project names for productos
+      const productoProjIds = [...new Set((productosRes.data || []).map((p: any) => p.id_proyecto).filter(Boolean))] as number[];
+      let productoToProject = new Map<number, string>();
+      if (productoProjIds.length > 0) {
+        const { data: projs } = await (supabase as any)
+          .from('proyectos').select('id, nombre').in('id', productoProjIds);
+        (projs || []).forEach((p: any) => productoToProject.set(p.id, p.nombre));
+      }
+
+      // Check for signed contracts
       const cuentaIds = (cuentaRes.data || []).map((c: any) => c.id);
       let signedSet = new Set<number>();
       if (cuentaIds.length > 0) {
@@ -133,24 +154,54 @@ const AgentPipeline = () => {
         (docs || []).forEach((d: any) => signedSet.add(d.id_cuenta_cobranza));
       }
 
+      // Get inmobiliaria for the agent
+      let inmobiliariaNombre = '';
+      const { data: usrData } = await (supabase as any)
+        .from('usuarios').select('id_persona').eq('email', agentEmail).eq('activo', true).limit(1);
+      if (usrData && usrData[0]?.id_persona) {
+        const agentPersonaId = usrData[0].id_persona;
+        const { data: erData } = await (supabase as any)
+          .from('entidades_relacionadas')
+          .select('id_persona_duena_lead')
+          .eq('id_persona', agentPersonaId)
+          .eq('id_tipo_entidad', 19)
+          .eq('activo', true)
+          .limit(1);
+        if (erData && erData[0]?.id_persona_duena_lead) {
+          const { data: inmobPersona } = await (supabase as any)
+            .from('personas').select('nombre_comercial, nombre_legal').eq('id', erData[0].id_persona_duena_lead).limit(1);
+          inmobiliariaNombre = inmobPersona?.[0]?.nombre_comercial || inmobPersona?.[0]?.nombre_legal || '';
+        }
+      }
+
       const propMap = new Map<number, any>((propRes.data || []).map((p: any) => [p.id, p]));
       const leadMap = new Map<number, string>((leadRes.data || []).map((l: any) => [l.id, l.nombre_legal || l.nombre_comercial || 'Sin nombre']));
+      const productoMap = new Map<number, any>((productosRes.data || []).map((p: any) => [p.id, p]));
       const cuentaByOferta = new Map<number, any>();
       (cuentaRes.data || []).forEach((c: any) => { if (c.id_oferta) cuentaByOferta.set(c.id_oferta, c); });
 
       return ofertasData.map((o: any) => {
         const prop = propMap.get(o.id_propiedad);
+        const producto = o.id_producto ? productoMap.get(o.id_producto) : null;
         const cuenta = cuentaByOferta.get(o.id);
+        const isProducto = !!o.id_producto;
+        const proyectoNombre = isProducto
+          ? (producto?.id_proyecto ? productoToProject.get(producto.id_proyecto) || '' : '')
+          : (propToProject.get(o.id_propiedad) || '');
+
         const enriched = {
           ...o,
-          lead_nombre: leadMap.get(o.id_persona_lead) || 'Sin lead',
+          lead_nombre: leadMap.get(o.id_persona_lead) || 'Sin prospecto',
           propiedad_nombre: prop?.numero_propiedad || '',
-          precio: prop?.precio_lista,
-          proyecto_nombre: propToProject.get(o.id_propiedad) || '',
+          producto_nombre: producto?.nombre || '',
+          precio: isProducto ? (producto?.precio_lista || null) : (prop?.precio_lista || null),
+          proyecto_nombre: proyectoNombre,
+          inmobiliaria_nombre: inmobiliariaNombre || 'Interno',
           estatus_disponibilidad: prop?.id_estatus_disponibilidad,
           cuenta_cobranza_id: cuenta?.id,
           contrato_draft: cuenta?.contrato_draft,
           tiene_contrato_firmado: cuenta ? signedSet.has(cuenta.id) : false,
+          is_producto: isProducto,
         };
         enriched.stage = classifyOffer(enriched);
         return enriched;
@@ -169,7 +220,6 @@ const AgentPipeline = () => {
     return map;
   }, [ofertas]);
 
-  // Non-expired offers for the summary
   const nonExpiredOfertas = useMemo(() => ofertas.filter((o: any) => o.stage !== 'expiradas'), [ofertas]);
 
   const displayOfertas = useMemo(() => {
@@ -182,7 +232,7 @@ const AgentPipeline = () => {
   }, [nonExpiredOfertas]);
 
   const formatCurrency = (v: number) =>
-    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(v);
+    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(v);
 
   const getStageInfo = (stage: string) => {
     return STAGES.find(s => s.key === stage) || STAGES[0];
@@ -215,7 +265,6 @@ const AgentPipeline = () => {
           {STAGES.map(stage => {
             const count = stage.key === 'all' ? nonExpiredOfertas.length : (grouped[stage.key]?.length || 0);
             const isActive = activeStage === stage.key;
-            // Hide stages with 0 count (except 'all')
             if (stage.key !== 'all' && count === 0) return null;
             return (
               <button
@@ -266,43 +315,73 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo }: {
   formatCurrency: (v: number) => string;
   getStageInfo: (s: string) => { key: string; label: string; color: string; borderColor: string };
 }) {
-  const days = differenceInDays(new Date(), new Date(oferta.fecha_generacion));
   const stageInfo = getStageInfo(oferta.stage);
+  const ofertaLabel = oferta.is_producto
+    ? `OP-${String(oferta.id).padStart(6, '0')}`
+    : `O-${String(oferta.id).padStart(6, '0')}`;
+
+  const unitLabel = oferta.is_producto
+    ? `${oferta.producto_nombre || 'Producto'} (${oferta.propiedad_nombre})`
+    : (oferta.proyecto_nombre
+      ? `${oferta.proyecto_nombre} - ${oferta.propiedad_nombre}`
+      : oferta.propiedad_nombre);
+
+  const cuentaTipo = oferta.is_producto ? 'Producto' : 'Propiedad';
 
   return (
     <div className={cn("rounded-xl bg-white border-l-4 border border-gray-100 shadow-sm p-3.5", stageInfo.borderColor)}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-              <User className="h-3.5 w-3.5 text-gray-500" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">{oferta.lead_nombre}</p>
-              {oferta.proyecto_nombre && (
-                <p className="text-[11px] text-[hsl(var(--agent-text-secondary))] truncate">
-                  {oferta.proyecto_nombre} {oferta.propiedad_nombre ? `· Unidad ${oferta.propiedad_nombre}` : ''}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {oferta.precio && (
-              <span className="text-xs font-semibold text-[hsl(var(--agent-text))]">
-                {formatCurrency(oferta.precio)}
-              </span>
-            )}
-            <span className="text-[10px] text-[hsl(var(--agent-text-secondary))] flex items-center gap-0.5">
-              <Clock className="h-3 w-3" />
-              {days}d
-            </span>
-          </div>
+      <div className="space-y-1.5">
+        {/* Oferta ID + Badge */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] text-[hsl(var(--agent-text-secondary))] font-mono">
+            Oferta: {ofertaLabel}
+          </span>
+          <Badge className={cn("text-[10px] shrink-0 border-0", stageInfo.color)}>
+            {stageInfo.label}
+          </Badge>
         </div>
 
-        <Badge className={cn("text-[10px] shrink-0 border-0", stageInfo.color)}>
-          {stageInfo.label}
-        </Badge>
+        {/* Unit / Project */}
+        <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
+          {unitLabel}
+        </p>
+
+        {/* Lead */}
+        <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--agent-text-secondary))]">
+          <User className="h-3 w-3 shrink-0" />
+          <span className="truncate">{oferta.lead_nombre}</span>
+        </div>
+
+        {/* Inmobiliaria */}
+        {oferta.inmobiliaria_nombre && (
+          <div className="flex items-center gap-1.5 text-xs">
+            <Building2 className="h-3 w-3 shrink-0 text-[hsl(var(--agent-text-secondary))]" />
+            <span className={cn("truncate font-medium", oferta.inmobiliaria_nombre === 'Interno' ? 'text-orange-600' : 'text-[hsl(var(--agent-primary))]')}>
+              {oferta.inmobiliaria_nombre}
+            </span>
+          </div>
+        )}
+
+        {/* Cuenta de cobranza */}
+        {oferta.cuenta_cobranza_id && (
+          <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--agent-text-secondary))]">
+            <FileText className="h-3 w-3 shrink-0" />
+            <span>{formatCuentaCobranzaId(oferta.cuenta_cobranza_id, cuentaTipo as any)}</span>
+          </div>
+        )}
+
+        {/* Price + Date */}
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          {oferta.precio != null && oferta.precio > 0 && (
+            <span className="text-xs font-semibold text-[hsl(var(--agent-text))]">
+              {formatCurrency(oferta.precio)}
+            </span>
+          )}
+          <span className="text-[10px] text-[hsl(var(--agent-text-secondary))] flex items-center gap-0.5 ml-auto">
+            <Calendar className="h-3 w-3" />
+            {format(new Date(oferta.fecha_generacion), 'dd MMM yyyy', { locale: es })}
+          </span>
+        </div>
       </div>
     </div>
   );
