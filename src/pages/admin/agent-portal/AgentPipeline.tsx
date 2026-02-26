@@ -3,6 +3,7 @@ import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHe
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -50,8 +51,9 @@ function classifyOffer(o: any): string {
 
 const AgentPipeline = () => {
   const { profile, user } = useAuth();
+  const { impersonatedAgentEmail, isImpersonating } = useAgentImpersonation();
   const navigate = useNavigate();
-  const agentEmail = user?.email || profile?.email;
+  const agentEmail = isImpersonating ? impersonatedAgentEmail : (user?.email || profile?.email);
   const [activeStage, setActiveStage] = useState<string>('all');
   const { permissions } = useAgentPortalPermissions();
   const pipelinePerms = permissions['/admin/agent/pipeline'];
