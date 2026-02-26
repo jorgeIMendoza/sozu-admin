@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
@@ -10,6 +10,7 @@ import {
   Check, AlertTriangle, ChevronRight, Loader2, LogOut 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import confetti from "canvas-confetti";
 
 const ACTIVATION_BLOCKS = [
   { 
@@ -49,6 +50,41 @@ const AgentPerfil = () => {
   const { permissions } = useAgentPortalPermissions();
   const perfilPerms = permissions['/admin/agent/perfil'];
   const [activeStep, setActiveStep] = useState<OnboardingStep['id'] | null>(null);
+  const confettiFiredRef = useRef(false);
+  const prevPercentageRef = useRef<number | null>(null);
+
+  // Fire confetti when profile reaches 100%
+  useEffect(() => {
+    if (!isLoading && percentage === 100 && !confettiFiredRef.current) {
+      // Only fire if we transitioned to 100 (not on initial load if already 100)
+      if (prevPercentageRef.current !== null && prevPercentageRef.current < 100) {
+        confettiFiredRef.current = true;
+        const duration = 3000;
+        const end = Date.now() + duration;
+        const frame = () => {
+          confetti({
+            particleCount: 3,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0, y: 0.7 },
+            colors: ['#10b981', '#059669', '#34d399', '#6ee7b7'],
+          });
+          confetti({
+            particleCount: 3,
+            angle: 120,
+            spread: 55,
+            origin: { x: 1, y: 0.7 },
+            colors: ['#10b981', '#059669', '#34d399', '#6ee7b7'],
+          });
+          if (Date.now() < end) requestAnimationFrame(frame);
+        };
+        frame();
+      }
+      prevPercentageRef.current = percentage;
+    } else if (!isLoading) {
+      prevPercentageRef.current = percentage;
+    }
+  }, [percentage, isLoading]);
 
   const getBlockStatus = (relatedSteps: readonly string[]) => {
     const related = steps.filter(s => relatedSteps.includes(s.id));

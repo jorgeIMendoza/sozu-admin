@@ -1536,8 +1536,20 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
   const [numeroCuenta, setNumeroCuenta] = useState('');
   const [clabe, setClabe] = useState('');
   const [evidencia, setEvidencia] = useState('');
+  const [titular, setTitular] = useState('');
+  const [titularIsSamePerson, setTitularIsSamePerson] = useState(false);
   const [existingId, setExistingId] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+
+  // Fetch persona name for "same person" checkbox
+  const { data: personaName } = useQuery({
+    queryKey: ['agent-persona-name', personaId],
+    queryFn: async () => {
+      const { data } = await supabase.from('personas').select('nombre_legal').eq('id', personaId).single();
+      return data?.nombre_legal || '';
+    },
+    enabled: !!personaId,
+  });
 
   const { data: banks = [] } = useQuery({
     queryKey: ['banks'],
@@ -1569,14 +1581,23 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
       setNumeroCuenta(existingAccount.numero_cuenta || '');
       setClabe(existingAccount.cuenta_clabe || '');
       setEvidencia(existingAccount.url_evidencia || '');
+      setTitular((existingAccount as any).titular || '');
       setExistingId(existingAccount.id);
+      // Check if titular matches persona name
+      if ((existingAccount as any).titular && personaName && (existingAccount as any).titular === personaName) {
+        setTitularIsSamePerson(true);
+      }
     }
-  }, [existingAccount]);
+  }, [existingAccount, personaName]);
 
   const handleSave = async () => {
     onTrackSave?.();
     if (!bankId || !numeroCuenta) {
       toast.error("Completa banco y número de cuenta.");
+      return;
+    }
+    if (!titular.trim()) {
+      toast.error("El nombre del titular es obligatorio.");
       return;
     }
     if (!evidencia) {
@@ -1600,14 +1621,15 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
         numero_cuenta: numeroCuenta,
         cuenta_clabe: clabe || null,
         url_evidencia: evidencia,
+        titular: titular.trim(),
         id_persona: personaId,
       };
 
       if (existingId) {
-        const { error } = await supabase.from('cuentas_bancarias').update(accountData).eq('id', existingId);
+        const { error } = await (supabase as any).from('cuentas_bancarias').update(accountData).eq('id', existingId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('cuentas_bancarias').insert([accountData]);
+        const { error } = await (supabase as any).from('cuentas_bancarias').insert([accountData]);
         if (error) throw error;
       }
 
@@ -1633,6 +1655,8 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
       setNumeroCuenta('');
       setClabe('');
       setEvidencia('');
+      setTitular('');
+      setTitularIsSamePerson(false);
       setIsEditing(true);
       queryClient.invalidateQueries({ queryKey: ['agent-bank-account'] });
       queryClient.invalidateQueries({ queryKey: ['agent-onboarding-bank'] });
@@ -1659,6 +1683,9 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground">{(existingAccount as any).banco?.nombre || 'Banco'}</p>
               <p className="text-xs text-muted-foreground">Cuenta: {existingAccount.numero_cuenta}</p>
+              {(existingAccount as any).titular && (
+                <p className="text-xs text-muted-foreground">Titular: {(existingAccount as any).titular}</p>
+              )}
             </div>
           </div>
           {existingAccount.cuenta_clabe && (
@@ -1702,6 +1729,34 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
       <div>
         <Label className="text-sm font-semibold">Número de Cuenta *</Label>
         <Input value={numeroCuenta} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setNumeroCuenta(v); onTrackFieldChange?.(); }} placeholder="Entre 8 y 34 dígitos" maxLength={34} className="mt-1.5 neu-input h-auto" />
+      </div>
+      <div>
+        <Label className="text-sm font-semibold">Titular de la cuenta *</Label>
+        <div className="flex items-center gap-2 mt-1">
+          <Checkbox
+            id="titular-same-person"
+            checked={titularIsSamePerson}
+            onCheckedChange={(checked) => {
+              setTitularIsSamePerson(checked as boolean);
+              if (checked && personaName) {
+                setTitular(personaName);
+              } else {
+                setTitular('');
+              }
+              onTrackFieldChange?.();
+            }}
+          />
+          <Label htmlFor="titular-same-person" className="text-xs text-muted-foreground font-normal cursor-pointer">
+            El titular es {personaName || 'la misma persona'}
+          </Label>
+        </div>
+        <Input
+          value={titular}
+          onChange={(e) => { setTitular(e.target.value); setTitularIsSamePerson(false); onTrackFieldChange?.(); }}
+          placeholder="Nombre completo del titular"
+          className="mt-1.5 neu-input h-auto"
+          disabled={titularIsSamePerson}
+        />
       </div>
       <div>
         <Label className="text-sm font-semibold">CLABE <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>

@@ -32,6 +32,7 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
     cuenta_clabe: "",
     cuenta_swift: "",
     url_evidencia: "",
+    titular: "",
     es_cuenta_fisica_para_stp: false
   });
 
@@ -146,6 +147,21 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
     entityData && 
     (entityData.id_tipo_entidad === 4 || entityData.id_tipo_entidad === 15 || entityData.id_tipo_entidad === 6); // "Dueño Vendedor", "Aportante" or "Administradora"
 
+  // Fetch persona name for "same person" checkbox
+  const { data: personaNameData } = useQuery({
+    queryKey: ['persona-name-for-bank', validPersonId],
+    queryFn: async () => {
+      if (!validPersonId) return null;
+      const { data } = await supabase.from('personas').select('nombre_legal').eq('id', validPersonId).single();
+      return data?.nombre_legal || '';
+    },
+    enabled: !!validPersonId,
+  });
+  const personaName = personaNameData || '';
+
+  const [titularIsSamePersonNew, setTitularIsSamePersonNew] = useState(false);
+  const [titularIsSamePersonEdit, setTitularIsSamePersonEdit] = useState(false);
+
   const addMutation = useMutation({
     mutationFn: async (accountData: typeof newAccount) => {
       if (!validPersonId) {
@@ -157,16 +173,21 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
         throw new Error('Esta entidad ya tiene una cuenta STP');
       }
 
+      if (!accountData.titular?.trim()) {
+        throw new Error('El nombre del titular es obligatorio');
+      }
+
       const insertData = {
         ...accountData,
         id_banco: parseInt(accountData.id_banco),
         id_persona: validPersonId,
         url_evidencia: accountData.url_evidencia || null,
         cuenta_clabe: accountData.cuenta_clabe || null,
-        cuenta_swift: accountData.cuenta_swift || null
+        cuenta_swift: accountData.cuenta_swift || null,
+        titular: accountData.titular.trim(),
       };
       
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('cuentas_bancarias')
         .insert([insertData])
         .select()
@@ -184,8 +205,10 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
         cuenta_clabe: "",
         cuenta_swift: "",
         url_evidencia: "",
+        titular: "",
         es_cuenta_fisica_para_stp: false
       });
+      setTitularIsSamePersonNew(false);
       setIsAdding(false);
       toast({ title: "Cuenta bancaria agregada exitosamente" });
     },
@@ -200,7 +223,10 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
 
   const updateMutation = useMutation({
     mutationFn: async (accountData: any) => {
-      const { data, error } = await supabase
+      if (!accountData.titular?.trim()) {
+        throw new Error('El nombre del titular es obligatorio');
+      }
+      const { data, error } = await (supabase as any)
         .from('cuentas_bancarias')
         .update({
           id_banco: parseInt(accountData.id_banco),
@@ -208,6 +234,7 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
           cuenta_clabe: accountData.cuenta_clabe || null,
           cuenta_swift: accountData.cuenta_swift || null,
           url_evidencia: accountData.url_evidencia || null,
+          titular: accountData.titular.trim(),
           es_cuenta_fisica_para_stp: accountData.es_cuenta_fisica_para_stp
         })
         .eq('id', accountData.id)
@@ -221,6 +248,7 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
       await refetchBankAccounts();
       queryClient.invalidateQueries({ queryKey: ['bankAccounts'] });
       setEditingAccount(null);
+      setTitularIsSamePersonEdit(false);
       toast({ title: "Cuenta bancaria actualizada exitosamente" });
     },
     onError: (error: any) => {
@@ -250,6 +278,10 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
   const handleSubmit = () => {
     if (!newAccount.id_banco || !newAccount.numero_cuenta) {
       toast({ title: "Por favor completa los campos requeridos", variant: "destructive" });
+      return;
+    }
+    if (!newAccount.titular?.trim()) {
+      toast({ title: "El nombre del titular es obligatorio", variant: "destructive" });
       return;
     }
 
@@ -282,6 +314,10 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
   const handleEditSubmit = () => {
     if (!editingAccount.id_banco || !editingAccount.numero_cuenta) {
       toast({ title: "Por favor completa los campos requeridos", variant: "destructive" });
+      return;
+    }
+    if (!editingAccount.titular?.trim()) {
+      toast({ title: "El nombre del titular es obligatorio", variant: "destructive" });
       return;
     }
 
@@ -322,8 +358,10 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
       id_banco: account.id_banco?.toString() || "",
       cuenta_clabe: account.cuenta_clabe || "",
       cuenta_swift: account.cuenta_swift || "",
-      url_evidencia: account.url_evidencia || ""
+      url_evidencia: account.url_evidencia || "",
+      titular: account.titular || "",
     });
+    setTitularIsSamePersonEdit(!!(account.titular && personaName && account.titular === personaName));
   };
 
   return (
@@ -394,6 +432,34 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
                   value={editingAccount.cuenta_swift}
                   onChange={(e) => setEditingAccount(prev => ({ ...prev, cuenta_swift: e.target.value }))}
                   placeholder="8 u 11 caracteres (opcional)"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit_titular">Titular de la cuenta *</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Checkbox
+                    id="edit_titular_same"
+                    checked={titularIsSamePersonEdit}
+                    onCheckedChange={(checked) => {
+                      setTitularIsSamePersonEdit(checked as boolean);
+                      if (checked && personaName) {
+                        setEditingAccount(prev => ({ ...prev, titular: personaName }));
+                      } else {
+                        setEditingAccount(prev => ({ ...prev, titular: '' }));
+                      }
+                    }}
+                  />
+                  <Label htmlFor="edit_titular_same" className="text-xs text-muted-foreground font-normal cursor-pointer">
+                    El titular es {personaName || 'la misma persona'}
+                  </Label>
+                </div>
+                <Input
+                  id="edit_titular"
+                  value={editingAccount.titular}
+                  onChange={(e) => { setEditingAccount(prev => ({ ...prev, titular: e.target.value })); setTitularIsSamePersonEdit(false); }}
+                  placeholder="Nombre completo del titular"
+                  disabled={titularIsSamePersonEdit}
                 />
               </div>
 
@@ -508,6 +574,34 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
                 />
               </div>
 
+              <div>
+                <Label htmlFor="titular">Titular de la cuenta *</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Checkbox
+                    id="titular_same"
+                    checked={titularIsSamePersonNew}
+                    onCheckedChange={(checked) => {
+                      setTitularIsSamePersonNew(checked as boolean);
+                      if (checked && personaName) {
+                        setNewAccount(prev => ({ ...prev, titular: personaName }));
+                      } else {
+                        setNewAccount(prev => ({ ...prev, titular: '' }));
+                      }
+                    }}
+                  />
+                  <Label htmlFor="titular_same" className="text-xs text-muted-foreground font-normal cursor-pointer">
+                    El titular es {personaName || 'la misma persona'}
+                  </Label>
+                </div>
+                <Input
+                  id="titular"
+                  value={newAccount.titular}
+                  onChange={(e) => { setNewAccount(prev => ({ ...prev, titular: e.target.value })); setTitularIsSamePersonNew(false); }}
+                  placeholder="Nombre completo del titular"
+                  disabled={titularIsSamePersonNew}
+                />
+              </div>
+
               <ImageUploadField
                 label="Evidencia"
                 value={newAccount.url_evidencia}
@@ -568,6 +662,7 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
               <div className="flex justify-between items-start">
                 <div className="space-y-2">
                   <p><strong>Banco:</strong> {account.banco?.nombre || 'N/A'}</p>
+                  <p><strong>Titular:</strong> {(account as any).titular || 'No especificado'}</p>
                   <p><strong>Número de Cuenta:</strong> {account.numero_cuenta}</p>
                   {account.cuenta_clabe && (
                     <p><strong>CLABE:</strong> {account.cuenta_clabe}</p>
