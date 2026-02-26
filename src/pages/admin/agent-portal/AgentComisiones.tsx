@@ -38,6 +38,7 @@ const AgentComisiones = () => {
   // Log page view
   useEffect(() => {
     registrarVista('/admin/agent/comisiones');
+    track({ page: 'agent_comisiones', elementId: 'page_view', elementType: 'page' });
   }, []);
 
   // Check profile completeness (fiscal + bank + docs)

@@ -50,6 +50,7 @@ const AgentUnidadesProyecto = () => {
   // Log page view
   useEffect(() => {
     registrarVista('/admin/agent/inventario/unidades');
+    track({ page: 'agent_unidades', elementId: 'page_view', elementType: 'page' });
   }, []);
 
   // State declarations from line 41 to line 100

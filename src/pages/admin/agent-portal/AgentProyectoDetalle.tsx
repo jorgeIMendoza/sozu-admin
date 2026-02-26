@@ -62,6 +62,7 @@ const AgentProyectoDetalle = () => {
   useEffect(() => {
     if (projectId > 0) {
       registrarVista(`/admin/agent/inventario/proyecto/${projectId}`, { proyecto_id: projectId });
+      track({ page: 'agent_detalle_desarrollo', elementId: 'page_view', elementType: 'page', metadata: { proyecto_id: projectId } });
     }
   }, [projectId]);
 

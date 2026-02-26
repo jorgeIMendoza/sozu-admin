@@ -76,6 +76,7 @@ const AgentPipeline = () => {
   // Log page view
   useEffect(() => {
     registrarVista('/admin/agent/pipeline');
+    track({ page: 'agent_pipeline', elementId: 'page_view', elementType: 'page' });
   }, []);
 
   const { data: ofertas = [], isLoading } = useQuery({

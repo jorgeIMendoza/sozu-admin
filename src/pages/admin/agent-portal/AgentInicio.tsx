@@ -37,6 +37,7 @@ const AgentInicio = () => {
   // Log page view
   useEffect(() => {
     registrarVista('/admin/agent/inicio');
+    track({ page: 'agent_inicio', elementId: 'page_view', elementType: 'page' });
   }, []);
 
   // Get current hour for greeting
