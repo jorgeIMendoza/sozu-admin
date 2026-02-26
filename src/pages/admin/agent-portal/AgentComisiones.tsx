@@ -214,6 +214,10 @@ const AgentComisiones = () => {
     .filter((c: any) => c.detailed_status !== 'pagada')
     .reduce((sum: number, c: any) => sum + (c.monto_comision || 0), 0);
 
+  const visibleTabs = isAgentRole 
+    ? TABS 
+    : TABS.filter(t => t.key !== 'factura_requerida');
+
   const filteredComisiones = activeTab === 'todas' 
     ? comisiones 
     : comisiones.filter((c: any) => c.detailed_status === activeTab);
@@ -291,7 +295,7 @@ const AgentComisiones = () => {
       <div className="px-4 mb-4">
         <ScrollArea className="w-full whitespace-nowrap">
           <div className="flex gap-2 pb-2">
-            {TABS.map(tab => {
+            {visibleTabs.map(tab => {
               const count = tab.key === 'todas' 
                 ? comisiones.length 
                 : comisiones.filter((c: any) => c.detailed_status === tab.key).length;
