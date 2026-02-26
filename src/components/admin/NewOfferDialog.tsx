@@ -187,9 +187,10 @@ interface NewOfferDialogProps {
   preSelectedSchemeId?: number | null; // Pre-selected payment scheme from inventory detail
   onTrackSubmit?: () => void; // Optional callback to track "Generar Oferta" submit inside modal
   onTrackFillIntent?: () => void; // Optional callback to track first field fill in the modal
+  hideBankingInPdf?: boolean; // Hide banking section in generated PDF (for unverified agents)
 }
 
-export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = false, hideManualMode = false, hidePdfOptions = false, customTrigger, preSelectedSchemeId, onTrackSubmit, onTrackFillIntent }: NewOfferDialogProps) {
+export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = false, hideManualMode = false, hidePdfOptions = false, customTrigger, preSelectedSchemeId, onTrackSubmit, onTrackFillIntent, hideBankingInPdf = false }: NewOfferDialogProps) {
   const fillIntentTracked = React.useRef(false);
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -971,6 +972,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             recipientEmail: result.leadEmail,
             recipientName: result.leadName,
             propertyNumber,
+            hideBanking: hideBankingInPdf,
           }
         });
 

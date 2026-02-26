@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { offerIds, recipientEmail, recipientName, propertyNumber } = await req.json();
+    const { offerIds, recipientEmail, recipientName, propertyNumber, hideBanking } = await req.json();
 
     if (!offerIds || !Array.isArray(offerIds) || offerIds.length === 0) {
       return new Response(JSON.stringify({ error: 'offerIds (array) requerido' }), {
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${supabaseServiceKey}`,
           },
-          body: JSON.stringify({ offerId, includeBase64: true }),
+          body: JSON.stringify({ offerId, includeBase64: true, hideBanking: !!hideBanking }),
         });
 
         const result = await res.json();
