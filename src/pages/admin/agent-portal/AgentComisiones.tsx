@@ -58,7 +58,7 @@ const AgentComisiones = () => {
       if (cuentaIds.length > 0) {
         const { data: cuentas } = await (supabase as any)
           .from('cuentas_cobranza')
-          .select('id, id_oferta, precio_final, tipo')
+          .select('id, id_oferta, precio_final')
           .in('id', cuentaIds);
 
         if (cuentas) {
@@ -120,7 +120,8 @@ const AgentComisiones = () => {
             (ofertas || []).forEach((o: any) => {
               const prop = propMap.get(o.id_propiedad);
               const productoNombre = o.id_producto ? prodMap.get(o.id_producto) || '' : '';
-              ofertaMap.set(o.id, { ...prop, productoNombre });
+              const tipoDerivado = o.id_producto ? 'Producto' : 'Propiedad';
+              ofertaMap.set(o.id, { ...prop, productoNombre, tipoDerivado });
             });
           }
           
@@ -131,7 +132,7 @@ const AgentComisiones = () => {
               propiedad: info?.numero_propiedad, 
               proyecto: info?.proyecto, 
               precio_final: c.precio_final, 
-              tipo: c.tipo,
+              tipo: info?.tipoDerivado || 'Propiedad',
               productoNombre: info?.productoNombre || '',
               id_estatus_disponibilidad: info?.id_estatus_disponibilidad,
             });
