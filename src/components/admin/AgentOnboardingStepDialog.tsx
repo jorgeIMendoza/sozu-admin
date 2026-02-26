@@ -9,17 +9,19 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, Download, FileText, CalendarDays } from "lucide-react";
+import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, Download, FileText, CalendarDays, Landmark, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BankAccountsSection } from "./BankAccountsSection";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { validateRFC } from "@/utils/fiscalDataValidation";
 import { Badge } from "@/components/ui/badge";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import type { OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { cn } from "@/lib/utils";
 
 interface AgentOnboardingStepDialogProps {
   step: OnboardingStep['id'];
@@ -33,7 +35,7 @@ const STEP_TITLES: Record<string, string> = {
   address: 'Dirección',
   fiscal: 'Información Fiscal',
   documents: 'Documentos',
-  'bank-accounts': 'Cuentas Bancarias',
+  'bank-accounts': 'Cuenta Bancaria',
   training: 'Capacitación',
 };
 
@@ -42,7 +44,7 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   address: 'Tu dirección física completa',
   fiscal: 'RFC, régimen fiscal, constancia y dirección fiscal',
   documents: 'INE, Constancia y Contrato de comercialización',
-  'bank-accounts': 'Agrega al menos una cuenta bancaria',
+  'bank-accounts': 'Agrega tu cuenta bancaria',
   training: 'Agenda tu cita de capacitación presencial',
 };
 
@@ -108,11 +110,12 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
     </div>
   ) : step === 'bank-accounts' ? (
     <div className="px-1">
-      <BankAccountsSection 
-        personId={personaId} 
-        onAddAccountClick={() => track({ page: "modal_perfil", elementId: "perfil_cuentas_agregar", metadata: { fase: "bank-accounts" } })}
-        onSaveAccountClick={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: "bank-accounts" } })}
-      />
+      <AgentBankAccountStep personaId={personaId} onTrackFieldChange={() => {
+        if (!hasTrackedFieldChange.current) {
+          hasTrackedFieldChange.current = true;
+          track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
+        }
+      }} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: "bank-accounts" } })} />
     </div>
   ) : step === 'training' ? (
     <div className="px-1">
@@ -830,10 +833,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
   return (
     <div className="space-y-5 pb-4">
-      {/* Config name as subtitle */}
-      {configName && configName !== 'Capacitación' && (
-        <p className="text-xs text-muted-foreground font-medium -mt-2">{configName}</p>
-      )}
+      {/* Config name removed from here — shown below in Fechas disponibles */}
 
       {/* Status */}
       {(existingCita || citaCancelledExternally) && (
@@ -1410,50 +1410,54 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
   return (
     <div className="space-y-5 pb-4">
       {step === 'basic' && (
-        <div className="space-y-4">
-          {/* Basic info fields */}
-          <div>
-            <Label className="text-sm font-semibold">Nombre completo *</Label>
-            <Input value={nombre} onChange={(e) => { setNombre(e.target.value); onTrackFieldChange?.(); }} className="mt-1.5 neu-input h-auto" />
-          </div>
-          <div>
-            <Label className="text-sm font-semibold">Correo electrónico *</Label>
-            <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); onTrackFieldChange?.(); }} className="mt-1.5 neu-input h-auto" />
-          </div>
-           <div>
-            <Label className="text-sm font-semibold">Teléfono (10 dígitos) *</Label>
-            <Input value={telefono} onChange={(e) => { setTelefono(e.target.value.replace(/\D/g, '')); onTrackFieldChange?.(); }} maxLength={10} className="mt-1.5 neu-input h-auto" />
-          </div>
-          <div>
-            <Label className="text-sm font-semibold">CURP <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
-            <Input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={18} placeholder="Ej. GARC850101HDFRRL09" className="mt-1.5 neu-input h-auto" />
-          </div>
-          <div>
-            <Label className="text-sm font-semibold">Tipo de Persona</Label>
-            <Input value="Persona Física" disabled className="mt-1.5 neu-input h-auto opacity-60" />
-          </div>
-          <div>
-            <Label className="text-sm font-semibold">Sexo <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
-            <Select value={sexo} onValueChange={setSexo}>
-              <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona sexo" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="M">Masculino</SelectItem>
-                <SelectItem value="F">Femenino</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Address section */}
-          <p className="text-xs font-medium text-muted-foreground pt-2 border-t">Dirección</p>
-          {renderAddressFields(
-            'dir', calle, setCalle, numExt, setNumExt, numInt, setNumInt,
-            colonia, setColonia, cp, setCp, idPais, setIdPais, idEstado, setIdEstado, idMunicipio, setIdMunicipio
-          )}
-
-          {/* Documents section (INE frente/reverso + Carta comercialización) */}
-          <p className="text-xs font-medium text-muted-foreground pt-2 border-t">Documentos</p>
-          <AgentDocumentsStep personaId={personaId} filterDocTypes={BASIC_DOC_TYPES} onTrackFieldChange={onTrackFieldChange} />
-        </div>
+        <Tabs defaultValue="personal" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsTrigger value="personal" className="text-xs">Datos personales</TabsTrigger>
+            <TabsTrigger value="address" className="text-xs">Dirección</TabsTrigger>
+            <TabsTrigger value="documents" className="text-xs">Documentos</TabsTrigger>
+          </TabsList>
+          <TabsContent value="personal" className="space-y-4">
+            <div>
+              <Label className="text-sm font-semibold">Nombre completo *</Label>
+              <Input value={nombre} onChange={(e) => { setNombre(e.target.value); onTrackFieldChange?.(); }} className="mt-1.5 neu-input h-auto" />
+            </div>
+            <div>
+              <Label className="text-sm font-semibold">Correo electrónico *</Label>
+              <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); onTrackFieldChange?.(); }} className="mt-1.5 neu-input h-auto" />
+            </div>
+            <div>
+              <Label className="text-sm font-semibold">Teléfono (10 dígitos) *</Label>
+              <Input value={telefono} onChange={(e) => { setTelefono(e.target.value.replace(/\D/g, '')); onTrackFieldChange?.(); }} maxLength={10} className="mt-1.5 neu-input h-auto" />
+            </div>
+            <div>
+              <Label className="text-sm font-semibold">CURP <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+              <Input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={18} placeholder="Ej. GARC850101HDFRRL09" className="mt-1.5 neu-input h-auto" />
+            </div>
+            <div>
+              <Label className="text-sm font-semibold">Tipo de Persona</Label>
+              <Input value="Persona Física" disabled className="mt-1.5 neu-input h-auto opacity-60" />
+            </div>
+            <div>
+              <Label className="text-sm font-semibold">Sexo <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+              <Select value={sexo} onValueChange={setSexo}>
+                <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona sexo" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="M">Masculino</SelectItem>
+                  <SelectItem value="F">Femenino</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </TabsContent>
+          <TabsContent value="address" className="space-y-4">
+            {renderAddressFields(
+              'dir', calle, setCalle, numExt, setNumExt, numInt, setNumInt,
+              colonia, setColonia, cp, setCp, idPais, setIdPais, idEstado, setIdEstado, idMunicipio, setIdMunicipio
+            )}
+          </TabsContent>
+          <TabsContent value="documents" className="space-y-4">
+            <AgentDocumentsStep personaId={personaId} filterDocTypes={BASIC_DOC_TYPES} onTrackFieldChange={onTrackFieldChange} />
+          </TabsContent>
+        </Tabs>
       )}
 
       {step === 'address' && renderAddressFields(
@@ -1462,49 +1466,54 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
       )}
 
       {step === 'fiscal' && (
-        <div className="space-y-4">
-          <div>
-            <Label className="text-sm font-semibold">RFC *</Label>
-            <Input value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} maxLength={13} className="mt-1.5 neu-input h-auto" />
-          </div>
-          <div>
-            <Label className="text-sm font-semibold">Régimen Fiscal *</Label>
-            <Select value={regimen} onValueChange={setRegimen}>
-              <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona" /></SelectTrigger>
-              <SelectContent>
-                {regimenes.map((r: any) => (
-                  <SelectItem key={r.id} value={r.id.toString()}>{r.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-sm font-semibold">Uso CFDI *</Label>
-            <Select value={usoCfdi} onValueChange={setUsoCfdi}>
-              <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona" /></SelectTrigger>
-              <SelectContent>
-                {usosCfdi.map((u: any) => (
-                  <SelectItem key={u.codigo} value={u.codigo}>{u.codigo} - {u.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2 pt-2">
-            <Checkbox id="copiar" checked={copiarDireccion} onCheckedChange={(c) => setCopiarDireccion(!!c)} />
-            <Label htmlFor="copiar" className="text-sm cursor-pointer">Copiar dirección física</Label>
-          </div>
-
-          <p className="text-xs font-medium text-muted-foreground pt-1">Dirección Fiscal</p>
-          {renderAddressFields(
-            'fiscal', fCalle, setFCalle, fNumExt, setFNumExt, fNumInt, setFNumInt,
-            fColonia, setFColonia, fCp, setFCp, fIdPais, setFIdPais, fIdEstado, setFIdEstado, fIdMunicipio, setFIdMunicipio
-          )}
-
-          {/* Constancia de Situación Fiscal upload */}
-          <p className="text-xs font-medium text-muted-foreground pt-2 border-t">Constancia de Situación Fiscal</p>
-          <AgentDocumentsStep personaId={personaId} filterDocTypes={FISCAL_DOC_TYPES} onTrackFieldChange={onTrackFieldChange} />
-        </div>
+        <Tabs defaultValue="datos" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsTrigger value="datos" className="text-xs">Datos</TabsTrigger>
+            <TabsTrigger value="direccion" className="text-xs">Dirección</TabsTrigger>
+            <TabsTrigger value="constancia" className="text-xs">Constancia</TabsTrigger>
+          </TabsList>
+          <TabsContent value="datos" className="space-y-4">
+            <div>
+              <Label className="text-sm font-semibold">RFC *</Label>
+              <Input value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} maxLength={13} className="mt-1.5 neu-input h-auto" />
+            </div>
+            <div>
+              <Label className="text-sm font-semibold">Régimen Fiscal *</Label>
+              <Select value={regimen} onValueChange={setRegimen}>
+                <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                <SelectContent>
+                  {regimenes.map((r: any) => (
+                    <SelectItem key={r.id} value={r.id.toString()}>{r.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-semibold">Uso CFDI *</Label>
+              <Select value={usoCfdi} onValueChange={setUsoCfdi}>
+                <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                <SelectContent>
+                  {usosCfdi.map((u: any) => (
+                    <SelectItem key={u.codigo} value={u.codigo}>{u.codigo} - {u.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </TabsContent>
+          <TabsContent value="direccion" className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Checkbox id="copiar" checked={copiarDireccion} onCheckedChange={(c) => setCopiarDireccion(!!c)} />
+              <Label htmlFor="copiar" className="text-sm cursor-pointer">Copiar dirección física</Label>
+            </div>
+            {renderAddressFields(
+              'fiscal', fCalle, setFCalle, fNumExt, setFNumExt, fNumInt, setFNumInt,
+              fColonia, setFColonia, fCp, setFCp, fIdPais, setFIdPais, fIdEstado, setFIdEstado, fIdMunicipio, setFIdMunicipio
+            )}
+          </TabsContent>
+          <TabsContent value="constancia" className="space-y-4">
+            <AgentDocumentsStep personaId={personaId} filterDocTypes={FISCAL_DOC_TYPES} onTrackFieldChange={onTrackFieldChange} />
+          </TabsContent>
+        </Tabs>
       )}
 
       <button
@@ -1514,6 +1523,208 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
       >
         {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Guardar"}
       </button>
+    </div>
+  );
+}
+
+// ---------- Agent Bank Account Step (single account, evidence required) ----------
+
+function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { personaId: number; onTrackFieldChange?: () => void; onTrackSave?: () => void }) {
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [bankId, setBankId] = useState('');
+  const [numeroCuenta, setNumeroCuenta] = useState('');
+  const [clabe, setClabe] = useState('');
+  const [evidencia, setEvidencia] = useState('');
+  const [existingId, setExistingId] = useState<number | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const { data: banks = [] } = useQuery({
+    queryKey: ['banks'],
+    queryFn: async () => {
+      const { data } = await supabase.from('bancos').select('id, nombre').eq('activo', true).order('nombre');
+      return data || [];
+    },
+  });
+
+  const { data: existingAccount, isLoading } = useQuery({
+    queryKey: ['agent-bank-account', personaId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('cuentas_bancarias')
+        .select('*, banco:bancos(nombre)')
+        .eq('id_persona', personaId)
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!personaId,
+  });
+
+  useEffect(() => {
+    if (existingAccount) {
+      setBankId(existingAccount.id_banco?.toString() || '');
+      setNumeroCuenta(existingAccount.numero_cuenta || '');
+      setClabe(existingAccount.cuenta_clabe || '');
+      setEvidencia(existingAccount.url_evidencia || '');
+      setExistingId(existingAccount.id);
+    }
+  }, [existingAccount]);
+
+  const handleSave = async () => {
+    onTrackSave?.();
+    if (!bankId || !numeroCuenta) {
+      toast.error("Completa banco y número de cuenta.");
+      return;
+    }
+    if (!evidencia) {
+      toast.error("La evidencia es obligatoria.");
+      return;
+    }
+    const len = numeroCuenta.length;
+    if (len < 8 || len > 34) {
+      toast.error("El número de cuenta debe tener entre 8 y 34 caracteres.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const accountData = {
+        id_banco: parseInt(bankId),
+        numero_cuenta: numeroCuenta,
+        cuenta_clabe: clabe || null,
+        url_evidencia: evidencia,
+        id_persona: personaId,
+      };
+
+      if (existingId) {
+        const { error } = await supabase.from('cuentas_bancarias').update(accountData).eq('id', existingId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('cuentas_bancarias').insert([accountData]);
+        if (error) throw error;
+      }
+
+      toast.success("Cuenta bancaria guardada.");
+      queryClient.invalidateQueries({ queryKey: ['agent-bank-account'] });
+      queryClient.invalidateQueries({ queryKey: ['agent-onboarding-bank'] });
+      setIsEditing(false);
+    } catch (err: any) {
+      toast.error("Error: " + (err.message || "Error"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!existingId) return;
+    setSaving(true);
+    try {
+      await supabase.from('cuentas_bancarias').update({ activo: false }).eq('id', existingId);
+      toast.success("Cuenta eliminada.");
+      setExistingId(null);
+      setBankId('');
+      setNumeroCuenta('');
+      setClabe('');
+      setEvidencia('');
+      setIsEditing(true);
+      queryClient.invalidateQueries({ queryKey: ['agent-bank-account'] });
+      queryClient.invalidateQueries({ queryKey: ['agent-onboarding-bank'] });
+    } catch (err: any) {
+      toast.error("Error: " + (err.message || "Error"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  }
+
+  // Show existing account view
+  if (existingAccount && !isEditing) {
+    return (
+      <div className="space-y-4 pb-4">
+        <div className="rounded-2xl border bg-card p-5 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-emerald-50 flex items-center justify-center">
+              <Landmark className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground">{(existingAccount as any).banco?.nombre || 'Banco'}</p>
+              <p className="text-xs text-muted-foreground">Cuenta: {existingAccount.numero_cuenta}</p>
+            </div>
+          </div>
+          {existingAccount.cuenta_clabe && (
+            <div className="text-xs text-muted-foreground">
+              <span className="font-medium">CLABE:</span> {existingAccount.cuenta_clabe}
+            </div>
+          )}
+          {existingAccount.url_evidencia && (
+            <div className="text-xs">
+              <span className="font-medium text-muted-foreground">Evidencia:</span>{' '}
+              <a href={existingAccount.url_evidencia} target="_blank" rel="noreferrer" className="text-primary hover:underline">Ver documento</a>
+            </div>
+          )}
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={() => setIsEditing(true)}>
+              Editar
+            </Button>
+            <Button variant="outline" size="sm" className="rounded-xl text-destructive hover:bg-destructive/10" onClick={handleDelete} disabled={saving}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show form (add or edit)
+  return (
+    <div className="space-y-4 pb-4">
+      <div>
+        <Label className="text-sm font-semibold">Banco *</Label>
+        <Select value={bankId} onValueChange={(v) => { setBankId(v); onTrackFieldChange?.(); }}>
+          <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona un banco" /></SelectTrigger>
+          <SelectContent>
+            {banks.map((b: any) => (
+              <SelectItem key={b.id} value={b.id.toString()}>{b.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label className="text-sm font-semibold">Número de Cuenta *</Label>
+        <Input value={numeroCuenta} onChange={(e) => { setNumeroCuenta(e.target.value); onTrackFieldChange?.(); }} placeholder="Entre 8 y 34 caracteres" className="mt-1.5 neu-input h-auto" />
+      </div>
+      <div>
+        <Label className="text-sm font-semibold">CLABE <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+        <Input value={clabe} onChange={(e) => setClabe(e.target.value)} placeholder="18 dígitos" maxLength={18} className="mt-1.5 neu-input h-auto" />
+      </div>
+      <div>
+        <ImageUploadField
+          label="Evidencia *"
+          value={evidencia}
+          onChange={(url) => { setEvidencia(url); onTrackFieldChange?.(); }}
+          accept=".pdf,.jpg,.jpeg,.png,.webp"
+        />
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex-1 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Guardar"}
+        </button>
+        {existingId && (
+          <button onClick={() => setIsEditing(false)} className="py-3 px-4 rounded-2xl border text-sm font-medium text-muted-foreground hover:bg-muted/50">
+            Cancelar
+          </button>
+        )}
+      </div>
     </div>
   );
 }

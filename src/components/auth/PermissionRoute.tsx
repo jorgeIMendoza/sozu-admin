@@ -24,8 +24,8 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <>{children}</>;
   }
 
-  // Allow agent portal routes only for simplified role (Agente Inmobiliario)
-  if (location.pathname.startsWith('/admin/agent') && isSimplifiedRole) {
+  // Allow agent portal routes for ALL roles (agent portal is accessible to everyone)
+  if (location.pathname.startsWith('/admin/agent')) {
     return <>{children}</>;
   }
 

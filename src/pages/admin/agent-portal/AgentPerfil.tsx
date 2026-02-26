@@ -5,7 +5,6 @@ import { APP_VERSION } from "@/lib/config";
 import { useAgentOnboardingStatus, type OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
-import { Progress } from "@/components/ui/progress";
 import { 
   FileText, Receipt, Landmark, GraduationCap, 
   Check, AlertTriangle, ChevronRight, Loader2, LogOut 
@@ -90,28 +89,55 @@ const AgentPerfil = () => {
         </div>
       </div>
 
-      {/* Progress Card - moved to top */}
+      {/* Progress Steps - 4 step indicators */}
       <div className="rounded-xl bg-white p-4 border border-gray-100 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-[hsl(var(--agent-text))]">
             Progreso
           </span>
-          <span className="text-sm font-bold text-[hsl(var(--agent-primary))]">
-            {percentage}%
+          <span className="text-xs text-[hsl(var(--agent-text-secondary))]">
+            {completedCount} de {totalSteps}
           </span>
         </div>
-        <Progress 
-          value={percentage} 
-          className="h-2.5 bg-gray-100"
-          style={{ 
-            ['--progress-color' as string]: percentage === 100 
-              ? 'hsl(var(--agent-primary))' 
-              : 'hsl(var(--agent-amber))' 
-          }}
-        />
-        <p className="text-xs text-[hsl(var(--agent-text-secondary))]">
-          {completedCount} de {totalSteps} etapas completadas
-        </p>
+        <div className="flex items-center gap-0">
+          {steps.map((step, index) => {
+            const block = ACTIVATION_BLOCKS[index];
+            return (
+              <div key={step.id} className="flex items-center flex-1 last:flex-none">
+                <div className="flex flex-col items-center gap-1">
+                  <div
+                    className={cn(
+                      "h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all",
+                      step.isComplete
+                        ? "bg-emerald-500 text-white"
+                        : step.hasPartialData
+                        ? "bg-amber-400 text-white"
+                        : "bg-gray-200 text-gray-500"
+                    )}
+                  >
+                    {step.isComplete ? <Check className="h-4 w-4" strokeWidth={3} /> : index + 1}
+                  </div>
+                  <span className={cn(
+                    "text-[9px] font-medium text-center max-w-[56px] leading-tight",
+                    step.isComplete
+                      ? "text-emerald-600"
+                      : step.hasPartialData
+                      ? "text-amber-600"
+                      : "text-gray-400"
+                  )}>
+                    {block?.label.split(' ')[0] || step.label}
+                  </span>
+                </div>
+                {index < steps.length - 1 && (
+                  <div className={cn(
+                    "flex-1 h-[2px] mx-1 mt-[-14px] rounded-full",
+                    step.isComplete ? "bg-emerald-400" : "bg-gray-200"
+                  )} />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Payment Warning */}
