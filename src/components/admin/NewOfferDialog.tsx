@@ -952,68 +952,46 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         });
       }
       
-      // Generate main property PDF
+      // Send offer PDFs via email instead of downloading
       try {
-        const { generateOfferPDF } = await import('@/services/htmlToPdfService');
-        await generateOfferPDF({
-          propertyId,
-          offerId: result.offerId,
-          propertyNumber,
-          leadName: result.leadName,
-          leadEmail: result.leadEmail,
-          leadPhone: result.leadPhone,
-          creatorEmail: profile?.email || ''
-        });
-        
+        const allOfferIds = [result.offerId];
+        // Add product offer IDs
+        for (const productOffer of result.productOffersResults.createdOffers) {
+          allOfferIds.push(productOffer.offerId);
+        }
+
         toast({
-          title: "PDF de propiedad generado",
-          description: "El PDF de la oferta de propiedad se ha descargado.",
+          title: "Enviando oferta por correo...",
+          description: `Enviando ${allOfferIds.length} PDF(s) a ${result.leadEmail}`,
         });
 
-        // Generate PDFs for product offers - with delay between each to avoid browser blocking
-        if (result.productOffersResults.createdOffers.length > 0) {
-          toast({
-            title: "Generando PDFs de productos...",
-            description: `Descargando ${result.productOffersResults.createdOffers.length} PDF(s) de productos.`,
-          });
-
-          for (const productOffer of result.productOffersResults.createdOffers) {
-            // Small delay to allow browser to handle downloads
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            try {
-              await generateOfferPDF({
-                propertyId,
-                offerId: productOffer.offerId,
-                propertyNumber,
-                leadName: result.leadName,
-                leadEmail: result.leadEmail,
-                leadPhone: result.leadPhone,
-                creatorEmail: profile?.email || '',
-                isProductOffer: true,
-                productId: productOffer.productId
-              });
-              console.log(`PDF generated for product offer ${productOffer.offerId} - ${productOffer.productName}`);
-            } catch (productPdfError) {
-              console.error(`Error generating PDF for product ${productOffer.productName}:`, productPdfError);
-              toast({
-                title: "Aviso",
-                description: `No se pudo generar el PDF para ${productOffer.productName}`,
-                variant: "destructive",
-              });
-            }
+        const { data: emailResult, error: emailError } = await supabase.functions.invoke('enviar-oferta-email', {
+          body: {
+            offerIds: allOfferIds,
+            recipientEmail: result.leadEmail,
+            recipientName: result.leadName,
+            propertyNumber,
           }
-          
+        });
+
+        if (emailError) {
+          console.error('Error sending offer email:', emailError);
           toast({
-            title: "PDFs de productos generados",
-            description: `Se descargaron ${result.productOffersResults.createdOffers.length} PDF(s) de productos.`,
+            title: "Error al enviar oferta",
+            description: "La oferta se creó pero no se pudo enviar por correo.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Oferta compartida",
+            description: `La oferta ha sido enviada a ${result.leadEmail} con ${emailResult?.attachmentsSent || allOfferIds.length} PDF(s) adjuntos.`,
           });
         }
-      } catch (pdfError) {
-        console.error('Error generating PDF:', pdfError);
+      } catch (emailErr) {
+        console.error('Error sending offer email:', emailErr);
         toast({
-          title: "Error al generar PDF",
-          description: "La oferta se creó correctamente, pero hubo un error al generar el PDF.",
+          title: "Error al enviar oferta",
+          description: "La oferta se creó correctamente, pero hubo un error al enviarla por correo.",
           variant: "destructive",
         });
       }
@@ -1246,7 +1224,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Generar Oferta</DialogTitle>
+          <DialogTitle>Configurar Oferta</DialogTitle>
           <p className="text-sm text-muted-foreground">
             Propiedad <span className="font-semibold">{propertyNumber}</span>
             {projectName && <span className="font-semibold"> de {projectName}</span>}
@@ -2297,7 +2275,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
                 className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                {createOfferMutation.isPending ? "Generando..." : "Generar Oferta"}
+                {createOfferMutation.isPending ? "Enviando..." : "Compartir Oferta"}
               </button>
             </div>
           </form>
@@ -2452,7 +2430,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             onClick={handleConfirmGenerate}
             disabled={createOfferMutation.isPending}
           >
-            {createOfferMutation.isPending ? "Generando..." : "Generar Ofertas"}
+            {createOfferMutation.isPending ? "Enviando..." : "Compartir Ofertas"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

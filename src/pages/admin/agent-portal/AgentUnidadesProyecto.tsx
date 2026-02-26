@@ -634,7 +634,7 @@ const AgentUnidadesProyecto = () => {
                         <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-emerald-600 text-white font-semibold text-sm shadow-lg hover:bg-emerald-700 active:scale-[0.98] transition-all">
                           <FileText className="h-5 w-5" />
                           <span>
-                            Generar Oferta
+                            Configurar Oferta
                             {selectedSchemeId && (
                               <span className="ml-1 text-xs opacity-80">({getSchemesForProperty(selectedProperty).find((s: any) => s.id === selectedSchemeId)?.nombre})</span>
                             )}
