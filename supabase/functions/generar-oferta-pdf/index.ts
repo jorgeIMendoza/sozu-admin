@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { offerId, includeBase64 } = await req.json();
+    const { offerId, includeBase64, hideBanking } = await req.json();
 
     console.log('Received request with offerId:', offerId);
 
@@ -195,11 +195,11 @@ Deno.serve(async (req) => {
     let fileName: string;
 
     if (isProductOffer) {
-      const result = await generateProductOfferPdf(supabase, oferta, estatus_aprobacion_nombre);
+      const result = await generateProductOfferPdf(supabase, oferta, estatus_aprobacion_nombre, hideBanking);
       pdfBytes = result.pdfBytes;
       fileName = result.fileName;
     } else {
-      const result = await generatePropertyOfferPdf(supabase, oferta, estatus_aprobacion_nombre);
+      const result = await generatePropertyOfferPdf(supabase, oferta, estatus_aprobacion_nombre, hideBanking);
       pdfBytes = result.pdfBytes;
       fileName = result.fileName;
     }
@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
 });
 
 // ================== PROPERTY OFFER PDF GENERATION ==================
-async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_aprobacion_nombre: string | null = null): Promise<{ pdfBytes: Uint8Array; fileName: string }> {
+async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_aprobacion_nombre: string | null = null, hideBanking: boolean = false): Promise<{ pdfBytes: Uint8Array; fileName: string }> {
   console.log('Generating property offer PDF...');
 
   // Fetch property with full relationship path INCLUDING vistas
@@ -1120,7 +1120,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
   const hasValidRFC = isValidRFC(leadInfo?.rfc);
   const hasClabe = propiedad.clabe_stp_tmp_apartado;
   const showCashPayment = proyecto?.mostrar_seccion_efectivo_en_oferta && ownerBankAccount;
-  const showBanking = hasValidRFC && (hasClabe || showCashPayment);
+  const showBanking = !hideBanking && hasValidRFC && (hasClabe || showCashPayment);
 
   if (showBanking) {
     checkNewPage(80);
@@ -1305,7 +1305,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
 }
 
 // ================== PRODUCT OFFER PDF GENERATION ==================
-async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprobacion_nombre: string | null = null): Promise<{ pdfBytes: Uint8Array; fileName: string }> {
+async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprobacion_nombre: string | null = null, hideBanking: boolean = false): Promise<{ pdfBytes: Uint8Array; fileName: string }> {
   console.log('Generating product offer PDF...');
 
   // Fetch product details
@@ -1975,7 +1975,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprob
   // ========== BANKING DATA ==========
   const hasValidRFC = isValidRFC(leadInfo?.rfc);
   const showCashPayment = proyecto?.mostrar_seccion_efectivo_en_oferta && ownerBankAccount;
-  const showBanking = hasValidRFC && showCashPayment;
+  const showBanking = !hideBanking && hasValidRFC && showCashPayment;
 
   if (showBanking) {
     checkNewPage(80);

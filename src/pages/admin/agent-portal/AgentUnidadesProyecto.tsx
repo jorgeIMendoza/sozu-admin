@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Layers, Car, Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Package } from "lucide-react";
+import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Layers, Car, Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Package, User } from "lucide-react";
 import bodegaIcon from "@/assets/icons/bodega.png";
 import useEmblaCarousel from "embla-carousel-react";
 import { Slider } from "@/components/ui/slider";
@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 
 const PAGE_SIZE = 30;
 type SortOrder = "none" | "asc" | "desc";
@@ -28,6 +30,13 @@ const AgentUnidadesProyecto = () => {
   const openFiltersParam = searchParams.get("openFilters");
   const navigate = useNavigate();
   const { canGenerateOffer } = usePagePermissions('/admin/inmobiliarias/inventario');
+  const { profile } = useAuth();
+  const personaId = profile?.id_persona;
+  const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
+  const { percentage, isLoading: isLoadingOnboarding } = useAgentOnboardingStatus(personaId);
+  const isVerified = percentage === 100;
+  const nombreCompleto = profile?.nombre || "Agente";
+  const initials = nombreCompleto.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("");
 
   const [page, setPage] = useState(0);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
@@ -356,13 +365,34 @@ const AgentUnidadesProyecto = () => {
 
   return (
     <div className="pb-24">
+      {/* No verificado badge - fixed */}
+      {isAgentRole && !isLoadingOnboarding && !isVerified && (
+        <div className="fixed top-3 right-4 z-50">
+          <Badge
+            variant="outline"
+            className="border-destructive/30 text-destructive gap-1 bg-white shadow-sm"
+          >
+            <span className="h-2 w-2 rounded-full bg-destructive inline-block" />
+            No verificado
+          </Badge>
+        </div>
+      )}
+
       {/* Header */}
       <div className="sticky top-0 z-10 bg-[hsl(var(--agent-bg))] px-4 pt-4 pb-3 space-y-3">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate("/admin/agent/inventario")} className="h-9 w-9 rounded-full bg-white border border-gray-200 flex items-center justify-center">
             <ArrowLeft className="h-4 w-4" />
           </button>
+          <div className="h-9 w-9 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center shrink-0">
+            {initials ? (
+              <span className="text-sm font-bold text-white leading-none">{initials}</span>
+            ) : (
+              <User className="h-4 w-4 text-white" />
+            )}
+          </div>
           <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-[hsl(var(--agent-text))]">{nombreCompleto}</p>
             <h1 className="text-lg font-bold text-foreground truncate">Unidades</h1>
             <p className="text-xs text-emerald-700">{totalCount} unidades disponibles</p>
           </div>
@@ -630,6 +660,7 @@ const AgentUnidadesProyecto = () => {
                       hideManualMode={true}
                       hidePdfOptions={true}
                       preSelectedSchemeId={selectedSchemeId}
+                      hideBankingInPdf={isAgentRole && !isVerified}
                       customTrigger={
                         <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-emerald-600 text-white font-semibold text-sm shadow-lg hover:bg-emerald-700 active:scale-[0.98] transition-all">
                           <FileText className="h-5 w-5" />
