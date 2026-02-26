@@ -55,11 +55,22 @@ const AgentComisiones = () => {
           if (ofertaIds.length > 0) {
             const { data: ofertas } = await (supabase as any)
               .from('ofertas')
-              .select('id, id_propiedad')
+              .select('id, id_propiedad, id_producto')
               .in('id', ofertaIds);
             
             const propIds = (ofertas || []).map((o: any) => o.id_propiedad).filter(Boolean);
+            const prodIds = [...new Set((ofertas || []).map((o: any) => o.id_producto).filter(Boolean))] as number[];
             let propMap = new Map<number, any>();
+            let prodMap = new Map<number, string>();
+
+            // Fetch product names
+            if (prodIds.length > 0) {
+              const { data: prods } = await (supabase as any)
+                .from('productos_servicios')
+                .select('id, nombre')
+                .in('id', prodIds);
+              (prods || []).forEach((p: any) => prodMap.set(p.id, p.nombre));
+            }
             
             if (propIds.length > 0) {
               const { data: props } = await (supabase as any)
@@ -94,12 +105,16 @@ const AgentComisiones = () => {
               (props || []).forEach((p: any) => propMap.set(p.id, { ...p, proyecto: propToProject.get(p.id) || '' }));
             }
             
-            (ofertas || []).forEach((o: any) => ofertaMap.set(o.id, propMap.get(o.id_propiedad)));
+            (ofertas || []).forEach((o: any) => {
+              const prop = propMap.get(o.id_propiedad);
+              const productoNombre = o.id_producto ? prodMap.get(o.id_producto) || '' : '';
+              ofertaMap.set(o.id, { ...prop, productoNombre });
+            });
           }
           
           cuentas.forEach((c: any) => {
-            const prop = ofertaMap.get(c.id_oferta);
-            cuentaMap.set(c.id, { ...c, propiedad: prop?.numero_propiedad, proyecto: prop?.proyecto, precio_final: c.precio_final });
+            const info = ofertaMap.get(c.id_oferta);
+            cuentaMap.set(c.id, { ...c, propiedad: info?.numero_propiedad, proyecto: info?.proyecto, precio_final: c.precio_final, productoNombre: info?.productoNombre || '' });
           });
         }
       }
@@ -113,6 +128,7 @@ const AgentComisiones = () => {
           ...c,
           proyecto: cuenta?.proyecto || '',
           propiedad: cuenta?.propiedad || '',
+          productoNombre: cuenta?.productoNombre || '',
           precio_final: precioFinal,
           monto_comision: montoComision,
           id_estatus_comision: statusId,
@@ -219,7 +235,9 @@ const AgentComisiones = () => {
                       {c.proyecto || 'Sin proyecto'}
                     </p>
                     <p className="text-xs text-[hsl(var(--agent-text-secondary))] truncate">
-                      {c.propiedad ? `Unidad ${c.propiedad}` : 'Sin unidad'}
+                      {c.productoNombre
+                        ? c.productoNombre
+                        : c.propiedad ? `Departamento ${c.propiedad}` : 'Sin unidad'}
                     </p>
                   </div>
                   <Badge variant="outline" className={cn("text-[10px] shrink-0 border", status.color)}>
