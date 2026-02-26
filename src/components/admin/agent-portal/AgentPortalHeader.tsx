@@ -12,6 +12,7 @@ interface AgentPortalHeaderProps {
 export const AgentPortalHeader = ({ title, children, showAgentName = false }: AgentPortalHeaderProps) => {
   const { profile } = useAuth();
   const personaId = profile?.id_persona;
+  const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const { percentage, isLoading } = useAgentOnboardingStatus(personaId);
   const isVerified = percentage === 100;
   const nombreCompleto = profile?.nombre || "Agente";
@@ -24,7 +25,7 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
 
   return (
     <>
-      {!isLoading && !isVerified && (
+      {isAgentRole && !isLoading && !isVerified && (
         <div className="fixed top-3 right-4 z-50">
           <Badge
             variant="outline"
@@ -57,7 +58,7 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
               ) : <div />}
             </div>
           </div>
-          {!isLoading && isVerified && (
+          {isAgentRole && !isLoading && isVerified && (
             <Badge
               variant="outline"
               className="border-emerald-500/30 text-emerald-600 gap-1"
