@@ -477,12 +477,16 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           stopCamera();
           // Now run AI verification
           const docUrl = capturedDocUrls.front || capturedDocUrls.passport || '';
-          const expectedType = capturedDocUrls.passport ? 'ine_frente' : 'ine_frente';
           const docType = capturedDocUrls.passport ? 'pasaporte' : 'ine_frente';
           const aiResult = await verifyDocument(docUrl, docType, selfieResult.url);
           if (aiResult) {
             setVerificationResult(aiResult);
+          } else {
+            // Verification failed - show clear feedback
+            toast.error("No se pudo verificar el documento. Intenta capturar de nuevo.");
           }
+        } else {
+          autoCaptureLockRef.current = false;
         }
       }
     }, 'image/jpeg', 0.85);
