@@ -56,10 +56,10 @@ export function useStabilityDetection(
   const [stabilityProgress, setStabilityProgress] = useState(0);
   const lastCheckRef = useRef(0);
 
-  const STABILITY_THRESHOLD = 0.02; // 2% difference
-  const STABILITY_DURATION = 750; // 0.75 seconds
-  const CHECK_INTERVAL = 200; // every 200ms
-  const SAMPLE_STEP = 10; // check every 10th pixel
+  const STABILITY_THRESHOLD = 0.05; // 5% difference (more tolerant)
+  const STABILITY_DURATION = 500; // 0.5 seconds
+  const CHECK_INTERVAL = 150; // every 150ms
+  const SAMPLE_STEP = 12; // check every 12th pixel
 
   const checkStability = useCallback((timestamp: number) => {
     if (!enabled || !videoRef.current) {
@@ -109,7 +109,7 @@ export function useStabilityDetection(
         const dr = Math.abs(curr[i] - prev[i]);
         const dg = Math.abs(curr[i + 1] - prev[i + 1]);
         const db = Math.abs(curr[i + 2] - prev[i + 2]);
-        if ((dr + dg + db) / 3 > 25) diffCount++;
+        if ((dr + dg + db) / 3 > 35) diffCount++;
       }
 
       const diffRatio = totalSampled > 0 ? diffCount / totalSampled : 1;
@@ -440,6 +440,37 @@ export function VerificationComparator({
 }: VerificationComparatorProps) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
+  const [celebrationShown, setCelebrationShown] = useState(false);
+
+  // Auto-fire confetti when verification result is positive
+  useEffect(() => {
+    if (celebrationShown) return;
+    const isSuccess = result.is_valid_document && result.confidence >= 70 && 
+      (result.face_match === true || result.face_match === null || result.face_match === undefined);
+    if (isSuccess) {
+      setCelebrationShown(true);
+      // Confetti burst
+      const end = Date.now() + 2000;
+      const frame = () => {
+        confetti({
+          particleCount: 6,
+          angle: 60,
+          spread: 65,
+          origin: { x: 0, y: 0.6 },
+          colors: ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#22c55e'],
+        });
+        confetti({
+          particleCount: 6,
+          angle: 120,
+          spread: 65,
+          origin: { x: 1, y: 0.6 },
+          colors: ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#22c55e'],
+        });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      };
+      frame();
+    }
+  }, [result, celebrationShown]);
 
   // Build the comparable fields
   const fields: ComparableField[] = [
@@ -639,6 +670,19 @@ export function VerificationComparator({
         <h3 className="text-sm font-bold text-foreground">Verificación de documento</h3>
       </div>
 
+      {/* Success celebration banner */}
+      {result.is_valid_document && result.confidence >= 70 && result.face_match === true && (
+        <div className="rounded-2xl bg-gradient-to-r from-emerald-500 to-green-500 p-4 text-white text-center space-y-1 animate-scale-in shadow-lg">
+          <div className="flex items-center justify-center gap-2">
+            <ShieldCheck className="h-6 w-6" />
+            <span className="text-base font-bold">¡Identidad verificada!</span>
+          </div>
+          <p className="text-xs text-white/90">
+            El documento es auténtico y coincide con la selfie
+          </p>
+        </div>
+      )}
+
       {/* Validity + Confidence */}
       <div className="flex items-center gap-3">
         {result.is_valid_document ? (
@@ -655,6 +699,11 @@ export function VerificationComparator({
         <span className={cn("text-xs font-bold", confidenceColor)}>
           Confianza: {result.confidence}%
         </span>
+        {!result.is_valid_document && result.document_type === "no_documento" && (
+          <Badge variant="destructive" className="text-[10px]">
+            No es una identificación
+          </Badge>
+        )}
       </div>
 
       {/* Expiry warning */}
