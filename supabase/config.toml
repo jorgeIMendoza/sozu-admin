@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.agendar-capacitacion]
 verify_jwt = false
+
+[functions.enviar-oferta-email]
+verify_jwt = false
