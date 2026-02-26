@@ -253,9 +253,12 @@ const AgentPipeline = () => {
           </div>
         )}
         {!isLoading && (
-          <p className="text-xs text-[hsl(var(--agent-text-secondary))]">
-            {nonExpiredOfertas.length} ofertas · {formatCurrency(totalMonto)} en proceso
-          </p>
+          <>
+            <p className="text-xs text-[hsl(var(--agent-text-secondary))]">
+              {nonExpiredOfertas.length} ofertas · {formatCurrency(totalMonto)} en proceso
+            </p>
+            <p className="text-[10px] text-[hsl(var(--agent-muted))]">Últimos 30 días</p>
+          </>
         )}
       </AgentPortalHeader>
 
