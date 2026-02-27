@@ -604,11 +604,22 @@ export function VerificationComparator({
     }
   }, [result, celebrationShown]);
 
+  // INE names come as "ApPaterno ApMaterno Nombre(s)" — reorder to "Nombre(s) ApPaterno ApMaterno"
+  const isIneDoc = result.document_type === "ine_frente" || result.document_type === "ine_reverso" || !!result.clave_elector;
+  const reorderIneName = (raw: string): string => {
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length < 3) return raw; // can't reorder with fewer than 3 words
+    // INE format: ApPaterno ApMaterno Nombre1 [Nombre2...]
+    const [apPaterno, apMaterno, ...nombres] = parts;
+    return [...nombres, apPaterno, apMaterno].join(" ");
+  };
+  const displayDocName = isIneDoc && result.full_name ? reorderIneName(result.full_name) : result.full_name;
+
   // Build the comparable fields
   const fields: ComparableField[] = [
     {
       label: "Nombre completo",
-      docValue: result.full_name,
+      docValue: displayDocName,
       profileValue: persona.nombre_legal,
       personaField: "nombre_legal",
       saveable: true,
@@ -667,7 +678,7 @@ export function VerificationComparator({
       }
       const profileEmpty = !f.profileValue || f.profileValue.trim() === "";
       const differs = f.profileValue && f.docValue && 
-        f.profileValue.trim().toUpperCase() !== f.docValue.trim().toUpperCase();
+        f.profileValue.trim().toLowerCase() !== f.docValue.trim().toLowerCase();
       initial[f.label] = profileEmpty || !!differs;
     });
     return initial;
@@ -677,11 +688,11 @@ export function VerificationComparator({
     if (!f.docValue) return "empty";
     if (!f.saveable || f.profileValue === undefined) return "info"; // info-only field
     if (!f.profileValue || f.profileValue.trim() === "") return "missing";
-    if (f.profileValue.trim().toUpperCase() === f.docValue.trim().toUpperCase()) return "match";
+    if (f.profileValue.trim().toLowerCase() === f.docValue.trim().toLowerCase()) return "match";
     // Check partial match (contains)
     if (
-      f.profileValue.trim().toUpperCase().includes(f.docValue.trim().toUpperCase().substring(0, 5)) ||
-      f.docValue.trim().toUpperCase().includes(f.profileValue.trim().toUpperCase().substring(0, 5))
+      f.profileValue.trim().toLowerCase().includes(f.docValue.trim().toLowerCase().substring(0, 5)) ||
+      f.docValue.trim().toLowerCase().includes(f.profileValue.trim().toLowerCase().substring(0, 5))
     )
       return "partial";
     return "differs";
