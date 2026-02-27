@@ -65,40 +65,49 @@ const AgentPerfil = () => {
   }, []);
 
   // Play celebration sound
-  const playCelebrationSound = useCallback(() => {
+  const playCelebrationSound = useCallback(async () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      // Trumpet-like fanfare using oscillators
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      const master = audioCtx.createGain();
+      master.gain.value = 0.28;
+      master.connect(audioCtx.destination);
+
+      // Fanfarria tipo trompeta (ataque fuerte + cola)
       const notes = [
-        { freq: 523.25, start: 0, dur: 0.15 },    // C5
-        { freq: 659.25, start: 0.15, dur: 0.15 },  // E5
-        { freq: 783.99, start: 0.30, dur: 0.15 },  // G5
-        { freq: 1046.50, start: 0.45, dur: 0.4 },  // C6 (long)
-        { freq: 783.99, start: 0.90, dur: 0.12 },  // G5
-        { freq: 1046.50, start: 1.05, dur: 0.5 },  // C6 (finale)
+        { freq: 523.25, start: 0, dur: 0.16 },
+        { freq: 659.25, start: 0.16, dur: 0.16 },
+        { freq: 783.99, start: 0.32, dur: 0.18 },
+        { freq: 1046.5, start: 0.5, dur: 0.45 },
+        { freq: 880.0, start: 1.0, dur: 0.14 },
+        { freq: 1174.66, start: 1.14, dur: 0.55 },
       ];
+
       notes.forEach(({ freq, start, dur }) => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = 'triangle';
-        osc.frequency.value = freq;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
         gain.gain.setValueAtTime(0, audioCtx.currentTime + start);
-        gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + start + 0.03);
-        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + start + dur);
+        gain.gain.linearRampToValueAtTime(0.22, audioCtx.currentTime + start + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
         osc.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(master);
         osc.start(audioCtx.currentTime + start);
-        osc.stop(audioCtx.currentTime + start + dur + 0.05);
+        osc.stop(audioCtx.currentTime + start + dur + 0.06);
       });
     } catch (e) {
-      // Audio not supported, silently ignore
+      // Audio no soportado/bloqueado
     }
   }, []);
 
   // Fire confetti + sound when profile reaches 100%
   useEffect(() => {
     if (!isLoading && percentage === 100 && !confettiFiredRef.current) {
-      if (prevPercentageRef.current !== null && prevPercentageRef.current < 100) {
+      if (prevPercentageRef.current === null || prevPercentageRef.current < 100) {
         confettiFiredRef.current = true;
         playCelebrationSound();
         const duration = 3000;
