@@ -673,7 +673,7 @@ export function VerificationComparator({
   // Full celebration: fanfare + confetti + streamers + trumpets overlay (5 seconds)
   const fireCelebration = useCallback(() => {
     setCelebrating(true);
-    setTimeout(() => setCelebrating(false), 5000);
+    setTimeout(() => setCelebrating(false), 3500);
 
     // Play fanfare sound (sawtooth + triangle brass) — same as AgentPerfil
     try {
@@ -723,8 +723,8 @@ export function VerificationComparator({
     const colors = ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#f97316', '#ec4899', '#8b5cf6'];
     confetti({ particleCount: 100, spread: 120, origin: { x: 0.5, y: 0.4 }, colors, shapes: ['circle'], startVelocity: 50 });
 
-    // Continuous round confetti + long streamers for 5 seconds
-    const celebrationEnd = Date.now() + 5000;
+    // Continuous round confetti + long streamers for 3.5 seconds
+    const celebrationEnd = Date.now() + 3500;
     const frame = () => {
       confetti({ particleCount: 4, angle: 60, spread: 65, origin: { x: 0, y: 0.7 }, colors, shapes: ['circle'] });
       confetti({ particleCount: 4, angle: 120, spread: 65, origin: { x: 1, y: 0.7 }, colors, shapes: ['circle'] });
