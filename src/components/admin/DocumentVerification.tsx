@@ -71,12 +71,13 @@ export function useStabilityDetection(
   const SELFIE_STABILITY_DURATION = 2000;
   const CHECK_INTERVAL = 120;
   const SAMPLE_STEP = 6;
-  const MIN_CONTENT_THRESHOLD = 0.25;
-  const MIN_EDGE_CONTRAST = 40;
+  const MIN_CONTENT_THRESHOLD = 0.16;
+  const MIN_EDGE_CONTRAST = 32;
   const MIN_SELFIE_CONTENT_THRESHOLD = 0.08;
   const MIN_SELFIE_EDGE_CONTRAST = 25;
-  const QUADRANT_EDGE_RATIO_THRESHOLD = 0.06;
-  const MIN_QUADRANTS_WITH_EDGES = 3;
+  const QUADRANT_EDGE_RATIO_THRESHOLD = 0.045;
+  const MIN_QUADRANTS_WITH_EDGES = 2;
+  const STRONG_DOC_EDGE_RATIO_THRESHOLD = 0.22;
   const DOC_STABILITY_THRESHOLD = 0.14;
   const SELFIE_STABILITY_THRESHOLD = 0.12;
   const PIXEL_DIFF_THRESHOLD = 25;
@@ -223,7 +224,8 @@ export function useStabilityDetection(
         };
 
         const activeQuadrantCount = Object.values(nextAlignedQuadrants).filter(Boolean).length;
-        hasContent = edgeRatio > threshold && activeQuadrantCount >= MIN_QUADRANTS_WITH_EDGES;
+        const hasStrongGlobalEdges = edgeRatio > STRONG_DOC_EDGE_RATIO_THRESHOLD;
+        hasContent = edgeRatio > threshold && (activeQuadrantCount >= MIN_QUADRANTS_WITH_EDGES || hasStrongGlobalEdges);
 
         setAlignedQuadrants(nextAlignedQuadrants);
 
