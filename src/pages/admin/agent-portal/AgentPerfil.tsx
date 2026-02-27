@@ -57,6 +57,7 @@ const AgentPerfil = () => {
   const [activeStep, setActiveStep] = useState<OnboardingStep['id'] | null>(null);
   const confettiFiredRef = useRef(false);
   const prevPercentageRef = useRef<number | null>(null);
+  const [showTrumpets, setShowTrumpets] = useState(false);
 
   // Log page view
   useEffect(() => {
@@ -64,7 +65,7 @@ const AgentPerfil = () => {
     track({ page: 'agent_perfil', elementId: 'page_view', elementType: 'page' });
   }, []);
 
-  // Play celebration sound
+  // Play celebration fanfare — louder, longer, richer
   const playCelebrationSound = useCallback(async () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -73,62 +74,125 @@ const AgentPerfil = () => {
       }
 
       const master = audioCtx.createGain();
-      master.gain.value = 0.28;
+      master.gain.value = 0.55; // Much louder
       master.connect(audioCtx.destination);
 
-      // Fanfarria tipo trompeta (ataque fuerte + cola)
+      // Brass-like fanfare: two oscillators per note for richness
       const notes = [
-        { freq: 523.25, start: 0, dur: 0.16 },
-        { freq: 659.25, start: 0.16, dur: 0.16 },
-        { freq: 783.99, start: 0.32, dur: 0.18 },
-        { freq: 1046.5, start: 0.5, dur: 0.45 },
-        { freq: 880.0, start: 1.0, dur: 0.14 },
-        { freq: 1174.66, start: 1.14, dur: 0.55 },
+        { freq: 523.25, start: 0, dur: 0.20 },
+        { freq: 659.25, start: 0.18, dur: 0.20 },
+        { freq: 783.99, start: 0.36, dur: 0.22 },
+        { freq: 1046.5, start: 0.56, dur: 0.50 },
+        { freq: 783.99, start: 1.10, dur: 0.14 },
+        { freq: 880.0,  start: 1.24, dur: 0.14 },
+        { freq: 1046.5, start: 1.38, dur: 0.18 },
+        { freq: 1174.66, start: 1.56, dur: 0.60 },
+        { freq: 1318.51, start: 2.20, dur: 0.70 },
       ];
 
       notes.forEach(({ freq, start, dur }) => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
-        gain.gain.setValueAtTime(0, audioCtx.currentTime + start);
-        gain.gain.linearRampToValueAtTime(0.22, audioCtx.currentTime + start + 0.03);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
-        osc.connect(gain);
-        gain.connect(master);
-        osc.start(audioCtx.currentTime + start);
-        osc.stop(audioCtx.currentTime + start + dur + 0.06);
+        // Primary oscillator — sawtooth for brass timbre
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
+        gain1.gain.setValueAtTime(0, audioCtx.currentTime + start);
+        gain1.gain.linearRampToValueAtTime(0.18, audioCtx.currentTime + start + 0.025);
+        gain1.gain.setValueAtTime(0.15, audioCtx.currentTime + start + 0.06);
+        gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
+        osc1.connect(gain1);
+        gain1.connect(master);
+        osc1.start(audioCtx.currentTime + start);
+        osc1.stop(audioCtx.currentTime + start + dur + 0.05);
+
+        // Second oscillator — triangle an octave below for warmth
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(freq * 0.5, audioCtx.currentTime + start);
+        gain2.gain.setValueAtTime(0, audioCtx.currentTime + start);
+        gain2.gain.linearRampToValueAtTime(0.10, audioCtx.currentTime + start + 0.03);
+        gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
+        osc2.connect(gain2);
+        gain2.connect(master);
+        osc2.start(audioCtx.currentTime + start);
+        osc2.stop(audioCtx.currentTime + start + dur + 0.05);
       });
     } catch (e) {
       // Audio no soportado/bloqueado
     }
   }, []);
 
-  // Fire confetti + sound when profile reaches 100%
+  // Fire confetti + streamers + trumpets when profile reaches 100%
   useEffect(() => {
     if (!isLoading && percentage === 100 && !confettiFiredRef.current) {
       if (prevPercentageRef.current === null || prevPercentageRef.current < 100) {
         confettiFiredRef.current = true;
+
+        // Show trumpet overlay
+        setShowTrumpets(true);
+        setTimeout(() => setShowTrumpets(false), 3500);
+
+        // Play fanfare
         playCelebrationSound();
-        const duration = 3000;
+
+        // Confetti burst
+        const duration = 3500;
         const end = Date.now() + duration;
+        const colors = ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#f97316', '#ec4899', '#8b5cf6'];
+
+        // Initial big burst
+        confetti({ particleCount: 80, spread: 100, origin: { x: 0.5, y: 0.4 }, colors, startVelocity: 45 });
+
+        // Streamers (long thin ribbons) from sides
+        const launchStreamers = () => {
+          // Left side streamers
+          confetti({
+            particleCount: 3,
+            angle: 60,
+            spread: 30,
+            origin: { x: 0, y: 0.5 },
+            colors,
+            shapes: ['square'],
+            scalar: 2.2,
+            drift: 0.8,
+            gravity: 0.6,
+            ticks: 300,
+          });
+          // Right side streamers
+          confetti({
+            particleCount: 3,
+            angle: 120,
+            spread: 30,
+            origin: { x: 1, y: 0.5 },
+            colors,
+            shapes: ['square'],
+            scalar: 2.2,
+            drift: -0.8,
+            gravity: 0.6,
+            ticks: 300,
+          });
+        };
+
+        // Continuous confetti + streamers
         const frame = () => {
           confetti({
-            particleCount: 5,
+            particleCount: 4,
             angle: 60,
             spread: 65,
             origin: { x: 0, y: 0.7 },
-            colors: ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#f97316'],
+            colors,
             shapes: ['circle', 'square'],
           });
           confetti({
-            particleCount: 5,
+            particleCount: 4,
             angle: 120,
             spread: 65,
             origin: { x: 1, y: 0.7 },
-            colors: ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#f97316'],
+            colors,
             shapes: ['circle', 'square'],
           });
+          launchStreamers();
           if (Date.now() < end) requestAnimationFrame(frame);
         };
         frame();
@@ -160,8 +224,35 @@ const AgentPerfil = () => {
   }
 
   return (
-    <div className="pb-24">
-      <AgentPortalHeader />
+    <div className="pb-24 relative">
+      {/* Trumpet celebration overlay */}
+      {showTrumpets && (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+          {/* Left trumpet */}
+          <div className="absolute left-4 top-1/3 animate-fade-in" style={{ animationDuration: '0.4s' }}>
+            <div className="text-6xl animate-bounce" style={{ animationDuration: '0.6s' }}>🎺</div>
+          </div>
+          {/* Right trumpet (mirrored) */}
+          <div className="absolute right-4 top-1/3 animate-fade-in" style={{ animationDuration: '0.4s', animationDelay: '0.15s', animationFillMode: 'both' }}>
+            <div className="text-6xl animate-bounce scale-x-[-1]" style={{ animationDuration: '0.6s' }}>🎺</div>
+          </div>
+          {/* Center celebration text */}
+          <div className="animate-scale-in flex flex-col items-center gap-2" style={{ animationDuration: '0.5s', animationDelay: '0.3s', animationFillMode: 'both' }}>
+            <span className="text-5xl">🎉</span>
+            <div className="bg-emerald-500 text-white px-6 py-3 rounded-2xl shadow-2xl">
+              <p className="text-lg font-bold text-center">¡Perfil completo!</p>
+              <p className="text-xs text-emerald-100 text-center">Ya puedes recibir comisiones</p>
+            </div>
+          </div>
+          {/* Bottom trumpets */}
+          <div className="absolute left-1/4 bottom-1/3 animate-fade-in" style={{ animationDuration: '0.4s', animationDelay: '0.25s', animationFillMode: 'both' }}>
+            <div className="text-4xl animate-bounce" style={{ animationDuration: '0.7s' }}>🎺</div>
+          </div>
+          <div className="absolute right-1/4 bottom-1/3 animate-fade-in" style={{ animationDuration: '0.4s', animationDelay: '0.35s', animationFillMode: 'both' }}>
+            <div className="text-4xl animate-bounce scale-x-[-1]" style={{ animationDuration: '0.7s' }}>🎺</div>
+          </div>
+        </div>
+      )}
       <div className="p-4 space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
