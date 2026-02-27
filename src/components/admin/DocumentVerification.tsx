@@ -57,9 +57,10 @@ export function useStabilityDetection(
   const lastCheckRef = useRef(0);
 
   const STABILITY_THRESHOLD = 0.05; // 5% difference (more tolerant)
-  const STABILITY_DURATION = 500; // 0.5 seconds
+  const STABILITY_DURATION = 1000; // 1 second for more reliable captures
   const CHECK_INTERVAL = 150; // every 150ms
   const SAMPLE_STEP = 12; // check every 12th pixel
+  const MIN_CONTENT_THRESHOLD = 0.15; // at least 15% of pixels must differ from uniform bg
 
   const checkStability = useCallback((timestamp: number) => {
     if (!enabled || !videoRef.current) {
@@ -103,6 +104,10 @@ export function useStabilityDetection(
       const curr = currentFrame.data;
       let diffCount = 0;
       let totalSampled = 0;
+      // Check if there's actual content in frame (not just empty/uniform background)
+      let edgeCount = 0;
+      let brightPixels = 0;
+      let darkPixels = 0;
 
       for (let i = 0; i < curr.length; i += 4 * SAMPLE_STEP) {
         totalSampled++;
@@ -110,11 +115,22 @@ export function useStabilityDetection(
         const dg = Math.abs(curr[i + 1] - prev[i + 1]);
         const db = Math.abs(curr[i + 2] - prev[i + 2]);
         if ((dr + dg + db) / 3 > 35) diffCount++;
+        // Detect edges/contrast for document presence
+        const luminance = curr[i] * 0.299 + curr[i + 1] * 0.587 + curr[i + 2] * 0.114;
+        if (luminance > 200) brightPixels++;
+        if (luminance < 50) darkPixels++;
+        // Check local contrast with neighbor
+        if (i + 4 * SAMPLE_STEP < curr.length) {
+          const nextL = curr[i + 4 * SAMPLE_STEP] * 0.299 + curr[i + 4 * SAMPLE_STEP + 1] * 0.587 + curr[i + 4 * SAMPLE_STEP + 2] * 0.114;
+          if (Math.abs(luminance - nextL) > 30) edgeCount++;
+        }
       }
 
       const diffRatio = totalSampled > 0 ? diffCount / totalSampled : 1;
+      const edgeRatio = totalSampled > 0 ? edgeCount / totalSampled : 0;
+      const hasDocument = edgeRatio > MIN_CONTENT_THRESHOLD;
 
-      if (diffRatio < STABILITY_THRESHOLD) {
+      if (diffRatio < STABILITY_THRESHOLD && hasDocument) {
         stabilityMsRef.current += CHECK_INTERVAL;
         const progress = Math.min(100, (stabilityMsRef.current / STABILITY_DURATION) * 100);
         setStabilityProgress(progress);
