@@ -63,18 +63,18 @@ export function useStabilityDetection(
   const lastCheckRef = useRef(0);
   const enabledAtRef = useRef<number>(0);
 
-  const STABILITY_THRESHOLD = 0.06;
+  const STABILITY_THRESHOLD = 0.08;
   const STABILITY_DURATION = 1200;
   const CHECK_INTERVAL = 150;
   const SAMPLE_STEP = 8;
-  const MIN_CONTENT_THRESHOLD = 0.18; // Edge ratio inside guide region for docs
-  const MIN_EDGE_CONTRAST = 35;
-  const MIN_SELFIE_CONTENT_THRESHOLD = 0.10; // Edge ratio inside oval for selfies
-  const QUADRANT_EDGE_RATIO_THRESHOLD = 0.11;
+  const MIN_CONTENT_THRESHOLD = 0.12; // Edge ratio inside guide region for docs
+  const MIN_EDGE_CONTRAST = 26;
+  const MIN_SELFIE_CONTENT_THRESHOLD = 0.07; // Edge ratio inside oval for selfies
+  const QUADRANT_EDGE_RATIO_THRESHOLD = 0.08;
 
   // Guide region proportions (matching the UI overlays)
-  // Document rectangle: centered, ~80% width, ~75% height (matching the corner guides with inset-4)
-  const DOC_REGION = { x: 0.10, y: 0.12, w: 0.80, h: 0.76 };
+  // Document rectangle: centered and slightly wider to tolerate framing
+  const DOC_REGION = { x: 0.06, y: 0.10, w: 0.88, h: 0.80 };
   // Selfie oval: centered at ~44% height, rx ~32%, ry ~31% of frame (matching SVG 95/125 of 300/400)
   const OVAL_CX = 0.50;
   const OVAL_CY = 0.44;

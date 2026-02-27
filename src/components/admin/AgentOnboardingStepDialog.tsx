@@ -249,6 +249,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const autoCaptureLockRef = useRef(false);
+  const activeVerifyCallsRef = useRef(0);
 
   const getDocForType = (typeId: number) => {
     return existingDocs
@@ -327,6 +328,8 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     setCameraStep(step);
     setCameraActive(true);
     setCapturedFront(null);
+    activeVerifyCallsRef.current = 0;
+    setVerifying(false);
 
     if (step !== 'selfie') {
       setVerificationResult(null);
@@ -411,6 +414,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
   // Verify document with AI
   const verifyDocument = async (imageUrl: string, expectedType: string, selfieUrl?: string) => {
+    activeVerifyCallsRef.current += 1;
     setVerifying(true);
     try {
       const { data, error } = await supabase.functions.invoke('verificar-documento-identidad', {
@@ -427,7 +431,10 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       });
       return null;
     } finally {
-      setVerifying(false);
+      activeVerifyCallsRef.current = Math.max(0, activeVerifyCallsRef.current - 1);
+      if (activeVerifyCallsRef.current === 0) {
+        setVerifying(false);
+      }
     }
   };
 
@@ -474,14 +481,12 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           });
           setVerificationDocId(result.docId);
           stopCamera();
-          // Pre-verify document before selfie
-          toast.loading("Verificando documento...", { id: 'pre-verify' });
+          // Pre-verifica documento mostrando el spinner de IA
           const urls = capturedDocUrlsRef.current;
           const [frontCheck, backCheck] = await Promise.all([
             urls.front ? verifyDocument(urls.front, 'ine_frente') : Promise.resolve(null),
             verifyDocument(result.url, 'ine_reverso'),
           ]);
-          toast.dismiss('pre-verify');
           const preResult = frontCheck ? {
             ...frontCheck,
             numero_identificacion: backCheck?.numero_identificacion || frontCheck.numero_identificacion,
@@ -507,10 +512,8 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           });
           setVerificationDocId(result.docId);
           stopCamera();
-          // Pre-verify document before selfie
-          toast.loading("Verificando documento...", { id: 'pre-verify' });
+          // Pre-verifica documento mostrando el spinner de IA
           const preResult = await verifyDocument(result.url, 'pasaporte');
-          toast.dismiss('pre-verify');
           if (preResult && !preResult.is_valid_document) {
             // Not a valid passport — show result immediately, no selfie
             setVerificationResult(preResult);
