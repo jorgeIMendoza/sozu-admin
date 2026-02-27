@@ -636,6 +636,7 @@ interface VerificationComparatorProps {
   persona: PersonaData;
   personaId: number;
   documentId: number; // The document record ID to update
+  allRelatedDocIds?: number[]; // All related doc IDs to mark as validated (e.g. both INE front+back)
   onAccepted: () => void;
   onRejected: () => void;
 }
@@ -657,6 +658,7 @@ export function VerificationComparator({
   persona,
   personaId,
   documentId,
+  allRelatedDocIds,
   onAccepted,
   onRejected,
 }: VerificationComparatorProps) {
@@ -902,11 +904,24 @@ export function VerificationComparator({
         docUpdate.numero = normalizedNumber;
       }
 
+      // Update the main document
       const { error: docError } = await supabase
         .from("documentos")
         .update(docUpdate)
         .eq("id", documentId);
       if (docError) throw docError;
+
+      // Also mark all related docs (e.g. INE front+back) as Validado
+      if (allRelatedDocIds && allRelatedDocIds.length > 0) {
+        const siblingIds = allRelatedDocIds.filter((id) => id !== documentId);
+        if (siblingIds.length > 0) {
+          const { error: siblingError } = await supabase
+            .from("documentos")
+            .update({ id_estatus_verificacion: 2 })
+            .in("id", siblingIds);
+          if (siblingError) throw siblingError;
+        }
+      }
 
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ["agent-onboarding-persona"] });

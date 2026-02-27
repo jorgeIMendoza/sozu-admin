@@ -698,6 +698,11 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           persona={personaData}
           personaId={personaId}
           documentId={verificationDocId}
+          allRelatedDocIds={
+            identityMode === 'ine'
+              ? existingDocs.filter((d: any) => INE_DOC_TYPES.includes(d.id_tipo_documento)).map((d: any) => d.id as number)
+              : undefined
+          }
           onAccepted={() => {
             setVerificationResult(null);
             setVerificationDocId(null);
