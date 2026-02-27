@@ -953,7 +953,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         });
       }
       
-      // Generate PDFs client-side (same quality as admin) and send via email
+      // Generate PDFs client-side
+      const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
       try {
         const allOfferIds = [result.offerId];
         for (const productOffer of result.productOffersResults.createdOffers) {
@@ -962,7 +963,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
 
         toast({
           title: "Generando PDFs...",
-          description: `Preparando ${allOfferIds.length} PDF(s) para enviar a ${result.leadEmail}`,
+          description: isAgentRole
+            ? `Preparando ${allOfferIds.length} PDF(s) para enviar a ${result.leadEmail}`
+            : `Preparando ${allOfferIds.length} PDF(s) para descarga`,
         });
 
         const { generateOfferPDFAsBase64 } = await import('@/services/htmlToPdfService');
@@ -1004,38 +1007,68 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           }
         }
 
-        toast({
-          title: "Enviando oferta por correo...",
-          description: `Enviando ${preGeneratedAttachments.length} PDF(s) a ${result.leadEmail}`,
-        });
-
-        const { data: emailResult, error: emailError } = await supabase.functions.invoke('enviar-oferta-email', {
-          body: {
-            preGeneratedAttachments,
-            recipientEmail: result.leadEmail,
-            recipientName: result.leadName,
-            propertyNumber,
-          }
-        });
-
-        if (emailError) {
-          console.error('Error sending offer email:', emailError);
+        if (isAgentRole) {
+          // Agent role: send via email
           toast({
-            title: "Error al enviar oferta",
-            description: "La oferta se creó pero no se pudo enviar por correo.",
-            variant: "destructive",
+            title: "Enviando oferta por correo...",
+            description: `Enviando ${preGeneratedAttachments.length} PDF(s) a ${result.leadEmail}`,
           });
+
+          const { data: emailResult, error: emailError } = await supabase.functions.invoke('enviar-oferta-email', {
+            body: {
+              preGeneratedAttachments,
+              recipientEmail: result.leadEmail,
+              recipientName: result.leadName,
+              propertyNumber,
+            }
+          });
+
+          if (emailError) {
+            console.error('Error sending offer email:', emailError);
+            toast({
+              title: "Error al enviar oferta",
+              description: "La oferta se creó pero no se pudo enviar por correo.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Oferta compartida",
+              description: `La oferta ha sido enviada a ${result.leadEmail} con ${emailResult?.attachmentsSent || preGeneratedAttachments.length} PDF(s) adjuntos.`,
+            });
+          }
         } else {
+          // Non-agent roles: download PDFs directly
+          for (const attachment of preGeneratedAttachments) {
+            try {
+              const byteCharacters = atob(attachment.base64);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              const blob = new Blob([byteArray], { type: 'application/pdf' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = attachment.filename;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            } catch (dlErr) {
+              console.error('Error downloading PDF:', dlErr);
+            }
+          }
           toast({
-            title: "Oferta compartida",
-            description: `La oferta ha sido enviada a ${result.leadEmail} con ${emailResult?.attachmentsSent || preGeneratedAttachments.length} PDF(s) adjuntos.`,
+            title: "Oferta generada",
+            description: `Se descargaron ${preGeneratedAttachments.length} PDF(s).`,
           });
         }
       } catch (emailErr) {
-        console.error('Error sending offer email:', emailErr);
+        console.error('Error generating/sending offer:', emailErr);
         toast({
-          title: "Error al enviar oferta",
-          description: "La oferta se creó correctamente, pero hubo un error al enviarla por correo.",
+          title: "Error al generar oferta",
+          description: "La oferta se creó correctamente, pero hubo un error al generar los PDFs.",
           variant: "destructive",
         });
       }
@@ -2319,7 +2352,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
                 className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                {createOfferMutation.isPending ? "Enviando..." : "Compartir Oferta"}
+                {createOfferMutation.isPending 
+                  ? (profile?.rol_nombre === 'Agente Inmobiliario' ? "Enviando..." : "Generando...") 
+                  : (profile?.rol_nombre === 'Agente Inmobiliario' ? "Compartir Oferta" : "Generar Oferta")}
               </button>
             </div>
           </form>
@@ -2474,7 +2509,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             onClick={handleConfirmGenerate}
             disabled={createOfferMutation.isPending}
           >
-            {createOfferMutation.isPending ? "Enviando..." : "Compartir Ofertas"}
+            {createOfferMutation.isPending 
+              ? (profile?.rol_nombre === 'Agente Inmobiliario' ? "Enviando..." : "Generando...") 
+              : (profile?.rol_nombre === 'Agente Inmobiliario' ? "Compartir Ofertas" : "Generar Ofertas")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
