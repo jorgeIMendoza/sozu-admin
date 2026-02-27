@@ -68,15 +68,17 @@ export function useStabilityDetection(
   onStableCaptureRef.current = onStableCapture;
 
   const STABILITY_DURATION = 1500;
+  const SELFIE_STABILITY_DURATION = 2000;
   const CHECK_INTERVAL = 120;
   const SAMPLE_STEP = 6;
   const MIN_CONTENT_THRESHOLD = 0.25;
   const MIN_EDGE_CONTRAST = 40;
-  const MIN_SELFIE_CONTENT_THRESHOLD = 0.035;
+  const MIN_SELFIE_CONTENT_THRESHOLD = 0.08;
+  const MIN_SELFIE_EDGE_CONTRAST = 25;
   const QUADRANT_EDGE_RATIO_THRESHOLD = 0.06;
   const MIN_QUADRANTS_WITH_EDGES = 3;
   const DOC_STABILITY_THRESHOLD = 0.14;
-  const SELFIE_STABILITY_THRESHOLD = 0.22;
+  const SELFIE_STABILITY_THRESHOLD = 0.12;
   const PIXEL_DIFF_THRESHOLD = 25;
 
   const DOC_REGION = { x: 0.04, y: 0.08, w: 0.92, h: 0.84 };
@@ -191,7 +193,8 @@ export function useStabilityDetection(
         const luminance = curr[i] * 0.299 + curr[i + 1] * 0.587 + curr[i + 2] * 0.114;
         if (i + 4 * SAMPLE_STEP < curr.length) {
           const nextL = curr[i + 4 * SAMPLE_STEP] * 0.299 + curr[i + 4 * SAMPLE_STEP + 1] * 0.587 + curr[i + 4 * SAMPLE_STEP + 2] * 0.114;
-          if (Math.abs(luminance - nextL) > MIN_EDGE_CONTRAST) {
+        const edgeContrast = requireDocumentPresence ? MIN_EDGE_CONTRAST : MIN_SELFIE_EDGE_CONTRAST;
+          if (Math.abs(luminance - nextL) > edgeContrast) {
             edgeCount++;
             if (quadrant) edgeQuadrants[quadrant]++;
           }
@@ -244,12 +247,14 @@ export function useStabilityDetection(
         ? DOC_STABILITY_THRESHOLD
         : SELFIE_STABILITY_THRESHOLD;
 
+      const currentStabilityDuration = requireDocumentPresence ? STABILITY_DURATION : SELFIE_STABILITY_DURATION;
+
       if (hasContent && diffRatio < stabilityThreshold) {
         stabilityMsRef.current += CHECK_INTERVAL;
-        const progress = Math.min(100, (stabilityMsRef.current / STABILITY_DURATION) * 100);
+        const progress = Math.min(100, (stabilityMsRef.current / currentStabilityDuration) * 100);
         setStabilityProgress(progress);
 
-        if (stabilityMsRef.current >= STABILITY_DURATION) {
+        if (stabilityMsRef.current >= currentStabilityDuration) {
           onStableCaptureRef.current();
           stabilityMsRef.current = 0;
           setStabilityProgress(0);
@@ -262,11 +267,11 @@ export function useStabilityDetection(
       } else if (hasContent && diffRatio < stabilityThreshold * 1.5) {
         // Small jitter: decay instead of hard reset
         stabilityMsRef.current = Math.max(0, stabilityMsRef.current - CHECK_INTERVAL * 0.3);
-        const progress = Math.min(100, (stabilityMsRef.current / STABILITY_DURATION) * 100);
+        const progress = Math.min(100, (stabilityMsRef.current / currentStabilityDuration) * 100);
         setStabilityProgress(progress);
       } else {
         stabilityMsRef.current = Math.max(0, stabilityMsRef.current - CHECK_INTERVAL * 0.6);
-        setStabilityProgress(Math.min(100, (stabilityMsRef.current / STABILITY_DURATION) * 100));
+        setStabilityProgress(Math.min(100, (stabilityMsRef.current / currentStabilityDuration) * 100));
       }
     }
 
