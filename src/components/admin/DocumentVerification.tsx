@@ -62,64 +62,48 @@ export function useStabilityDetection(
   const [alignedQuadrants, setAlignedQuadrants] = useState({ tl: false, tr: false, bl: false, br: false });
   const lastCheckRef = useRef(0);
   const enabledAtRef = useRef<number>(0);
+  // Use refs to avoid recreating the callback when state changes
+  const initialDelayDoneRef = useRef(false);
+  const onStableCaptureRef = useRef(onStableCapture);
+  onStableCaptureRef.current = onStableCapture;
 
-  // More tolerant stability/content thresholds to recover reliable auto-capture on real devices
-  const DOC_STABILITY_THRESHOLD = 0.14;
-  const SELFIE_STABILITY_THRESHOLD = 0.18;
-  const STABILITY_DURATION = 900;
-  const CHECK_INTERVAL = 150;
-  const SAMPLE_STEP = 8;
-  const MIN_CONTENT_THRESHOLD = 0.08; // Edge ratio inside guide region for docs
-  const MIN_EDGE_CONTRAST = 20;
-  const MIN_SELFIE_CONTENT_THRESHOLD = 0.045; // Edge ratio inside oval for selfies
-  const QUADRANT_EDGE_RATIO_THRESHOLD = 0.05;
+  const STABILITY_DURATION = 800;
+  const CHECK_INTERVAL = 120;
+  const SAMPLE_STEP = 6;
+  const MIN_CONTENT_THRESHOLD = 0.06;
+  const MIN_EDGE_CONTRAST = 15;
+  const MIN_SELFIE_CONTENT_THRESHOLD = 0.035;
+  const QUADRANT_EDGE_RATIO_THRESHOLD = 0.04;
+  const DOC_STABILITY_THRESHOLD = 0.16;
+  const SELFIE_STABILITY_THRESHOLD = 0.22;
+  const PIXEL_DIFF_THRESHOLD = 25;
 
-  // Guide region proportions (matching the UI overlays)
-  // Document rectangle: centered and slightly wider to tolerate framing
-  const DOC_REGION = { x: 0.06, y: 0.10, w: 0.88, h: 0.80 };
-  // Selfie oval: centered at ~44% height, rx ~32%, ry ~31% of frame (matching SVG 95/125 of 300/400)
+  const DOC_REGION = { x: 0.04, y: 0.08, w: 0.92, h: 0.84 };
   const OVAL_CX = 0.50;
   const OVAL_CY = 0.44;
-  const OVAL_RX = 0.32;
-  const OVAL_RY = 0.31;
+  const OVAL_RX = 0.36;
+  const OVAL_RY = 0.35;
 
-  const isInsideRegion = useCallback((px: number, py: number, w: number, h: number) => {
-    if (requireDocumentPresence) {
-      // Rectangle check
-      const x0 = DOC_REGION.x * w;
-      const y0 = DOC_REGION.y * h;
-      const x1 = (DOC_REGION.x + DOC_REGION.w) * w;
-      const y1 = (DOC_REGION.y + DOC_REGION.h) * h;
-      return px >= x0 && px <= x1 && py >= y0 && py <= y1;
-    } else {
-      // Oval check
-      const cx = OVAL_CX * w;
-      const cy = OVAL_CY * h;
-      const rx = OVAL_RX * w;
-      const ry = OVAL_RY * h;
-      const dx = (px - cx) / rx;
-      const dy = (py - cy) / ry;
-      return (dx * dx + dy * dy) <= 1;
-    }
-  }, [requireDocumentPresence]);
-
+  // Stable callback ref that doesn't cause re-renders
   const checkStability = useCallback((timestamp: number) => {
     if (!enabled || !videoRef.current) {
       animFrameRef.current = requestAnimationFrame(checkStability);
       return;
     }
 
-    // Initial delay: don't evaluate anything for the first N ms
+    // Initial delay
     if (enabledAtRef.current > 0 && (timestamp - enabledAtRef.current) < initialDelayMs) {
-      setInitialDelayDone(false);
-      setDocumentDetected(false);
-      setStabilityProgress(0);
-      setAlignmentProgress(0);
-      setAlignedQuadrants({ tl: false, tr: false, bl: false, br: false });
+      if (initialDelayDoneRef.current) {
+        initialDelayDoneRef.current = false;
+        setInitialDelayDone(false);
+      }
       animFrameRef.current = requestAnimationFrame(checkStability);
       return;
     }
-    if (!initialDelayDone) setInitialDelayDone(true);
+    if (!initialDelayDoneRef.current) {
+      initialDelayDoneRef.current = true;
+      setInitialDelayDone(true);
+    }
 
     const elapsed = timestamp - lastCheckRef.current;
     if (elapsed < CHECK_INTERVAL) {
@@ -162,6 +146,8 @@ export function useStabilityDetection(
 
       const docLeft = DOC_REGION.x * w;
       const docTop = DOC_REGION.y * h;
+      const docRight = (DOC_REGION.x + DOC_REGION.w) * w;
+      const docBottom = (DOC_REGION.y + DOC_REGION.h) * h;
       const docMidX = docLeft + (DOC_REGION.w * w) / 2;
       const docMidY = docTop + (DOC_REGION.h * h) / 2;
 
@@ -170,8 +156,20 @@ export function useStabilityDetection(
         const px = pixelIndex % w;
         const py = Math.floor(pixelIndex / w);
 
-        // Only analyze pixels INSIDE the guide region
-        if (!isInsideRegion(px, py, w, h)) continue;
+        // Region check inlined for performance
+        let insideRegion: boolean;
+        if (requireDocumentPresence) {
+          insideRegion = px >= docLeft && px <= docRight && py >= docTop && py <= docBottom;
+        } else {
+          const cx = OVAL_CX * w;
+          const cy = OVAL_CY * h;
+          const rx = OVAL_RX * w;
+          const ry = OVAL_RY * h;
+          const dx = (px - cx) / rx;
+          const dy = (py - cy) / ry;
+          insideRegion = (dx * dx + dy * dy) <= 1;
+        }
+        if (!insideRegion) continue;
 
         totalSampled++;
 
@@ -187,7 +185,7 @@ export function useStabilityDetection(
         const dr = Math.abs(curr[i] - prev[i]);
         const dg = Math.abs(curr[i + 1] - prev[i + 1]);
         const db = Math.abs(curr[i + 2] - prev[i + 2]);
-        if ((dr + dg + db) / 3 > 35) diffCount++;
+        if ((dr + dg + db) / 3 > PIXEL_DIFF_THRESHOLD) diffCount++;
 
         const luminance = curr[i] * 0.299 + curr[i + 1] * 0.587 + curr[i + 2] * 0.114;
         if (i + 4 * SAMPLE_STEP < curr.length) {
@@ -223,13 +221,13 @@ export function useStabilityDetection(
         const alignedCount = Object.values(nextAlignedQuadrants).filter(Boolean).length;
         const cornerProgress = (alignedCount / 4) * 100;
         const edgeProgress = Math.min(100, (edgeRatio / (threshold * 1.8)) * 100);
-        const blendedProgress = Math.round(cornerProgress * 0.7 + edgeProgress * 0.3);
+        const blendedProgress = Math.round(cornerProgress * 0.6 + edgeProgress * 0.4);
 
         setAlignedQuadrants(nextAlignedQuadrants);
         setAlignmentProgress(blendedProgress);
 
-        // At least one corner aligned + enough edges is enough to start stability countdown
-        hasContent = edgeRatio > threshold && alignedCount >= 1;
+        // ANY content with edges is enough — no minimum quadrant requirement
+        hasContent = edgeRatio > threshold;
       } else {
         setAlignedQuadrants({ tl: false, tr: false, bl: false, br: false });
         setAlignmentProgress(Math.round(Math.min(100, (edgeRatio / (threshold * 1.6)) * 100)));
@@ -247,7 +245,7 @@ export function useStabilityDetection(
         setStabilityProgress(progress);
 
         if (stabilityMsRef.current >= STABILITY_DURATION) {
-          onStableCapture();
+          onStableCaptureRef.current();
           stabilityMsRef.current = 0;
           setStabilityProgress(0);
           setDocumentDetected(false);
@@ -256,26 +254,28 @@ export function useStabilityDetection(
           prevFrameRef.current = null;
           return;
         }
-      } else if (hasContent && diffRatio < stabilityThreshold * 1.35) {
-        // Small jitter: decay instead of hard reset to avoid getting stuck forever
-        stabilityMsRef.current = Math.max(0, stabilityMsRef.current - CHECK_INTERVAL * 0.35);
+      } else if (hasContent && diffRatio < stabilityThreshold * 1.5) {
+        // Small jitter: decay instead of hard reset
+        stabilityMsRef.current = Math.max(0, stabilityMsRef.current - CHECK_INTERVAL * 0.3);
         const progress = Math.min(100, (stabilityMsRef.current / STABILITY_DURATION) * 100);
         setStabilityProgress(progress);
       } else {
-        stabilityMsRef.current = 0;
-        setStabilityProgress(0);
+        stabilityMsRef.current = Math.max(0, stabilityMsRef.current - CHECK_INTERVAL * 0.6);
+        setStabilityProgress(Math.min(100, (stabilityMsRef.current / STABILITY_DURATION) * 100));
       }
     }
 
     prevFrameRef.current = currentFrame;
     animFrameRef.current = requestAnimationFrame(checkStability);
-  }, [enabled, videoRef, onStableCapture, initialDelayMs, initialDelayDone, requireDocumentPresence, isInsideRegion]);
+  // CRITICAL: Only depend on `enabled` and `requireDocumentPresence` — not on state that we set inside
+  }, [enabled, videoRef, initialDelayMs, requireDocumentPresence]);
 
   useEffect(() => {
     if (enabled) {
       stabilityMsRef.current = 0;
       setStabilityProgress(0);
       setDocumentDetected(false);
+      initialDelayDoneRef.current = false;
       setInitialDelayDone(false);
       setAlignmentProgress(0);
       setAlignedQuadrants({ tl: false, tr: false, bl: false, br: false });
@@ -284,6 +284,7 @@ export function useStabilityDetection(
       animFrameRef.current = requestAnimationFrame(checkStability);
     } else {
       setDocumentDetected(false);
+      initialDelayDoneRef.current = false;
       setInitialDelayDone(false);
       setAlignmentProgress(0);
       setAlignedQuadrants({ tl: false, tr: false, bl: false, br: false });
@@ -480,14 +481,19 @@ export function DocCameraOverlay({
       ? "Foto reverso del INE"
       : "Foto del Pasaporte";
 
-  const alignedCornersCount = Object.values(alignedQuadrants).filter(Boolean).length;
+  // Combined progress: blend alignment + stability into one 0-100% indicator
+  const combinedProgress = stabilityProgress > 0
+    ? Math.round(alignmentProgress * 0.4 + stabilityProgress * 0.6)
+    : alignmentProgress;
 
   // Dynamic hint based on detection state
   const stepHint = !initialDelayDone
-    ? "Preparando cámara... posiciona tu documento"
+    ? "Preparando cámara..."
+    : stabilityProgress > 0
+    ? `Capturando... ${Math.round(stabilityProgress)}%`
     : !documentDetected
-    ? "Alinea las 4 esquinas con el marco"
-    : "Extremos alineados, mantén quieto para captura automática";
+    ? "Alinea el documento con el marco"
+    : "Documento detectado, mantén quieto";
 
   const frameTone = !initialDelayDone
     ? "border-muted-foreground/40"
@@ -548,26 +554,24 @@ export function DocCameraOverlay({
           </div>
         )}
 
-        {/* Detection status indicator */}
+        {/* Combined progress indicator */}
         {initialDelayDone && (
-          <div className="absolute top-2 left-2 right-2 space-y-1.5">
+          <div className="absolute bottom-3 left-4 right-4 space-y-1.5">
             <div className={cn(
               "flex items-center justify-between px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-colors duration-300",
-              documentDetected
+              stabilityProgress > 50
                 ? "bg-emerald-500/80 text-white"
+                : documentDetected
+                ? "bg-emerald-500/70 text-white"
                 : "bg-amber-500/80 text-white"
             )}>
               <span className="flex items-center gap-1">
-                {documentDetected ? <><Check className="h-3 w-3" /> Alineado</> : <><Eye className="h-3 w-3" /> Ajustando</>}
+                {stabilityProgress > 0 ? <><Camera className="h-3 w-3" /> Capturando...</> : documentDetected ? <><Check className="h-3 w-3" /> Detectado</> : <><Eye className="h-3 w-3" /> Buscando...</>}
               </span>
-              <span>{alignedCornersCount}/4 extremos</span>
+              <span className="font-bold">{combinedProgress}%</span>
             </div>
             <div className="bg-black/60 rounded-full px-2.5 py-1.5">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-white/80 whitespace-nowrap">Alineación</span>
-                <Progress value={alignmentProgress} className="h-1.5 bg-white/20" />
-                <span className="text-[10px] text-white font-bold">{alignmentProgress}%</span>
-              </div>
+              <Progress value={combinedProgress} className="h-2 bg-white/20" />
             </div>
           </div>
         )}
@@ -575,24 +579,9 @@ export function DocCameraOverlay({
         {/* Initial delay indicator */}
         {!initialDelayDone && (
           <div className="absolute bottom-3 left-4 right-4">
-            <div className="bg-black/60 rounded-full px-3 py-1.5 flex items-center gap-2 justify-center">
-              <Loader2 className="h-3 w-3 animate-spin text-white/80" />
-              <span className="text-[10px] text-white/80">Posiciona tu documento...</span>
-            </div>
-          </div>
-        )}
-
-        {/* Stability indicator */}
-        {initialDelayDone && stabilityProgress > 0 && stabilityProgress < 100 && (
-          <div className="absolute bottom-3 left-4 right-4">
-            <div className="bg-black/60 rounded-full px-3 py-1.5 flex items-center gap-2">
-              <span className="text-[10px] text-white/80">Mantén quieto...</span>
-              <div className="flex-1">
-                <Progress value={stabilityProgress} className="h-1.5 bg-white/20" />
-              </div>
-              <span className="text-[10px] text-white font-bold">
-                {Math.round(stabilityProgress)}%
-              </span>
+            <div className="bg-black/60 rounded-full px-3 py-2 flex items-center gap-2 justify-center">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-white/80" />
+              <span className="text-xs text-white/90 font-medium">Preparando... 0%</span>
             </div>
           </div>
         )}
@@ -600,27 +589,35 @@ export function DocCameraOverlay({
 
       <canvas className="hidden" />
 
-      {/* Capture button with progress ring */}
-      <button
-        onClick={onCapture}
-        disabled={uploading}
-        className="relative w-full py-4 rounded-2xl bg-emerald-600 text-white font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-emerald-700 flex items-center justify-center gap-2 disabled:opacity-60"
-      >
-        {uploading ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" /> Guardando...
-          </>
-        ) : (
-          <>
-            <Camera className="h-5 w-5" />
-            {cameraStep === "front"
-              ? "Capturar frente del INE"
-              : cameraStep === "back"
-              ? "Capturar reverso del INE"
-              : "Capturar Pasaporte"}
-          </>
-        )}
-      </button>
+      {/* Round capture button — same style as selfie */}
+      <div className="flex justify-center pt-1">
+        <button
+          onClick={onCapture}
+          disabled={uploading}
+          className="relative w-16 h-16 rounded-full bg-white border-4 border-white/60 shadow-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-60"
+        >
+          {uploading ? (
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          ) : (
+            <Camera className="h-6 w-6 text-foreground" />
+          )}
+          {/* Progress ring around capture button */}
+          {stabilityProgress > 0 && !uploading && (
+            <svg className="absolute inset-[-4px] w-[calc(100%+8px)] h-[calc(100%+8px)] -rotate-90">
+              <circle
+                cx="50%"
+                cy="50%"
+                r="34"
+                fill="none"
+                stroke="hsl(142, 76%, 36%)"
+                strokeWidth="3"
+                strokeDasharray={`${(stabilityProgress / 100) * 213.6} 213.6`}
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
+        </button>
+      </div>
 
       <button
         onClick={onCancel}
@@ -672,34 +669,79 @@ export function VerificationComparator({
   const faceMatchFailed = result.face_match === false;
   const faceMatchMissing = result.face_match == null;
 
-  // Auto-fire confetti when verification result is positive
+  // Play celebration fanfare sound
+  const playCelebrationSound = useCallback(async () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      const master = audioCtx.createGain();
+      master.gain.value = 0.5;
+      master.connect(audioCtx.destination);
+      const notes = [
+        { freq: 523.25, start: 0, dur: 0.18 },
+        { freq: 659.25, start: 0.16, dur: 0.18 },
+        { freq: 783.99, start: 0.32, dur: 0.20 },
+        { freq: 1046.5, start: 0.50, dur: 0.45 },
+        { freq: 880.0, start: 1.0, dur: 0.14 },
+        { freq: 1174.66, start: 1.14, dur: 0.55 },
+      ];
+      notes.forEach(({ freq, start, dur }) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
+        gain.gain.setValueAtTime(0, audioCtx.currentTime + start);
+        gain.gain.linearRampToValueAtTime(0.16, audioCtx.currentTime + start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(audioCtx.currentTime + start);
+        osc.stop(audioCtx.currentTime + start + dur + 0.05);
+        // Warmth layer
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(freq * 0.5, audioCtx.currentTime + start);
+        gain2.gain.setValueAtTime(0, audioCtx.currentTime + start);
+        gain2.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + start + 0.03);
+        gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
+        osc2.connect(gain2);
+        gain2.connect(master);
+        osc2.start(audioCtx.currentTime + start);
+        osc2.stop(audioCtx.currentTime + start + dur + 0.05);
+      });
+    } catch (e) { /* audio blocked */ }
+  }, []);
+
+  // Auto-fire confetti + trumpets + streamers when verification is positive
   useEffect(() => {
     if (celebrationShown) return;
     const isSuccess = result.is_valid_document && result.confidence >= 70 && hasStrongFaceMatch;
     if (isSuccess) {
       setCelebrationShown(true);
-      // Confetti burst
-      const end = Date.now() + 2000;
+      playCelebrationSound();
+
+      // Big burst
+      confetti({ particleCount: 80, spread: 100, origin: { x: 0.5, y: 0.4 }, startVelocity: 45,
+        colors: ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#f97316', '#ec4899'] });
+
+      const duration = 3000;
+      const end = Date.now() + duration;
+      const colors = ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#f97316', '#ec4899', '#8b5cf6'];
       const frame = () => {
-        confetti({
-          particleCount: 6,
-          angle: 60,
-          spread: 65,
-          origin: { x: 0, y: 0.6 },
-          colors: ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#22c55e'],
-        });
-        confetti({
-          particleCount: 6,
-          angle: 120,
-          spread: 65,
-          origin: { x: 1, y: 0.6 },
-          colors: ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#22c55e'],
-        });
+        // Confetti
+        confetti({ particleCount: 4, angle: 60, spread: 65, origin: { x: 0, y: 0.6 }, colors });
+        confetti({ particleCount: 4, angle: 120, spread: 65, origin: { x: 1, y: 0.6 }, colors });
+        // Streamers
+        confetti({ particleCount: 2, angle: 60, spread: 30, origin: { x: 0, y: 0.5 }, colors,
+          shapes: ['square'], scalar: 2.2, drift: 0.8, gravity: 0.6, ticks: 300 });
+        confetti({ particleCount: 2, angle: 120, spread: 30, origin: { x: 1, y: 0.5 }, colors,
+          shapes: ['square'], scalar: 2.2, drift: -0.8, gravity: 0.6, ticks: 300 });
         if (Date.now() < end) requestAnimationFrame(frame);
       };
       frame();
     }
-  }, [result, celebrationShown, hasStrongFaceMatch]);
+  }, [result, celebrationShown, hasStrongFaceMatch, playCelebrationSound]);
 
   // INE names come as "ApPaterno ApMaterno Nombre(s)" — reorder to "Nombre(s) ApPaterno ApMaterno"
   const isIneDoc = result.document_type === "ine_frente" || result.document_type === "ine_reverso" || !!result.clave_elector;
