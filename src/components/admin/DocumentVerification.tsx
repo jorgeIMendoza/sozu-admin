@@ -646,7 +646,14 @@ export function VerificationComparator({
     },
     {
       label: "Sexo",
-      docValue: result.sexo,
+      docValue: (() => {
+        // INE uses H=Hombre, M=Mujer; DB uses M=Masculino, F=Femenino
+        const raw = result.sexo;
+        if (!raw) return raw;
+        if (raw === "H") return "M";
+        if (raw === "M") return "F";
+        return raw;
+      })(),
       profileValue: persona.sexo,
       personaField: "sexo",
       saveable: true,
