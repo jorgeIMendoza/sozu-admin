@@ -648,28 +648,47 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   // Show verifying spinner
   if (verifying) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
+      <div className="flex flex-col items-center justify-center py-20 gap-6">
         <CaptureFlash show={showFlash} />
-        <div className="relative">
-          <div className="h-20 w-20 rounded-full border-4 border-primary/20 flex items-center justify-center">
-            <Shield className="h-10 w-10 text-primary animate-pulse" />
-          </div>
-          <svg className="absolute inset-0 w-20 h-20 -rotate-90 animate-spin" style={{ animationDuration: '2s' }}>
-            <circle
-              cx="40" cy="40" r="38"
-              fill="none"
-              stroke="hsl(var(--primary))"
-              strokeWidth="4"
-              strokeDasharray="60 180"
-              strokeLinecap="round"
-            />
+        
+        {/* Animated verification spinner */}
+        <div className="relative flex items-center justify-center">
+          {/* Outer pulsing ring */}
+          <div className="absolute h-28 w-28 rounded-full border-2 border-emerald-400/30 animate-ping" style={{ animationDuration: '2s' }} />
+          {/* Middle rotating gradient ring */}
+          <svg className="absolute h-24 w-24 animate-spin" style={{ animationDuration: '3s' }}>
+            <defs>
+              <linearGradient id="spinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="hsl(142, 76%, 36%)" stopOpacity="1" />
+                <stop offset="50%" stopColor="hsl(142, 76%, 36%)" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="hsl(142, 76%, 36%)" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <circle cx="48" cy="48" r="44" fill="none" stroke="url(#spinGrad)" strokeWidth="3" strokeLinecap="round" />
           </svg>
+          {/* Inner circle with shield icon */}
+          <div className="h-16 w-16 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-400/30 flex items-center justify-center backdrop-blur-sm">
+            <Shield className="h-7 w-7 text-emerald-600 animate-pulse" />
+          </div>
         </div>
-        <div className="text-center space-y-1">
-          <p className="text-sm font-bold text-foreground">Verificando identidad...</p>
-          <p className="text-xs text-muted-foreground">
-            Analizando autenticidad, extrayendo datos y comparando rostro
+
+        <div className="text-center space-y-2 max-w-[260px]">
+          <p className="text-base font-bold text-foreground">Verificando identidad...</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Analizando autenticidad del documento, extrayendo datos y comparando rostro con selfie
           </p>
+        </div>
+
+        {/* Animated steps */}
+        <div className="flex flex-col gap-2 w-full max-w-[240px]">
+          {['Analizando documento', 'Extrayendo datos', 'Comparando rostro'].map((label, i) => (
+            <div key={label} className="flex items-center gap-2.5 animate-fade-in" style={{ animationDelay: `${i * 0.6}s`, animationFillMode: 'both' }}>
+              <div className="h-5 w-5 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                <Loader2 className="h-3 w-3 animate-spin text-emerald-600" style={{ animationDelay: `${i * 0.3}s` }} />
+              </div>
+              <span className="text-xs text-muted-foreground">{label}</span>
+            </div>
+          ))}
         </div>
       </div>
     );
