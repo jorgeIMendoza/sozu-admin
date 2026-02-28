@@ -211,8 +211,21 @@ export default function CartaAcuerdos() {
                           <TableCell>
                             <div className="space-y-0.5">
                               {(firma.firmantes || []).map((f: any, i: number) => (
-                                <div key={i} className="text-xs">
-                                  {f.name || f.email}
+                                <div key={i} className="text-xs flex items-center gap-1">
+                                  <span>{f.name || f.email}</span>
+                                  {f.email && (
+                                    <button
+                                      type="button"
+                                      className="text-muted-foreground hover:text-primary cursor-pointer underline decoration-dotted"
+                                      title="Copiar correo"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(f.email);
+                                        toast({ title: "Correo copiado", description: f.email });
+                                      }}
+                                    >
+                                      {f.email}
+                                    </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
