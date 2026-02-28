@@ -22,9 +22,9 @@ import {
 } from "@/components/ui/dialog";
 
 const PLACEHOLDERS = [
-  { key: "nombre_agente", label: "Nombre completo del agente" },
-  { key: "fecha_actual", label: "Fecha actual" },
-  { key: "fecha_fin", label: "Fecha fin (+3 meses)" },
+  { key: "nombre_agente", label: "Nombre completo del agente", editable: true },
+  { key: "fecha_actual", label: "Fecha actual", editable: false },
+  { key: "fecha_fin", label: "Fecha fin (+3 meses)", editable: false },
 ];
 
 const ESTADO_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: any }> = {
