@@ -2424,6 +2424,27 @@ export type Database = {
         }
         Relationships: []
       }
+      carta_acuerdos_template: {
+        Row: {
+          contenido_html: string
+          id: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          contenido_html?: string
+          id?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          contenido_html?: string
+          id?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       categorias_producto: {
         Row: {
           activo: boolean
@@ -3931,6 +3952,48 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           nombre?: string
+        }
+        Relationships: []
+      }
+      firmas_digitales: {
+        Row: {
+          created_at: string
+          estado: string
+          firmantes: Json
+          id: number
+          metadata: Json | null
+          mifiel_document_id: string | null
+          pdf_firmado_url: string | null
+          pdf_url: string | null
+          referencia_id: number | null
+          tipo_documento: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          estado?: string
+          firmantes?: Json
+          id?: number
+          metadata?: Json | null
+          mifiel_document_id?: string | null
+          pdf_firmado_url?: string | null
+          pdf_url?: string | null
+          referencia_id?: number | null
+          tipo_documento?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          estado?: string
+          firmantes?: Json
+          id?: number
+          metadata?: Json | null
+          mifiel_document_id?: string | null
+          pdf_firmado_url?: string | null
+          pdf_url?: string | null
+          referencia_id?: number | null
+          tipo_documento?: string
+          updated_at?: string
         }
         Relationships: []
       }
