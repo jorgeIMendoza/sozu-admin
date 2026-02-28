@@ -257,15 +257,31 @@ export function RichTextEditor({ value, onChange, placeholders }: Props) {
       </div>
 
       {/* Editor */}
-      <EditorContent
-        editor={editor}
-        className="prose prose-sm max-w-none p-3 min-h-[200px] max-h-[350px] overflow-y-auto focus-within:outline-none
-          [&_.tiptap]:outline-none [&_.tiptap]:min-h-[180px]
-          [&_.tiptap_p]:my-1 [&_.tiptap_h1]:my-2 [&_.tiptap_h2]:my-2 [&_.tiptap_h3]:my-1.5
-          [&_.tiptap_ul]:my-1 [&_.tiptap_ol]:my-1 [&_.tiptap_li]:my-0.5
-          [&_.tiptap_a]:text-primary [&_.tiptap_a]:underline
-          [&_.tiptap_img]:max-w-full [&_.tiptap_img]:rounded"
-      />
+      <div
+        onDrop={(e) => {
+          const key = e.dataTransfer.getData("application/placeholder-key");
+          if (key) {
+            e.preventDefault();
+            insertPlaceholder(key);
+          }
+        }}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("application/placeholder-key")) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }
+        }}
+      >
+        <EditorContent
+          editor={editor}
+          className="prose prose-sm max-w-none p-3 min-h-[200px] max-h-[350px] overflow-y-auto focus-within:outline-none
+            [&_.tiptap]:outline-none [&_.tiptap]:min-h-[180px]
+            [&_.tiptap_p]:my-1 [&_.tiptap_h1]:my-2 [&_.tiptap_h2]:my-2 [&_.tiptap_h3]:my-1.5
+            [&_.tiptap_ul]:my-1 [&_.tiptap_ol]:my-1 [&_.tiptap_li]:my-0.5
+            [&_.tiptap_a]:text-primary [&_.tiptap_a]:underline
+            [&_.tiptap_img]:max-w-full [&_.tiptap_img]:rounded"
+        />
+      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ export const PlaceholderNode = Node.create({
   inline: true,
   atom: true,
   selectable: true,
-  draggable: false,
+  draggable: true,
 
   addAttributes() {
     return {

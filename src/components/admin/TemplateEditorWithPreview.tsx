@@ -1,15 +1,18 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, DragEvent } from "react";
 import { format, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
 import { replacePlaceholders } from "@/utils/templatePlaceholders";
+import { GripVertical } from "lucide-react";
 
 interface PlaceholderConfig {
   key: string;
   label: string;
   defaultValue?: string;
+  editable?: boolean;
 }
 
 interface TemplateEditorWithPreviewProps {
@@ -59,11 +62,37 @@ export function TemplateEditorWithPreview({
   img { max-width: 100%; border-radius: 4px; }
 </style></head><body>${previewHtml}</body></html>`;
 
+  const handleDragStart = (e: DragEvent<HTMLDivElement>, key: string) => {
+    e.dataTransfer.setData("application/placeholder-key", key);
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
+  const editablePlaceholders = placeholders.filter((p) => p.editable !== false);
+  const autoPlaceholders = placeholders.filter((p) => p.editable === false);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Left: Editor */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <Label className="text-sm font-semibold">Editor de Template</Label>
+
+        {/* Draggable placeholder chips */}
+        <div className="flex flex-wrap gap-2 rounded-md border border-dashed p-3 bg-muted/20">
+          <span className="text-xs text-muted-foreground w-full mb-1">Arrastra un placeholder al editor:</span>
+          {placeholders.map((p) => (
+            <div
+              key={p.key}
+              draggable
+              onDragStart={(e) => handleDragStart(e, p.key)}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-background text-xs font-mono cursor-grab active:cursor-grabbing hover:border-primary hover:bg-primary/5 transition-colors select-none"
+            >
+              <GripVertical className="h-3 w-3 text-muted-foreground" />
+              <span className="text-primary">{`{{${p.key}}}`}</span>
+              <span className="text-muted-foreground ml-1 font-sans">{p.label}</span>
+            </div>
+          ))}
+        </div>
+
         <RichTextEditor
           value={value}
           onChange={onChange}
@@ -75,10 +104,10 @@ export function TemplateEditorWithPreview({
       <div className="space-y-4">
         <Label className="text-sm font-semibold">Vista Previa</Label>
 
-        {/* Placeholder value inputs */}
+        {/* Editable placeholder inputs (only nombre) */}
         <div className="space-y-3 rounded-md border p-4 bg-muted/30">
-          <p className="text-xs font-medium text-muted-foreground">Valores de prueba para placeholders:</p>
-          {placeholders.map((p) => (
+          <p className="text-xs font-medium text-muted-foreground">Valores para placeholders:</p>
+          {editablePlaceholders.map((p) => (
             <div key={p.key} className="space-y-1">
               <Label htmlFor={`ph-${p.key}`} className="text-xs">
                 {p.label}
@@ -92,6 +121,17 @@ export function TemplateEditorWithPreview({
               />
             </div>
           ))}
+          {autoPlaceholders.length > 0 && (
+            <div className="space-y-1.5 pt-2 border-t">
+              <p className="text-xs text-muted-foreground">Auto-calculados:</p>
+              {autoPlaceholders.map((p) => (
+                <div key={p.key} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{p.label}</span>
+                  <Badge variant="secondary" className="font-normal">{placeholderValues[p.key]}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Live preview iframe */}
