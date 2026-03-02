@@ -69,7 +69,7 @@ serve(async (req) => {
           const authHeader = "Basic " + btoa(`${MIFIEL_API_ID}:${MIFIEL_API_SECRET}`);
 
           const pdfResponse = await fetch(
-            `https://app.mifiel.com/api/v1/documents/${documentId}/file`,
+            `https://app-sandbox.mifiel.com/api/v1/documents/${documentId}/file`,
             { headers: { Authorization: authHeader } }
           );
 

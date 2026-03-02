@@ -49,10 +49,10 @@ const STEP_TITLES: Record<string, string> = {
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
-  basic: 'Datos personales, dirección, INE y contrato',
+  basic: 'Datos personales, dirección, INE y carta de cumplimiento',
   address: 'Tu dirección física completa',
   fiscal: 'RFC, régimen fiscal, constancia y dirección fiscal',
-  documents: 'INE, Constancia y Contrato de comercialización',
+  documents: 'INE, Constancia y Carta de cumplimiento',
   'bank-accounts': 'Agrega tu cuenta bancaria',
   training: 'Agenda tu cita de capacitación presencial',
 };

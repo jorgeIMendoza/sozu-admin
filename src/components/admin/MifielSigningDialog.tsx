@@ -45,7 +45,7 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
     // Load the Mifiel CDN script if not already loaded
     if (!scriptLoadedRef.current && !document.querySelector('script[src*="mifiel.com/widget"]')) {
       const script = document.createElement('script');
-      script.src = 'https://app.mifiel.com/sign-widget-assets/v3/index.js';
+      script.src = 'https://app-sandbox.mifiel.com/sign-widget-assets/v3/index.js';
       script.type = 'module';
       script.onload = () => {
         scriptLoadedRef.current = true;

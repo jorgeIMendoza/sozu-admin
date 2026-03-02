@@ -20,7 +20,7 @@ const ACTIVATION_BLOCKS = [
   { 
     stepId: 'basic' as const, 
     label: 'Identidad', 
-    description: 'Datos personales, dirección, INE y contrato',
+    description: 'Datos personales, dirección, INE y carta de cumplimiento',
     icon: FileText,
     relatedSteps: ['basic'] as const,
   },
@@ -290,9 +290,12 @@ const AgentPerfil = () => {
             {profile?.rol_nombre || "Agente Inmobiliario"}
           </p>
           {agencyName && (
-            <p className="text-xs text-[hsl(var(--agent-text-secondary))]">
-              {agencyName}
-            </p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="text-xs font-medium text-[hsl(var(--agent-text-secondary))]">
+                {agencyName}
+              </span>
+            </div>
           )}
         </div>
       </div>
