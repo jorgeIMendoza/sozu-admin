@@ -2,78 +2,46 @@
 
 ## Problema
 
-La funcion `getOrCreateProductClabe` en `clabeReuseUtils.ts` tiene un patron destructivo: limpia las CLABEs de ofertas existentes **antes** de que el llamador guarde la CLABE en la nueva oferta. Si algo falla despues de limpiar, la CLABE se pierde permanentemente (como paso con la oferta 1791).
+La descarga de PDF de **ofertas de productos** (en el diálogo de "Ofertas de Productos" de Propiedades) siempre regenera el PDF sin verificar si ya existe una URL guardada. En cambio, las **ofertas de propiedades** sí tienen esta lógica correcta: primero revisan si hay URL, validan los datos, y solo regeneran si es necesario.
 
-## Solucion
+Adicionalmente, hay un bug en la validación de `ofertaPdfStorageService.ts` que **siempre invalida** los PDFs cuando la oferta tiene esquema de pago seleccionado + estatus de aprobación (linea 173), lo que causa regeneraciones innecesarias en ambos flujos.
 
-### 1. Refactorizar `clabeReuseUtils.ts` - Patron no destructivo
+## Solución
 
-Cambiar la funcion para que **no limpie CLABEs directamente**. En su lugar, retornara un objeto con la CLABE y el ID de la oferta fuente:
+### 1. Agregar lógica de caché al botón de descarga de ofertas de productos
+
+**Archivo:** `src/pages/admin/Propiedades.tsx` (lineas ~6496-6530)
+
+Replicar el mismo patrón que ya usa `handleDownloadOffer` (linea 1056) para propiedades:
 
 ```text
-Antes:  getOrCreateProductClabe() -> string (y limpia CLABEs internamente)
-Ahora:  getOrCreateProductClabe() -> { clabe: string, sourceOfferIds: number[] }
+Flujo actual (productos):
+  Click → generateOfferPDF() → siempre regenera
+
+Flujo corregido (igual que propiedades):
+  Click → getExistingUrl()
+    → Si existe URL → validateOfferDataAndInvalidateIfNeeded()
+      → Si es válida → downloadFromUrl() (descarga directa, rápida)
+      → Si fue invalidada → generateOfferPDF() (regenera)
+    → Si no existe URL → generateOfferPDF() (genera por primera vez)
 ```
 
-La funcion dejara de hacer el `UPDATE ... SET clabe_stp_tmp_producto = NULL`. Solo buscara y retornara la informacion.
+### 2. Corregir la validación que siempre invalida con estatus de aprobación
 
-El llamador sera responsable de:
-1. Guardar la CLABE en la nueva oferta
-2. Solo despues de exito, limpiar la CLABE de las ofertas fuente
+**Archivo:** `src/services/ofertaPdfStorageService.ts` (linea ~170-175)
 
-### 2. Actualizar los 3 llamadores
+El Caso 3 actual dice: "si hay esquema + estatus de aprobación, invalidar siempre". Esto causa que **toda oferta aprobada** se regenere cada vez.
 
-**a) `NewProductOfferDialog.tsx` (linea ~624)**
-- Recibir `{ clabe, sourceOfferIds }`
-- Usar `clabe` al crear la oferta
-- Despues de crear exitosamente, limpiar CLABEs de `sourceOfferIds`
+La corrección: eliminar este caso, ya que el badge de estatus ya se incluye en la generación actual del PDF. Si se necesita regenerar por un cambio de estatus, eso debería manejarse con un mecanismo explícito (setear `url = null` cuando cambia el estatus), no invalidando siempre.
 
-**b) `NewOfferDialog.tsx` (linea ~862)**
-- Mismo patron: crear oferta primero, limpiar despues
+### 3. Invalidación explícita al cambiar estatus de aprobación
 
-**c) `Propiedades.tsx` (linea ~6314)**
-- Mismo patron: actualizar oferta con esquema y CLABE, luego limpiar fuentes
+**Archivo:** `src/pages/admin/Propiedades.tsx`
 
-### 3. Recuperar CLABE de oferta 1791
+Cuando se cambia el `id_estatus_aprobacion` de una oferta (via `CambiarEstatusAprobacionDialog`), se debe limpiar la URL del PDF para forzar regeneración en la próxima descarga. Esto reemplaza la invalidación automática del Caso 3.
 
-Generar una nueva CLABE via `crear_referencia_bancaria` y asignarla a la oferta 1791 directamente desde la consola SQL o mediante una accion manual en el sistema.
+## Resumen de archivos a modificar
 
-## Detalle tecnico
-
-### Nuevo tipo de retorno de `getOrCreateProductClabe`:
-
-```typescript
-interface ClabeResult {
-  clabe: string;
-  sourceOfferIds: number[];  // IDs de ofertas a limpiar (vacio si se genero nueva)
-  isNew: boolean;            // true si se genero nueva CLABE
-}
-```
-
-### Logica en cada llamador (ejemplo):
-
-```typescript
-const result = await getOrCreateProductClabe(propId, prodId, idErDueno);
-
-// 1. Crear/actualizar oferta con la CLABE
-const { error } = await supabase.from('ofertas').insert({
-  ...datos,
-  clabe_stp_tmp_producto: result.clabe
-});
-
-if (error) throw error; // La CLABE original sigue intacta
-
-// 2. Solo si la oferta se creo bien, limpiar fuentes
-if (result.sourceOfferIds.length > 0) {
-  await supabase.from('ofertas')
-    .update({ clabe_stp_tmp_producto: null })
-    .in('id', result.sourceOfferIds);
-}
-```
-
-### Archivos a modificar:
-1. `src/utils/clabeReuseUtils.ts` - Refactorizar retorno
-2. `src/components/admin/NewProductOfferDialog.tsx` - Actualizar llamada
-3. `src/components/admin/NewOfferDialog.tsx` - Actualizar llamada
-4. `src/pages/admin/Propiedades.tsx` - Actualizar llamada
+1. **`src/pages/admin/Propiedades.tsx`** - Agregar verificación de URL existente al descargar ofertas de productos (lineas ~6496-6530), y limpiar URL al cambiar estatus de aprobación
+2. **`src/services/ofertaPdfStorageService.ts`** - Eliminar Caso 3 que siempre invalida cuando hay esquema + estatus
 
