@@ -1127,14 +1127,6 @@ const Propiedades = () => {
         });
       }
 
-      // Enviar por correo al prospecto (fire-and-forget)
-      const { sendOfferEmailAfterDownload } = await import('@/services/ofertaEmailService');
-      sendOfferEmailAfterDownload({
-        offerId: offer.id,
-        propertyNumber: offer.numero_propiedad,
-        recipientEmail: offer.lead_email,
-        recipientName: offer.lead_name,
-      });
     } catch (error) {
       console.error('Error generating/downloading PDF:', error);
       toast({
@@ -6556,14 +6548,6 @@ const Propiedades = () => {
                                   description: "La oferta se ha descargado exitosamente",
                                 });
 
-                                // Enviar por correo al prospecto (fire-and-forget)
-                                const { sendOfferEmailAfterDownload } = await import('@/services/ofertaEmailService');
-                                sendOfferEmailAfterDownload({
-                                  offerId: offer.id,
-                                  propertyNumber: selectedPropertyForProductOffers?.numero_propiedad,
-                                  recipientEmail: offer.lead_email,
-                                  recipientName: offer.lead_name,
-                                });
                               } catch (error) {
                                 console.error('Error generating PDF:', error);
                                 toast({
