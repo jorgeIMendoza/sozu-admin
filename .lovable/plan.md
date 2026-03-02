@@ -1,38 +1,49 @@
 
+# Fix: Generar nueva CLABE STP al poner propiedad en Reventa
 
-## Agregar disclaimer cuando el prospecto no tiene RFC valido
+## Problema
+Cuando una propiedad se pone en reventa mediante el `ReventaDialog`, la CLABE STP se borra (`clabe_stp_tmp_apartado: null`). Esto causa que las ofertas generadas para esas propiedades no muestren la seccion de datos bancarios, ya que no hay CLABE disponible.
 
-### Problema
-Actualmente, cuando se genera una oferta y el prospecto no tiene un RFC valido, la seccion de datos bancarios se omite silenciosamente. Solo existe un disclaimer para el caso de "sin plan de pago seleccionado", pero no para "sin RFC valido".
+Otros flujos similares (cancelacion de cuenta, juicio terminado) si generan una nueva CLABE al devolver la propiedad a "Disponible", usando `supabase.rpc('crear_referencia_bancaria', { id_er_dueno })`.
 
-### Cambios
+## Solucion
 
-#### 1. `src/components/admin/NewOfferDialog.tsx`
-- Despues del disclaimer actual de esquema de pago (~linea 955), agregar una segunda condicion: si el prospecto no tiene RFC valido, mostrar un toast indicando que la oferta se genero sin datos bancarios por falta de RFC.
-- Se importara `isValidRFC` desde `@/utils/fiscalDataValidation` y se evaluara el RFC del lead.
-- Si ambas condiciones se cumplen (sin esquema Y sin RFC), se mostrara un solo toast combinado en lugar de dos separados.
+### Archivo: `src/components/admin/ReventaDialog.tsx`
 
-Logica:
-```
-const missingScheme = !result.schemeId;
-const missingRFC = !isValidRFC(leadRfc);
+Modificar la `mutationFn` del `reventaMutation` para:
 
-if (missingScheme || missingRFC) {
-  const reasons = [];
-  if (missingRFC) reasons.push("el prospecto no tiene un RFC valido");
-  if (missingScheme) reasons.push("no se selecciono un plan de pago");
-  
-  toast({
-    title: "Aviso: Sin datos bancarios",
-    description: `La oferta se genero sin la seccion de datos bancarios porque ${reasons.join(" y ")}.`,
-    duration: 8000,
-  });
+1. **Obtener el `id_entidad_relacionada_dueno`** de la propiedad actual (ya existe como prop pero necesitamos consultarlo si no esta disponible como prop, o bien agregarlo como prop).
+2. **Llamar a `crear_referencia_bancaria`** con ese ID para generar una nueva CLABE STP.
+3. **Asignar la nueva CLABE** en el update en lugar de `null`.
+
+El patron ya existe en `CancelCuentaDialog` y `JuicioTerminadoDialog`:
+
+```text
+// Paso 1: Obtener id_er_dueno de la propiedad
+const { data: propData } = await supabase
+  .from('propiedades')
+  .select('id_entidad_relacionada_dueno')
+  .eq('id', propertyId)
+  .single();
+
+// Paso 2: Generar nueva CLABE
+let nuevaClabe = null;
+if (propData?.id_entidad_relacionada_dueno) {
+  const { data: clabeData } = await supabase
+    .rpc('crear_referencia_bancaria', { 
+      id_er_dueno: propData.id_entidad_relacionada_dueno 
+    });
+  nuevaClabe = clabeData;
 }
+
+// Paso 3: Asignar en el update
+clabe_stp_tmp_apartado: nuevaClabe,  // en vez de null
 ```
 
-#### 2. `src/components/admin/NewProductOfferDialog.tsx`
-- Mismo cambio: agregar validacion de RFC del prospecto y combinar ambos disclaimers en uno solo con la misma logica.
+### Correccion de propiedades existentes
 
-### Resumen
-Se reemplaza el disclaimer actual (solo plan de pago) por uno inteligente que cubre ambos casos (RFC invalido y/o sin plan de pago), mostrando al usuario la razon exacta por la que no se incluyen los datos bancarios.
+Ademas, se ejecutara un UPDATE para las 5 propiedades de Margot que ya estan en reventa sin CLABE (IDs: 5062, 5085, 5097, 4842, 5112). Se generara una CLABE para cada una llamando a `crear_referencia_bancaria` con su respectivo `id_entidad_relacionada_dueno`.
 
+### Invalidar ofertas afectadas
+
+Se invalidaran (url = NULL) las ofertas de esas propiedades para que se regeneren con la nueva CLABE y muestren la seccion de datos bancarios.
