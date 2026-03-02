@@ -946,23 +946,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         description: `La oferta para la propiedad ${propertyNumber} ha sido generada exitosamente.`,
       });
 
-      // Disclaimer: si no hay esquema de pago o RFC válido, no se mostrará la sección de datos bancarios
-      {
-        const missingScheme = !result.schemeId;
-        const missingRFC = !isValidRFC(result.leadRfc);
-
-        if (missingScheme || missingRFC) {
-          const reasons: string[] = [];
-          if (missingRFC) reasons.push("el prospecto no tiene un RFC válido");
-          if (missingScheme) reasons.push("no se seleccionó un plan de pago");
-
-          toast({
-            title: "Aviso: Sin datos bancarios",
-            description: `La oferta se generó sin la sección de datos bancarios porque ${reasons.join(" y ")}.`,
-            duration: 8000,
-          });
-        }
-      }
 
       // Show product offers results
       if (result.productOffersResults.created > 0) {
@@ -1253,17 +1236,30 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     };
   }, [tramosMensualidad, form.watch("numero_mensualidades"), manualSchemeCalculations.montoMensualidades]);
 
+  const confirmBankingReasons = React.useMemo(() => {
+    if (!pendingFormData) return [] as string[];
+
+    const reasons: string[] = [];
+    if (!isValidRFC(pendingFormData.rfc)) reasons.push("el prospecto no tiene un RFC válido");
+    if (pendingFormData.mode === "precargada" && !propertySchemeSelection) reasons.push("no se seleccionó un plan de pago");
+
+    return reasons;
+  }, [pendingFormData, propertySchemeSelection]);
+
   const onSubmit = (data: FormData) => {
     console.log("Form submitted successfully!");
     onTrackSubmit?.();
-    
-    // If there are products with price > 0, show confirmation dialog
-    if (productsWithPriceInfo.total > 0) {
+
+    const missingScheme = data.mode === "precargada" && !localSchemeId;
+    const missingRFC = !isValidRFC(data.rfc);
+    const shouldShowBankingConfirm = missingScheme || missingRFC;
+
+    if (productsWithPriceInfo.total > 0 || shouldShowBankingConfirm) {
       setPendingFormData(data);
       setPropertySchemeSelection(localSchemeId);
       setShowConfirmDialog(true);
     } else {
-      // No products, proceed directly - use localSchemeId
+      // No products ni advertencias bancarias, proceder directamente
       createOfferMutation.mutate({ data, schemeSelections: {}, propertySchemeId: localSchemeId });
     }
   };
@@ -2373,13 +2369,15 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
-            Confirmar generación de ofertas
+            {productsWithPriceInfo.total > 0 ? "Confirmar generación de ofertas" : "Confirmar generación de oferta"}
           </AlertDialogTitle>
           <AlertDialogDescription className="space-y-4">
-            <p>
-              Esta propiedad tiene {productsWithPriceInfo.total} producto(s) con costo extra. 
-              Se generarán las siguientes ofertas:
-            </p>
+            {productsWithPriceInfo.total > 0 && (
+              <p>
+                Esta propiedad tiene {productsWithPriceInfo.total} producto(s) con costo extra.
+                Se generarán las siguientes ofertas:
+              </p>
+            )}
             
             <div className="bg-muted/50 rounded-lg p-3 space-y-4">
               {/* Property offer with scheme selector */}
@@ -2501,9 +2499,31 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </div>
             )}
 
-            <p className="text-sm text-muted-foreground">
-              Se descargarán {1 + productsWithPriceInfo.valid.length} PDF(s) automáticamente.
-            </p>
+            {confirmBankingReasons.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-start gap-2 text-sm text-amber-700">
+                  <AlertTriangle className="h-4 w-4 mt-0.5" />
+                  <div>
+                    <span className="font-medium">Aviso de datos bancarios:</span>
+                    <ul className="ml-4 mt-1 list-disc">
+                      {confirmBankingReasons.map((reason, idx) => (
+                        <li key={idx}>La oferta se generará sin sección de datos bancarios porque {reason}.</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {productsWithPriceInfo.total > 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Se descargarán {1 + productsWithPriceInfo.valid.length} PDF(s) automáticamente.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Se generará 1 PDF automáticamente.
+              </p>
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ShoppingCart, UserPlus, AlertCircle, Info } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -101,6 +111,9 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmReasons, setConfirmReasons] = useState<string[]>([]);
+  const [pendingFormValues, setPendingFormValues] = useState<FormData | null>(null);
   const selectedProductRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
@@ -540,11 +553,28 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
     }, 100);
   };
 
-  const handleGenerateOffer = async () => {
+  const handleGenerateOffer = async (confirmedFormValues?: FormData) => {
+    const formValues = confirmedFormValues ?? form.getValues();
+
+    if (!confirmedFormValues) {
+      const missingScheme = formValues.mode === "precargada" && !formValues.selectedSchemeId;
+      const missingRFC = !isValidRFC(formValues.rfc);
+      const reasons: string[] = [];
+
+      if (missingRFC) reasons.push("el prospecto no tiene un RFC válido");
+      if (missingScheme) reasons.push("no se seleccionó un plan de pago");
+
+      if (reasons.length > 0) {
+        setPendingFormValues(formValues);
+        setConfirmReasons(reasons);
+        setShowConfirmDialog(true);
+        return;
+      }
+    }
+
     setIsGenerating(true);
-    
+
     try {
-      const formValues = form.getValues();
       
       // Step 1: Create or get persona (comprador)
       let personaId: number;
@@ -697,23 +727,6 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
         description: "Oferta de producto/servicio generada correctamente. Descargando PDF...",
       });
 
-      // Disclaimer: si no hay esquema de pago o RFC válido, no se mostrará la sección de datos bancarios
-      {
-        const missingScheme = !schemeId;
-        const missingRFC = !isValidRFC(formValues.rfc);
-
-        if (missingScheme || missingRFC) {
-          const reasons: string[] = [];
-          if (missingRFC) reasons.push("el prospecto no tiene un RFC válido");
-          if (missingScheme) reasons.push("no se seleccionó un plan de pago");
-
-          toast({
-            title: "Aviso: Sin datos bancarios",
-            description: `La oferta se generó sin la sección de datos bancarios porque ${reasons.join(" y ")}.`,
-            duration: 8000,
-          });
-        }
-      }
 
       // Generate PDF for the created offer
       try {
@@ -777,6 +790,21 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleConfirmGenerate = () => {
+    if (!pendingFormValues) return;
+    const values = pendingFormValues;
+    setShowConfirmDialog(false);
+    setPendingFormValues(null);
+    setConfirmReasons([]);
+    void handleGenerateOffer(values);
+  };
+
+  const handleCancelGenerate = () => {
+    setShowConfirmDialog(false);
+    setPendingFormValues(null);
+    setConfirmReasons([]);
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
@@ -1415,7 +1443,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
                 </Button>
                 {selectedProductData && (
                   <Button 
-                    onClick={handleGenerateOffer} 
+                    onClick={() => void handleGenerateOffer()} 
                     disabled={isGenerating || (selectedMode === "precargada" && productPaymentSchemes.length === 0)}
                   >
                     {isGenerating ? "Generando..." : "Generar Oferta"}
@@ -1426,6 +1454,30 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
           </Form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Confirmar generación de oferta
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>La oferta se generará sin sección de datos bancarios por lo siguiente:</p>
+              <ul className="ml-5 list-disc">
+                {confirmReasons.map((reason, idx) => (
+                  <li key={idx}>{reason}.</li>
+                ))}
+              </ul>
+              <p className="text-sm text-muted-foreground">¿Deseas continuar?</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelGenerate}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmGenerate}>Continuar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Category and Product Selection Dialog */}
       <Dialog open={showCategoryDialog} onOpenChange={setShowCategoryDialog}>
