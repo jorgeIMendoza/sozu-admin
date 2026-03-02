@@ -1,49 +1,31 @@
 
-# Fix: Generar nueva CLABE STP al poner propiedad en Reventa
 
-## Problema
-Cuando una propiedad se pone en reventa mediante el `ReventaDialog`, la CLABE STP se borra (`clabe_stp_tmp_apartado: null`). Esto causa que las ofertas generadas para esas propiedades no muestren la seccion de datos bancarios, ya que no hay CLABE disponible.
+# Fix: Filtrar proyectos por estado de publicacion en Portal Agente
 
-Otros flujos similares (cancelacion de cuenta, juicio terminado) si generan una nueva CLABE al devolver la propiedad a "Disponible", usando `supabase.rpc('crear_referencia_bancaria', { id_er_dueno })`.
+## Problemas identificados
+
+### 1. Portal Agente muestra proyectos no publicados
+En `AgentInventario.tsx` (linea 65), la consulta de proyectos solo filtra por `activo = true` pero NO filtra por `publicar = true`. Esto causa que el Super Admin (y cualquier rol con acceso irrestricto) vea todos los proyectos, incluyendo los no publicados.
+
+### 2. abel1@yopmail.com ve Monocolo
+El usuario tiene acceso explicito al proyecto Monocolo (ID 1902) en la tabla `proyectos_acceso`. Aunque Monocolo tiene `publicar = false`, el Portal Agente no valida este campo, por lo que se muestra igualmente.
 
 ## Solucion
 
-### Archivo: `src/components/admin/ReventaDialog.tsx`
+### Archivo: `src/pages/admin/agent-portal/AgentInventario.tsx`
 
-Modificar la `mutationFn` del `reventaMutation` para:
-
-1. **Obtener el `id_entidad_relacionada_dueno`** de la propiedad actual (ya existe como prop pero necesitamos consultarlo si no esta disponible como prop, o bien agregarlo como prop).
-2. **Llamar a `crear_referencia_bancaria`** con ese ID para generar una nueva CLABE STP.
-3. **Asignar la nueva CLABE** en el update en lugar de `null`.
-
-El patron ya existe en `CancelCuentaDialog` y `JuicioTerminadoDialog`:
+Agregar `.eq('publicar', true)` a la consulta de proyectos (linea 65):
 
 ```text
-// Paso 1: Obtener id_er_dueno de la propiedad
-const { data: propData } = await supabase
-  .from('propiedades')
-  .select('id_entidad_relacionada_dueno')
-  .eq('id', propertyId)
-  .single();
-
-// Paso 2: Generar nueva CLABE
-let nuevaClabe = null;
-if (propData?.id_entidad_relacionada_dueno) {
-  const { data: clabeData } = await supabase
-    .rpc('crear_referencia_bancaria', { 
-      id_er_dueno: propData.id_entidad_relacionada_dueno 
-    });
-  nuevaClabe = clabeData;
-}
-
-// Paso 3: Asignar en el update
-clabe_stp_tmp_apartado: nuevaClabe,  // en vez de null
+let query = (supabase as any)
+  .from('proyectos')
+  .select('id, nombre, direccion, url_imagen_portada, id_estatus_proyecto')
+  .eq('activo', true)
+  .eq('publicar', true);   // <-- NUEVO: solo proyectos publicados
 ```
 
-### Correccion de propiedades existentes
+Esto aplica para todos los roles en el portal de agente, incluyendo Super Admin. Solo los proyectos marcados como publicados apareceran en el inventario del portal.
 
-Ademas, se ejecutara un UPDATE para las 5 propiedades de Margot que ya estan en reventa sin CLABE (IDs: 5062, 5085, 5097, 4842, 5112). Se generara una CLABE para cada una llamando a `crear_referencia_bancaria` con su respectivo `id_entidad_relacionada_dueno`.
+### Sin cambios en proyectos_acceso
+No es necesario remover el acceso de abel1@yopmail.com a Monocolo en `proyectos_acceso`, ya que el filtro `publicar = true` en la consulta se encargara de excluirlo automaticamente del portal.
 
-### Invalidar ofertas afectadas
-
-Se invalidaran (url = NULL) las ofertas de esas propiedades para que se regeneren con la nueva CLABE y muestren la seccion de datos bancarios.
