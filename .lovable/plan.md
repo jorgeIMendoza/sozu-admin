@@ -1,108 +1,70 @@
 
 
-# Integrar firma digital de Carta de Acuerdos en el Portal de Agentes
+# Centralizar URL de Mifiel en variable de entorno
 
-## Resumen
+## Problema
 
-Mover el flujo de firma de la "Carta de cumplimiento de comercializacion inmobiliaria" (documento tipo 48) desde la vista administrativa (Legal > Carta de Acuerdos) al portal del agente. En lugar de subir un archivo manualmente, el agente firmara digitalmente via Mifiel desde el modal de Identidad > Documentos.
+La URL `https://app-sandbox.mifiel.com/api/v1` esta hardcodeada en 3 edge functions:
+- `mifiel-crear-documento`
+- `mifiel-consultar-documento`
+- `mifiel-webhook`
+
+Cuando se pase a produccion, habria que editar las 3 funciones manualmente.
+
+## Solucion
+
+Crear un secret `MIFIEL_API_URL` en Supabase con el valor actual (`https://app-sandbox.mifiel.com/api/v1`) y reemplazar la constante hardcodeada en las 3 funciones por `Deno.env.get("MIFIEL_API_URL")`.
+
+Tambien aplica para el widget CDN en el frontend (`MifielSigningDialog.tsx`), que usa `https://app-sandbox.mifiel.com/sign-widget-assets/v3/index.js`. Para el frontend se usara una variable `VITE_MIFIEL_ENVIRONMENT` (valor: `sandbox` o `production`) que determine la URL del widget.
 
 ## Cambios
 
-### 1. Quitar boton "Enviar a firmar" de CartaAcuerdos.tsx
+### 1. Agregar secret MIFIEL_API_URL en Supabase
 
-**Archivo:** `src/pages/admin/legal/CartaAcuerdos.tsx`
+Valor: `https://app-sandbox.mifiel.com/api/v1`
 
-- Eliminar el boton "Enviar a firmar" del header del editor
-- Eliminar el Dialog de envio (`enviarDialogOpen`) y todo su estado asociado (`agenteEmail`, `agenteNombre`, `agentePersonaId`, `enviarMutation`)
-- La vista administrativa queda solo como editor de template + historial de firmas (lectura)
+### 2. Actualizar edge functions (3 archivos)
 
-### 2. Modificar el renderizado del documento tipo 48 en AgentOnboardingStepDialog.tsx
-
-**Archivo:** `src/components/admin/AgentOnboardingStepDialog.tsx`
-
-Dentro de `AgentDocumentsStep`, cuando se renderiza el documento tipo 48 (Carta de cumplimiento):
-
-- **Si NO hay firma activa**: Mostrar un boton "Firmar Carta de Acuerdos" (en lugar de "Subir")
-  - Al hacer clic, invocar `mifiel-crear-documento` con los datos del agente (nombre, email, personaId) que ya estan disponibles via la query de persona
-  - Guardar el `widget_id` del firmante agente de la respuesta de Mifiel
-  - Abrir un dialog/drawer con el widget de Mifiel embebido usando `<mifiel-widget>` via CDN (`https://app.mifiel.com/widget/index.js`)
-
-- **Si hay firma en progreso** (estado enviado/firmado_parcial): Mostrar boton "Continuar firma" que abre el widget de Mifiel con el `widget_id` guardado, y un badge con el estado actual
-
-- **Si firma completada**: Mostrar badge "Firmado" con boton para ver/descargar el PDF firmado. Ademas, crear automaticamente el registro en la tabla `documentos` (tipo 48) con la URL del PDF firmado y marcarlo como validado (estatus 2)
-
-### 3. Crear componente MifielSigningDialog
-
-**Archivo nuevo:** `src/components/admin/MifielSigningDialog.tsx`
-
-- Dialog/Drawer que carga el script CDN de Mifiel (`https://app.mifiel.com/widget/index.js`)
-- Renderiza `<mifiel-widget>` con el `widget_id` del agente
-- Escucha eventos `success` y `error` del widget
-- Al completar la firma exitosamente: cierra el dialog, muestra toast de exito, invalida queries
-
-### 4. Actualizar edge function mifiel-crear-documento
-
-**Archivo:** `supabase/functions/mifiel-crear-documento/index.ts`
-
-- Incluir en la respuesta el `widget_id` del firmante agente (ya viene en la respuesta de Mifiel API como parte de los signatories)
-- Guardar los `widget_id` de cada firmante en la tabla `firmas_digitales` (campo metadata o firmantes)
-
-### 5. Actualizar webhook para vincular documento tipo 48
-
-**Archivo:** `supabase/functions/mifiel-webhook/index.ts`
-
-- Cuando el estado cambia a "completado", ademas de guardar el PDF:
-  - Buscar el `referencia_id` (id_persona del agente) en la firma
-  - Crear un registro en tabla `documentos` con tipo 48, la URL del PDF firmado, y estatus de verificacion 2 (Validado)
-  - Esto hara que el onboarding detecte automaticamente el documento como completado
-
-### 6. Query de firma existente en AgentDocumentsStep
-
-Dentro de `AgentDocumentsStep`, agregar un query para buscar si ya existe una firma digital para este agente:
-
-```text
-supabase
-  .from('firmas_digitales')
-  .select('*')
-  .eq('tipo_documento', 'carta_acuerdos')
-  .eq('referencia_id', personaId)
-  .order('created_at', { ascending: false })
-  .limit(1)
+En cada una, reemplazar:
+```typescript
+const MIFIEL_API_URL = "https://app-sandbox.mifiel.com/api/v1";
+```
+Por:
+```typescript
+const MIFIEL_API_URL = Deno.env.get("MIFIEL_API_URL") || "https://app-sandbox.mifiel.com/api/v1";
 ```
 
-Esto determina si mostrar "Firmar", "Continuar firma" o "Firmado".
+Archivos:
+- `supabase/functions/mifiel-crear-documento/index.ts`
+- `supabase/functions/mifiel-consultar-documento/index.ts`
+- `supabase/functions/mifiel-webhook/index.ts` (la URL inline en el fetch del PDF tambien usara la variable)
 
-## Flujo completo
+### 3. Actualizar frontend widget URL
 
-```text
-Agente abre modal Identidad > Documentos
-  |
-  v
-Ve documento "Carta de cumplimiento..." con boton "Firmar"
-  |
-  v
-Clic en "Firmar" --> Llama a mifiel-crear-documento
-  |
-  v
-Se abre MifielSigningDialog con widget embebido
-  |
-  v
-Agente firma --> Mifiel notifica via webhook
-  |
-  v
-Webhook guarda PDF firmado + crea registro en documentos (tipo 48, validado)
-  |
-  v
-Agente ve documento como "Firmado" y puede descargar el PDF
+**Archivo:** `src/components/admin/MifielSigningDialog.tsx`
+
+Agregar variable de entorno `VITE_MIFIEL_ENVIRONMENT` a los archivos `.env`:
+- Valor: `sandbox` (desarrollo) o `production` (produccion)
+
+En el componente, construir la URL del widget dinamicamente:
+```typescript
+const mifielEnv = import.meta.env.VITE_MIFIEL_ENVIRONMENT || 'sandbox';
+const mifielHost = mifielEnv === 'production' ? 'app.mifiel.com' : 'app-sandbox.mifiel.com';
+const widgetUrl = `https://${mifielHost}/sign-widget-assets/v3/index.js`;
 ```
 
-## Archivos a modificar/crear
+### 4. Actualizar archivos .env
 
-| Archivo | Accion |
-|---------|--------|
-| `src/pages/admin/legal/CartaAcuerdos.tsx` | Quitar boton "Enviar a firmar" y dialog asociado |
-| `src/components/admin/AgentOnboardingStepDialog.tsx` | Logica especial para doc tipo 48 con firma digital |
-| `src/components/admin/MifielSigningDialog.tsx` | **Nuevo** - Widget embebido de Mifiel |
-| `supabase/functions/mifiel-crear-documento/index.ts` | Retornar widget_id en respuesta |
-| `supabase/functions/mifiel-webhook/index.ts` | Crear registro en documentos tipo 48 al completar |
+Agregar `VITE_MIFIEL_ENVIRONMENT=sandbox` a:
+- `.env`
+- `.env.development`
+- `.env.production` (cambiar a `production` cuando sea el momento)
+- `.env.example`
 
+## Beneficio
+
+Para cambiar de sandbox a produccion solo se necesita:
+1. Cambiar el secret `MIFIEL_API_URL` en Supabase Dashboard
+2. Cambiar `VITE_MIFIEL_ENVIRONMENT` a `production` en `.env.production`
+
+Sin tocar codigo.
