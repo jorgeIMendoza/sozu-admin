@@ -1688,7 +1688,9 @@ const Propiedades = () => {
         monto_apartado_pagando: property.monto_apartado_pagando,
         clabe_stp_tmp_apartado: property.clabe_stp_tmp_apartado,
         id_entidad_relacionada_dueno: property.id_entidad_relacionada_dueno,
-        clabe_stp: cuentaCobranzaData?.clabe_stp || property.clabe_stp_tmp_apartado,
+        clabe_stp: property.id_tipo_transaccion === ID_TIPO_REVENTA 
+          ? property.clabe_stp_tmp_apartado 
+          : (cuentaCobranzaData?.clabe_stp || property.clabe_stp_tmp_apartado),
         cuenta_cobranza_id: cuentaCobranzaData?.id || null,
         precio_final: precio_final > 0 ? precio_final : null,
         es_comision_venta_efectivo: esComisionEfectivo,
