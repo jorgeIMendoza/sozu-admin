@@ -997,14 +997,6 @@ export default function MisPropiedades() {
         });
       }
 
-      // Enviar por correo al prospecto (fire-and-forget)
-      const { sendOfferEmailAfterDownload } = await import('@/services/ofertaEmailService');
-      sendOfferEmailAfterDownload({
-        offerId: offer.id,
-        propertyNumber: offer.numero_propiedad,
-        recipientEmail: offer.lead_email,
-        recipientName: offer.lead_name,
-      });
     } catch (error) {
       console.error('Error generating/downloading PDF:', error);
       toast({

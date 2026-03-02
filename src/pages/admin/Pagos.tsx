@@ -636,12 +636,6 @@ export default function Pagos() {
         });
       }
 
-      // Enviar por correo al prospecto (fire-and-forget)
-      const { sendOfferEmailAfterDownload } = await import('@/services/ofertaEmailService');
-      sendOfferEmailAfterDownload({
-        offerId: offerData.id_oferta,
-        propertyNumber: cuenta.numero_propiedad,
-      });
     } catch (error) {
       console.error('Error downloading offer:', error);
       toast({

@@ -1960,12 +1960,6 @@ export default function DetalleCuentaCobranza() {
       }
       toast({ title: "PDF Generado", description: "La oferta se ha generado y descargado exitosamente" });
 
-      // Enviar por correo al prospecto (fire-and-forget)
-      const { sendOfferEmailAfterDownload } = await import('@/services/ofertaEmailService');
-      sendOfferEmailAfterDownload({
-        offerId,
-        propertyNumber: cuentaDetalle?.numero_propiedad,
-      });
     } catch (error) {
       console.error('Error downloading offer:', error);
       toast({ title: "Error", description: `No se pudo descargar la oferta: ${error instanceof Error ? error.message : 'Error desconocido'}`, variant: "destructive" });
