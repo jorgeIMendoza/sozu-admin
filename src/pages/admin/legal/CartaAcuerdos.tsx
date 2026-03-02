@@ -7,19 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TemplateEditorWithPreview } from "@/components/admin/TemplateEditorWithPreview";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Save, Loader2, Send, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { FileText, Save, Loader2, CheckCircle2, Clock, XCircle, Send } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 const PLACEHOLDERS = [
   { key: "nombre_agente", label: "Nombre completo del agente", editable: true },
@@ -40,10 +30,6 @@ export default function CartaAcuerdos() {
   const { toast } = useToast();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
-  const [enviarDialogOpen, setEnviarDialogOpen] = useState(false);
-  const [agenteEmail, setAgenteEmail] = useState("");
-  const [agenteNombre, setAgenteNombre] = useState("");
-  const [agentePersonaId, setAgentePersonaId] = useState<number | null>(null);
 
   // Fetch template
   const { data: template, isLoading: templateLoading } = useQuery({
@@ -92,33 +78,6 @@ export default function CartaAcuerdos() {
     },
   });
 
-  // Send to Mifiel
-  const enviarMutation = useMutation({
-    mutationFn: async ({ email, nombre, personaId }: { email: string; nombre: string; personaId: number | null }) => {
-      const { data, error } = await supabase.functions.invoke("mifiel-crear-documento", {
-        body: {
-          agente_email: email,
-          agente_nombre: nombre,
-          agente_persona_id: personaId,
-        },
-      });
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Error desconocido");
-      return data;
-    },
-    onSuccess: () => {
-      toast({ title: "✅ Documento enviado", description: "Se envió a Mifiel para firma digital." });
-      setEnviarDialogOpen(false);
-      setAgenteEmail("");
-      setAgenteNombre("");
-      setAgentePersonaId(null);
-      queryClient.invalidateQueries({ queryKey: ["firmas-digitales"] });
-    },
-    onError: (err: any) => {
-      toast({ title: "❌ Error al enviar", description: err.message, variant: "destructive" });
-    },
-  });
-
   const [editorHtml, setEditorHtml] = useState<string | null>(null);
   const currentHtml = editorHtml ?? template?.contenido_html ?? "";
 
@@ -141,24 +100,14 @@ export default function CartaAcuerdos() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Template de la Carta</CardTitle>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => saveMutation.mutate(currentHtml)}
-                    disabled={saveMutation.isPending || templateLoading}
-                    size="sm"
-                  >
-                    {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
-                    Guardar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setEnviarDialogOpen(true)}
-                    size="sm"
-                  >
-                    <Send className="h-4 w-4 mr-1" />
-                    Enviar a firmar
-                  </Button>
-                </div>
+                <Button
+                  onClick={() => saveMutation.mutate(currentHtml)}
+                  disabled={saveMutation.isPending || templateLoading}
+                  size="sm"
+                >
+                  {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
+                  Guardar
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -261,51 +210,6 @@ export default function CartaAcuerdos() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Dialog enviar a firmar */}
-      <Dialog open={enviarDialogOpen} onOpenChange={setEnviarDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Enviar Carta a Firmar</DialogTitle>
-            <DialogDescription>
-              Ingresa los datos del agente. La carta será firmada por <strong>rodrigo.terveen@sozu.com</strong> y el agente.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="agente-nombre">Nombre del agente</Label>
-              <Input
-                id="agente-nombre"
-                value={agenteNombre}
-                onChange={(e) => setAgenteNombre(e.target.value)}
-                placeholder="Nombre completo"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="agente-email">Email del agente</Label>
-              <Input
-                id="agente-email"
-                type="email"
-                value={agenteEmail}
-                onChange={(e) => setAgenteEmail(e.target.value)}
-                placeholder="agente@ejemplo.com"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEnviarDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => enviarMutation.mutate({ email: agenteEmail, nombre: agenteNombre, personaId: agentePersonaId })}
-              disabled={!agenteEmail || !agenteNombre || enviarMutation.isPending}
-            >
-              {enviarMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
-              Enviar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

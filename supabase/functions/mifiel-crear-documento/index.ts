@@ -71,8 +71,7 @@ serve(async (req) => {
       (_match: string, key: string) => values[key] || `[${key}]`
     );
 
-    // 3. Generate PDF from HTML using a simple HTML-to-PDF approach
-    // Wrap in a full HTML document for PDF generation
+    // 3. Generate PDF from HTML
     const fullHtml = `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
@@ -82,10 +81,7 @@ serve(async (req) => {
 </style>
 </head><body>${html}</body></html>`;
 
-    // Convert HTML to PDF using an external service or encode as base64
-    // For Mifiel, we can send the file directly
     const pdfContent = new TextEncoder().encode(fullHtml);
-    const pdfBase64 = btoa(String.fromCharCode(...pdfContent));
 
     // 4. Create document in Mifiel
     const authHeader = "Basic " + btoa(`${MIFIEL_API_ID}:${MIFIEL_API_SECRET}`);
@@ -114,16 +110,32 @@ serve(async (req) => {
 
     const mifielDoc = await mifielResponse.json();
 
-    // 5. Save to firmas_digitales
+    // 5. Extract widget_id for the agent signer
+    const signatories = mifielDoc.signers || mifielDoc.signatories || [];
+    const agentSigner = signatories.find((s: any) => s.email === agente_email);
+    const agentWidgetId = agentSigner?.widget_id || null;
+
+    // Build firmantes array with widget_ids
+    const firmantes = [
+      { 
+        name: SOZU_SIGNER_NAME, 
+        email: SOZU_SIGNER_EMAIL,
+        widget_id: signatories.find((s: any) => s.email === SOZU_SIGNER_EMAIL)?.widget_id || null,
+      },
+      { 
+        name: agente_nombre, 
+        email: agente_email,
+        widget_id: agentWidgetId,
+      },
+    ];
+
+    // 6. Save to firmas_digitales
     const { error: insertErr } = await supabase.from("firmas_digitales").insert({
       tipo_documento: "carta_acuerdos",
       referencia_id: agente_persona_id || null,
       mifiel_document_id: mifielDoc.id,
       estado: "enviado",
-      firmantes: [
-        { name: SOZU_SIGNER_NAME, email: SOZU_SIGNER_EMAIL },
-        { name: agente_nombre, email: agente_email },
-      ],
+      firmantes,
       metadata: { mifiel_response: mifielDoc },
     });
 
@@ -132,7 +144,11 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, document_id: mifielDoc.id }),
+      JSON.stringify({ 
+        success: true, 
+        document_id: mifielDoc.id,
+        widget_id: agentWidgetId,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

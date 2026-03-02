@@ -4,12 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { MifielSigningDialog } from "@/components/admin/MifielSigningDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, Download, FileText, CalendarDays, Landmark, Trash2, Camera, Shield } from "lucide-react";
+import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, Download, FileText, CalendarDays, Landmark, Trash2, Camera, Shield, PenTool, Send } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -250,6 +251,95 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   const streamRef = useRef<MediaStream | null>(null);
   const autoCaptureLockRef = useRef(false);
   const activeVerifyCallsRef = useRef(0);
+
+  // --- Mifiel digital signature state for doc type 48 ---
+  const [mifielDialogOpen, setMifielDialogOpen] = useState(false);
+  const [mifielWidgetId, setMifielWidgetId] = useState<string | null>(null);
+  const [sendingToMifiel, setSendingToMifiel] = useState(false);
+
+  // Fetch persona data for Mifiel (name + email)
+  const { data: personaForMifiel } = useQuery({
+    queryKey: ['agent-persona-mifiel', personaId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('personas')
+        .select('nombre_legal, email')
+        .eq('id', personaId)
+        .single();
+      return data;
+    },
+    enabled: activeDocTypes.includes(48),
+  });
+
+  // Fetch existing firma digital for this agent
+  const { data: firmaExistente, refetch: refetchFirma } = useQuery({
+    queryKey: ['agent-firma-digital', personaId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('firmas_digitales')
+        .select('*')
+        .eq('tipo_documento', 'carta_acuerdos')
+        .eq('referencia_id', personaId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+      return data || null;
+    },
+    enabled: activeDocTypes.includes(48),
+  });
+
+  const handleFirmarCarta = async () => {
+    if (!personaForMifiel?.email || !personaForMifiel?.nombre_legal) {
+      toast.error("Faltan datos del agente (nombre o email) para enviar a firma.");
+      return;
+    }
+    setSendingToMifiel(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mifiel-crear-documento", {
+        body: {
+          agente_email: personaForMifiel.email,
+          agente_nombre: personaForMifiel.nombre_legal,
+          agente_persona_id: personaId,
+        },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Error desconocido");
+      
+      if (data.widget_id) {
+        setMifielWidgetId(data.widget_id);
+        setMifielDialogOpen(true);
+      } else {
+        toast.success("Documento enviado a firma. Revisa tu correo.");
+      }
+      refetchFirma();
+    } catch (err: any) {
+      toast.error("Error al enviar a firma: " + (err.message || "Error"));
+    } finally {
+      setSendingToMifiel(false);
+    }
+  };
+
+  const handleContinuarFirma = () => {
+    // Get widget_id from firmantes
+    const firmantes = firmaExistente?.firmantes || [];
+    const agentFirmante = firmantes.find((f: any) => f.email === personaForMifiel?.email);
+    const wid = agentFirmante?.widget_id || null;
+    if (wid) {
+      setMifielWidgetId(wid);
+      setMifielDialogOpen(true);
+    } else {
+      toast.error("No se encontró el widget de firma. Contacta soporte.");
+    }
+  };
+
+  const handleMifielSuccess = () => {
+    setMifielDialogOpen(false);
+    toast.success("¡Firma completada exitosamente!");
+    refetchFirma();
+    refetchDocs();
+    queryClient.invalidateQueries({ queryKey: ['agent-onboarding-docs'] });
+  };
 
   const getDocForType = (typeId: number) => {
     return existingDocs
@@ -877,6 +967,118 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         const isUploading = uploading === typeId;
         const isCameraDoc = CAMERA_DOC_TYPES.includes(typeId);
 
+        // Special rendering for doc type 48 (Carta de cumplimiento - firma digital)
+        if (typeId === 48) {
+          const firmaEstado = firmaExistente?.estado;
+          const firmaCompletada = firmaEstado === 'completado';
+          const firmaEnProgreso = firmaEstado === 'enviado' || firmaEstado === 'firmado_parcial';
+          const pdfUrl = firmaExistente?.pdf_firmado_url;
+
+          // Determine status display for firma
+          const firmaStatus = firmaCompletada
+            ? { label: 'Firmado', color: 'text-emerald-600', bg: 'bg-emerald-500/10', icon: CheckCircle2 }
+            : firmaEnProgreso
+            ? { label: firmaEstado === 'firmado_parcial' ? 'Firma parcial' : 'Enviado', color: 'text-amber-600', bg: 'bg-amber-500/10', icon: Clock }
+            : isValidated
+            ? { label: 'Validado', color: 'text-emerald-600', bg: 'bg-emerald-500/10', icon: CheckCircle2 }
+            : doc
+            ? status
+            : { label: 'Sin firmar', color: 'text-muted-foreground', bg: 'bg-muted', icon: PenTool };
+
+          const FirmaIcon = firmaStatus.icon;
+
+          return (
+            <div
+              key={typeId}
+              className={`rounded-2xl border-2 transition-all duration-300 shadow-sm hover:shadow-md ${
+                firmaCompletada || isValidated
+                  ? 'border-emerald-500/30 bg-emerald-500/5'
+                  : firmaEnProgreso
+                  ? 'border-amber-500/30 bg-amber-500/5'
+                  : 'border-dashed border-muted-foreground/20 bg-muted/30'
+              }`}
+            >
+              <div className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <PenTool className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium text-foreground truncate">
+                      {docType?.nombre || 'Carta de Acuerdos'}
+                    </span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] px-2 py-0.5 shrink-0 ${firmaStatus.color} ${firmaStatus.bg} border-0`}
+                  >
+                    <FirmaIcon className="h-3 w-3 mr-1" />
+                    {firmaStatus.label}
+                  </Badge>
+                </div>
+
+                <div className="flex gap-2">
+                  {/* View PDF if available */}
+                  {(pdfUrl || doc?.url) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(pdfUrl || doc?.url, '_blank')}
+                      className="h-10 px-3 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5 border-primary/20"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Ver PDF
+                    </Button>
+                  )}
+
+                  {/* Firmar button - no active firma */}
+                  {!firmaCompletada && !firmaEnProgreso && !isValidated && (
+                    <Button
+                      size="sm"
+                      disabled={sendingToMifiel}
+                      onClick={handleFirmarCarta}
+                      className="flex-1 h-10 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5"
+                    >
+                      {sendingToMifiel ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <PenTool className="h-3.5 w-3.5" />
+                          Firmar Carta
+                        </>
+                      )}
+                    </Button>
+                  )}
+
+                  {/* Continuar firma button */}
+                  {firmaEnProgreso && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleContinuarFirma}
+                      className="flex-1 h-10 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      Continuar firma
+                    </Button>
+                  )}
+
+                  {/* Download for completed */}
+                  {(firmaCompletada || isValidated) && (pdfUrl || doc?.url) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(pdfUrl || doc?.url, '_blank')}
+                      className="flex-1 h-10 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5 text-emerald-600 border-emerald-200"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Descargar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div
             key={typeId}
@@ -908,7 +1110,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
               {/* Action buttons */}
               <div className="flex gap-2">
-                {/* Preview button for uploaded docs */}
                 {doc?.url && (
                   <Button
                     variant="outline"
@@ -921,7 +1122,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   </Button>
                 )}
 
-                {/* Upload/Update button */}
                 {!isValidated && (
                   <Button
                     variant="outline"
@@ -946,7 +1146,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   </Button>
                 )}
 
-                {/* Camera button for identity docs */}
                 {isCameraDoc && !isValidated && (
                   <Button
                     variant="outline"
@@ -963,7 +1162,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   </Button>
                 )}
 
-                {/* Download button for validated */}
                 {isValidated && doc?.url && (
                   <Button
                     variant="outline"
@@ -980,6 +1178,17 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           </div>
         );
       })}
+
+      {/* Mifiel Signing Dialog */}
+      {mifielWidgetId && (
+        <MifielSigningDialog
+          open={mifielDialogOpen}
+          onOpenChange={setMifielDialogOpen}
+          widgetId={mifielWidgetId}
+          onSuccess={handleMifielSuccess}
+          onError={(err) => toast.error("Error en firma: " + err)}
+        />
+      )}
     </div>
   );
 }
