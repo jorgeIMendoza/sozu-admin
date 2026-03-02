@@ -1045,13 +1045,22 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
 
         // Enviar por correo al prospecto (fire-and-forget)
         const { sendOfferEmailAfterDownload } = await import('@/services/ofertaEmailService');
-        // Enviar email para la oferta principal y cada oferta de producto
-        for (const oid of allOfferIds) {
+        // Enviar email para la oferta principal
+        sendOfferEmailAfterDownload({
+          offerId: result.offerId,
+          propertyNumber,
+          recipientEmail: result.leadEmail,
+          recipientName: result.leadName,
+          tipo: 'propiedad',
+        });
+        // Enviar email para cada oferta de producto
+        for (const productOffer of result.productOffersResults.createdOffers) {
           sendOfferEmailAfterDownload({
-            offerId: oid,
+            offerId: productOffer.offerId,
             propertyNumber,
             recipientEmail: result.leadEmail,
             recipientName: result.leadName,
+            tipo: 'producto',
           });
         }
       } catch (emailErr) {
