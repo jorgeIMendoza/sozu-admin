@@ -1,40 +1,38 @@
 
 
-## Ocultar datos bancarios cuando no hay plan de pago seleccionado
+## Agregar disclaimer cuando el prospecto no tiene RFC valido
 
 ### Problema
-Cuando una oferta no tiene un plan de pago seleccionado (`id_esquema_pago_seleccionado = null`), el PDF sigue mostrando la seccion de datos bancarios. El usuario quiere que se comporte igual que cuando no hay RFC: si no hay esquema seleccionado, no se muestran datos bancarios.
+Actualmente, cuando se genera una oferta y el prospecto no tiene un RFC valido, la seccion de datos bancarios se omite silenciosamente. Solo existe un disclaimer para el caso de "sin plan de pago seleccionado", pero no para "sin RFC valido".
 
 ### Cambios
 
-#### 1. `src/services/ofertaPdfNativeService.ts` (Propiedad - PDF nativo)
-- Linea ~793: agregar condicion `data.offerData.id_esquema_pago_seleccionado` al calculo de `showBanking`
-- Actualmente: `showBanking = hasValidRFC && (clabe || efectivo)`
-- Nuevo: `showBanking = hasValidRFC && !!data.offerData.id_esquema_pago_seleccionado && (clabe || efectivo)`
+#### 1. `src/components/admin/NewOfferDialog.tsx`
+- Despues del disclaimer actual de esquema de pago (~linea 955), agregar una segunda condicion: si el prospecto no tiene RFC valido, mostrar un toast indicando que la oferta se genero sin datos bancarios por falta de RFC.
+- Se importara `isValidRFC` desde `@/utils/fiscalDataValidation` y se evaluara el RFC del lead.
+- Si ambas condiciones se cumplen (sin esquema Y sin RFC), se mostrara un solo toast combinado en lugar de dos separados.
 
-#### 2. `src/services/ofertaProductoPdfNativeService.ts` (Producto - PDF nativo)
-- Linea ~492-495: agregar condicion de `id_esquema_pago_seleccionado` y RFC al bloque de banking
-- Actualmente: `if (hasClabe || hasCashAccount)`
-- Nuevo: `if (data.offerData.id_esquema_pago_seleccionado && (hasClabe || hasCashAccount))`
+Logica:
+```
+const missingScheme = !result.schemeId;
+const missingRFC = !isValidRFC(leadRfc);
 
-#### 3. `src/components/admin/OfferPDFTemplateSozu.tsx` (Propiedad - HTML template)
-- Linea ~623: agregar condicion de esquema seleccionado
-- Actualmente: `leadInfo?.hasValidRFC && (clabe || efectivo)`
-- Nuevo: `leadInfo?.hasValidRFC && offerData.id_esquema_pago_seleccionado && (clabe || efectivo)`
+if (missingScheme || missingRFC) {
+  const reasons = [];
+  if (missingRFC) reasons.push("el prospecto no tiene un RFC valido");
+  if (missingScheme) reasons.push("no se selecciono un plan de pago");
+  
+  toast({
+    title: "Aviso: Sin datos bancarios",
+    description: `La oferta se genero sin la seccion de datos bancarios porque ${reasons.join(" y ")}.`,
+    duration: 8000,
+  });
+}
+```
 
-#### 4. `src/components/admin/OfferPDFTemplateProducto.tsx` (Producto - HTML template)
-- Linea ~442: agregar condicion de esquema seleccionado
-- Actualmente: `(offerData.clabe_stp_tmp_producto || offerData.clabe_stp)`
-- Nuevo: `offerData.id_esquema_pago_seleccionado && (offerData.clabe_stp_tmp_producto || offerData.clabe_stp)`
-- Linea ~432 (divider): misma condicion
-
-#### 5. `src/components/admin/OfferPDFTemplate.tsx` (Template legacy)
-- Linea ~381: agregar condicion de esquema seleccionado
-- Actualmente: `leadInfo?.rfc`
-- Nuevo: `leadInfo?.rfc && offerData.id_esquema_pago_seleccionado`
-
-#### 6. Archivos en `public/despia/` (copias para Despia)
-- `public/despia/paquete-pdf-ofertas/services/ofertaPdfNativeService.ts` y `ofertaProductoPdfNativeService.ts`: aplicar los mismos cambios para mantener sincronizados
+#### 2. `src/components/admin/NewProductOfferDialog.tsx`
+- Mismo cambio: agregar validacion de RFC del prospecto y combinar ambos disclaimers en uno solo con la misma logica.
 
 ### Resumen
-Se agrega una sola condicion (`id_esquema_pago_seleccionado` debe existir) en 6 archivos, afectando tanto los PDF nativos (jsPDF) como los templates HTML. Si no hay plan seleccionado, la seccion de "Datos Bancarios" simplemente no aparece en el PDF generado.
+Se reemplaza el disclaimer actual (solo plan de pago) por uno inteligente que cubre ambos casos (RFC invalido y/o sin plan de pago), mostrando al usuario la razon exacta por la que no se incluyen los datos bancarios.
+
