@@ -1,31 +1,38 @@
 
 
-# Fix: Filtrar proyectos por estado de publicacion en Portal Agente
+# Restriccion: No enviar email si la oferta no muestra datos bancarios
 
-## Problemas identificados
+## Problema
+El sistema envia ofertas por correo incluso cuando el PDF no contiene la seccion de "Datos Bancarios". El usuario quiere que si la oferta no muestra datos bancarios, NO se envie el correo.
 
-### 1. Portal Agente muestra proyectos no publicados
-En `AgentInventario.tsx` (linea 65), la consulta de proyectos solo filtra por `activo = true` pero NO filtra por `publicar = true`. Esto causa que el Super Admin (y cualquier rol con acceso irrestricto) vea todos los proyectos, incluyendo los no publicados.
+## Logica actual de "Datos Bancarios" en el PDF
+La seccion se muestra cuando se cumplen TODAS estas condiciones (definido en `ofertaPdfNativeService.ts` lineas 791-798):
 
-### 2. abel1@yopmail.com ve Monocolo
-El usuario tiene acceso explicito al proyecto Monocolo (ID 1902) en la tabla `proyectos_acceso`. Aunque Monocolo tiene `publicar = false`, el Portal Agente no valida este campo, por lo que se muestra igualmente.
+```text
+showBanking = hasValidRFC 
+  AND id_esquema_pago_seleccionado exists 
+  AND (clabe_stp_tmp_apartado exists OR (proyecto mostrar_seccion_efectivo AND ownerStpBankAccount exists))
+```
 
 ## Solucion
 
-### Archivo: `src/pages/admin/agent-portal/AgentInventario.tsx`
+### Archivo: `src/services/ofertaEmailService.ts`
 
-Agregar `.eq('publicar', true)` a la consulta de proyectos (linea 65):
+Modificar `sendOfferEmailAfterDownload` para consultar la oferta con su propiedad y proyecto, y aplicar la misma logica de visibilidad de datos bancarios antes de enviar:
 
-```text
-let query = (supabase as any)
-  .from('proyectos')
-  .select('id, nombre, direccion, url_imagen_portada, id_estatus_proyecto')
-  .eq('activo', true)
-  .eq('publicar', true);   // <-- NUEVO: solo proyectos publicados
-```
+1. Consultar la oferta con `id_esquema_pago_seleccionado`, `id_propiedad`, `id_persona_lead`
+2. Consultar la propiedad con `clabe_stp_tmp_apartado` y datos del proyecto (`mostrar_seccion_efectivo_en_oferta`)
+3. Consultar el RFC del lead desde `personas`
+4. Evaluar `showBanking` con la misma formula que usa el PDF
+5. Si `showBanking` es `false`, hacer `return` sin enviar y loguear la razon
 
-Esto aplica para todos los roles en el portal de agente, incluyendo Super Admin. Solo los proyectos marcados como publicados apareceran en el inventario del portal.
+Para ofertas de producto: consultar si la oferta tiene `clabe_stp_tmp_producto`. Si no tiene, no enviar.
 
-### Sin cambios en proyectos_acceso
-No es necesario remover el acceso de abel1@yopmail.com a Monocolo en `proyectos_acceso`, ya que el filtro `publicar = true` en la consulta se encargara de excluirlo automaticamente del portal.
+### Puntos de envio afectados (ambos pasan por esta funcion)
+- `NewOfferDialog.tsx` - linea 1047: envia email para oferta principal y productos
+- `NewProductOfferDialog.tsx` - linea 747: envia email para oferta de producto
 
+Como ambos usan `sendOfferEmailAfterDownload`, la validacion centralizada en el servicio cubre todos los casos sin necesidad de modificar los dialogos.
+
+### Archivo unico a modificar
+- `src/services/ofertaEmailService.ts`
