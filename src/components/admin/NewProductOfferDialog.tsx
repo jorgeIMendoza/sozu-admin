@@ -750,6 +750,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
           propertyNumber: propertyNumber || '',
           recipientEmail: formValues.email,
           recipientName: formValues.razon_social,
+          tipo: 'producto',
         });
       } catch (pdfError) {
         console.error('Error generating PDF:', pdfError);
