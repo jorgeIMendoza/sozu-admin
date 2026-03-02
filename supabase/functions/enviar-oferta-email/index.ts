@@ -48,38 +48,49 @@ Deno.serve(async (req) => {
         }
       }
     } else if (offerIds && Array.isArray(offerIds) && offerIds.length > 0) {
-      // Fallback: generate PDFs server-side via generar-oferta-pdf edge function
-      console.log(`Generating ${offerIds.length} PDF(s) server-side`);
+      // Download existing PDFs from Storage URLs stored in ofertas table
+      console.log(`Downloading ${offerIds.length} existing PDF(s) from Storage`);
       for (const offerId of offerIds) {
         try {
-          const genUrl = `${supabaseUrl}/functions/v1/generar-oferta-pdf`;
-          const res = await fetch(genUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseServiceKey}`,
-            },
-            body: JSON.stringify({ offerId, includeBase64: true, hideBanking: !!hideBanking }),
-          });
+          const { data: oferta, error: ofertaError } = await supabase
+            .from('ofertas')
+            .select('url, tipo_oferta')
+            .eq('id', offerId)
+            .single();
 
-          const result = await res.json();
-          if (result.success && result.pdfBase64) {
-            const fileName = result.fileName || `Oferta_${offerId}.pdf`;
-            const tipo = result.tipoOferta || 'propiedad';
-
-            pdfResults.push({ offerId, fileName, tipo });
-            attachments.push({
-              Name: fileName,
-              Content: result.pdfBase64,
-              ContentType: 'application/pdf',
-            });
-
-            console.log(`PDF generated for offer ${offerId}: ${fileName} (base64 length: ${result.pdfBase64.length})`);
-          } else {
-            console.error(`Error generating PDF for offer ${offerId}:`, result);
+          if (ofertaError || !oferta?.url) {
+            console.error(`Oferta ${offerId} sin URL de PDF:`, ofertaError);
+            continue;
           }
+
+          const pdfResponse = await fetch(oferta.url);
+          if (!pdfResponse.ok) {
+            console.error(`Error downloading PDF for offer ${offerId}: HTTP ${pdfResponse.status}`);
+            continue;
+          }
+
+          const pdfBuffer = await pdfResponse.arrayBuffer();
+          const uint8 = new Uint8Array(pdfBuffer);
+
+          // Chunked base64 conversion to avoid stack overflow
+          let binary = '';
+          const chunkSize = 8192;
+          for (let i = 0; i < uint8.length; i += chunkSize) {
+            const chunk = uint8.subarray(i, i + chunkSize);
+            binary += String.fromCharCode(...chunk);
+          }
+          const base64 = btoa(binary);
+
+          const urlParts = oferta.url.split('/');
+          const fileName = decodeURIComponent(urlParts[urlParts.length - 1] || `Oferta_${offerId}.pdf`);
+          const tipo = oferta.tipo_oferta || 'propiedad';
+
+          pdfResults.push({ offerId, fileName, tipo });
+          attachments.push({ Name: fileName, Content: base64, ContentType: 'application/pdf' });
+
+          console.log(`PDF downloaded for offer ${offerId}: ${fileName} (base64 length: ${base64.length})`);
         } catch (err) {
-          console.error(`Error calling generar-oferta-pdf for ${offerId}:`, err);
+          console.error(`Error downloading PDF for offer ${offerId}:`, err);
         }
       }
     } else {
