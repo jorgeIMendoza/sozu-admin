@@ -4621,8 +4621,7 @@ const Propiedades = () => {
                           <TableCell key={column.key}
                       className="font-mono text-sm cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => {
-                        // No copiar CLABE para propiedades en Reventa
-                        if (property.clabe_stp && property.tipo_transaccion !== "Re-venta") {
+                        if (property.clabe_stp) {
                           navigator.clipboard.writeText(property.clabe_stp);
                           toast({
                             title: "CLABE copiada",
@@ -4631,8 +4630,7 @@ const Propiedades = () => {
                         }
                       }}
                     >
-                            {/* No mostrar CLABE para propiedades en Reventa */}
-                            {property.tipo_transaccion === "Re-venta" ? 'N/A' : (property.clabe_stp || 'Sin CLABE')}
+                            {property.clabe_stp || 'Sin CLABE'}
                           </TableCell>
                         );
                       
