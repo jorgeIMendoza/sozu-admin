@@ -127,7 +127,8 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     const hasINE = docTypes.has(2) && docTypes.has(3);
     const hasPasaporte = docTypes.has(4);
     const hasIdentityDoc = hasINE || hasPasaporte;
-    const identityDocsComplete = hasIdentityDoc && docTypes.has(48);
+    // For agents with inmobiliaria, carta de cumplimiento (48) is NOT required
+    const identityDocsComplete = hasIdentityDoc;
     const identityDocsPartial = !identityDocsComplete && docTypes.size > 0;
 
     const identityComplete = basicComplete && addressComplete && identityDocsComplete;

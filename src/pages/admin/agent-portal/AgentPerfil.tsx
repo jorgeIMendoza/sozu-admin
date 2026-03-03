@@ -20,7 +20,7 @@ const ACTIVATION_BLOCKS = [
   { 
     stepId: 'basic' as const, 
     label: 'Identidad', 
-    description: 'Datos personales, dirección, INE y carta de cumplimiento',
+    description: 'Datos personales, dirección e INE',
     icon: FileText,
     relatedSteps: ['basic'] as const,
   },

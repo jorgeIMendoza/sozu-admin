@@ -49,10 +49,10 @@ const STEP_TITLES: Record<string, string> = {
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
-  basic: 'Datos personales, dirección, INE y carta de cumplimiento',
+  basic: 'Datos personales, dirección e INE',
   address: 'Tu dirección física completa',
   fiscal: 'RFC, régimen fiscal, constancia y dirección fiscal',
-  documents: 'INE, Constancia y Carta de cumplimiento',
+  documents: 'INE y Constancia',
   'bank-accounts': 'Agrega tu cuenta bancaria',
   training: 'Agenda tu cita de capacitación presencial',
 };
@@ -77,6 +77,28 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
   const queryClient = useQueryClient();
   const { track } = useCtaTracker();
   const hasTrackedFieldChange = useRef(false);
+
+  // Check if agent belongs to an inmobiliaria (to hide doc 48)
+  const { data: hasInmobiliaria } = useQuery({
+    queryKey: ['agent-step-dialog-inmo', personaId],
+    queryFn: async () => {
+      if (!personaId) return false;
+      const { data } = await supabase
+        .from('entidades_relacionadas')
+        .select('id')
+        .eq('id_persona', personaId)
+        .eq('id_tipo_entidad', 19)
+        .eq('activo', true)
+        .not('id_persona_duena_lead', 'is', null)
+        .limit(1);
+      return (data && data.length > 0) || false;
+    },
+    enabled: !!personaId,
+  });
+
+  // Filter out doc type 48 for agents with inmobiliaria
+  const effectiveBasicDocTypes = hasInmobiliaria ? BASIC_DOC_TYPES.filter(t => t !== 48) : BASIC_DOC_TYPES;
+  const effectiveRequiredDocTypes = hasInmobiliaria ? REQUIRED_DOC_TYPES.filter(t => t !== 48) : REQUIRED_DOC_TYPES;
 
   // Track opening the step
   useEffect(() => {
@@ -118,7 +140,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
     </div>
   ) : step === 'documents' ? (
     <div className="px-1">
-      <AgentDocumentsStep personaId={personaId} filterDocTypes={REQUIRED_DOC_TYPES} onTrackFieldChange={() => {
+      <AgentDocumentsStep personaId={personaId} filterDocTypes={effectiveRequiredDocTypes} onTrackFieldChange={() => {
         if (!hasTrackedFieldChange.current) {
           hasTrackedFieldChange.current = true;
           track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
@@ -144,7 +166,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
       }} />
     </div>
   ) : (
-    <StepForm step={step} persona={persona} personaId={personaId} onSaved={handleSaved} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: step } })} onTrackFieldChange={() => {
+    <StepForm step={step} persona={persona} personaId={personaId} onSaved={handleSaved} basicDocTypes={effectiveBasicDocTypes} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: step } })} onTrackFieldChange={() => {
       if (!hasTrackedFieldChange.current) {
         hasTrackedFieldChange.current = true;
         track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
@@ -2043,9 +2065,10 @@ interface StepFormProps {
   onSaved: () => void;
   onTrackSave?: () => void;
   onTrackFieldChange?: () => void;
+  basicDocTypes?: number[];
 }
 
-function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackFieldChange }: StepFormProps) {
+function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackFieldChange, basicDocTypes }: StepFormProps) {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(step === 'basic' ? 'personal' : step === 'fiscal' ? 'datos' : '');
 
@@ -2406,7 +2429,7 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
             )}
           </TabsContent>
           <TabsContent value="documents" className="space-y-4">
-            <AgentDocumentsStep personaId={personaId} filterDocTypes={BASIC_DOC_TYPES} onTrackFieldChange={onTrackFieldChange} />
+            <AgentDocumentsStep personaId={personaId} filterDocTypes={basicDocTypes || BASIC_DOC_TYPES} onTrackFieldChange={onTrackFieldChange} />
           </TabsContent>
         </Tabs>
       )}
