@@ -62,7 +62,17 @@ serve(async (req) => {
     let pdfStorageUrl: string | null = null;
 
     try {
-      const pdfResponse = await fetch(`${MIFIEL_API_URL}/documents/${document_id}/file`, {
+      const mifielApiBaseUrl = MIFIEL_API_URL.replace(/\/api\/v1$/i, "");
+      const signedFilePath = typeof data?.file_signed === "string" ? data.file_signed : null;
+      const signedFileUrl = signedFilePath
+        ? signedFilePath.startsWith("http")
+          ? signedFilePath
+          : signedFilePath.startsWith("/api/")
+            ? `${mifielApiBaseUrl}${signedFilePath}`
+            : `${MIFIEL_API_URL}${signedFilePath.startsWith("/") ? "" : "/"}${signedFilePath}`
+        : `${MIFIEL_API_URL}/documents/${document_id}/file_signed`;
+
+      const pdfResponse = await fetch(signedFileUrl, {
         headers: { Authorization: authHeader },
       });
 
@@ -99,7 +109,7 @@ serve(async (req) => {
         }
       } else if (!pdfResponse.ok) {
         const pdfErrorBody = await pdfResponse.text();
-        console.error("Error fetching Mifiel PDF:", pdfResponse.status, pdfErrorBody);
+        console.error("Error fetching signed Mifiel PDF:", pdfResponse.status, pdfErrorBody);
       }
     } catch (pdfError) {
       console.error("Error resolving signed PDF URL:", pdfError);

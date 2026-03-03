@@ -527,7 +527,17 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                           </TableCell>
                           <TableCell>
                             {firma.pdf_firmado_url && (
-                              <Button variant="ghost" size="sm" onClick={() => setPdfViewerUrl(firma.pdf_firmado_url)}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setPdfViewerUrl(
+                                    firma.mifiel_document_id
+                                      ? `/api/v1/documents/${firma.mifiel_document_id}/file_signed`
+                                      : firma.pdf_firmado_url,
+                                  )
+                                }
+                              >
                                 Ver PDF
                               </Button>
                             )}
