@@ -410,9 +410,13 @@ serve(async (req) => {
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
     formData.append("file", blob, "carta-acuerdos.pdf");
 
+    const preferredSignatureMethods = ["FESCV", "FESSV"]; // firma simple/biométrica (sin e.firma/FIEL)
     signatories.forEach((s, i) => {
       formData.append(`signatories[${i}][name]`, s.name);
       formData.append(`signatories[${i}][email]`, s.email);
+      preferredSignatureMethods.forEach((method, methodIndex) => {
+        formData.append(`signatories[${i}][allowed_signature_methods][${methodIndex}]`, method);
+      });
     });
 
     formData.append("send_invites", "true");

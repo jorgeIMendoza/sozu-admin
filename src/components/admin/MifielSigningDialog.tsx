@@ -26,19 +26,17 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
       // Clear previous widget
       containerRef.current.innerHTML = '';
 
-      // Create the mifiel-widget element
       const widget = document.createElement('mifiel-widget') as any;
-      widget.setAttribute('id', 'mifiel-widget');
-      widget.setAttribute('widget-id', widgetId);
+      widget.setAttribute('id', widgetId);
       const env = import.meta.env.VITE_MIFIEL_ENVIRONMENT || 'sandbox';
       widget.setAttribute('environment', env === 'production' ? 'production' : 'sandbox');
       containerRef.current.appendChild(widget);
 
-      // Listen for events
-      widget.addEventListener('success', () => {
+      // Listen for official widget events
+      widget.addEventListener('signSuccess', () => {
         onSuccess?.();
       });
-      widget.addEventListener('error', (e: any) => {
+      widget.addEventListener('signError', (e: any) => {
         onError?.(e?.detail?.message || 'Error en la firma');
       });
     };
@@ -46,7 +44,7 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
     // Load the Mifiel CDN script if not already loaded
     const mifielEnv = import.meta.env.VITE_MIFIEL_ENVIRONMENT || 'sandbox';
     const mifielHost = mifielEnv === 'production' ? 'app.mifiel.com' : 'app-sandbox.mifiel.com';
-    const scriptSrc = `https://${mifielHost}/widget/index.js`;
+    const scriptSrc = `https://${mifielHost}/widget-component/index.js`;
 
     if (!scriptLoadedRef.current && !document.querySelector(`script[src="${scriptSrc}"]`)) {
       const script = document.createElement('script');
