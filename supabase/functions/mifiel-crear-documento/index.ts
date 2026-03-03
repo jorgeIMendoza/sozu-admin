@@ -440,13 +440,18 @@ serve(async (req) => {
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
     formData.append("file", blob, "carta-acuerdos.pdf");
 
-    const preferredSignatureMethods = requiereBiometrica ? ["FESCV"] : ["FESSV"];
+    // When biometric is NOT required, restrict to only e.firma (efirma).
+    // When biometric IS required, do NOT restrict methods so all enabled methods
+    // (including FESCV/biometric) are available to the signer.
     signatories.forEach((s, i) => {
       formData.append(`signatories[${i}][name]`, s.name);
       formData.append(`signatories[${i}][email]`, s.email);
-      preferredSignatureMethods.forEach((method, methodIndex) => {
-        formData.append(`signatories[${i}][allowed_signature_methods][${methodIndex}]`, method);
-      });
+      if (!requiereBiometrica) {
+        // Restrict to only simple signature (no biometric)
+        formData.append(`signatories[${i}][allowed_signature_methods][0]`, "efirma");
+      }
+      // If requiereBiometrica is true, we omit allowed_signature_methods
+      // so Mifiel shows ALL enabled methods (including biometric/FESCV)
     });
 
     formData.append("send_invites", "true");
