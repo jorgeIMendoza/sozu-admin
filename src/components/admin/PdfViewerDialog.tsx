@@ -19,7 +19,7 @@ function extractStoragePath(url: string): { bucket: string; path: string } | nul
   if (publicMatch) return { bucket: publicMatch[1], path: decodeURIComponent(publicMatch[2]) };
 
   // Mifiel API file endpoints are handled separately via edge function
-  if (/\/?api\/v1\/documents\/[^/]+\/file(?:\?.*)?$/i.test(url)) {
+  if (/\/?api\/v1\/documents\/[^/]+\/file(?:_signed)?(?:\?.*)?$/i.test(url)) {
     return null;
   }
 
@@ -44,7 +44,7 @@ export function PdfViewerDialog({ open, onOpenChange, url, title = "Documento PD
       return;
     }
 
-    const mifielMatch = url.match(/\/?api\/v1\/documents\/([^/]+)\/file(?:\?.*)?$/i);
+    const mifielMatch = url.match(/\/?api\/v1\/documents\/([^/]+)\/file(?:_signed)?(?:\?.*)?$/i);
     if (mifielMatch?.[1]) {
       setLoading(true);
       setError(null);
