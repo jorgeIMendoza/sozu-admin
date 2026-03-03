@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   FileText, Save, Loader2, CheckCircle2, Clock, XCircle, Send, Plus, Trash2,
-  Users, Info, PenTool, Fingerprint,
+  Users, Info, PenTool, Fingerprint, RefreshCw, Pencil, Check,
 } from "lucide-react";
 
 const PLACEHOLDERS = [
@@ -58,6 +58,10 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
   const [newCargo, setNewCargo] = useState("");
   const [signingOpen, setSigningOpen] = useState(false);
   const [signingWidgetId, setSigningWidgetId] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [editableName, setEditableName] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch carta
   const { data: carta, isLoading: cartaLoading } = useQuery({
@@ -156,14 +160,94 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
     setSigningOpen(true);
   };
 
+  // Sync firmas with Mifiel
+  const handleSyncMifiel = async () => {
+    const toCheck = firmas.filter((f: any) => f.mifiel_document_id && f.estado !== "cancelado" && f.estado !== "completado");
+    if (toCheck.length === 0) {
+      toast({ title: "No hay firmas pendientes para sincronizar" });
+      return;
+    }
+    setSyncing(true);
+    let removed = 0;
+    try {
+      for (const firma of toCheck) {
+        try {
+          const { data, error } = await supabase.functions.invoke("mifiel-consultar-documento", {
+            body: { document_id: firma.mifiel_document_id },
+          });
+          const notFound = error || !data?.success || data?.upstream_status === 404;
+          if (notFound) {
+            await (supabase as any).from("firmas_digitales").delete().eq("id", firma.id);
+            removed++;
+          }
+        } catch {
+          // skip individual errors
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["firmas-digitales", cartaId] });
+      queryClient.invalidateQueries({ queryKey: ["cartas-acuerdo-firma-counts"] });
+      toast({
+        title: removed > 0 ? `🗑️ ${removed} firma(s) eliminada(s)` : "✅ Todo sincronizado",
+        description: removed > 0 ? "Se eliminaron firmas que ya no existen en Mifiel." : "Todas las firmas están al día.",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Rename carta
+  const startEditingName = () => {
+    setEditableName(cartaNombre || carta?.nombre || "");
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.focus(), 50);
+  };
+
+  const saveCartaName = async () => {
+    const trimmed = editableName.trim();
+    if (!trimmed) {
+      setEditingName(false);
+      return;
+    }
+    const { error } = await (supabase as any)
+      .from("cartas_acuerdo")
+      .update({ nombre: trimmed, updated_at: new Date().toISOString() })
+      .eq("id", cartaId);
+    if (error) {
+      toast({ title: "Error al renombrar", description: error.message, variant: "destructive" });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["carta-acuerdo", cartaId] });
+      queryClient.invalidateQueries({ queryKey: ["cartas-acuerdo"] });
+      toast({ title: "Nombre actualizado" });
+    }
+    setEditingName(false);
+  };
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="editor">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="flex items-center gap-2 text-lg">
+          <div className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            {cartaNombre}
-          </CardTitle>
+            {editingName ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  ref={nameInputRef}
+                  value={editableName}
+                  onChange={(e) => setEditableName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveCartaName(); if (e.key === "Escape") setEditingName(false); }}
+                  className="h-8 text-lg font-semibold w-64"
+                />
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={saveCartaName}>
+                  <Check className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <CardTitle className="text-lg flex items-center gap-1 cursor-pointer group" onClick={startEditingName}>
+                {carta?.nombre || cartaNombre}
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </CardTitle>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             {/* Biometric toggle */}
             <TooltipProvider>
@@ -322,7 +406,13 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
         <TabsContent value="firmas" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Historial de Firmas</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Historial de Firmas</CardTitle>
+                <Button variant="outline" size="sm" onClick={handleSyncMifiel} disabled={syncing || firmasLoading}>
+                  {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                  Sincronizar con Mifiel
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {firmasLoading ? (
