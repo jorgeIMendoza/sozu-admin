@@ -308,8 +308,11 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         return data;
       }
 
-      const remoteState = String(mifielData?.document?.state || '').toLowerCase();
-      if (remoteState === 'deleted' && data.estado !== 'cancelado') {
+      const remoteState = String(mifielData?.document?.state || '').toLowerCase().trim();
+      const remoteCancelledStates = new Set(['deleted', 'canceled', 'cancelled', 'void', 'voided', 'expired', 'rejected']);
+      const remoteCompletedStates = new Set(['completed', 'signed']);
+
+      if (remoteCancelledStates.has(remoteState) && data.estado !== 'cancelado') {
         await (supabase as any)
           .from('firmas_digitales')
           .update({ estado: 'cancelado' })
@@ -317,7 +320,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         return { ...data, estado: 'cancelado' };
       }
 
-      if (remoteState === 'completed' && data.estado !== 'completado') {
+      if (remoteCompletedStates.has(remoteState) && data.estado !== 'completado') {
         await (supabase as any)
           .from('firmas_digitales')
           .update({ estado: 'completado' })
@@ -388,6 +391,31 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           return;
         }
         throw new Error(errorMessage || 'No se pudo sincronizar el estado de firma');
+      }
+
+      const remoteState = String(mifielData?.document?.state || '').toLowerCase().trim();
+      const remoteCancelledStates = new Set(['deleted', 'canceled', 'cancelled', 'void', 'voided', 'expired', 'rejected']);
+      const remoteCompletedStates = new Set(['completed', 'signed']);
+
+      if (remoteCancelledStates.has(remoteState)) {
+        await (supabase as any)
+          .from('firmas_digitales')
+          .update({ estado: 'cancelado' })
+          .eq('id', firmaExistente.id);
+        await refetchFirma();
+        toast.error("Este documento ya no está disponible para firma en Mifiel. Se sincronizó como cancelado.");
+        return;
+      }
+
+      if (remoteCompletedStates.has(remoteState)) {
+        await (supabase as any)
+          .from('firmas_digitales')
+          .update({ estado: 'completado' })
+          .eq('id', firmaExistente.id);
+        await refetchFirma();
+        refetchDocs();
+        toast.success("Este documento ya aparece como firmado en Mifiel. Se sincronizó el estado.");
+        return;
       }
 
       const mifielSigners = mifielData.document?.signers || mifielData.document?.signatories || [];
