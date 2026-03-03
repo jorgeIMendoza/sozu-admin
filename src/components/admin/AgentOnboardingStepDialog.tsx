@@ -1219,18 +1219,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                     </Button>
                   )}
 
-                  {/* Download for completed */}
-                  {(firmaCompletada || isValidated) && (pdfUrl || doc?.url) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(pdfUrl || doc?.url, '_blank')}
-                      className="flex-1 h-10 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5 text-emerald-600 border-emerald-200"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Descargar
-                    </Button>
-                  )}
                 </div>
               </div>
             </div>
@@ -1320,17 +1308,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   </Button>
                 )}
 
-                {isValidated && doc?.url && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(doc.url, '_blank')}
-                    className="flex-1 h-10 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5 text-emerald-600 border-emerald-200"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    Descargar
-                  </Button>
-                )}
               </div>
             </div>
           </div>
