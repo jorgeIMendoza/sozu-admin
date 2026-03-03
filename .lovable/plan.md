@@ -1,114 +1,89 @@
 
 
-## Plan: Firmantes configurables + PDF enriquecido + Firma autografa del agente
+## Plan: Convertir "Carta de Acuerdos" en gestor multi-carta con opcion de validacion biometrica
 
-### Resumen
+### Contexto actual
+- Existe una sola tabla `carta_acuerdos_template` con un unico registro (se hace `.limit(1).single()`)
+- La vista actual muestra un editor, firmantes y firmas para esa unica carta
+- La edge function `mifiel-crear-documento` genera el PDF y lo envia a Mifiel
 
-Eliminar todos los firmantes hardcodeados (incluyendo Rodrigo). Los firmantes se configuran desde la UI de Legal > Carta de Acuerdos y se guardan en la base de datos. Cuando el agente firma autografamente desde su portal, su firma queda registrada inmediatamente (estado "firmado_parcial") y los demas firmantes configurados reciben un correo de Mifiel para firmar cuando gusten (desde la seccion Firmas o desde su correo).
+### Arquitectura propuesta
 
-### Flujo completo
+**1. Nueva tabla en Supabase: `cartas_acuerdo`** (reemplaza el uso de `carta_acuerdos_template`)
 
-1. Admin configura firmantes en Legal > Carta de Acuerdos (ej: Rodrigo, Director Legal, etc.)
-2. Agente abre su portal > Perfil > Identidad > Documentos > "Firmar carta"
-3. Se crea el documento en Mifiel con todos los firmantes (los configurados + el agente)
-4. El agente firma autografamente con el widget embebido (garabato)
-5. Al firmar, Mifiel envia correos a los demas firmantes y el webhook actualiza estado a "firmado_parcial"
-6. Los otros firmantes pueden firmar desde su correo o desde la seccion Legal > Firmas (con un boton "Firmar" que abre el widget con su widget_id)
-7. Cuando todos firman, el webhook marca "completado" y genera el documento tipo 48
-
----
-
-### Cambios en base de datos
-
-**Agregar columna `firmantes_config` a `carta_acuerdos_template`:**
-
-```text
-ALTER TABLE carta_acuerdos_template
-ADD COLUMN firmantes_config JSONB DEFAULT '[]'::jsonb;
+```sql
+CREATE TABLE public.cartas_acuerdo (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre TEXT NOT NULL,
+  descripcion TEXT,
+  contenido_html TEXT NOT NULL DEFAULT '',
+  firmantes_config JSONB DEFAULT '[]',
+  requiere_validacion_biometrica BOOLEAN DEFAULT false,
+  activo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  updated_by TEXT
+);
 ```
 
-Estructura del campo:
-```text
-[
-  { "name": "Rodrigo Terveen", "email": "rodrigo.terveen@sozu.com" },
-  { "name": "Otro Director", "email": "otro@empresa.com" }
-]
-```
+- Se migra el registro existente de `carta_acuerdos_template` a esta nueva tabla
+- El campo `requiere_validacion_biometrica` controla si se envia `allowed_signature_methods: ["FESCV"]` o no a Mifiel
 
----
+**2. Reestructurar la vista `CartaAcuerdos.tsx`**
 
-### Cambios en archivos
+La pagina tendra dos estados:
 
-#### 1. `src/pages/admin/legal/CartaAcuerdos.tsx`
+- **Vista listado** (por defecto): Muestra todas las cartas como tarjetas/cards con nombre, descripcion, badge activo/inactivo, conteo de firmas y boton de editar. Incluye boton "Nueva Carta". En la parte superior, un disclaimer:
+  > "Las cartas de acuerdo son documentos informativos que no requieren una robusta validez legal. Se utilizan para formalizar compromisos comerciales entre las partes."
 
-- Agregar una tercera pestania "Firmantes" (o seccion dentro del editor)
-- UI para CRUD de firmantes: lista con nombre + email, boton agregar, boton eliminar
-- El agente NO aparece aqui (es dinamico, se agrega automaticamente al crear el documento)
-- Indicador visual de que el agente se agrega automaticamente
-- Guardar `firmantes_config` junto con el template al hacer clic en "Guardar"
-- En la pestania "Firmas": agregar boton "Firmar" para firmantes pendientes que tengan widget_id, abriendo el MifielSigningDialog
+- **Vista detalle/editor**: Al hacer clic en una carta, se abre la vista actual (con tabs: Editor, Firmantes, Firmas) pero contextualizada a esa carta especifica. Se agrega un boton "Volver" para regresar al listado.
 
-#### 2. `supabase/functions/mifiel-crear-documento/index.ts`
+**3. Dialogo "Nueva Carta"**
 
-- Eliminar constantes hardcodeadas `SOZU_SIGNER_EMAIL` y `SOZU_SIGNER_NAME`
-- Leer `firmantes_config` de la tabla `carta_acuerdos_template` junto con `contenido_html`
-- Construir la lista de firmantes dinamicamente: firmantes_config + agente
-- Enviar `send_invites: true` para que los firmantes fijos reciban correo inmediatamente
-- **Mejorar parser HTML-to-PDF** para preservar formato:
-  - `<strong>` / `<b>`: usar HelveticaBold
-  - `<h1>`-`<h3>`: tamanio de fuente mayor + bold
-  - `<ol>` / `<ul>` / `<li>`: listas con numeracion o vinetas
-  - `<p>`, `<br>`: saltos de parrafo y linea
-  - Preservar espaciado y margenes
+Un dialogo simple con:
+- Nombre de la carta (obligatorio)
+- Descripcion (opcional)
+- Toggle: "Requiere validacion biometrica" (Switch con tooltip explicativo)
 
-#### 3. `supabase/functions/mifiel-webhook/index.ts`
+**4. Configuracion de validacion biometrica por carta**
 
-- Sin cambios mayores. Ya maneja `firmado_parcial` y `completado` correctamente.
-- El estado "firmado_parcial" se activa cuando el agente firma pero los demas no han firmado aun.
+- En la vista de detalle/editor, agregar un Switch en el header: "Validacion biometrica"
+- Este campo se persiste en `cartas_acuerdo.requiere_validacion_biometrica`
+- En la edge function `mifiel-crear-documento`, se recibe este flag y se agrega `allowed_signature_methods: ["FESCV"]` solo si esta activo
 
-#### 4. `src/components/admin/AgentOnboardingStepDialog.tsx`
+**5. Actualizar `firmas_digitales`**
 
-- Sin cambios en el flujo del agente. El agente sigue viendo "Firmar carta", se abre el widget, firma con garabato, y queda en estado "firmado_parcial" o "enviado" hasta que todos firmen.
+- Agregar campo `carta_acuerdo_id` (UUID, FK) para vincular firmas con la carta especifica
+- El query de firmas filtra por `carta_acuerdo_id` en lugar de solo `tipo_documento`
 
----
+**6. Actualizar la edge function**
 
-### Detalles tecnicos
+- Recibir `carta_acuerdo_id` en el body
+- Leer el template y firmantes de la tabla `cartas_acuerdo` en lugar de `carta_acuerdos_template`
+- Condicionar `allowed_signature_methods` segun el flag `requiere_validacion_biometrica`
 
-**Parser HTML mejorado en la Edge Function:**
+### Archivos a modificar/crear
 
-```text
-Logica de renderizado:
-1. Tokenizar el HTML por bloques (h1-h3, p, ul/ol/li, strong, br)
-2. Para cada bloque:
-   - Encabezados: fontSize 16-20 + boldFont + espaciado extra
-   - Parrafos: fontSize 11 + font regular
-   - Negritas inline: cambiar a boldFont para ese segmento
-   - Listas: prefijo "1." o "o" con indentacion
-   - Saltos: incrementar Y
-3. Word-wrap respetando cambios de fuente bold/regular
-4. Paginacion automatica
-```
+| Archivo | Cambio |
+|---|---|
+| **Migracion SQL** | Crear tabla `cartas_acuerdo`, migrar datos |
+| `src/pages/admin/legal/CartaAcuerdos.tsx` | Reestructurar con vista listado + vista detalle |
+| `src/components/admin/NuevaCartaAcuerdoDialog.tsx` | Nuevo dialogo para crear cartas |
+| `supabase/functions/mifiel-crear-documento/index.ts` | Leer de nueva tabla, condicionar biometria |
+| `src/components/admin/AgentOnboardingStepDialog.tsx` | Actualizar referencia a nueva tabla |
 
-**UI de Firmantes en CartaAcuerdos:**
+### Flujo del usuario
 
 ```text
-+------------------------------------------+
-| Firmantes Configurados                   |
-+------------------------------------------+
-| Rodrigo Terveen                          |
-| rodrigo.terveen@sozu.com          [X]    |
-+------------------------------------------+
-| Director Legal                           |
-| legal@empresa.com                 [X]    |
-+------------------------------------------+
-| [Nombre]  [Email]  [+ Agregar]           |
-+------------------------------------------+
-| (i) El agente se agrega automaticamente  |
-|     al momento de firmar                 |
-+------------------------------------------+
+Cartas de Acuerdo (listado)
+  ├── [Disclaimer: no requiere robusta validez legal]
+  ├── [+ Nueva Carta] → Dialogo con nombre, descripcion, toggle biometria
+  ├── Card 1: "Carta Agente Inmobiliario" [Activa] [Biometria: No] [4 firmas] → [Editar]
+  ├── Card 2: "Carta Colaborador Externo" [Activa] [Biometria: Si] [0 firmas] → [Editar]
+  └── ...
+
+Vista detalle (misma que actual):
+  [← Volver]  "Carta Agente Inmobiliario"  [Validacion biometrica: toggle]
+  [Editor] [Firmantes] [Firmas (4)]
 ```
-
-**Boton "Firmar" en tabla de Firmas (para firmantes pendientes):**
-
-En la pestania Firmas de CartaAcuerdos, cada firma con estado != "completado" mostrara un boton "Firmar" junto a cada firmante que tenga widget_id. Al hacer clic, abre el MifielSigningDialog con ese widget_id, permitiendo que Rodrigo (u otro firmante) firme directamente desde la seccion Legal.
 
