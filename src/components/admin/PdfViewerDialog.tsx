@@ -100,18 +100,6 @@ export function PdfViewerDialog({ open, onOpenChange, url, title = "Documento PD
 
   const content = (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex justify-end mb-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!effectiveUrl}
-          onClick={() => window.open(effectiveUrl, "_blank")}
-          className="gap-1.5"
-        >
-          <Download className="h-4 w-4" />
-          Descargar
-        </Button>
-      </div>
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
