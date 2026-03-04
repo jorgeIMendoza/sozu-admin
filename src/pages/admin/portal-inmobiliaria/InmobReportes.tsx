@@ -48,8 +48,8 @@ export default function InmobReportes() {
     queryKey: ["inmob-reportes-comisiones", agentEmails],
     queryFn: async () => {
       if (agentEmails.length === 0) return [];
-      const { data } = await (supabase
-        .from("comisiones") as any)
+      const { data } = await (supabase as any)
+        .from("comisiones")
         .select("id, email_agente, monto, estatus_pago, fecha_creacion, activo")
         .in("email_agente", agentEmails)
         .eq("activo", true)
