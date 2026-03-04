@@ -246,9 +246,9 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
       queryClient.invalidateQueries({ queryKey: ["firmas-digitales", cartaId] });
       queryClient.invalidateQueries({ queryKey: ["cartas-acuerdo-firma-counts"] });
       toast({
-        title: removed > 0 ? `🗑️ ${removed} firma(s) eliminada(s)` : "✅ Todo sincronizado",
-        description: removed > 0
-          ? "Se eliminaron firmas que ya no existen en Mifiel."
+        title: cancelled > 0 ? `⚠️ ${cancelled} firma(s) cancelada(s)` : "✅ Todo sincronizado",
+        description: cancelled > 0
+          ? "Se marcaron como canceladas firmas que ya no existen en Mifiel."
           : updated > 0
             ? `Se actualizó el estado de firma de ${updated} documento(s).`
             : "Todas las firmas están al día.",
