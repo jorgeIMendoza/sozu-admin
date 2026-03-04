@@ -139,7 +139,7 @@ export default function InmobConfiguracion() {
             </div>
             <div>
               <p className="text-muted-foreground text-xs">Rol</p>
-              <p className="font-medium text-foreground">{profile?.roles?.nombre || "—"}</p>
+              <p className="font-medium text-foreground">{profile?.rol_nombre || "—"}</p>
             </div>
           </div>
         </CardContent>

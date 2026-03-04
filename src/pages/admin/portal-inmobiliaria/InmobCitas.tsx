@@ -41,13 +41,13 @@ export default function InmobCitas() {
     queryKey: ["inmob-citas", agentEmails],
     queryFn: async () => {
       if (agentEmails.length === 0) return [];
-      const { data } = await supabase
-        .from("reservas_citas")
+      const { data } = await (supabase
+        .from("reservas_citas") as any)
         .select("*")
         .in("email_agente", agentEmails)
         .eq("activo", true)
         .order("fecha", { ascending: false })
-        .limit(200) as any;
+        .limit(200);
       return data || [];
     },
     enabled: agentEmails.length > 0,

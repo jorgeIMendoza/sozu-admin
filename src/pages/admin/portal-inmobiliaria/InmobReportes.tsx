@@ -32,12 +32,12 @@ export default function InmobReportes() {
     queryKey: ["inmob-reportes-ofertas", agentEmails],
     queryFn: async () => {
       if (agentEmails.length === 0) return [];
-      const { data } = await supabase
-        .from("ofertas")
+      const { data } = await (supabase
+        .from("ofertas") as any)
         .select("id, email_agente, estatus_aprobacion, precio_final, id_proyecto, fecha_creacion, activo")
         .in("email_agente", agentEmails)
         .eq("activo", true)
-        .limit(1000) as any;
+        .limit(1000);
       return data || [];
     },
     enabled: agentEmails.length > 0,
@@ -48,19 +48,19 @@ export default function InmobReportes() {
     queryKey: ["inmob-reportes-comisiones", agentEmails],
     queryFn: async () => {
       if (agentEmails.length === 0) return [];
-      const { data } = await supabase
-        .from("comisiones")
+      const { data } = await (supabase
+        .from("comisiones") as any)
         .select("id, email_agente, monto, estatus_pago, fecha_creacion, activo")
         .in("email_agente", agentEmails)
         .eq("activo", true)
-        .limit(1000) as any;
+        .limit(1000);
       return data || [];
     },
     enabled: agentEmails.length > 0,
   });
 
   // Fetch project names
-  const projectIds = useMemo(() => [...new Set(ofertas.map((o: any) => o.id_proyecto).filter(Boolean))], [ofertas]);
+  const projectIds = useMemo(() => [...new Set(ofertas.map((o: any) => o.id_proyecto).filter(Boolean))] as number[], [ofertas]);
   const { data: proyectos = [] } = useQuery({
     queryKey: ["inmob-reportes-proyectos", projectIds],
     queryFn: async () => {
