@@ -121,18 +121,31 @@ export const PortalInmobiliariaLayout = () => {
           })}
         </nav>
 
-        {/* Back button */}
-        {showBackButton && (
-          <div className="px-3 py-4 border-t border-border">
+        {/* User info & logout */}
+        <div className="px-4 py-3 border-t border-border space-y-2">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground truncate">{profile?.email || "—"}</p>
+            <p className="text-[10px] text-muted-foreground/60">{APP_VERSION}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {showBackButton && (
+              <button
+                onClick={() => navigate("/admin")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Menú principal
+              </button>
+            )}
             <button
-              onClick={() => navigate("/admin")}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              onClick={signOut}
+              className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Menú principal
+              <LogOut className="h-3.5 w-3.5" />
+              Salir
             </button>
           </div>
-        )}
+        </div>
       </aside>
 
       {/* Mobile bottom nav */}
