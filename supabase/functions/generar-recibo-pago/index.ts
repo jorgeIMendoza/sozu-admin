@@ -636,7 +636,8 @@ Deno.serve(async (req) => {
         .join('/');
       nombreParaItem3 = todosNombresItem3;
     }
-    const item3Label = `Monto total de depósito en garantía de cumplimiento al que se compromete ${nombreParaItem3}:`;
+    const verboCompromiso = numCompradores > 1 ? 'comprometen' : 'compromete';
+    const item3Label = `Monto total de depósito en garantía de cumplimiento al que se ${verboCompromiso} ${nombreParaItem3}:`;
     const item3LabelLines = wrapText(item3Label, contentWidth - 30, helveticaBold, 11);
     for (let i = 0; i < item3LabelLines.length; i++) {
       page.drawText(item3LabelLines[i], {
