@@ -1142,8 +1142,9 @@ Deno.serve(async (req) => {
             end: { dateTime: `${desired.fechaStr}T${desired.horaFin}:00`, timeZone: "America/Mexico_City" },
             recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${desired.rruleDay};UNTIL=${untilStr}`],
           };
-          patchBody.description = buildDescriptionWithAttendees(eventDescription, slotAttendees4, desired.fechaStr, parseInt(desired.horaInicio));
-          if (slotAttendees4.length > 0) patchBody.attendees = [...slotAttendees4];
+          const updateSlotAttendees = buildAttendeesForSlot(desired.fechaStr, parseInt(desired.horaInicio));
+          patchBody.description = buildDescriptionWithAttendees(eventDescription, updateSlotAttendees, desired.fechaStr, parseInt(desired.horaInicio));
+          if (updateSlotAttendees.length > 0) patchBody.attendees = [...updateSlotAttendees];
 
           try {
             let res = await fetch(
