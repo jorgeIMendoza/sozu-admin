@@ -451,17 +451,17 @@ export function EditUserDialog({
       return;
     }
 
-    // Inmobiliaria is optional for agent roles
+    // Inmobiliaria change support for agents and Inmobiliaria role
     updateUserMutation.mutate({
       oldEmail: userEmail,
       newEmail: email.trim(),
       newNombre: nombre.trim(),
-      newInmobiliariaId: isAgentRole && selectedInmobiliariaId ? parseInt(selectedInmobiliariaId) : undefined,
+      newInmobiliariaId: needsInmobiliaria && selectedInmobiliariaId ? parseInt(selectedInmobiliariaId) : undefined,
       personaId: userPersonaId,
     });
   };
 
-  const inmobiliariaChanged = isAgentRole && selectedInmobiliariaId !== originalInmobiliariaId;
+  const inmobiliariaChanged = needsInmobiliaria && selectedInmobiliariaId !== originalInmobiliariaId;
   const hasChanges = nombre !== userName || email !== userEmail || inmobiliariaChanged;
 
   return (
