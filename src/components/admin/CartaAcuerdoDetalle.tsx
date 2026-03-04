@@ -79,7 +79,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
   const [signatureTargetIndex, setSignatureTargetIndex] = useState<number>(-1);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
-
+  const autoSyncDoneRef = useRef(false);
   // Fetch carta
   const { data: carta, isLoading: cartaLoading } = useQuery({
     queryKey: ["carta-acuerdo", cartaId],
