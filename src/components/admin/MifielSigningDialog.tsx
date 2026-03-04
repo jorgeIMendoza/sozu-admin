@@ -39,11 +39,18 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
         onSuccess?.();
       });
       widget.addEventListener("signError", (e: any) => {
-        // Ignore errors that fire after a successful sign
+        // Ignore ALL errors — the widget fires spurious errors after signing
         if (signedRef.current) return;
+        // Also mark as handled to prevent duplicate error toasts
+        signedRef.current = true;
         if (containerRef.current) containerRef.current.innerHTML = "";
         onOpenChange(false);
-        onError?.(e?.detail?.message || "Error en la firma");
+        // Only report genuine pre-sign errors
+        const msg = e?.detail?.message || "";
+        // Suppress generic/empty and non-2xx errors from Mifiel widget internals
+        if (msg && !msg.includes("already") && !msg.includes("Ya fue firmado")) {
+          onError?.(msg);
+        }
       });
     };
 
