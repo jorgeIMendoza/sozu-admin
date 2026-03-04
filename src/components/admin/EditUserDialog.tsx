@@ -115,11 +115,11 @@ export function EditUserDialog({
         nombre: item.nombre_comercial || item.nombre_legal
       })) as InmobiliariaOption[];
     },
-    enabled: open && isAgentRole,
+    enabled: open && needsInmobiliaria,
   });
 
-  // Fetch current inmobiliaria for this agent
-  const { data: currentInmobiliaria, isLoading: isLoadingInmobiliaria } = useQuery({
+  // Fetch current inmobiliaria for this agent (via entidades_relacionadas tipo 19)
+  const { data: currentAgentInmobiliaria, isLoading: isLoadingAgentInmob } = useQuery({
     queryKey: ['agent_inmobiliaria', userPersonaId],
     queryFn: async () => {
       if (!userPersonaId) return null;
@@ -137,6 +137,38 @@ export function EditUserDialog({
     },
     enabled: open && isAgentRole && !!userPersonaId,
   });
+
+  // Fetch current inmobiliaria for Inmobiliaria role users (via proyectos_acceso)
+  const { data: currentInmobInmobiliaria, isLoading: isLoadingInmobInmob } = useQuery({
+    queryKey: ['inmob_user_inmobiliaria', userEmail],
+    queryFn: async () => {
+      if (!userEmail) return null;
+      
+      const { data: accesos } = await supabase
+        .from('proyectos_acceso')
+        .select('id_entidad_relacionada_dueno')
+        .eq('usuario_id', userEmail)
+        .not('id_entidad_relacionada_dueno', 'is', null)
+        .eq('activo', true)
+        .limit(1);
+      
+      if (accesos && accesos.length > 0) {
+        const erDueno = accesos[0].id_entidad_relacionada_dueno;
+        const { data: er } = await supabase
+          .from('entidades_relacionadas')
+          .select('id_persona')
+          .eq('id', erDueno)
+          .eq('id_tipo_entidad', 5)
+          .single();
+        return er?.id_persona || null;
+      }
+      return null;
+    },
+    enabled: open && isInmobiliariaRole,
+  });
+
+  const currentInmobiliaria = isAgentRole ? currentAgentInmobiliaria : currentInmobInmobiliaria;
+  const isLoadingInmobiliaria = isAgentRole ? isLoadingAgentInmob : isLoadingInmobInmob;
 
   // Reset form when dialog opens with new data
   useEffect(() => {
