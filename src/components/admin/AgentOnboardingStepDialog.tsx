@@ -452,7 +452,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       }
 
       const remoteState = String(mifielData?.document?.state || '').toLowerCase().trim();
-      const remoteCancelledStates = new Set(['deleted', 'canceled', 'cancelled', 'void', 'voided', 'expired', 'rejected']);
+      const remoteCancelledStates = new Set(['deleted', 'canceled', 'cancelled', 'void', 'voided', 'expired', 'rejected', 'archived']);
       const remoteCompletedStates = new Set(['completed', 'signed']);
 
       if (remoteCancelledStates.has(remoteState)) {
