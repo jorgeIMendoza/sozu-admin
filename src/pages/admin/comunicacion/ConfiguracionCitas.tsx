@@ -433,29 +433,28 @@ export default function ConfiguracionCitas() {
     onError: (e) => toast.error(`Error: ${e.message}`),
   });
 
-  // Check if CURRENT selected config has FUTURE events with real attendees (Google Calendar)
-  const { data: futureAttendeesData, isLoading: loadingFutureAttendees, isError: futureAttendeesError } = useQuery({
-    queryKey: ["config-future-attendees", selectedConfigId],
+  // Check if target config has FUTURE events with real attendees (Google Calendar)
+  const { data: futureAttendeesData, isLoading: loadingFutureAttendees } = useQuery({
+    queryKey: ["config-future-attendees", deleteConfigTarget?.id],
     queryFn: async () => {
-      if (!selectedConfigId) return { has_attendees: false, total_future_events: 0, events_with_attendees: 0 };
+      if (!deleteConfigTarget?.id) return { has_attendees: false, total_future_events: 0, events_with_attendees: 0 };
       const { data, error } = await supabase.functions.invoke("agendar-capacitacion", {
         body: {
           action: "check-config-future-attendees",
-          config_id: parseInt(selectedConfigId),
+          config_id: deleteConfigTarget.id,
           calendar_owner_email: selectedUserEmail,
         },
       });
       if (error) {
         console.error("Error checking future attendees:", error);
-        throw error;
+        return { has_attendees: false, total_future_events: 0, events_with_attendees: 0 };
       }
       return data || { has_attendees: false, total_future_events: 0, events_with_attendees: 0 };
     },
-    enabled: !!selectedConfigId,
-    retry: 1,
+    enabled: !!deleteConfigTarget?.id,
   });
 
-  const hasFutureAttendees = futureAttendeesError ? true : (futureAttendeesData?.has_attendees || false);
+  const hasFutureAttendees = futureAttendeesData?.has_attendees || false;
 
 
   const deleteCitaMutation = useMutation({
@@ -833,7 +832,6 @@ export default function ConfiguracionCitas() {
                               size="sm"
                               variant="ghost"
                               className="text-destructive hover:text-destructive"
-                              disabled={cfg.id.toString() === selectedConfigId && (loadingFutureAttendees || hasFutureAttendees)}
                               onClick={() => {
                                 setDeleteConfigTarget({ id: cfg.id, nombre: cfg.nombre });
                                 setDeleteDialogOpen(true);
@@ -1205,13 +1203,7 @@ export default function ConfiguracionCitas() {
                   <Loader2 className="h-4 w-4 animate-spin" /> Verificando invitados en Google Calendar...
                 </div>
               )}
-              {futureAttendeesError && (
-                <div className="rounded-md border border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm">
-                  <p className="font-medium text-amber-700 dark:text-amber-400">⚠️ No se pudo validar invitados en Google Calendar.</p>
-                  <p className="mt-1 text-muted-foreground">Por seguridad, la eliminación queda bloqueada temporalmente.</p>
-                </div>
-              )}
-              {hasFutureAttendees && !loadingFutureAttendees && !futureAttendeesError && (
+              {hasFutureAttendees && !loadingFutureAttendees && (
                 <div className="rounded-md border border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm">
                   <p className="font-medium text-amber-700 dark:text-amber-400">🚫 Esta cita tiene {futureAttendeesData?.events_with_attendees} evento(s) futuro(s) con invitados.</p>
                   <p className="mt-1 text-muted-foreground">No es posible eliminar una cita que tiene eventos futuros con asistentes. Primero cancela o reagenda las citas pendientes.</p>
@@ -1222,7 +1214,7 @@ export default function ConfiguracionCitas() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteCitaMutation.isPending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              disabled={hasFutureAttendees || futureAttendeesError || loadingFutureAttendees || deleteCitaMutation.isPending}
+              disabled={hasFutureAttendees || loadingFutureAttendees || deleteCitaMutation.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 if (deleteConfigTarget) deleteCitaMutation.mutate(deleteConfigTarget.id);
