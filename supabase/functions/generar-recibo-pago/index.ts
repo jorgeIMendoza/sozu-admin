@@ -516,13 +516,13 @@ Deno.serve(async (req) => {
           .eq('claverastreo', pago.clave_rastreo)
           .single();
         if (stpRaw?.nombre_ordenante) {
-          nombrePagador = stpRaw.nombre_ordenante.toUpperCase();
+          nombrePagador = stpRaw.nombre_ordenante.trim().replace(/\s+/g, ' ').toUpperCase();
         }
         console.log('Multiple buyers + STP, using nombre_ordenante:', nombrePagador);
       } else {
         // Multiple buyers + non-STP: use "del cliente (NAME1/NAME2/...)"
         const todosNombres = compradores!
-          .map((c: any) => (c.personas?.nombre_legal || '').toUpperCase())
+          .map((c: any) => (c.personas?.nombre_legal || '').trim().replace(/\s+/g, ' ').toUpperCase())
           .filter((n: string) => n)
           .join('/');
         nombrePagador = todosNombres;
