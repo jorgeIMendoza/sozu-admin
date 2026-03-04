@@ -627,7 +627,15 @@ Deno.serve(async (req) => {
     });
     
     // Item 3 label - wrap the full text including client name
-    const nombreParaItem3 = (numCompradores > 1 && !esSTP) ? `(${nombrePagador})` : nombreComprador.toUpperCase();
+    // Item 3 always shows ALL buyers when multiple, regardless of payment method
+    let nombreParaItem3 = nombreComprador.toUpperCase();
+    if (numCompradores > 1) {
+      const todosNombresItem3 = compradores!
+        .map((c: any) => (c.personas?.nombre_legal || '').toUpperCase())
+        .filter((n: string) => n)
+        .join('/');
+      nombreParaItem3 = todosNombresItem3;
+    }
     const item3Label = `Monto total de depósito en garantía de cumplimiento al que se compromete ${nombreParaItem3}:`;
     const item3LabelLines = wrapText(item3Label, contentWidth - 30, helveticaBold, 11);
     for (let i = 0; i < item3LabelLines.length; i++) {
