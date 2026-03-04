@@ -527,14 +527,15 @@ Deno.serve(async (req) => {
     const tipoCitaId = body.tipo_cita_id || 1;
     const calendarOwnerEmail = body.calendar_owner_email || "jorge.mendoza@sozu.com";
 
-    // Generate token with Domain-Wide Delegation (sub = calendar owner)
-    const token = await getAccessToken(sa, calendarOwnerEmail);
-    console.log(`[auth] Token generated with DWD subject: ${calendarOwnerEmail}`);
-
     // Fetch dynamic config
     const userCitaConfig = await getUserCitaConfig(supabase, calendarOwnerEmail, tipoCitaId);
     const duracionMinutos = body.duracion_minutos || userCitaConfig?.duracion_minutos || 90;
     const calendarId = userCitaConfig?.calendario_email || calendarOwnerEmail;
+
+    // Generate token with Domain-Wide Delegation (sub = actual calendar owner, not config owner)
+    const dwdSubject = calendarId;
+    const token = await getAccessToken(sa, dwdSubject);
+    console.log(`[auth] Token generated with DWD subject: ${dwdSubject} (config owner: ${calendarOwnerEmail})`);
 
     // ---- Action: verify-event (check if calendar event still exists) ----
     if (body.action === "verify-event") {
