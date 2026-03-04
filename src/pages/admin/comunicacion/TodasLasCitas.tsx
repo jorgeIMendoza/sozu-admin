@@ -40,19 +40,27 @@ interface Horario {
   activo: boolean;
 }
 
-interface Cita {
+interface CitaRaw {
   id: number;
-  id_configuracion_cita: number;
-  id_estatus_cita: number;
+  id_configuracion_cita: number | null;
+  id_estatus_cita: number | null;
   estatus: string;
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
-  nombre_prospecto: string | null;
-  email_agente: string | null;
+  id_persona_prospecto: number | null;
+  id_agente: number | null;
   notas: string | null;
   google_calendar_event_id: string | null;
   activo: boolean;
+  // Joined
+  prospecto?: { nombre: string; apellido_paterno: string; email: string } | null;
+  agente?: { nombre: string; apellido_paterno: string; email: string } | null;
+}
+
+interface Cita extends CitaRaw {
+  nombre_prospecto: string | null;
+  email_agente: string | null;
 }
 
 // A unified slot that can be empty or have a cita
