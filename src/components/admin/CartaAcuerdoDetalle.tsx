@@ -683,7 +683,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar documento de firma?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción no se puede deshacer. El documento será eliminado permanentemente.
+              Esta acción eliminará el documento tanto en Mifiel como en la base de datos. No se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -691,11 +691,29 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={async () => {
+                const firmaToDelete = firmas.find((f: any) => f.id === deleteConfirmId);
                 try {
-                  await (supabase as any).from("firmas_digitales").delete().eq("id", deleteConfirmId);
-                  queryClient.invalidateQueries({ queryKey: ["firmas-digitales", cartaId] });
-                  queryClient.invalidateQueries({ queryKey: ["cartas-acuerdo-firma-counts"] });
-                  toast({ title: "🗑️ Documento eliminado" });
+                  // 1. Delete from Mifiel if there's a mifiel_document_id
+                  if (firmaToDelete?.mifiel_document_id) {
+                    const { data: mifielResult, error: mifielError } = await supabase.functions.invoke("mifiel-cancelar-documento", {
+                      body: { document_id: firmaToDelete.mifiel_document_id },
+                    });
+                    if (mifielError || !mifielResult?.success) {
+                      console.error("Mifiel cancel error:", mifielError || mifielResult);
+                      toast({ title: "Error al eliminar en Mifiel", description: mifielError?.message || mifielResult?.error || "Error desconocido", variant: "destructive" });
+                      setDeleteConfirmId(null);
+                      return;
+                    }
+                  }
+                  // 2. Delete from DB
+                  const { error: dbError } = await (supabase as any).from("firmas_digitales").delete().eq("id", deleteConfirmId);
+                  if (dbError) {
+                    toast({ title: "Error al eliminar de la base de datos", description: dbError.message, variant: "destructive" });
+                  } else {
+                    queryClient.invalidateQueries({ queryKey: ["firmas-digitales", cartaId] });
+                    queryClient.invalidateQueries({ queryKey: ["cartas-acuerdo-firma-counts"] });
+                    toast({ title: "🗑️ Documento eliminado", description: "Se eliminó de Mifiel y de la base de datos." });
+                  }
                 } catch (err: any) {
                   toast({ title: "Error", description: err.message, variant: "destructive" });
                 } finally {
