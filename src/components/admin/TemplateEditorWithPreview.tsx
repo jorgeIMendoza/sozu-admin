@@ -73,9 +73,9 @@ export function TemplateEditorWithPreview({
         ? `<img src="${f.firma_imagen}" style="position:absolute;left:50%;transform:translateX(-50%);bottom:4px;height:128px;max-width:240px;object-fit:contain" />`
         : "";
 
-      html += `<div style="margin-bottom:32px"><p style="font-size:1.1em"><strong>${f.name}</strong></p><p>Cargo: ${f.cargo}</p><div style="display:flex;align-items:flex-end;gap:4px;margin:6px 0 4px 0"><span>Firma:</span><div style="position:relative;flex:1;height:140px">${firmaLayer}<span style="position:absolute;left:0;bottom:0">___________________________</span></div></div><p>Fecha: ${fechaActual}</p></div>`;
+      html += `<div style="margin-bottom:32px"><p style="font-size:1.1em"><strong>${f.name}</strong></p><p>Cargo: ${f.cargo}</p><div style="display:flex;align-items:flex-end;gap:4px;margin:6px 0 4px 0"><span>Firma:</span><div style="position:relative;height:140px;width:230px;flex-shrink:0">${firmaLayer}<span style="position:absolute;left:0;bottom:0">___________________________</span></div></div><p>Fecha: ${fechaActual}</p></div>`;
     }
-    html += `<div style="border-top:1px solid #ccc;padding-top:16px;margin-top:16px"><p style="font-size:1.1em"><strong>EL AGENTE</strong></p><p>Nombre/Razón Social: ${nombreAgente}</p><p>RFC: ${rfcAgente}</p><div style="display:flex;align-items:flex-end;gap:4px;margin:16px 0"><span>Firma:</span><div style="position:relative;flex:1;height:60px"><span style="position:absolute;left:0;bottom:0">___________________________</span></div></div><p>Fecha: ${fechaActual}</p></div>`;
+    html += `<div style="border-top:1px solid #ccc;padding-top:16px;margin-top:16px"><p style="font-size:1.1em"><strong>EL AGENTE</strong></p><p>Nombre/Razón Social: ${nombreAgente}</p><p>RFC: ${rfcAgente}</p><div style="display:flex;align-items:flex-end;gap:4px;margin:16px 0"><span>Firma:</span><div style="position:relative;height:60px;width:230px;flex-shrink:0"><span style="position:absolute;left:0;bottom:0">___________________________</span></div></div><p>Fecha: ${fechaActual}</p></div>`;
     return html;
   }, [firmantes, placeholderValues]);
 

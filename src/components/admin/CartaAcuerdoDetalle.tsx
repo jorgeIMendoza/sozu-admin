@@ -371,7 +371,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                           <p>Cargo: {f.cargo}</p>
                           <div className="flex items-end gap-1 my-2">
                             <span>Firma:</span>
-                            <div className="relative flex-1 h-36">
+                            <div className="relative h-36 w-[230px] shrink-0">
                               {f.firma_imagen ? (
                                 <img
                                   src={f.firma_imagen}
@@ -391,7 +391,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                         <p>RFC: <Badge variant="secondary" className="text-xs">{"{{rfc_agente}}"}</Badge></p>
                         <div className="flex items-end gap-1 my-2">
                           <span>Firma:</span>
-                          <div className="relative flex-1 h-36">
+                          <div className="relative h-36 w-[230px] shrink-0">
                             <span className="absolute left-0 bottom-0">___________________________</span>
                           </div>
                         </div>
