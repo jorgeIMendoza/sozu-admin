@@ -1,51 +1,41 @@
 
 
-## Diagnóstico
+## Plan: Agregar Domain-Wide Delegation (subject/sub) al JWT de la cuenta de servicio
 
-El botón "Eliminar" está habilitado porque el frontend verifica invitados buscando en la tabla `reservas_citas` con `estatus = "programada"` y `activo = true`. Sin embargo, los "2 invitados" que ves en el evento del 5 de marzo son **attendees del evento de Google Calendar** (correos de enterados/CC agregados al crear el evento), no reservas en la base de datos. La única reserva que existía para config 14 el 5 de marzo ya está `cancelada` y `activo = false`, por lo que el query no encuentra nada y el botón queda habilitado.
+### Problema actual
+La función `getAccessToken` genera un JWT sin el campo `sub`, por lo que Google Calendar ve las operaciones como hechas por la cuenta de servicio directamente. Esto impide que los invitados reciban correos de notificación del evento.
 
-**En resumen**: la validación actual mira la fuente equivocada. Debe consultar los attendees reales del evento en Google Calendar.
+### Cambio necesario
 
----
+**Archivo**: `supabase/functions/agendar-capacitacion/index.ts`
 
-## Plan de corrección
+1. **Modificar `getAccessToken`** para aceptar un parámetro opcional `subject` (el email del dueño del calendario) y agregarlo al payload JWT:
+   ```
+   sub: subject  // e.g. "jorge.mendoza@sozu.com"
+   ```
 
-### 1. Nueva acción en la Edge Function `agendar-capacitacion`
+2. **Actualizar la llamada** a `getAccessToken(sa)` → `getAccessToken(sa, calendarOwnerEmail)` en el `Deno.serve` principal (línea 519), para que el token se genere impersonando al dueño del calendario.
 
-Agregar una acción `check-config-future-attendees` que:
-- Consulte `citas_calendar_events` para obtener eventos futuros activos de la configuración
-- Para cada evento futuro, consulte la API de Google Calendar para obtener los attendees
-- Filtre el email de la service account (`cuenta-conexiones-drive@sozu-38755.iam.gserviceaccount.com`)
-- Retorne `{ has_attendees: true/false, events_with_attendees: [...] }`
+3. Agregar el scope `https://www.googleapis.com/auth/calendar.events` al JWT (ya lo tienes en el Admin Console, pero el código solo pide `calendar`).
 
-### 2. Cambiar la validación en el frontend (`ConfiguracionCitas.tsx`)
+### Detalle técnico
 
-- Reemplazar el `useQuery` actual que consulta `reservas_citas` por una llamada a `supabase.functions.invoke("agendar-capacitacion", { body: { action: "check-config-future-attendees", config_id, calendar_owner_email } })`
-- Usar el resultado `has_attendees` para habilitar/deshabilitar el botón de eliminar
-- Ajustar el mensaje del disclaimer para mostrar cuántos eventos tienen attendees
-
-### 3. Ajustar la acción `delete-config-events` en la Edge Function
-
-Antes de eliminar cada evento futuro de Google Calendar, verificar si tiene attendees (excluyendo la service account). Si los tiene, **saltar** ese evento y no eliminarlo. Esto agrega una capa de seguridad server-side adicional.
-
----
-
-### Detalles técnicos
-
-**Edge Function - nueva acción** (`check-config-future-attendees`):
 ```text
-Input:  { action: "check-config-future-attendees", config_id, calendar_owner_email }
-Output: { has_attendees: boolean, total_future_events: number, events_with_attendees: number }
+// Antes (línea 18-23):
+payload = { iss, scope: "...calendar", aud, iat, exp }
 
-Lógica:
-1. Query citas_calendar_events WHERE config_id AND activo AND fecha >= today
-2. Para cada evento, GET Google Calendar event by google_event_id
-3. Contar attendees excluyendo la service account
-4. Si algún evento tiene >= 1 attendee → has_attendees = true
+// Después:
+payload = { iss, sub: subject, scope: "...calendar ...calendar.events", aud, iat, exp }
 ```
 
-**Frontend - cambio en query**:
-- El `useQuery` con key `config-future-reservations` pasará a invocar la edge function
-- Se mantiene `enabled: !!deleteConfigTarget?.id`
-- El resultado alimenta `hasFutureReservations` (renombrado a `hasFutureAttendees`)
+La llamada cambia de:
+```text
+const token = await getAccessToken(sa);
+```
+A:
+```text
+const token = await getAccessToken(sa, calendarOwnerEmail);
+```
+
+Esto hará que Google Calendar trate las operaciones como si las hiciera el usuario real (calendarOwnerEmail), permitiendo el envío automático de correos a los invitados.
 
