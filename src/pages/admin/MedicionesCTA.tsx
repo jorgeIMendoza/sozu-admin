@@ -857,4 +857,94 @@ const AgentPortalView = ({
   </>
 );
 
+// ===== Inmob Portal View =====
+const InmobPortalView = ({
+  totalClicks, uniqueCTAs, uniqueUsers, pageViews,
+  getPageViews, getPageCTAs,
+}: {
+  totalClicks: number;
+  uniqueCTAs: number;
+  uniqueUsers: number;
+  pageViews: number;
+  getPageViews: (key: string) => number;
+  getPageCTAs: (key: string) => { name: string; clicks: number }[];
+}) => (
+  <>
+    {/* Summary cards */}
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <Card>
+        <CardContent className="pt-6 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center"><MousePointer className="h-6 w-6 text-primary" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{totalClicks}</p><p className="text-xs text-muted-foreground">Total clicks</p></div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center"><BarChart3 className="h-6 w-6 text-primary" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{uniqueCTAs}</p><p className="text-xs text-muted-foreground">CTAs únicos</p></div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center"><TrendingUp className="h-6 w-6 text-primary" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{uniqueUsers}</p><p className="text-xs text-muted-foreground">Usuarios únicos</p></div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center"><Eye className="h-6 w-6 text-primary" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{pageViews}</p><p className="text-xs text-muted-foreground">Visitas a páginas</p></div>
+        </CardContent>
+      </Card>
+    </div>
+
+    {/* Page views by section */}
+    <Card>
+      <CardHeader><CardTitle className="text-sm">Visitas por Sección</CardTitle></CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
+          {INMOB_PAGES.map(({ key, label }) => (
+            <div key={key} className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-2xl font-bold text-foreground">{getPageViews(key)}</p>
+              <p className="text-xs text-muted-foreground">{label}</p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+
+    {/* Tabs by section */}
+    <Tabs defaultValue="inmob_dashboard" className="space-y-4">
+      <TabsList className="flex flex-wrap h-auto gap-1">
+        {INMOB_PAGES.map(({ key, label }) => (
+          <TabsTrigger key={key} value={key}>{label}</TabsTrigger>
+        ))}
+      </TabsList>
+
+      {INMOB_PAGES.map(({ key, label }) => (
+        <TabsContent key={key} value={key} className="space-y-4">
+          <Card>
+            <CardHeader><CardTitle className="text-sm">CTAs — {label}</CardTitle></CardHeader>
+            <CardContent>
+              {getPageCTAs(key).length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={getPageCTAs(key)} layout="vertical" margin={{ left: 10, right: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="clicks" radius={[0, 6, 6, 0]}>
+                      {getPageCTAs(key).map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-sm text-muted-foreground text-center py-8">Sin datos para {label}</p>}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      ))}
+    </Tabs>
+  </>
+);
+
 export default MedicionesCTA;
