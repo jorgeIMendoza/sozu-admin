@@ -1,41 +1,32 @@
 
+## Plan: Centrar firmas sobre la línea en todos los firmantes
 
-## Plan: Agregar Domain-Wide Delegation (subject/sub) al JWT de la cuenta de servicio
+### Problema
+La firma actual usa `left-12` que la posiciona con un offset fijo. El usuario quiere que cada firma quede centrada exactamente sobre la porción de línea "___________________________" (después del texto "Firma:").
 
-### Problema actual
-La función `getAccessToken` genera un JWT sin el campo `sub`, por lo que Google Calendar ve las operaciones como hechas por la cuenta de servicio directamente. Esto impide que los invitados reciban correos de notificación del evento.
+### Cambios
 
-### Cambio necesario
+**1. `src/components/admin/CartaAcuerdoDetalle.tsx` (líneas 370-378)**
+- Cambiar la estructura para que la imagen de firma se centre sobre la línea de guiones bajos
+- Separar "Firma:" del trazo "___________________________" en elementos distintos
+- Posicionar la imagen centrada horizontalmente sobre los guiones bajos usando un contenedor relativo solo para la línea + firma
 
-**Archivo**: `supabase/functions/agendar-capacitacion/index.ts`
-
-1. **Modificar `getAccessToken`** para aceptar un parámetro opcional `subject` (el email del dueño del calendario) y agregarlo al payload JWT:
-   ```
-   sub: subject  // e.g. "jorge.mendoza@sozu.com"
-   ```
-
-2. **Actualizar la llamada** a `getAccessToken(sa)` → `getAccessToken(sa, calendarOwnerEmail)` en el `Deno.serve` principal (línea 519), para que el token se genere impersonando al dueño del calendario.
-
-3. Agregar el scope `https://www.googleapis.com/auth/calendar.events` al JWT (ya lo tienes en el Admin Console, pero el código solo pide `calendar`).
-
-### Detalle técnico
-
-```text
-// Antes (línea 18-23):
-payload = { iss, scope: "...calendar", aud, iat, exp }
-
-// Después:
-payload = { iss, sub: subject, scope: "...calendar ...calendar.events", aud, iat, exp }
+Estructura propuesta:
+```
+<div className="flex items-end gap-1 my-2">
+  <span>Firma:</span>
+  <div className="relative flex-1">
+    {firma_imagen && (
+      <img className="absolute left-1/2 -translate-x-1/2 bottom-1 h-32 max-w-[260px] object-contain" />
+    )}
+    <span>___________________________</span>
+  </div>
+</div>
 ```
 
-La llamada cambia de:
-```text
-const token = await getAccessToken(sa);
-```
-A:
-```text
-const token = await getAccessToken(sa, calendarOwnerEmail);
-```
+Esto centra la imagen respecto a la línea de guiones (no respecto a "Firma:"), manteniendo el tamaño `h-32` ya aprobado.
 
-Esto hará que Google Calendar trate las operaciones como si las hiciera el usuario real (calendarOwnerEmail), permitiendo el envío automático de correos a los invitados.
+**2. Aplicar el mismo patrón al bloque "EL AGENTE"** (líneas 387-389) para consistencia.
 
+**3. `src/components/admin/TemplateEditorWithPreview.tsx` (líneas 72-76)**
+- Actualizar el HTML inline de firmas en el iframe preview con la misma lógica: separar "Firma:" de la línea y centrar la imagen sobre los guiones.
