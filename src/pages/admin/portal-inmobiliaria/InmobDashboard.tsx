@@ -16,7 +16,7 @@ import {
 import {
   Users, TrendingUp, DollarSign, Home, FileText, CircleAlert, Target,
   ArrowUpRight, ArrowDownRight, BarChart3, Clock, Percent, Building2,
-  ChevronRight, AlertTriangle, Eye, CalendarCheck, UserPlus, Handshake,
+  ChevronRight, AlertTriangle, CalendarCheck, Handshake,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -123,6 +123,50 @@ export default function InmobDashboard() {
     staleTime: 3 * 60_000,
   });
 
+  // Cuentas cobranza + pagos for financial KPIs
+  const { data: financialData } = useQuery({
+    queryKey: ["inmob-dash-financials", propIds],
+    queryFn: async () => {
+      if (!propIds.length) return { cobrado: 0, porCobrar: 0 };
+      const { data: cuentas } = await (supabase as any)
+        .from("cuentas_cobranza")
+        .select("id, precio_final, activo")
+        .in("id_propiedad", propIds)
+        .eq("activo", true);
+
+      if (!cuentas?.length) return { cobrado: 0, porCobrar: 0 };
+
+      const cuentaIds = (cuentas as any[]).map((c: any) => c.id);
+      let allPagos: any[] = [];
+      for (let i = 0; i < cuentaIds.length; i += 50) {
+        const batch = cuentaIds.slice(i, i + 50);
+        const { data: acuerdos } = await (supabase
+          .from("acuerdos_pago")
+          .select("id")
+          .in("id_cuenta_cobranza", batch)
+          .eq("activo", true) as any);
+        const acuerdoIds = (acuerdos || []).map((a: any) => a.id);
+        if (!acuerdoIds.length) continue;
+        const { data: pagos } = await (supabase
+          .from("aplicaciones_pago")
+          .select("monto, activo")
+          .in("id_acuerdo_pago", acuerdoIds)
+          .eq("activo", true) as any);
+        if (pagos) allPagos = [...allPagos, ...pagos];
+      }
+
+      const totalCobrado = allPagos.reduce((s: number, p: any) => s + (Number(p.monto) || 0), 0);
+      const totalPrecio = cuentas.reduce((s: number, c: any) => s + (Number(c.precio_final) || 0), 0);
+
+      return {
+        cobrado: totalCobrado,
+        porCobrar: Math.max(0, totalPrecio - totalCobrado),
+      };
+    },
+    enabled: propIds.length > 0,
+    staleTime: 3 * 60_000,
+  });
+
   // Comisiones
   const { data: comisiones = [], isLoading: comisionesLoading } = useQuery({
     queryKey: ["inmob-dash-comisiones", agentEmails],
@@ -188,13 +232,8 @@ export default function InmobDashboard() {
     }).length;
   }, [ofertas, propMap]);
 
-  const ingresosCobrados = useMemo(() => {
-    return comisiones.filter((c: any) => c.pagada).reduce((s: number, c: any) => s + (c.monto_comision || 0), 0);
-  }, [comisiones]);
-
-  const porCobrar = useMemo(() => {
-    return comisiones.filter((c: any) => !c.pagada && c.aprobada).reduce((s: number, c: any) => s + (c.monto_comision || 0), 0);
-  }, [comisiones]);
+  const ingresosCobrados = financialData?.cobrado || 0;
+  const porCobrar = financialData?.porCobrar || 0;
 
   const estimados = useMemo(() => {
     let sum = 0;
@@ -260,7 +299,7 @@ export default function InmobDashboard() {
 
       return {
         nombre: agent.nombre,
-        prospectos: 0, // requires separate query per agent
+        prospectos: 0,
         ofertas: agentOfertas.length,
         apartados: agentApartados,
         ventas: agentVentas,
@@ -310,12 +349,16 @@ export default function InmobDashboard() {
       }));
   }, [ofertas]);
 
+  /* SOZU green for this theme context: --accent is the green */
+  const SOZU_GREEN = "hsl(var(--accent))";
+  const SOZU_GREEN_BG = "hsl(var(--accent) / 0.12)";
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Building2 className="h-4 w-4 text-primary" />
+          <Building2 className="h-4 w-4 text-accent" />
           <span className="font-medium text-foreground">{inmobName || "Mi Inmobiliaria"}</span>
           <ChevronRight className="h-3 w-3" />
           <span>Dashboard</span>
@@ -340,13 +383,13 @@ export default function InmobDashboard() {
 
       {/* 7 KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-        <MainKpi icon={Users} label="Agentes activos" value={totalAgentes} sub="Operando ahora" badge={`${agents.filter(a => a.activo).length} activos`} loading={isLoading} />
-        <MainKpi icon={TrendingUp} label="Pipeline total" value={fmtShort(pipelineTotal)} sub="Valor acumulado" loading={isLoading} />
-        <MainKpi icon={FileText} label="Ofertas activas" value={ofertasActivas} sub="En negociación" loading={isLoading} />
-        <MainKpi icon={Home} label="Apartados" value={apartados} sub="Confirmados" loading={isLoading} />
-        <MainKpi icon={DollarSign} label="Ingresos cobrados" value={fmtShort(ingresosCobrados)} sub="Comisiones pagadas" loading={isLoading} />
-        <MainKpi icon={CircleAlert} label="Por cobrar" value={fmtShort(porCobrar)} sub="Pendiente de pago" loading={isLoading} variant="warning" />
-        <MainKpi icon={Target} label="Estimados" value={fmtShort(estimados)} sub="Basado en apartados" loading={isLoading} />
+        <MainKpi icon={Users} label="Agentes activos" value={totalAgentes} sub="Operando ahora" loading={isLoading} color="accent" />
+        <MainKpi icon={TrendingUp} label="Pipeline total" value={fmtShort(pipelineTotal)} sub="Valor acumulado" loading={isLoading} color="accent" />
+        <MainKpi icon={FileText} label="Ofertas activas" value={ofertasActivas} sub="En negociación" loading={isLoading} color="accent" />
+        <MainKpi icon={Home} label="Apartados" value={apartados} sub="Confirmados" loading={isLoading} color="accent" />
+        <MainKpi icon={DollarSign} label="Ingresos cobrados" value={fmtShort(ingresosCobrados)} sub="Pagos recibidos" loading={isLoading} color="accent" />
+        <MainKpi icon={CircleAlert} label="Por cobrar" value={fmtShort(porCobrar)} sub="Pendiente de pago" loading={isLoading} color="warning" />
+        <MainKpi icon={Target} label="Estimados" value={fmtShort(estimados)} sub="Basado en apartados" loading={isLoading} color="muted" />
       </div>
 
       {/* 4 secondary KPIs */}
@@ -361,7 +404,15 @@ export default function InmobDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <Card className="lg:col-span-3">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">Embudo de Conversión</CardTitle>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Embudo de Conversión Comercial</p>
+                <CardTitle className="text-base font-semibold">Pipeline Global</CardTitle>
+              </div>
+              <a href="/admin/portal-inmobiliaria/pipeline" className="text-xs text-accent hover:underline font-medium flex items-center gap-1">
+                Ver pipeline <ChevronRight className="h-3 w-3" />
+              </a>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? <Skeleton className="h-64 w-full" /> : <FunnelChart stages={funnelStages} />}
@@ -409,7 +460,7 @@ export default function InmobDashboard() {
                     onClick={() => setChartTab(tab)}
                     className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
                       chartTab === tab
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-accent text-accent-foreground"
                         : "text-muted-foreground hover:bg-muted"
                     }`}
                   >
@@ -430,7 +481,7 @@ export default function InmobDashboard() {
                     contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
                     formatter={(v: number) => chartTab === "unidades" ? v : fmtCurrency(v)}
                   />
-                  <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="value" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -442,7 +493,7 @@ export default function InmobDashboard() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold">Ingreso Real vs Proyectado</CardTitle>
-              <a href="/admin/portal-inmobiliaria/comisiones" className="text-xs text-primary hover:underline font-medium flex items-center gap-1">
+              <a href="/admin/portal-inmobiliaria/comisiones" className="text-xs text-accent hover:underline font-medium flex items-center gap-1">
                 Ver comisiones <ChevronRight className="h-3 w-3" />
               </a>
             </div>
@@ -455,9 +506,9 @@ export default function InmobDashboard() {
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                   <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => fmtShort(v)} />
                   <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }} formatter={(v: number) => fmtCurrency(v)} />
-                  <Area type="monotone" dataKey="cobrado" stackId="1" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} name="Cobrado" />
-                  <Area type="monotone" dataKey="porCobrar" stackId="2" stroke="hsl(43, 96%, 56%)" fill="hsl(43, 96%, 56%)" fillOpacity={0.2} name="Por cobrar" strokeDasharray="5 5" />
-                  <Area type="monotone" dataKey="estimado" stackId="3" stroke="hsl(43, 96%, 76%)" fill="hsl(43, 96%, 76%)" fillOpacity={0.15} name="Estimado" strokeDasharray="3 3" />
+                  <Area type="monotone" dataKey="cobrado" stackId="1" stroke="hsl(var(--accent))" fill="hsl(var(--accent))" fillOpacity={0.3} name="Cobrado" />
+                  <Area type="monotone" dataKey="porCobrar" stackId="2" stroke="hsl(var(--warning))" fill="hsl(var(--warning))" fillOpacity={0.2} name="Por cobrar" strokeDasharray="5 5" />
+                  <Area type="monotone" dataKey="estimado" stackId="3" stroke="hsl(var(--muted-foreground))" fill="hsl(var(--muted-foreground))" fillOpacity={0.1} name="Estimado" strokeDasharray="3 3" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -470,7 +521,7 @@ export default function InmobDashboard() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base font-semibold">Desempeño por Agente</CardTitle>
-            <a href="/admin/portal-inmobiliaria/agentes" className="text-xs text-primary hover:underline font-medium flex items-center gap-1">
+            <a href="/admin/portal-inmobiliaria/agentes" className="text-xs text-accent hover:underline font-medium flex items-center gap-1">
               Ver agentes <ChevronRight className="h-3 w-3" />
             </a>
           </div>
@@ -502,7 +553,7 @@ export default function InmobDashboard() {
                       <TableCell className="text-right text-sm">{fmtShort(a.ingreso)}</TableCell>
                       <TableCell className="text-right text-sm">{fmtShort(a.comision)}</TableCell>
                       <TableCell className="text-center text-sm">
-                        <span className={`inline-flex items-center gap-1 ${a.conversion >= 20 ? "text-primary" : a.conversion > 0 ? "text-warning" : "text-muted-foreground"}`}>
+                        <span className={`inline-flex items-center gap-1 ${a.conversion >= 20 ? "text-accent" : a.conversion > 0 ? "text-warning" : "text-muted-foreground"}`}>
                           {a.conversion > 0 && (a.conversion >= 20 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />)}
                           {a.conversion}%
                         </span>
@@ -531,8 +582,8 @@ export default function InmobDashboard() {
               {recentActivity.map((act, i) => (
                 <div key={i} className="flex items-start gap-3">
                   <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                    act.type === "aprobada" ? "bg-primary/10 text-primary"
-                    : act.type === "firmada" ? "bg-primary/20 text-primary"
+                    act.type === "aprobada" ? "bg-accent/10 text-accent"
+                    : act.type === "firmada" ? "bg-accent/20 text-accent"
                     : "bg-muted text-muted-foreground"
                   }`}>
                     {act.type === "aprobada" ? <Handshake className="h-4 w-4" /> : act.type === "firmada" ? <CalendarCheck className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
@@ -558,29 +609,28 @@ export default function InmobDashboard() {
 
 /* ───── Sub-components ───── */
 
-function MainKpi({ icon: Icon, label, value, sub, badge, loading, variant }: {
-  icon: any; label: string; value: string | number; sub: string; badge?: string; loading: boolean; variant?: "warning";
+function MainKpi({ icon: Icon, label, value, sub, loading, color = "accent" }: {
+  icon: any; label: string; value: string | number; sub: string; loading: boolean; color?: "accent" | "warning" | "muted";
 }) {
+  const colorClasses = {
+    accent: "bg-accent/12 text-accent",
+    warning: "bg-warning/12 text-warning",
+    muted: "bg-muted text-muted-foreground",
+  };
+
   return (
     <Card className="sozu-card">
       <CardContent className="p-4 space-y-2">
         {loading ? <Skeleton className="h-20 w-full" /> : (
           <>
-            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${
-              variant === "warning" ? "bg-warning/10 text-warning" : "bg-primary/10 text-primary"
-            }`}>
-              <Icon className="h-4.5 w-4.5" />
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{label}</p>
+            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
+              <Icon className="h-[18px] w-[18px]" />
             </div>
             <div>
               <p className="text-xl font-bold text-foreground leading-tight">{value}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
             </div>
-            {badge && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
-                <ArrowUpRight className="h-3 w-3" />
-                {badge}
-              </span>
-            )}
           </>
         )}
       </CardContent>
@@ -596,7 +646,7 @@ function SecondaryKpi({ icon: Icon, label, value, loading }: {
       <CardContent className="p-4">
         {loading ? <Skeleton className="h-10 w-full" /> : (
           <div className="flex items-center gap-3">
-            <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+            <Icon className="h-4 w-4 text-accent shrink-0" />
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground truncate">{label}</p>
               <p className="text-lg font-bold text-foreground">{value}</p>
@@ -608,32 +658,83 @@ function SecondaryKpi({ icon: Icon, label, value, loading }: {
   );
 }
 
+/* ───── SVG Funnel Chart ───── */
 function FunnelChart({ stages }: { stages: { label: string; value: number }[] }) {
-  const maxVal = Math.max(...stages.map(s => s.value), 1);
+  const totalStages = stages.length;
+  const svgWidth = 400;
+  const svgHeight = 300;
+  const stageHeight = svgHeight / totalStages;
+  const topWidth = svgWidth * 0.92;
+  const bottomWidth = svgWidth * 0.28;
+  const centerX = svgWidth / 2;
+
+  // Green gradient steps from dark to light
+  const colors = [
+    "hsl(145, 38%, 28%)",   // darkest
+    "hsl(145, 36%, 34%)",
+    "hsl(145, 35%, 42%)",
+    "hsl(145, 35%, 51%)",   // SOZU green
+    "hsl(145, 33%, 60%)",
+    "hsl(145, 30%, 70%)",   // lightest
+  ];
+
   return (
-    <div className="space-y-2 py-2">
-      {stages.map((stage, i) => {
-        const widthPct = Math.max(20, (stage.value / maxVal) * 100);
-        const opacity = 1 - i * 0.12;
-        return (
-          <div key={stage.label} className="flex items-center gap-3">
-            <div className="w-24 text-right">
-              <span className="text-xs text-muted-foreground">{stage.label}</span>
-            </div>
-            <div className="flex-1 relative h-9">
-              <div
-                className="h-full rounded-md flex items-center justify-center transition-all"
-                style={{
-                  width: `${widthPct}%`,
-                  background: `hsl(var(--primary) / ${opacity})`,
-                }}
+    <div className="flex items-center gap-4">
+      <svg
+        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+        className="w-full max-w-[320px] h-auto"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {stages.map((stage, i) => {
+          const t1 = i / totalStages;
+          const t2 = (i + 1) / totalStages;
+          const w1 = topWidth - (topWidth - bottomWidth) * t1;
+          const w2 = topWidth - (topWidth - bottomWidth) * t2;
+          const y1 = i * stageHeight;
+          const y2 = (i + 1) * stageHeight;
+
+          const x1Left = centerX - w1 / 2;
+          const x1Right = centerX + w1 / 2;
+          const x2Left = centerX - w2 / 2;
+          const x2Right = centerX + w2 / 2;
+
+          const points = `${x1Left},${y1} ${x1Right},${y1} ${x2Right},${y2} ${x2Left},${y2}`;
+
+          return (
+            <g key={stage.label}>
+              <polygon
+                points={points}
+                fill={colors[i] || colors[colors.length - 1]}
+                stroke="white"
+                strokeWidth="2"
+              />
+              <text
+                x={centerX}
+                y={y1 + stageHeight / 2 + 1}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill="white"
+                fontWeight="700"
+                fontSize="18"
               >
-                <span className="text-xs font-bold text-primary-foreground">{stage.value}</span>
-              </div>
-            </div>
+                {stage.value}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      {/* Labels */}
+      <div className="flex flex-col justify-between" style={{ height: "100%" }}>
+        {stages.map((stage, i) => (
+          <div key={stage.label} className="flex items-center gap-2 py-2">
+            <div
+              className="w-3 h-3 rounded-sm shrink-0"
+              style={{ backgroundColor: colors[i] || colors[colors.length - 1] }}
+            />
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{stage.label}</span>
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
