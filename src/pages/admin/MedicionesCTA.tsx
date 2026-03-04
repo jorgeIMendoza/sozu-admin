@@ -28,6 +28,14 @@ const PAGE_LABELS: Record<string, string> = {
   agent_pipeline: "Pipeline",
   agent_comisiones: "Comisiones",
   agent_perfil: "Perfil",
+  inmob_dashboard: "Dashboard",
+  inmob_agentes: "Agentes",
+  inmob_pipeline: "Pipeline",
+  inmob_prospectos: "Prospectos",
+  inmob_citas: "Citas",
+  inmob_comisiones: "Comisiones",
+  inmob_reportes: "Reportes",
+  inmob_configuracion: "Configuración",
 };
 
 const AGENT_PAGES = [
@@ -46,6 +54,17 @@ const AGENT_PAGE_GROUPS: Record<string, string[]> = {
   agent_comisiones: ["agent_comisiones"],
   agent_perfil: ["agent_perfil"],
 };
+
+const INMOB_PAGES = [
+  { key: "inmob_dashboard", label: "Dashboard" },
+  { key: "inmob_agentes", label: "Agentes" },
+  { key: "inmob_pipeline", label: "Pipeline" },
+  { key: "inmob_prospectos", label: "Prospectos" },
+  { key: "inmob_citas", label: "Citas" },
+  { key: "inmob_comisiones", label: "Comisiones" },
+  { key: "inmob_reportes", label: "Reportes" },
+  { key: "inmob_configuracion", label: "Configuración" },
+];
 
 const MedicionesCTA = () => {
   const [timeRange, setTimeRange] = useState<string>("7d");
