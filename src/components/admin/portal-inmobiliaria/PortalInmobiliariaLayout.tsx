@@ -44,12 +44,12 @@ export const PortalInmobiliariaLayout = () => {
     queryKey: ["inmob-agency-name", profile?.id_persona],
     queryFn: async () => {
       if (!profile?.id_persona) return "Mi Inmobiliaria";
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("personas")
-        .select("nombre_comercial, nombre_legal, nombre")
+        .select("nombre_comercial, nombre_legal")
         .eq("id", profile.id_persona)
         .single();
-      return data?.nombre_comercial || data?.nombre_legal || data?.nombre || "Mi Inmobiliaria";
+      return data?.nombre_comercial || data?.nombre_legal || "Mi Inmobiliaria";
     },
     enabled: !!profile?.id_persona,
     staleTime: 10 * 60_000,
