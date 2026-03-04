@@ -524,33 +524,15 @@ serve(async (req) => {
       (_match: string, key: string) => values[key] || `[${key}]`
     );
 
-    // 3. Auto-generate signature blocks from firmantes_config + agent
-    let firmaBlocksHtml = '<br><hr><h3>Firmas</h3>';
-    
-    // Add configured firmantes blocks
-    for (const f of firmantesConfig) {
-      firmaBlocksHtml += `
-        <p><strong>${f.name}</strong><br>
-        Cargo: ${f.cargo || ''}<br>
-        Firma: ___________________________<br>
-        Fecha: ${fechaActual}</p>
-      `;
-    }
-    
-    // Add agent block
-    firmaBlocksHtml += `
-      <p><strong>EL AGENTE</strong><br>
-      Nombre/Razón Social: ${agente_nombre}<br>
-      RFC: ${values.rfc_agente || '[rfc_agente]'}<br>
-      Firma: ___________________________<br>
-      Fecha: ${fechaActual}</p>
-    `;
-
-    html += firmaBlocksHtml;
-
-    // 4. Generate rich PDF from HTML
+    // 3. Generate rich PDF from HTML (signature blocks rendered natively in PDF)
     const blocks = parseHtmlToBlocks(html);
-    const pdfBytes = await renderBlocksToPdf(blocks);
+    const pdfBytes = await renderBlocksToPdf(blocks, {
+      firmantesConfig: firmantesConfig as any,
+      agentSignature: firma_autografa_agente || undefined,
+      agentName: agente_nombre,
+      agentRfc: agente_rfc || "[rfc_agente]",
+      fechaActual,
+    });
 
     // 5. Build signatories: configured firmantes + agent
     const signatories: { name: string; email: string }[] = [
