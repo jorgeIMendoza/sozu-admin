@@ -944,13 +944,13 @@ Deno.serve(async (req) => {
         if (!se.calendarData) continue;
         const slotAttendees = buildAttendeesForSlot(se.fecha, se.hora);
         const patchBody: any = { summary: tipoCitaDescripcion };
-        // Always include attendees in description
         patchBody.description = buildDescriptionWithAttendees(eventDescription, slotAttendees, se.fecha, se.hora);
         if (slotAttendees.length > 0) patchBody.attendees = [...slotAttendees];
+        const sendParam = slotAttendees.length > 0 ? "all" : "none";
 
         try {
           let res = await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(se.calendar_email)}/events/${encodeURIComponent(se.google_event_id)}?sendUpdates=all`,
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(se.calendar_email)}/events/${encodeURIComponent(se.google_event_id)}?sendUpdates=${sendParam}`,
             { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(patchBody) },
           );
           if (!res.ok) {
