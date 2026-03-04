@@ -631,7 +631,7 @@ Deno.serve(async (req) => {
     let nombreParaItem3 = nombreComprador.toUpperCase();
     if (numCompradores > 1) {
       const todosNombresItem3 = compradores!
-        .map((c: any) => (c.personas?.nombre_legal || '').toUpperCase())
+        .map((c: any) => (c.personas?.nombre_legal || '').trim().replace(/\s+/g, ' ').toUpperCase())
         .filter((n: string) => n)
         .join('/');
       nombreParaItem3 = todosNombresItem3;
