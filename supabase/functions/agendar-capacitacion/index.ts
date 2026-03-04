@@ -579,23 +579,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ---- Action: delete-config-events (delete all calendar events for a config) ----
+    // ---- Action: delete-config-events (delete only future calendar events without attendees) ----
     if (body.action === "delete-config-events") {
       const configId = body.config_id;
       if (!configId) {
         return new Response(JSON.stringify({ error: "Falta config_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      console.log(`[delete-config-events] Deleting all calendar events for config ${configId}`);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      console.log(`[delete-config-events] Deleting future calendar events (>= ${todayStr}) for config ${configId}`);
 
-      // 1. Get all stored calendar events for this config
+      // 1. Get future stored calendar events for this config
       const { data: storedEvents } = await supabase
         .from("citas_calendar_events")
         .select("*")
         .eq("id_configuracion_cita", configId)
-        .eq("activo", true);
+        .eq("activo", true)
+        .gte("fecha", todayStr);
 
       let deletedCount = 0;
+      const skippedCount = 0;
       const errors: string[] = [];
 
       for (const se of (storedEvents || [])) {
@@ -607,22 +610,24 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 2. Mark all stored events as inactive
+      // 2. Mark only future stored events as inactive
       if (storedEvents && storedEvents.length > 0) {
+        const futureIds = storedEvents.map((se: any) => se.id);
         await supabase
           .from("citas_calendar_events")
           .update({ activo: false })
-          .eq("id_configuracion_cita", configId);
+          .in("id", futureIds);
       }
 
-      // 3. Also cancel any active reservations for this config
+      // 3. Cancel only future active reservations (without attendees — already validated in frontend)
       await supabase
         .from("reservas_citas")
         .update({ activo: false, estatus: "cancelada" })
         .eq("id_configuracion_cita", configId)
-        .eq("activo", true);
+        .eq("activo", true)
+        .gte("fecha", todayStr);
 
-      console.log(`[delete-config-events] Deleted ${deletedCount}/${(storedEvents || []).length} events, errors: ${errors.length}`);
+      console.log(`[delete-config-events] Deleted ${deletedCount}/${(storedEvents || []).length} future events, errors: ${errors.length}`);
 
       return new Response(JSON.stringify({ 
         success: true, 
