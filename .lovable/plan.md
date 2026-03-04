@@ -1,36 +1,37 @@
 
 
-## Plan: Forzar firma biométrica sin mostrar opciones
+## Plan: Solo mostrar "Enterados" cuando hay asistentes con reserva
 
-### Hallazgo clave
-La documentación de Mifiel (sección "Actualizar participante") especifica los valores válidos para `allowed_signature_methods`:
-- **FEA** — Firma Electrónica Avanzada (e.firma/FIEL)
-- **FESCV** — Firma Electrónica con verificación biométrica (con validación de identidad)
-- **FESSV** — Firma Electrónica Simple sin validación
-
-El código actual usa `"efirma"` que no es un valor válido de la API. Además, cuando `requiereBiometrica` es `true`, omite el parámetro por completo, lo que hace que Mifiel muestre TODAS las opciones disponibles en lugar de forzar solo la biométrica.
+### Problema
+La función `buildDescriptionWithAttendees` (línea 722-743 de `agendar-capacitacion/index.ts`) siempre agrega la sección "Enterados: email1, email2" a la descripción del evento de Google Calendar, incluso cuando el slot no tiene ninguna reserva. Esto causa que al guardar la configuración de citas, todos los eventos muestren "Enterados" aunque nadie haya agendado aún.
 
 ### Cambio requerido
 
-**Archivo**: `supabase/functions/mifiel-crear-documento/index.ts` (líneas 443-455)
+**Archivo**: `supabase/functions/agendar-capacitacion/index.ts` (~líneas 722-743)
 
-Cambiar la lógica para:
-- Cuando `requiereBiometrica = true` → enviar `allowed_signature_methods = ["FESCV"]` (solo biométrica, sin opciones)
-- Cuando `requiereBiometrica = false` → enviar `allowed_signature_methods = ["FEA"]` (solo e.firma, valor correcto)
+Mover la lógica de "Enterados" dentro del bloque que verifica si hay asistentes reales:
 
 ```typescript
-signatories.forEach((s, i) => {
-  formData.append(`signatories[${i}][name]`, s.name);
-  formData.append(`signatories[${i}][email]`, s.email);
-  if (requiereBiometrica) {
-    // Force biometric only - no choice screen
-    formData.append(`signatories[${i}][allowed_signature_methods][0]`, "FESCV");
-  } else {
-    // e.firma only
-    formData.append(`signatories[${i}][allowed_signature_methods][0]`, "FEA");
+const buildDescriptionWithAttendees = (baseDesc: string, _allAttendees: {email: string}[], fecha?: string, hora?: number) => {
+  const parts: string[] = [];
+  if (baseDesc) parts.push(baseDesc);
+
+  // Solo agregar Enterados y Asistentes cuando hay reservas reales en el slot
+  if (fecha !== undefined && hora !== undefined) {
+    const slotKey = `${fecha}_${hora}`;
+    const resAttendees = reservationAttendeesBySlot.get(slotKey) || [];
+    if (resAttendees.length > 0) {
+      const ccEmails = ccAttendees.map(a => a.email);
+      if (ccEmails.length > 0) {
+        parts.push(`Enterados: ${ccEmails.join(", ")}`);
+      }
+      parts.push(`Asistentes: ${resAttendees.map(a => a.email).join(", ")}`);
+    }
   }
-});
+
+  return parts.join("\n\n");
+};
 ```
 
-Esto hará que Mifiel vaya directamente al flujo biométrico sin mostrar la pantalla de selección de método. Requiere redesplegar la edge function después del cambio.
+Después del cambio, redesplegar la edge function `agendar-capacitacion`.
 
