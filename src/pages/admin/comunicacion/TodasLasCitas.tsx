@@ -34,6 +34,7 @@ interface ConfigCita {
   duracion_minutos: number;
   max_invitados: number;
   descripcion_invitacion: string | null;
+  fecha_fin_recurrencia: string | null;
 }
 
 interface Horario {
@@ -334,7 +335,7 @@ export default function TodasLasCitas() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("configuracion_citas_usuarios")
-        .select("id, nombre, id_usuario_email, calendario_email, correos_enterado, correos_enterado_fijos, duracion_minutos, max_invitados, descripcion_invitacion")
+        .select("id, nombre, id_usuario_email, calendario_email, correos_enterado, correos_enterado_fijos, duracion_minutos, max_invitados, descripcion_invitacion, fecha_fin_recurrencia")
         .eq("activo", true);
       if (error) { console.error("Error fetching configs:", error); return []; }
       return (data || []) as ConfigCita[];
