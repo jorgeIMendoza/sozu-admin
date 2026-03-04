@@ -889,7 +889,7 @@ Deno.serve(async (req) => {
         return parts.join("\n\n");
       };
 
-      console.log(`[create-recurring-meets] Summary: "${tipoCitaDescripcion}", CC Attendees: ${JSON.stringify(ccAttendees)}, CalendarId: ${calendarId}, ConfigId: ${bodyConfigId}`);
+      console.log(`[create-recurring-meets] Summary: "${tipoCitaDescripcion}", CC Emails (deferred): ${JSON.stringify(ccEmails)}, CalendarId: ${calendarId}, ConfigId: ${bodyConfigId}`);
 
       const endDate = new Date(fecha_fin + "T23:59:59-06:00");
       const today = new Date();
