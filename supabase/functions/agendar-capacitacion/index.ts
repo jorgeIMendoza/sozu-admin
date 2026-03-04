@@ -827,7 +827,9 @@ Deno.serve(async (req) => {
       }
 
       const eventDescription = descripcion_invitacion || userCitaConfig?.descripcion_invitacion || "";
-      const ccAttendees = (correos_enterado || userCitaConfig?.correos_enterado || []).map((email: string) => ({ email }));
+      // NOTE: ccAttendees are NOT added when creating/syncing recurring slots.
+      // They are only added when someone actually books a slot (schedule action).
+      const ccEmails = (correos_enterado || userCitaConfig?.correos_enterado || []) as string[];
 
       // Fetch active reservations to include booked persons as attendees
       const reservationAttendeesBySlot = new Map<string, {email: string, nombre: string}[]>();
@@ -850,14 +852,16 @@ Deno.serve(async (req) => {
         console.log(`[sync] Reservation attendees by slot: ${JSON.stringify(Object.fromEntries(reservationAttendeesBySlot))}`);
       }
 
-      // Helper: build full attendees list (CC + reservation) for a given date/hora
+      // Helper: build attendees for a slot — only includes actual booked people + CC (only when bookings exist)
       const buildAttendeesForSlot = (fecha: string, hora: number) => {
         const slotKey = `${fecha}_${hora}`;
         const resAttendees = reservationAttendeesBySlot.get(slotKey) || [];
+        if (resAttendees.length === 0) return []; // No bookings = no attendees on the event
         const allEmails = new Set<string>();
         const result: {email: string}[] = [];
-        for (const a of ccAttendees) {
-          if (!allEmails.has(a.email)) { allEmails.add(a.email); result.push(a); }
+        // Include CC only when there are real bookings
+        for (const cc of ccEmails) {
+          if (!allEmails.has(cc)) { allEmails.add(cc); result.push({ email: cc }); }
         }
         for (const a of resAttendees) {
           if (!allEmails.has(a.email)) { allEmails.add(a.email); result.push({ email: a.email }); }
