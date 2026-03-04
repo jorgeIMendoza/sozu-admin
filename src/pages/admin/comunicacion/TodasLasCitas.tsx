@@ -450,11 +450,18 @@ export default function TodasLasCitas() {
       const dayKey = format(day, "yyyy-MM-dd");
 
       dayHorarios.forEach(h => {
+        const config = h.id_configuracion_cita ? configMap.get(h.id_configuracion_cita) : undefined;
+        
+        // Skip if config has a fecha_fin_recurrencia and this day is past it
+        if (config?.fecha_fin_recurrencia) {
+          const endDate = new Date(config.fecha_fin_recurrencia + "T23:59:59");
+          if (day > endDate) return;
+        }
+
         const key = `${dayKey}_${h.hora}`;
         const existingCitas = citasIndex.get(key) || [];
         const hasCitaForConfig = existingCitas.some(c => c.id_configuracion_cita === h.id_configuracion_cita);
         if (!hasCitaForConfig) {
-          const config = h.id_configuracion_cita ? configMap.get(h.id_configuracion_cita) : undefined;
           const slot: CalendarSlot = { type: "empty", config, hora: h.hora, configId: h.id_configuracion_cita || 0 };
           if (!map.has(key)) map.set(key, []);
           map.get(key)!.push(slot);
