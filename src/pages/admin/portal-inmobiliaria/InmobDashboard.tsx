@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useInmobAgents } from "@/hooks/useInmobAgents";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,40 +17,12 @@ import {
 
 const COLORS = ["#57AE75", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
-function useInmobAgents(personaId: number | null | undefined) {
-  return useQuery({
-    queryKey: ["inmob-agents", personaId],
-    queryFn: async () => {
-      if (!personaId) return { emails: [] as string[], personaIds: [] as number[] };
-      const { data } = await supabase
-        .from("entidades_relacionadas")
-        .select("id_persona")
-        .eq("id_persona_duena_lead", personaId)
-        .eq("id_tipo_entidad", 19)
-        .eq("activo", true) as any;
-      if (!data || data.length === 0) return { emails: [], personaIds: [] };
-      const pIds = data.map((d: any) => d.id_persona).filter(Boolean) as number[];
-      const { data: usuarios } = await supabase
-        .from("usuarios")
-        .select("email, id_persona")
-        .in("id_persona", pIds)
-        .eq("activo", true) as any;
-      return {
-        emails: (usuarios || []).map((u: any) => u.email) as string[],
-        personaIds: pIds,
-      };
-    },
-    enabled: !!personaId,
-    staleTime: 5 * 60_000,
-  });
-}
-
 export default function InmobDashboard() {
-  const { profile } = useAuth();
-  const personaId = profile?.id_persona;
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
-  const { data: agents, isLoading: agentsLoading } = useInmobAgents(personaId);
+  const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
+
+  const agentEmails = useMemo(() => agents.map(a => a.email), [agents]);
 
   useEffect(() => {
     registrarVista("/admin/portal-inmobiliaria/dashboard");
@@ -59,33 +31,33 @@ export default function InmobDashboard() {
 
   // Fetch offers from agents
   const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
-    queryKey: ["inmob-dashboard-ofertas", agents?.emails],
+    queryKey: ["inmob-dashboard-ofertas", agentEmails],
     queryFn: async () => {
-      if (!agents?.emails?.length) return [];
+      if (!agentEmails.length) return [];
       const { data } = await supabase
         .from("ofertas")
         .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado")
-        .in("email_creador", agents.emails)
+        .in("email_creador", agentEmails)
         .eq("activo", true) as any;
       return data || [];
     },
-    enabled: !!agents?.emails?.length,
+    enabled: agentEmails.length > 0,
     staleTime: 3 * 60_000,
   });
 
   // Fetch comisiones
   const { data: comisiones = [], isLoading: comisionesLoading } = useQuery({
-    queryKey: ["inmob-dashboard-comisiones", agents?.emails],
+    queryKey: ["inmob-dashboard-comisiones", agentEmails],
     queryFn: async () => {
-      if (!agents?.emails?.length) return [];
+      if (!agentEmails.length) return [];
       const { data } = await supabase
         .from("comisionistas")
         .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza")
-        .in("email_usuario", agents.emails)
+        .in("email_usuario", agentEmails)
         .eq("activo", true) as any;
       return data || [];
     },
-    enabled: !!agents?.emails?.length,
+    enabled: agentEmails.length > 0,
     staleTime: 3 * 60_000,
   });
 
@@ -113,7 +85,7 @@ export default function InmobDashboard() {
   const isLoading = agentsLoading || ofertasLoading || comisionesLoading;
 
   // KPI calculations
-  const totalAgentes = agents?.emails?.length || 0;
+  const totalAgentes = agents.length;
   const totalOfertas = ofertas.length;
   const ofertasAprobadas = ofertas.filter((o: any) => o.id_estatus_aprobacion === 2).length;
   const ventasCerradas = ofertas.filter((o: any) => {
