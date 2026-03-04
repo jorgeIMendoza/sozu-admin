@@ -253,7 +253,7 @@ Deno.serve(async (req) => {
     }, null) || compradores?.[0];
     
     const titularPersona = titularComprador?.personas;
-    const nombreComprador = titularPersona?.nombre_legal || 'Sin nombre';
+    const nombreComprador = (titularPersona?.nombre_legal || 'Sin nombre').trim().replace(/\s+/g, ' ');
     const tipoPersona = titularPersona?.tipo_persona || 'fisica';
     const sexo = titularPersona?.sexo || 'F';
     
