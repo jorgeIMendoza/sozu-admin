@@ -70,8 +70,8 @@ export function TemplateEditorWithPreview({
     let html = '<hr style="margin-top:32px"><h3><strong>Firmas</strong></h3>';
     for (const f of firmantes) {
       const firmaImg = f.firma_imagen
-        ? `<div style="margin:0 0 -8px 0"><img src="${f.firma_imagen}" style="height:72px;object-fit:contain" /></div>`
-        : `<div style="height:72px;margin:16px 0"></div>`;
+        ? `<div style="margin:8px 0 -24px 0"><img src="${f.firma_imagen}" style="height:96px;object-fit:contain" /></div>`
+        : `<div style="height:96px;margin:16px 0"></div>`;
       html += `<div style="margin-bottom:32px"><p style="font-size:1.1em"><strong>${f.name}</strong></p><p>Cargo: ${f.cargo}</p>${firmaImg}<p>Firma: ___________________________</p><p>Fecha: ${fechaActual}</p></div>`;
     }
     html += `<div style="border-top:1px solid #ccc;padding-top:16px;margin-top:16px"><p style="font-size:1.1em"><strong>EL AGENTE</strong></p><p>Nombre/Razón Social: ${nombreAgente}</p><p>RFC: ${rfcAgente}</p><div style="height:60px;margin:16px 0"></div><p>Firma: ___________________________</p><p>Fecha: ${fechaActual}</p></div>`;
