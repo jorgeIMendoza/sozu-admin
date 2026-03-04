@@ -627,7 +627,8 @@ Deno.serve(async (req) => {
     });
     
     // Item 3 label - wrap the full text including client name
-    const item3Label = `Monto total de depósito en garantía de cumplimiento al que se compromete ${nombreComprador.toUpperCase()}:`;
+    const nombreParaItem3 = (numCompradores > 1 && !esSTP) ? `(${nombrePagador})` : nombreComprador.toUpperCase();
+    const item3Label = `Monto total de depósito en garantía de cumplimiento al que se compromete ${nombreParaItem3}:`;
     const item3LabelLines = wrapText(item3Label, contentWidth - 30, helveticaBold, 11);
     for (let i = 0; i < item3LabelLines.length; i++) {
       page.drawText(item3LabelLines[i], {
