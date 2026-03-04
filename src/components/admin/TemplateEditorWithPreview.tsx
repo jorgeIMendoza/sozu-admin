@@ -19,6 +19,7 @@ interface FirmanteConfig {
   name: string;
   email: string;
   cargo: string;
+  firma_imagen?: string;
 }
 
 interface TemplateEditorWithPreviewProps {
@@ -66,11 +67,14 @@ export function TemplateEditorWithPreview({
     const nombreAgente = placeholderValues["nombre_agente"] || "{{nombre_agente}}";
     const rfcAgente = placeholderValues["rfc_agente"] || "{{rfc_agente}}";
 
-    let html = '<hr style="margin-top:24px"><h3><strong>Firmas</strong></h3>';
+    let html = '<hr style="margin-top:32px"><h3><strong>Firmas</strong></h3>';
     for (const f of firmantes) {
-      html += `<p><strong>${f.name}</strong><br>Cargo: ${f.cargo}<br>Firma: ___________________________<br>Fecha: ${fechaActual}</p>`;
+      const firmaImg = f.firma_imagen
+        ? `<div style="margin:16px 0"><img src="${f.firma_imagen}" style="height:60px;object-fit:contain" /></div>`
+        : `<div style="height:60px;margin:16px 0"></div>`;
+      html += `<div style="margin-bottom:32px"><p style="font-size:1.1em"><strong>${f.name}</strong></p><p>Cargo: ${f.cargo}</p>${firmaImg}<p>Firma: ___________________________</p><p>Fecha: ${fechaActual}</p></div>`;
     }
-    html += `<p><strong>EL AGENTE</strong><br>Nombre/Razón Social: ${nombreAgente}<br>RFC: ${rfcAgente}<br>Firma: ___________________________<br>Fecha: ${fechaActual}</p>`;
+    html += `<div style="border-top:1px solid #ccc;padding-top:16px;margin-top:16px"><p style="font-size:1.1em"><strong>EL AGENTE</strong></p><p>Nombre/Razón Social: ${nombreAgente}</p><p>RFC: ${rfcAgente}</p><div style="height:60px;margin:16px 0"></div><p>Firma: ___________________________</p><p>Fecha: ${fechaActual}</p></div>`;
     return html;
   }, [firmantes, placeholderValues]);
 

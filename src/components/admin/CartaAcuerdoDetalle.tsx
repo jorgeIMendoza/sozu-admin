@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { SignaturePadDialog } from "@/components/admin/SignaturePadDialog";
 import { PdfViewerDialog } from "@/components/admin/PdfViewerDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +40,7 @@ interface Firmante {
   name: string;
   email: string;
   cargo: string;
+  firma_imagen?: string;
 }
 
 interface CartaAcuerdoDetalleProps {
@@ -64,6 +66,8 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
   const [editingName, setEditingName] = useState(false);
   const [editableName, setEditableName] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
+  const [signatureTargetIndex, setSignatureTargetIndex] = useState<number>(-1);
 
   // Fetch carta
   const { data: carta, isLoading: cartaLoading } = useQuery({
@@ -142,6 +146,15 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
   };
 
   const handleSave = () => {
+    const sinFirma = firmantes.filter(f => !f.firma_imagen);
+    if (sinFirma.length > 0) {
+      toast({
+        title: "Firma autógrafa requerida",
+        description: `Los siguientes firmantes no tienen firma: ${sinFirma.map(f => f.name).join(", ")}`,
+        variant: "destructive",
+      });
+      return;
+    }
     saveMutation.mutate({ html: currentHtml, firmantesConfig: firmantes, biometrica });
   };
 
@@ -345,24 +358,33 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                       <PenTool className="h-4 w-4 text-muted-foreground" />
                       <h4 className="text-sm font-semibold text-muted-foreground">Sección de Firmas (generada automáticamente)</h4>
                     </div>
-                    <div className="bg-muted/40 border rounded-lg p-4 space-y-4 pointer-events-none select-none opacity-80">
+                    <div className="bg-muted/40 border rounded-lg p-6 space-y-8 pointer-events-none select-none opacity-80">
                       <p className="font-bold text-sm border-b pb-2">Firmas</p>
                       {firmantes.length === 0 && (
                         <p className="text-xs text-muted-foreground italic">No hay firmantes configurados.</p>
                       )}
                       {firmantes.map((f, i) => (
-                        <div key={i} className="space-y-0.5 text-sm">
-                          <p className="font-bold">{f.name || "SOZU"}</p>
-                          <p>Nombre: {f.name}</p>
+                        <div key={i} className="space-y-1 text-sm">
+                          <p className="font-bold text-base">{f.name || "SOZU"}</p>
                           <p>Cargo: {f.cargo}</p>
+                          <div className="py-3">
+                            {f.firma_imagen ? (
+                              <img src={f.firma_imagen} alt={`Firma de ${f.name}`} className="h-16 object-contain" />
+                            ) : (
+                              <div className="h-16" />
+                            )}
+                          </div>
                           <p>Firma: ___________________________</p>
                           <p>Fecha: <Badge variant="secondary" className="text-xs">{"{{fecha_actual}}"}</Badge></p>
                         </div>
                       ))}
-                      <div className="space-y-0.5 text-sm border-t pt-3">
-                        <p className="font-bold">EL AGENTE</p>
+                      <div className="space-y-1 text-sm border-t pt-4">
+                        <p className="font-bold text-base">EL AGENTE</p>
                         <p>Nombre/Razón Social: <Badge variant="secondary" className="text-xs">{"{{nombre_agente}}"}</Badge></p>
                         <p>RFC: <Badge variant="secondary" className="text-xs">{"{{rfc_agente}}"}</Badge></p>
+                        <div className="py-3">
+                          <div className="h-16" />
+                        </div>
                         <p>Firma: ___________________________</p>
                         <p>Fecha: <Badge variant="secondary" className="text-xs">{"{{fecha_actual}}"}</Badge></p>
                       </div>
@@ -398,13 +420,40 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                 <div className="text-center py-4 text-muted-foreground text-sm">No hay firmantes configurados.</div>
               )}
               {firmantes.map((f, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{f.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{f.cargo}</p>
                     <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                    {/* Signature preview */}
+                    <div className="mt-2">
+                      {f.firma_imagen ? (
+                        <div className="flex items-center gap-2">
+                          <img src={f.firma_imagen} alt={`Firma de ${f.name}`} className="h-12 border rounded bg-white p-1 object-contain" />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs h-7"
+                            onClick={() => { setSignatureTargetIndex(i); setSignatureDialogOpen(true); }}
+                          >
+                            <PenTool className="h-3 w-3 mr-1" />
+                            Editar firma
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 border-dashed"
+                          onClick={() => { setSignatureTargetIndex(i); setSignatureDialogOpen(true); }}
+                        >
+                          <PenTool className="h-3 w-3 mr-1" />
+                          Agregar firma autógrafa *
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => removeFirmante(i)} className="shrink-0">
+                  <Button variant="ghost" size="icon" onClick={() => removeFirmante(i)} className="shrink-0 mt-1">
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
@@ -579,6 +628,17 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
         onOpenChange={(open) => { if (!open) setPdfViewerUrl(null); }}
         url={pdfViewerUrl || ""}
         title="Carta de Acuerdo Firmada"
+      />
+
+      <SignaturePadDialog
+        open={signatureDialogOpen}
+        onOpenChange={setSignatureDialogOpen}
+        initialImage={signatureTargetIndex >= 0 ? firmantes[signatureTargetIndex]?.firma_imagen : undefined}
+        onSave={(dataUrl) => {
+          if (signatureTargetIndex >= 0) {
+            setFirmantes(prev => prev.map((f, i) => i === signatureTargetIndex ? { ...f, firma_imagen: dataUrl } : f));
+          }
+        }}
       />
     </div>
   );
