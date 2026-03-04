@@ -130,8 +130,8 @@ export default function InmobComisiones() {
                     <TableRow key={r.nombre}>
                       <TableCell className="font-medium">{r.nombre}</TableCell>
                       <TableCell className="text-right">{r.count}</TableCell>
-                      <TableCell className="text-right text-green-600">{fmt(r.pagado)}</TableCell>
-                      <TableCell className="text-right text-amber-600">{fmt(r.pendiente)}</TableCell>
+                      <TableCell className="text-right text-primary">{fmt(r.pagado)}</TableCell>
+                      <TableCell className="text-right text-destructive">{fmt(r.pendiente)}</TableCell>
                       <TableCell className="text-right font-semibold">{fmt(r.total)}</TableCell>
                     </TableRow>
                   ))}
