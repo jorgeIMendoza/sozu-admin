@@ -289,6 +289,8 @@ const MedicionesCTA = () => {
       const guardado = agentEvents.filter((e: any) => e.page === "agent_perfil" && e.element_id === "perfil_fase_guardar" && (e.metadata as any)?.fase === fase).length;
       return { fase: labels[fase] || fase, abierto, guardado, tasa: abierto > 0 ? ((guardado / abierto) * 100).toFixed(1) + "%" : "—" };
     });
+  }, [agentEvents]);
+
   // ===== Inmob Portal helpers =====
   const inmobUniqueUsers = useMemo(() => new Set(inmobPortalEvents.map((e: any) => e.user_email)).size, [inmobPortalEvents]);
   const inmobUniqueCTAs = useMemo(() => {
