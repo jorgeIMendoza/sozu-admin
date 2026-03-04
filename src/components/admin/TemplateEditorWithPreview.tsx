@@ -69,10 +69,11 @@ export function TemplateEditorWithPreview({
 
     let html = '<hr style="margin-top:32px"><h3><strong>Firmas</strong></h3>';
     for (const f of firmantes) {
-      const firmaImg = f.firma_imagen
-        ? `<div style="margin:8px 0 -24px 0"><img src="${f.firma_imagen}" style="height:96px;object-fit:contain" /></div>`
-        : `<div style="height:96px;margin:16px 0"></div>`;
-      html += `<div style="margin-bottom:32px"><p style="font-size:1.1em"><strong>${f.name}</strong></p><p>Cargo: ${f.cargo}</p>${firmaImg}<p>Firma: ___________________________</p><p>Fecha: ${fechaActual}</p></div>`;
+      const firmaLayer = f.firma_imagen
+        ? `<img src="${f.firma_imagen}" style="position:absolute;left:64px;bottom:4px;height:132px;max-width:260px;object-fit:contain;object-position:left bottom" />`
+        : "";
+
+      html += `<div style="margin-bottom:32px"><p style="font-size:1.1em"><strong>${f.name}</strong></p><p>Cargo: ${f.cargo}</p><div style="position:relative;height:132px;margin:6px 0 4px 0">${firmaLayer}<p style="position:absolute;left:0;bottom:0;margin:0">Firma: ___________________________</p></div><p>Fecha: ${fechaActual}</p></div>`;
     }
     html += `<div style="border-top:1px solid #ccc;padding-top:16px;margin-top:16px"><p style="font-size:1.1em"><strong>EL AGENTE</strong></p><p>Nombre/Razón Social: ${nombreAgente}</p><p>RFC: ${rfcAgente}</p><div style="height:60px;margin:16px 0"></div><p>Firma: ___________________________</p><p>Fecha: ${fechaActual}</p></div>`;
     return html;
