@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useInmobAgents } from "@/hooks/useInmobAgents";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,34 +17,6 @@ import {
 } from "recharts";
 
 const COLORS = ["#57AE75", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
-
-function useInmobAgents(personaId: number | null | undefined) {
-  return useQuery({
-    queryKey: ["inmob-agents", personaId],
-    queryFn: async () => {
-      if (!personaId) return { emails: [] as string[], personaIds: [] as number[] };
-      const { data } = await supabase
-        .from("entidades_relacionadas")
-        .select("id_persona")
-        .eq("id_persona_duena_lead", personaId)
-        .eq("id_tipo_entidad", 19)
-        .eq("activo", true) as any;
-      if (!data || data.length === 0) return { emails: [], personaIds: [] };
-      const pIds = data.map((d: any) => d.id_persona).filter(Boolean) as number[];
-      const { data: usuarios } = await supabase
-        .from("usuarios")
-        .select("email, id_persona")
-        .in("id_persona", pIds)
-        .eq("activo", true) as any;
-      return {
-        emails: (usuarios || []).map((u: any) => u.email) as string[],
-        personaIds: pIds,
-      };
-    },
-    enabled: !!personaId,
-    staleTime: 5 * 60_000,
-  });
-}
 
 export default function InmobDashboard() {
   const { profile } = useAuth();
