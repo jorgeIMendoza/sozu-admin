@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MifielSigningDialog } from "@/components/admin/MifielSigningDialog";
 import { PdfViewerDialog } from "@/components/admin/PdfViewerDialog";
+import { SignaturePadDialog } from "@/components/admin/SignaturePadDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -281,6 +282,9 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   const [sendingToMifiel, setSendingToMifiel] = useState(false);
   const [syncingFirma, setSyncingFirma] = useState(false);
   const [cartaPdfViewerUrl, setCartaPdfViewerUrl] = useState<string | null>(null);
+  const [agentSignaturePadOpen, setAgentSignaturePadOpen] = useState(false);
+  const [agentSignatureDataUrl, setAgentSignatureDataUrl] = useState<string | null>(null);
+  const [pendingSignAction, setPendingSignAction] = useState<"firmar" | "continuar" | null>(null);
 
   // Fetch persona data for Mifiel (name + email)
   const { data: personaForMifiel } = useQuery({
@@ -366,19 +370,37 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     refetchInterval: 30000,
   });
 
-  const handleFirmarCarta = async () => {
+  // Step 1: Ask for autograph before creating/continuing Mifiel doc
+  const handleRequestAgentSignature = (action: "firmar" | "continuar") => {
     if (!personaForMifiel?.email || !personaForMifiel?.nombre_legal) {
       toast.error("Faltan datos del agente (nombre o email) para enviar a firma.");
       return;
     }
+    setPendingSignAction(action);
+    setAgentSignaturePadOpen(true);
+  };
+
+  // Step 2: After autograph is captured, proceed with the action
+  const handleAgentSignatureSaved = async (dataUrl: string) => {
+    setAgentSignatureDataUrl(dataUrl);
+    if (pendingSignAction === "firmar") {
+      await doFirmarCarta(dataUrl);
+    } else if (pendingSignAction === "continuar") {
+      await handleContinuarFirmaInternal();
+    }
+    setPendingSignAction(null);
+  };
+
+  const doFirmarCarta = async (firmaAutografa: string) => {
     setSendingToMifiel(true);
     try {
       const { data, error } = await supabase.functions.invoke("mifiel-crear-documento", {
         body: {
-          agente_email: personaForMifiel.email,
-          agente_nombre: personaForMifiel.nombre_legal,
+          agente_email: personaForMifiel!.email,
+          agente_nombre: personaForMifiel!.nombre_legal,
           agente_persona_id: personaId,
           carta_acuerdo_id: "ce94b2d7-dcc8-4f91-a8d8-882264556c3e",
+          firma_autografa_agente: firmaAutografa,
         },
       });
       if (error) throw error;
@@ -398,7 +420,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     }
   };
 
-  const handleContinuarFirma = async () => {
+  const handleContinuarFirmaInternal = async () => {
     if (!firmaExistente?.mifiel_document_id) {
       toast.error("No se encontró un documento activo para continuar firma.");
       return;
@@ -430,7 +452,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       }
 
       const remoteState = String(mifielData?.document?.state || '').toLowerCase().trim();
-      const remoteCancelledStates = new Set(['deleted', 'canceled', 'cancelled', 'void', 'voided', 'expired', 'rejected']);
+      const remoteCancelledStates = new Set(['deleted', 'canceled', 'cancelled', 'void', 'voided', 'expired', 'rejected', 'archived']);
       const remoteCompletedStates = new Set(['completed', 'signed']);
 
       if (remoteCancelledStates.has(remoteState)) {
@@ -1176,7 +1198,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                     <Button
                       size="sm"
                       disabled={sendingToMifiel}
-                      onClick={handleFirmarCarta}
+                      onClick={() => handleRequestAgentSignature("firmar")}
                       className="flex-1 h-10 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5"
                     >
                       {sendingToMifiel ? (
@@ -1195,7 +1217,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={pendienteContraparte ? undefined : handleContinuarFirma}
+                      onClick={pendienteContraparte ? undefined : () => handleRequestAgentSignature("continuar")}
                       disabled={syncingFirma || pendienteContraparte}
                       className={cn(
                         "flex-1 h-10 rounded-2xl shadow-md font-semibold text-xs gap-1.5",
@@ -1330,6 +1352,16 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         onOpenChange={(open) => { if (!open) setCartaPdfViewerUrl(null); }}
         url={cartaPdfViewerUrl || ""}
         title="Carta de Cumplimiento"
+      />
+
+      <SignaturePadDialog
+        open={agentSignaturePadOpen}
+        onOpenChange={(open) => {
+          setAgentSignaturePadOpen(open);
+          if (!open) setPendingSignAction(null);
+        }}
+        initialImage={agentSignatureDataUrl || undefined}
+        onSave={handleAgentSignatureSaved}
       />
     </div>
   );
