@@ -20,10 +20,11 @@ const COLORS = ["#57AE75", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"
 
 export default function InmobDashboard() {
   const { profile } = useAuth();
-  const personaId = profile?.id_persona;
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
-  const { data: agents, isLoading: agentsLoading } = useInmobAgents(personaId);
+  const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
+
+  const agentEmails = useMemo(() => agents.map(a => a.email), [agents]);
 
   useEffect(() => {
     registrarVista("/admin/portal-inmobiliaria/dashboard");
@@ -32,33 +33,33 @@ export default function InmobDashboard() {
 
   // Fetch offers from agents
   const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
-    queryKey: ["inmob-dashboard-ofertas", agents?.emails],
+    queryKey: ["inmob-dashboard-ofertas", agentEmails],
     queryFn: async () => {
-      if (!agents?.emails?.length) return [];
+      if (!agentEmails.length) return [];
       const { data } = await supabase
         .from("ofertas")
         .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado")
-        .in("email_creador", agents.emails)
+        .in("email_creador", agentEmails)
         .eq("activo", true) as any;
       return data || [];
     },
-    enabled: !!agents?.emails?.length,
+    enabled: agentEmails.length > 0,
     staleTime: 3 * 60_000,
   });
 
   // Fetch comisiones
   const { data: comisiones = [], isLoading: comisionesLoading } = useQuery({
-    queryKey: ["inmob-dashboard-comisiones", agents?.emails],
+    queryKey: ["inmob-dashboard-comisiones", agentEmails],
     queryFn: async () => {
-      if (!agents?.emails?.length) return [];
+      if (!agentEmails.length) return [];
       const { data } = await supabase
         .from("comisionistas")
         .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza")
-        .in("email_usuario", agents.emails)
+        .in("email_usuario", agentEmails)
         .eq("activo", true) as any;
       return data || [];
     },
-    enabled: !!agents?.emails?.length,
+    enabled: agentEmails.length > 0,
     staleTime: 3 * 60_000,
   });
 
@@ -86,7 +87,7 @@ export default function InmobDashboard() {
   const isLoading = agentsLoading || ofertasLoading || comisionesLoading;
 
   // KPI calculations
-  const totalAgentes = agents?.emails?.length || 0;
+  const totalAgentes = agents.length;
   const totalOfertas = ofertas.length;
   const ofertasAprobadas = ofertas.filter((o: any) => o.id_estatus_aprobacion === 2).length;
   const ventasCerradas = ofertas.filter((o: any) => {
