@@ -381,13 +381,17 @@ export default function InmobDashboard() {
         <p className="text-sm text-muted-foreground">Vista general del desempeño inmobiliario</p>
       </div>
 
-      {/* 7 KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+      {/* First row: 4 KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <MainKpi icon={Users} label="Agentes activos" value={totalAgentes} sub="Operando ahora" loading={isLoading} color="accent" />
         <MainKpi icon={TrendingUp} label="Pipeline total" value={fmtShort(pipelineTotal)} sub="Valor acumulado" loading={isLoading} color="accent" />
         <MainKpi icon={FileText} label="Ofertas activas" value={ofertasActivas} sub="En negociación" loading={isLoading} color="accent" />
         <MainKpi icon={Home} label="Apartados" value={apartados} sub="Confirmados" loading={isLoading} color="accent" />
-        <MainKpi icon={DollarSign} label="Ingresos cobrados" value={fmtShort(ingresosCobrados)} sub="Pagos recibidos" loading={isLoading} color="accent" />
+      </div>
+
+      {/* Second row: 3 KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <MainKpi icon={DollarSign} label="Ingresos cobrados" value={fmtShort(ingresosCobrados)} sub="Últimos 12 meses" loading={isLoading} color="accent" />
         <MainKpi icon={CircleAlert} label="Por cobrar" value={fmtShort(porCobrar)} sub="Pendiente de pago" loading={isLoading} color="warning" />
         <MainKpi icon={Target} label="Estimados" value={fmtShort(estimados)} sub="Basado en apartados" loading={isLoading} color="muted" />
       </div>
@@ -612,23 +616,23 @@ export default function InmobDashboard() {
 function MainKpi({ icon: Icon, label, value, sub, loading, color = "accent" }: {
   icon: any; label: string; value: string | number; sub: string; loading: boolean; color?: "accent" | "warning" | "muted";
 }) {
-  const colorClasses = {
-    accent: "bg-accent/12 text-accent",
-    warning: "bg-warning/12 text-warning",
-    muted: "bg-muted text-muted-foreground",
+  const iconBg = {
+    accent: "bg-[hsl(139,35%,51%)] text-white",
+    warning: "bg-[hsl(37,91%,55%)] text-white",
+    muted: "bg-[hsl(0,0%,75%)] text-white",
   };
 
   return (
     <Card className="sozu-card">
-      <CardContent className="p-4 space-y-2">
-        {loading ? <Skeleton className="h-20 w-full" /> : (
+      <CardContent className="p-5 flex flex-col items-start gap-3">
+        {loading ? <Skeleton className="h-24 w-full" /> : (
           <>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{label}</p>
-            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
-              <Icon className="h-[18px] w-[18px]" />
+            <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${iconBg[color]}`}>
+              <Icon className="h-5 w-5" />
             </div>
+            <p className="text-xs text-muted-foreground font-medium">{label}</p>
             <div>
-              <p className="text-xl font-bold text-foreground leading-tight">{value}</p>
+              <p className="text-2xl font-bold text-foreground leading-tight">{value}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
             </div>
           </>
@@ -646,7 +650,7 @@ function SecondaryKpi({ icon: Icon, label, value, loading }: {
       <CardContent className="p-4">
         {loading ? <Skeleton className="h-10 w-full" /> : (
           <div className="flex items-center gap-3">
-            <Icon className="h-4 w-4 text-accent shrink-0" />
+            <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground truncate">{label}</p>
               <p className="text-lg font-bold text-foreground">{value}</p>
@@ -661,80 +665,75 @@ function SecondaryKpi({ icon: Icon, label, value, loading }: {
 /* ───── SVG Funnel Chart ───── */
 function FunnelChart({ stages }: { stages: { label: string; value: number }[] }) {
   const totalStages = stages.length;
-  const svgWidth = 400;
-  const svgHeight = 300;
+  const svgWidth = 520;
+  const svgHeight = 320;
   const stageHeight = svgHeight / totalStages;
-  const topWidth = svgWidth * 0.92;
-  const bottomWidth = svgWidth * 0.28;
-  const centerX = svgWidth / 2;
+  const funnelWidth = 340;
+  const topWidth = funnelWidth * 0.95;
+  const bottomWidth = funnelWidth * 0.22;
+  const funnelCenterX = funnelWidth / 2;
+  const labelX = funnelWidth + 16;
 
-  // Green gradient steps from dark to light
   const colors = [
-    "hsl(145, 38%, 28%)",   // darkest
-    "hsl(145, 36%, 34%)",
-    "hsl(145, 35%, 42%)",
-    "hsl(145, 35%, 51%)",   // SOZU green
-    "hsl(145, 33%, 60%)",
-    "hsl(145, 30%, 70%)",   // lightest
+    "hsl(145, 38%, 32%)",
+    "hsl(145, 36%, 38%)",
+    "hsl(145, 35%, 45%)",
+    "hsl(139, 35%, 51%)",
+    "hsl(145, 40%, 60%)",
+    "hsl(145, 42%, 72%)",
   ];
 
   return (
-    <div className="flex items-center gap-4">
-      <svg
-        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-        className="w-full max-w-[320px] h-auto"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        {stages.map((stage, i) => {
-          const t1 = i / totalStages;
-          const t2 = (i + 1) / totalStages;
-          const w1 = topWidth - (topWidth - bottomWidth) * t1;
-          const w2 = topWidth - (topWidth - bottomWidth) * t2;
-          const y1 = i * stageHeight;
-          const y2 = (i + 1) * stageHeight;
+    <svg
+      viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+      className="w-full h-auto"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      {stages.map((stage, i) => {
+        const t1 = i / totalStages;
+        const t2 = (i + 1) / totalStages;
+        const w1 = topWidth - (topWidth - bottomWidth) * t1;
+        const w2 = topWidth - (topWidth - bottomWidth) * t2;
+        const y1 = i * stageHeight;
+        const y2 = (i + 1) * stageHeight;
 
-          const x1Left = centerX - w1 / 2;
-          const x1Right = centerX + w1 / 2;
-          const x2Left = centerX - w2 / 2;
-          const x2Right = centerX + w2 / 2;
+        const x1Left = funnelCenterX - w1 / 2;
+        const x1Right = funnelCenterX + w1 / 2;
+        const x2Left = funnelCenterX - w2 / 2;
+        const x2Right = funnelCenterX + w2 / 2;
 
-          const points = `${x1Left},${y1} ${x1Right},${y1} ${x2Right},${y2} ${x2Left},${y2}`;
+        const points = `${x1Left},${y1 + 1} ${x1Right},${y1 + 1} ${x2Right},${y2 - 1} ${x2Left},${y2 - 1}`;
 
-          return (
-            <g key={stage.label}>
-              <polygon
-                points={points}
-                fill={colors[i] || colors[colors.length - 1]}
-                stroke="white"
-                strokeWidth="2"
-              />
-              <text
-                x={centerX}
-                y={y1 + stageHeight / 2 + 1}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fill="white"
-                fontWeight="700"
-                fontSize="18"
-              >
-                {stage.value}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      {/* Labels */}
-      <div className="flex flex-col justify-between" style={{ height: "100%" }}>
-        {stages.map((stage, i) => (
-          <div key={stage.label} className="flex items-center gap-2 py-2">
-            <div
-              className="w-3 h-3 rounded-sm shrink-0"
-              style={{ backgroundColor: colors[i] || colors[colors.length - 1] }}
+        return (
+          <g key={stage.label}>
+            <polygon
+              points={points}
+              fill={colors[i] || colors[colors.length - 1]}
             />
-            <span className="text-xs text-muted-foreground whitespace-nowrap">{stage.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+            <text
+              x={funnelCenterX}
+              y={y1 + stageHeight / 2 + 1}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill="white"
+              fontWeight="700"
+              fontSize="17"
+            >
+              {stage.value}
+            </text>
+            <text
+              x={labelX}
+              y={y1 + stageHeight / 2 + 1}
+              dominantBaseline="middle"
+              fill="hsl(0,0%,45%)"
+              fontSize="13"
+              fontWeight="500"
+            >
+              {stage.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }

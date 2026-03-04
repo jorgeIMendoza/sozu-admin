@@ -148,9 +148,9 @@ export const PortalInmobiliariaLayout = () => {
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border">
-        <div className="flex items-center justify-around h-16 px-2 overflow-x-auto">
+      {/* Mobile bottom nav - floating like agent portal */}
+      <nav className="lg:hidden fixed bottom-4 left-4 right-4 z-50">
+        <div className="flex items-center justify-around h-16 max-w-lg mx-auto bg-background rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-border/50">
           {tabs.slice(0, 5).map((tab) => {
             const active = isActive(tab.path);
             const Icon = tab.icon;
@@ -170,6 +170,13 @@ export const PortalInmobiliariaLayout = () => {
               </button>
             );
           })}
+          <button
+            onClick={signOut}
+            className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors min-w-0 text-destructive"
+          >
+            <LogOut className="h-5 w-5" strokeWidth={2} />
+            <span className="text-[10px] font-medium">Salir</span>
+          </button>
         </div>
       </nav>
 
