@@ -66,6 +66,8 @@ export function EditUserDialog({
   const { registrarActualizacion } = useActivityLogger();
 
   const isAgentRole = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_AGENTE_INTERNO;
+  const isInmobiliariaRole = userRoleId === ROLE_INMOBILIARIA;
+  const needsInmobiliaria = isAgentRole || isInmobiliariaRole;
   const showEmailConfirmation = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_INMOBILIARIA;
 
   // Fetch email confirmation status
