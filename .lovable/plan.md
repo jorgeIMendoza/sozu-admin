@@ -1,37 +1,51 @@
 
 
-## Plan: Solo mostrar "Enterados" cuando hay asistentes con reserva
+## Diagnóstico
 
-### Problema
-La función `buildDescriptionWithAttendees` (línea 722-743 de `agendar-capacitacion/index.ts`) siempre agrega la sección "Enterados: email1, email2" a la descripción del evento de Google Calendar, incluso cuando el slot no tiene ninguna reserva. Esto causa que al guardar la configuración de citas, todos los eventos muestren "Enterados" aunque nadie haya agendado aún.
+El botón "Eliminar" está habilitado porque el frontend verifica invitados buscando en la tabla `reservas_citas` con `estatus = "programada"` y `activo = true`. Sin embargo, los "2 invitados" que ves en el evento del 5 de marzo son **attendees del evento de Google Calendar** (correos de enterados/CC agregados al crear el evento), no reservas en la base de datos. La única reserva que existía para config 14 el 5 de marzo ya está `cancelada` y `activo = false`, por lo que el query no encuentra nada y el botón queda habilitado.
 
-### Cambio requerido
+**En resumen**: la validación actual mira la fuente equivocada. Debe consultar los attendees reales del evento en Google Calendar.
 
-**Archivo**: `supabase/functions/agendar-capacitacion/index.ts` (~líneas 722-743)
+---
 
-Mover la lógica de "Enterados" dentro del bloque que verifica si hay asistentes reales:
+## Plan de corrección
 
-```typescript
-const buildDescriptionWithAttendees = (baseDesc: string, _allAttendees: {email: string}[], fecha?: string, hora?: number) => {
-  const parts: string[] = [];
-  if (baseDesc) parts.push(baseDesc);
+### 1. Nueva acción en la Edge Function `agendar-capacitacion`
 
-  // Solo agregar Enterados y Asistentes cuando hay reservas reales en el slot
-  if (fecha !== undefined && hora !== undefined) {
-    const slotKey = `${fecha}_${hora}`;
-    const resAttendees = reservationAttendeesBySlot.get(slotKey) || [];
-    if (resAttendees.length > 0) {
-      const ccEmails = ccAttendees.map(a => a.email);
-      if (ccEmails.length > 0) {
-        parts.push(`Enterados: ${ccEmails.join(", ")}`);
-      }
-      parts.push(`Asistentes: ${resAttendees.map(a => a.email).join(", ")}`);
-    }
-  }
+Agregar una acción `check-config-future-attendees` que:
+- Consulte `citas_calendar_events` para obtener eventos futuros activos de la configuración
+- Para cada evento futuro, consulte la API de Google Calendar para obtener los attendees
+- Filtre el email de la service account (`cuenta-conexiones-drive@sozu-38755.iam.gserviceaccount.com`)
+- Retorne `{ has_attendees: true/false, events_with_attendees: [...] }`
 
-  return parts.join("\n\n");
-};
+### 2. Cambiar la validación en el frontend (`ConfiguracionCitas.tsx`)
+
+- Reemplazar el `useQuery` actual que consulta `reservas_citas` por una llamada a `supabase.functions.invoke("agendar-capacitacion", { body: { action: "check-config-future-attendees", config_id, calendar_owner_email } })`
+- Usar el resultado `has_attendees` para habilitar/deshabilitar el botón de eliminar
+- Ajustar el mensaje del disclaimer para mostrar cuántos eventos tienen attendees
+
+### 3. Ajustar la acción `delete-config-events` en la Edge Function
+
+Antes de eliminar cada evento futuro de Google Calendar, verificar si tiene attendees (excluyendo la service account). Si los tiene, **saltar** ese evento y no eliminarlo. Esto agrega una capa de seguridad server-side adicional.
+
+---
+
+### Detalles técnicos
+
+**Edge Function - nueva acción** (`check-config-future-attendees`):
+```text
+Input:  { action: "check-config-future-attendees", config_id, calendar_owner_email }
+Output: { has_attendees: boolean, total_future_events: number, events_with_attendees: number }
+
+Lógica:
+1. Query citas_calendar_events WHERE config_id AND activo AND fecha >= today
+2. Para cada evento, GET Google Calendar event by google_event_id
+3. Contar attendees excluyendo la service account
+4. Si algún evento tiene >= 1 attendee → has_attendees = true
 ```
 
-Después del cambio, redesplegar la edge function `agendar-capacitacion`.
+**Frontend - cambio en query**:
+- El `useQuery` con key `config-future-reservations` pasará a invocar la edge function
+- Se mantiene `enabled: !!deleteConfigTarget?.id`
+- El resultado alimenta `hasFutureReservations` (renombrado a `hasFutureAttendees`)
 
