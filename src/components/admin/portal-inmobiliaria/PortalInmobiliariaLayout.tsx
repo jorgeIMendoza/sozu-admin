@@ -38,7 +38,7 @@ const FALLBACK_TABS = [
 export const PortalInmobiliariaLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
   const isInmobiliariaRole = profile?.rol_nombre === "Inmobiliaria";
   const { personaId } = useInmobiliariaPersonaId();
 
