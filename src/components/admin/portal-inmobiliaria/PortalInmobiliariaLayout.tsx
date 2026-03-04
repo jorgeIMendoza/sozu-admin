@@ -1,13 +1,14 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, BarChart3, UserSearch,
-  Calendar, DollarSign, FileText, Settings, ArrowLeft, LucideIcon,
+  Calendar, DollarSign, FileText, Settings, ArrowLeft, LucideIcon, LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
+import { APP_VERSION } from "@/lib/config";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
 
 const PORTAL_INMOB_MENU_ID = 17;
