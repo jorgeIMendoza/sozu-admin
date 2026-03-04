@@ -433,24 +433,26 @@ export default function ConfiguracionCitas() {
     onError: (e) => toast.error(`Error: ${e.message}`),
   });
 
-  // Check if target config has active reservations (attendees)
+  // Check if target config has FUTURE active reservations (attendees)
   const { data: deleteTargetReservations } = useQuery({
-    queryKey: ["config-active-reservations", deleteConfigTarget?.id],
+    queryKey: ["config-future-reservations", deleteConfigTarget?.id],
     queryFn: async () => {
       if (!deleteConfigTarget?.id) return [];
+      const todayStr = new Date().toISOString().slice(0, 10);
       const { data } = await supabase
         .from("reservas_citas")
         .select("id")
         .eq("id_configuracion_cita", deleteConfigTarget.id)
         .eq("activo", true)
         .eq("estatus", "programada")
+        .gte("fecha", todayStr)
         .limit(1);
       return data || [];
     },
     enabled: !!deleteConfigTarget?.id,
   });
 
-  const hasActiveReservations = (deleteTargetReservations?.length || 0) > 0;
+  const hasFutureReservations = (deleteTargetReservations?.length || 0) > 0;
 
 
   const deleteCitaMutation = useMutation({
@@ -1191,13 +1193,13 @@ export default function ConfiguracionCitas() {
             <AlertDialogDescription className="space-y-3">
               <p>¿Estás seguro de que deseas eliminar esta configuración de cita?</p>
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-                <p className="font-medium text-destructive">⚠️ Esta acción eliminará todos los eventos asociados en Google Calendar.</p>
-                <p className="mt-1 text-muted-foreground">Los horarios configurados, proyectos vinculados y eventos del calendario serán eliminados permanentemente.</p>
+                <p className="font-medium text-destructive">⚠️ Se eliminarán los eventos futuros del Google Calendar que no tengan invitados.</p>
+                <p className="mt-1 text-muted-foreground">Los eventos pasados se mantendrán intactos. Los horarios configurados y proyectos vinculados serán eliminados permanentemente.</p>
               </div>
-              {hasActiveReservations && (
+              {hasFutureReservations && (
                 <div className="rounded-md border border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm">
-                  <p className="font-medium text-amber-700 dark:text-amber-400">🚫 Esta cita tiene invitados con reserva activa.</p>
-                  <p className="mt-1 text-muted-foreground">No es posible eliminar una cita que tiene eventos con asistentes confirmados. Primero cancela o reagenda las citas pendientes.</p>
+                  <p className="font-medium text-amber-700 dark:text-amber-400">🚫 Esta cita tiene eventos futuros con invitados.</p>
+                  <p className="mt-1 text-muted-foreground">No es posible eliminar una cita que tiene eventos futuros con asistentes confirmados. Primero cancela o reagenda las citas pendientes.</p>
                 </div>
               )}
             </AlertDialogDescription>
@@ -1205,7 +1207,7 @@ export default function ConfiguracionCitas() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteCitaMutation.isPending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              disabled={hasActiveReservations || deleteCitaMutation.isPending}
+              disabled={hasFutureReservations || deleteCitaMutation.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 if (deleteConfigTarget) deleteCitaMutation.mutate(deleteConfigTarget.id);
