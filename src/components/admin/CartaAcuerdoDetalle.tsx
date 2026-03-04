@@ -1,4 +1,14 @@
 import { useState, useRef } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { SignaturePadDialog } from "@/components/admin/SignaturePadDialog";
 import { PdfViewerDialog } from "@/components/admin/PdfViewerDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -68,6 +78,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
   const [signatureTargetIndex, setSignatureTargetIndex] = useState<number>(-1);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
   // Fetch carta
   const { data: carta, isLoading: cartaLoading } = useQuery({
@@ -609,17 +620,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                                     size="sm"
                                     disabled={anySigned}
                                     title={anySigned ? "No se puede eliminar: ya hay firmas registradas" : "Eliminar documento"}
-                                    onClick={async () => {
-                                      if (!confirm("¿Estás seguro de eliminar este documento de firma?")) return;
-                                      try {
-                                        await (supabase as any).from("firmas_digitales").delete().eq("id", firma.id);
-                                        queryClient.invalidateQueries({ queryKey: ["firmas-digitales", cartaId] });
-                                        queryClient.invalidateQueries({ queryKey: ["cartas-acuerdo-firma-counts"] });
-                                        toast({ title: "🗑️ Documento eliminado" });
-                                      } catch (err: any) {
-                                        toast({ title: "Error", description: err.message, variant: "destructive" });
-                                      }
-                                    }}
+                                    onClick={() => setDeleteConfirmId(firma.id)}
                                   >
                                     <Trash2 className="h-4 w-4 text-destructive" />
                                   </Button>
@@ -676,6 +677,37 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
           }
         }}
       />
+
+      <AlertDialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar documento de firma?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. El documento será eliminado permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                try {
+                  await (supabase as any).from("firmas_digitales").delete().eq("id", deleteConfirmId);
+                  queryClient.invalidateQueries({ queryKey: ["firmas-digitales", cartaId] });
+                  queryClient.invalidateQueries({ queryKey: ["cartas-acuerdo-firma-counts"] });
+                  toast({ title: "🗑️ Documento eliminado" });
+                } catch (err: any) {
+                  toast({ title: "Error", description: err.message, variant: "destructive" });
+                } finally {
+                  setDeleteConfirmId(null);
+                }
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
