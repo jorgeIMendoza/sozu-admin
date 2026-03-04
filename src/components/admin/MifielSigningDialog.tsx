@@ -31,6 +31,7 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
       containerRef.current.appendChild(widget);
 
       widget.addEventListener("signSuccess", () => {
+        onOpenChange(false);
         onSuccess?.();
       });
       widget.addEventListener("signError", (e: any) => {
