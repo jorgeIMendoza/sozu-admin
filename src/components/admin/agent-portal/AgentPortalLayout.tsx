@@ -30,6 +30,7 @@ export const AgentPortalLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { permissions, isLoading: permLoading } = useAgentPortalPermissions();
+  const { hasInmobiliaria } = useAgentHasInmobiliaria();
 
   const { profile } = useAuth();
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
@@ -39,14 +40,12 @@ export const AgentPortalLayout = () => {
     queryKey: ['has-other-menus', profile?.rol_id],
     queryFn: async () => {
       if (!profile?.rol_id) return false;
-      // Get all menus the user's role has access to (excluding agent portal menu 16)
       const { data, error } = await (supabase as any)
         .from('submenus')
         .select('menu_id')
         .neq('menu_id', AGENT_MENU_ID)
         .eq('activo', true);
       if (error || !data) return false;
-      // Check if any of these submenus have 'leer' permission for this role
       const uniqueMenuIds = [...new Set(data.map((s: any) => s.menu_id))];
       return uniqueMenuIds.length > 0;
     },
@@ -75,13 +74,20 @@ export const AgentPortalLayout = () => {
     staleTime: 5 * 60_000,
   });
 
-  // Filtrar tabs por permiso de lectura
+  // Filtrar tabs por permiso de lectura + ocultar comisiones si tiene inmobiliaria
   const tabs = permLoading
     ? allTabs
     : allTabs.filter((tab) => {
+        // Hide comisiones for agents with linked inmobiliaria
+        if (hasInmobiliaria && tab.path === '/admin/agent/comisiones') return false;
         const perm = permissions[tab.path as keyof typeof permissions];
         return perm?.canRead !== false;
       });
+
+  // Block route access to comisiones if agent has inmobiliaria
+  if (hasInmobiliaria && location.pathname.startsWith('/admin/agent/comisiones')) {
+    return <Navigate to="/admin/agent/inicio" replace />;
+  }
 
   const isActive = (path: string) => location.pathname.startsWith(path);
 
