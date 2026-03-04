@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useInmobAgents } from "@/hooks/useInmobAgents";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
@@ -19,7 +18,7 @@ import {
 const COLORS = ["#57AE75", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
 export default function InmobDashboard() {
-  const { profile } = useAuth();
+  const { registrarVista } = useActivityLogger();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
   const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
