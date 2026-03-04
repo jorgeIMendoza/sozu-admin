@@ -193,7 +193,7 @@ function cleanText(text: string): string {
     .trim();
 }
 
-async function renderBlocksToPdf(blocks: Block[]): Promise<Uint8Array> {
+async function renderBlocksToPdf(blocks: Block[], options?: { firmantesConfig?: { name: string; email: string; cargo?: string; firma_imagen?: string }[]; agentSignature?: string; agentName?: string; agentRfc?: string; fechaActual?: string }): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -301,6 +301,118 @@ async function renderBlocksToPdf(blocks: Block[]): Promise<Uint8Array> {
     if (block.spacingAfter) y -= block.spacingAfter;
   }
 
+  // ── Render signature blocks directly in PDF (not via HTML) ──
+  if (options) {
+    const { firmantesConfig = [], agentSignature, agentName, agentRfc, fechaActual } = options;
+    const fontSize = 11;
+    const lineHeight = fontSize * 1.5;
+    const underline = "___________________________";
+    const underlineWidth = font.widthOfTextAtSize(underline, fontSize);
+
+    // Helper to embed a base64 PNG image
+    const embedBase64Image = async (dataUrl: string) => {
+      try {
+        const base64Data = dataUrl.split(",")[1];
+        if (!base64Data) return null;
+        const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        if (dataUrl.includes("image/png")) {
+          return await pdfDoc.embedPng(imageBytes);
+        }
+        return await pdfDoc.embedJpg(imageBytes);
+      } catch (e) {
+        console.error("Error embedding image:", e);
+        return null;
+      }
+    };
+
+    // Draw horizontal rule
+    ensureSpace(20);
+    y -= 10;
+    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
+    y -= 16;
+
+    // "Firmas" heading
+    ensureSpace(lineHeight + 10);
+    page.drawText("Firmas", { x: margin, y, size: 14, font: boldFont, color: textColor });
+    y -= lineHeight + 8;
+
+    // Configured firmantes
+    for (const f of firmantesConfig) {
+      ensureSpace(100);
+      page.drawText(f.name, { x: margin, y, size: 12, font: boldFont, color: textColor });
+      y -= lineHeight;
+      page.drawText(`Cargo: ${f.cargo || ""}`, { x: margin, y, size: fontSize, font, color: textColor });
+      y -= lineHeight;
+
+      // Firmante signature image (if available)
+      if (f.firma_imagen) {
+        const img = await embedBase64Image(f.firma_imagen);
+        if (img) {
+          const imgHeight = 80;
+          const imgWidth = Math.min(160, (img.width / img.height) * imgHeight);
+          const firmaLabelWidth = font.widthOfTextAtSize("Firma: ", fontSize);
+          const underlineCenter = margin + firmaLabelWidth + underlineWidth / 2;
+          ensureSpace(imgHeight + lineHeight);
+          page.drawImage(img, {
+            x: underlineCenter - imgWidth / 2,
+            y: y - imgHeight + lineHeight,
+            width: imgWidth,
+            height: imgHeight,
+          });
+          y -= imgHeight;
+        }
+      }
+
+      // "Firma: ___________________________"
+      page.drawText("Firma: ", { x: margin, y, size: fontSize, font, color: textColor });
+      const firmaLabelW = font.widthOfTextAtSize("Firma: ", fontSize);
+      page.drawText(underline, { x: margin + firmaLabelW, y, size: fontSize, font, color: textColor });
+      y -= lineHeight;
+
+      page.drawText(`Fecha: ${fechaActual || ""}`, { x: margin, y, size: fontSize, font, color: textColor });
+      y -= lineHeight + 12;
+    }
+
+    // Agent block
+    ensureSpace(120);
+    // Separator
+    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+    y -= 16;
+
+    page.drawText("EL AGENTE", { x: margin, y, size: 12, font: boldFont, color: textColor });
+    y -= lineHeight;
+    page.drawText(`Nombre/Razón Social: ${agentName || ""}`, { x: margin, y, size: fontSize, font, color: textColor });
+    y -= lineHeight;
+    page.drawText(`RFC: ${agentRfc || ""}`, { x: margin, y, size: fontSize, font, color: textColor });
+    y -= lineHeight;
+
+    // Agent autograph signature
+    if (agentSignature) {
+      const img = await embedBase64Image(agentSignature);
+      if (img) {
+        const imgHeight = 80;
+        const imgWidth = Math.min(160, (img.width / img.height) * imgHeight);
+        const firmaLabelWidth = font.widthOfTextAtSize("Firma: ", fontSize);
+        const underlineCenter = margin + firmaLabelWidth + underlineWidth / 2;
+        ensureSpace(imgHeight + lineHeight);
+        page.drawImage(img, {
+          x: underlineCenter - imgWidth / 2,
+          y: y - imgHeight + lineHeight,
+          width: imgWidth,
+          height: imgHeight,
+        });
+        y -= imgHeight;
+      }
+    }
+
+    page.drawText("Firma: ", { x: margin, y, size: fontSize, font, color: textColor });
+    const firmaLabelW = font.widthOfTextAtSize("Firma: ", fontSize);
+    page.drawText(underline, { x: margin + firmaLabelW, y, size: fontSize, font, color: textColor });
+    y -= lineHeight;
+
+    page.drawText(`Fecha: ${fechaActual || ""}`, { x: margin, y, size: fontSize, font, color: textColor });
+  }
+
   return await pdfDoc.save();
 }
 
@@ -322,7 +434,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { agente_email, agente_nombre, agente_persona_id, carta_acuerdo_id } = await req.json();
+    const { agente_email, agente_nombre, agente_persona_id, carta_acuerdo_id, firma_autografa_agente } = await req.json();
     if (!agente_email || !agente_nombre) {
       throw new Error("agente_email y agente_nombre son requeridos");
     }
