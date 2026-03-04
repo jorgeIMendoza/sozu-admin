@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { Home, Building2, BarChart3, DollarSign, User, LucideIcon, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDynamicMenus } from "@/hooks/useDynamicMenus";
+import { useAgentHasInmobiliaria } from "@/hooks/useAgentHasInmobiliaria";
 
 const AGENT_MENU_ID = 16;
 
