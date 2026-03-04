@@ -306,6 +306,7 @@ export default function Usuarios() {
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   
   const [isInmobiliariaLocked, setIsInmobiliariaLocked] = useState(false);
+  const [isInmobiliariaPopoverOpen, setIsInmobiliariaPopoverOpen] = useState(false);
   // Pagination state
   const [currentPageActive, setCurrentPageActive] = useState(1);
   const [currentPageInactive, setCurrentPageInactive] = useState(1);
@@ -788,12 +789,12 @@ export default function Usuarios() {
       return;
     }
 
-    // Validate inmobiliaria is required for agent roles
+    // Validate inmobiliaria is required for agent roles and Inmobiliaria role
     const rolId = parseInt(newUserForm.rol_id);
-    if ((rolId === ROLE_AGENTE_INTERNO || rolId === ROLE_AGENTE_INMOBILIARIO) && !newUserForm.id_inmobiliaria) {
+    if ((rolId === ROLE_AGENTE_INTERNO || rolId === ROLE_AGENTE_INMOBILIARIO || rolId === ROLE_INMOBILIARIA) && !newUserForm.id_inmobiliaria) {
       toast({
         title: "Error",
-        description: "Por favor selecciona una inmobiliaria para el agente.",
+        description: "Por favor selecciona una inmobiliaria.",
         variant: "destructive",
       });
       return;
@@ -962,8 +963,8 @@ export default function Usuarios() {
         id_inmobiliaria: SOZU_INMOBILIARIA_ID.toString()
       }));
       setIsInmobiliariaLocked(true); // Lock for Agente Interno
-    } else if (newRolId === ROLE_AGENTE_INMOBILIARIO) {
-      // Allow selecting inmobiliaria
+    } else if (newRolId === ROLE_AGENTE_INMOBILIARIO || newRolId === ROLE_INMOBILIARIA) {
+      // Allow selecting inmobiliaria (required for agents and Inmobiliaria secondary users)
       setNewUserForm(prev => ({ 
         ...prev, 
         rol_id: roleId,
@@ -1347,7 +1348,7 @@ export default function Usuarios() {
                   Inmobiliaria *
                   {isInmobiliariaLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
                 </Label>
-                <Popover>
+                <Popover open={isInmobiliariaPopoverOpen} onOpenChange={setIsInmobiliariaPopoverOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -1377,9 +1378,10 @@ export default function Usuarios() {
                               <CommandItem
                                 key={inmob.id}
                                 value={inmob.nombre}
-                                onSelect={() => {
-                                  setNewUserForm(prev => ({ ...prev, id_inmobiliaria: inmob.id.toString() }));
-                                }}
+                              onSelect={() => {
+                                setNewUserForm(prev => ({ ...prev, id_inmobiliaria: inmob.id.toString() }));
+                                setIsInmobiliariaPopoverOpen(false);
+                              }}
                               >
                                 <Check
                                   className={cn(
