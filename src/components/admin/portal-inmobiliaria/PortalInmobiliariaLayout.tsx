@@ -110,7 +110,7 @@ export const PortalInmobiliariaLayout = () => {
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                   active
-                    ? "bg-accent/10 text-accent"
+                    ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
@@ -148,10 +148,10 @@ export const PortalInmobiliariaLayout = () => {
         </div>
       </aside>
 
-      {/* Mobile bottom nav - floating like agent portal */}
+      {/* Mobile bottom nav - scrollable to show all tabs */}
       <nav className="lg:hidden fixed bottom-4 left-4 right-4 z-50">
-        <div className="flex items-center justify-around h-16 max-w-lg mx-auto bg-background rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-border/50">
-          {tabs.slice(0, 5).map((tab) => {
+        <div className="flex items-center h-16 max-w-lg mx-auto bg-background rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-border/50 overflow-x-auto scrollbar-none">
+          {tabs.map((tab) => {
             const active = isActive(tab.path);
             const Icon = tab.icon;
             return (
@@ -159,8 +159,8 @@ export const PortalInmobiliariaLayout = () => {
                 key={tab.path}
                 onClick={() => navigate(tab.path)}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors min-w-0",
-                  active ? "text-accent" : "text-muted-foreground"
+                  "flex flex-col items-center justify-center gap-0.5 min-w-[60px] px-2 h-full transition-colors shrink-0",
+                  active ? "text-primary" : "text-muted-foreground"
                 )}
               >
                 <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
@@ -172,7 +172,7 @@ export const PortalInmobiliariaLayout = () => {
           })}
           <button
             onClick={signOut}
-            className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors min-w-0 text-destructive"
+            className="flex flex-col items-center justify-center gap-0.5 min-w-[60px] px-2 h-full transition-colors shrink-0 text-destructive"
           >
             <LogOut className="h-5 w-5" strokeWidth={2} />
             <span className="text-[10px] font-medium">Salir</span>
