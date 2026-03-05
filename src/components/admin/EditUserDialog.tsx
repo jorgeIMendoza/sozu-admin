@@ -378,7 +378,7 @@ export function EditUserDialog({
             .from("personas")
             .select("email")
             .eq("id", newInmobiliariaId)
-            .single();
+            .maybeSingle();
 
           if (inmobiliariaPersona?.email) {
             const { data: inmobiliariaAccess } = await supabase
