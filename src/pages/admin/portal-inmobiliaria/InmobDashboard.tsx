@@ -664,8 +664,12 @@ export default function InmobDashboard() {
   // Secondary KPIs — current month
   const conversionGlobal = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100) : 0;
   const ticketPromedio = ventasCerradas > 0
-    ? ofertas.filter((o: any) => propMap.get(o.id_propiedad)?.id_estatus_disponibilidad === 5)
-        .reduce((s: number, o: any) => s + (propMap.get(o.id_propiedad)?.precio_lista || 0), 0) / ventasCerradas
+    ? classifiedOfertas
+        .filter((o: any) => o.stage === "cierre")
+        .reduce((s: number, o: any) => {
+          const cuenta = cuentasMap.get(o.id);
+          return s + (Number(cuenta?.precio_final) || 0);
+        }, 0) / ventasCerradas
     : 0;
   const comisionPromAgente = totalAgentes > 0
     ? comisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0) / totalAgentes
@@ -756,10 +760,10 @@ export default function InmobDashboard() {
       const days = Math.floor((now - new Date(o.fecha_generacion).getTime()) / (24 * 60 * 60 * 1000));
       const agent = o.email_creador?.split("@")[0] || "—";
       if ([1, 4].includes(o.id_estatus_aprobacion) && days > 7) {
-        result.push({ id: `offer-${o.id}`, type: "warning", text: `${agent} — Oferta #${o.id} sin respuesta (${days} días)`, to: `${NAV_PREFIX}/pipeline?mes=actual` });
+        result.push({ id: `offer-${o.id}`, type: "warning", text: `${agent} — Oferta #${o.id} sin respuesta (${days} días)`, to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}` });
       }
       if (p.id_estatus_disponibilidad === 4 && days > 5) {
-        result.push({ id: `apt-${o.id}`, type: "danger", text: `${agent} — Apartado sin firma (${days} días)`, to: `${NAV_PREFIX}/pipeline?mes=actual` });
+        result.push({ id: `apt-${o.id}`, type: "danger", text: `${agent} — Apartado sin firma (${days} días)`, to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}` });
       }
     });
     return result.slice(0, 5);
@@ -820,7 +824,7 @@ export default function InmobDashboard() {
           text: type === "aprobada" ? "Oferta aprobada" : type === "firmada" ? "Contrato firmado" : "Nueva oferta generada",
           detail: `${o.email_creador?.split("@")[0] || "—"} · Oferta #${o.id}`,
           time: formatDistanceToNow(new Date(o.fecha_generacion), { addSuffix: true, locale: es }),
-          to: `${NAV_PREFIX}/pipeline?mes=actual`,
+          to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`,
         };
       });
   }, [ofertas]);
@@ -882,9 +886,9 @@ export default function InmobDashboard() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <DashStatCard icon={Users} title="Agentes activos" value={String(totalAgentes)} subtitle="Operando ahora" variant="primary" to={`${NAV_PREFIX}/agentes`} />
-          <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle={`${pipelineCount} ofertas desde apartado`} variant="primary" to={`${NAV_PREFIX}/pipeline?mes=actual`} trend={trendPipeline} />
-          <DashStatCard icon={FileCheck} title="Ofertas activas" value={String(ofertasActivas)} subtitle="En negociación" variant="primary" to={`${NAV_PREFIX}/pipeline?mes=actual`} trend={trendOfertasActivas} />
-          <DashStatCard icon={Home} title="Apartados" value={String(apartados)} subtitle="Confirmados" variant="primary" to={`${NAV_PREFIX}/pipeline?mes=actual`} trend={trendApartados} />
+          <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle={`${pipelineCount} ofertas desde apartado`} variant="primary" to={`${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`} trend={trendPipeline} />
+          <DashStatCard icon={FileCheck} title="Ofertas activas" value={String(ofertasActivas)} subtitle="En negociación" variant="primary" to={`${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`} trend={trendOfertasActivas} />
+          <DashStatCard icon={Home} title="Apartados" value={String(apartados)} subtitle="Confirmados" variant="primary" to={`${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`} trend={trendApartados} />
         </div>
       )}
 
@@ -937,7 +941,7 @@ export default function InmobDashboard() {
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Embudo de conversión comercial</p>
               <p className="text-base font-semibold">Pipeline Global</p>
             </div>
-            <button onClick={() => navigate(`${NAV_PREFIX}/pipeline?mes=actual`)} className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors">
+            <button onClick={() => navigate(`${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`)} className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors">
               Ver pipeline <ChevronRight className="h-3 w-3" />
             </button>
           </div>
