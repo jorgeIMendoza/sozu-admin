@@ -30,6 +30,7 @@ interface PipelineCard {
   id_persona_lead: number | null;
   lead_nombre?: string;
   propiedad_nombre?: string;
+  producto_nombre?: string;
   proyecto_nombre?: string;
   proyecto_id?: number;
   agente_nombre?: string;
@@ -38,6 +39,7 @@ interface PipelineCard {
   cuenta_cobranza_id?: number;
   contrato_draft?: string | null;
   tiene_contrato_firmado?: boolean;
+  is_producto?: boolean;
   stage?: string;
 }
 
@@ -172,7 +174,8 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
     const card: PipelineCard = {
       ...o,
       lead_nombre: o.id_persona_lead ? leadMap.get(o.id_persona_lead) : undefined,
-      propiedad_nombre: prop?.numero_propiedad || (producto?.nombre) || undefined,
+      propiedad_nombre: prop?.numero_propiedad || undefined,
+      producto_nombre: producto?.nombre || undefined,
       proyecto_nombre: projInfo?.nombre || undefined,
       proyecto_id: projInfo?.id || undefined,
       agente_nombre: agentNameMap.get(o.email_creador) || o.email_creador,
@@ -181,6 +184,7 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
       cuenta_cobranza_id: cuenta?.id,
       contrato_draft: cuenta?.contrato_draft,
       tiene_contrato_firmado: cuenta ? firmadoSet.has(cuenta.id) : false,
+      is_producto: isProducto,
     };
     card.stage = classifyOffer(card);
     return card;
@@ -757,7 +761,7 @@ export default function InmobPipeline() {
                       <p className="text-xs text-muted-foreground text-center py-8">Sin ofertas</p>
                     ) : (
                       cards.map((card) => (
-                        <Card key={card.id} className="sozu-card">
+                          <Card key={card.id} className="sozu-card">
                           <CardContent className="p-3 space-y-1.5">
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
@@ -773,9 +777,26 @@ export default function InmobPipeline() {
                                 )}
                               </div>
                               <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
-                                {card.id_producto ? "OP" : "O"}-{String(card.id).padStart(6, "0")}
+                                {card.is_producto ? "OP" : "O"}-{String(card.id).padStart(6, "0")}
                               </span>
                             </div>
+                            {/* Tipo de oferta y producto */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                {card.is_producto ? "Producto" : "Propiedad"}
+                              </Badge>
+                              {card.is_producto && card.producto_nombre && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 truncate max-w-[180px]">
+                                  {card.producto_nombre}
+                                </Badge>
+                              )}
+                            </div>
+                            {/* Cuenta de cobranza */}
+                            {card.cuenta_cobranza_id && (
+                              <p className="text-[11px] text-muted-foreground font-mono">
+                                {card.is_producto ? "CCP" : "CC"}-{String(card.cuenta_cobranza_id).padStart(6, "0")}
+                              </p>
+                            )}
                             {card.precio != null && card.precio > 0 && (
                               <p className="text-sm font-bold text-foreground flex items-center gap-1">
                                 <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
