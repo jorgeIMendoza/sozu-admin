@@ -784,7 +784,7 @@ export default function InmobDashboard() {
   }, [classifiedOfertas, agentEmails]);
 
   const { data: internalComisiones = [] } = useQuery({
-    queryKey: ["inmob-dash-internal-comisiones", internalEmails, selectedMonths],
+    queryKey: ["inmob-dash-internal-comisiones-v2", internalEmails, selectedMonths],
     queryFn: async () => {
       if (!internalEmails.length) return [];
       const ranges = dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }];
@@ -792,7 +792,7 @@ export default function InmobDashboard() {
       for (const range of ranges) {
         const { data } = await (supabase as any)
           .from("comisionistas")
-          .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision, fecha_creacion")
+          .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, fecha_creacion")
           .in("email_usuario", internalEmails)
           .eq("activo", true)
           .gte("fecha_creacion", range.start)
@@ -800,7 +800,27 @@ export default function InmobDashboard() {
         if (data) all.push(...data);
       }
       const seen = new Set<number>();
-      return all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+      const deduped = all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+
+      // Enrich with precio_final to compute monto
+      if (deduped.length > 0) {
+        const cuentaIds = [...new Set(deduped.map(c => c.id_cuenta_cobranza).filter(Boolean))] as number[];
+        const precioMap = new Map<number, number>();
+        for (let i = 0; i < cuentaIds.length; i += 200) {
+          const batch = cuentaIds.slice(i, i + 200);
+          const { data: cuentas } = await supabase
+            .from("cuentas_cobranza")
+            .select("id, precio_final")
+            .in("id", batch) as any;
+          (cuentas || []).forEach((cc: any) => precioMap.set(cc.id, Number(cc.precio_final) || 0));
+        }
+        deduped.forEach(c => {
+          const precioFinal = precioMap.get(c.id_cuenta_cobranza) || 0;
+          c.monto_comision = (Number(c.porcentaje_comision) || 0) / 100 * precioFinal;
+        });
+      }
+
+      return deduped;
     },
     enabled: internalEmails.length > 0,
     staleTime: 3 * 60_000,
