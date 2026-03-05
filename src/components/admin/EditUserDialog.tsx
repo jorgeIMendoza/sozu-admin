@@ -418,7 +418,6 @@ export function EditUserDialog({
             }
           }
         }
-      }
 
       return { oldEmail, newEmail, newNombre, newInmobiliariaId };
     },
