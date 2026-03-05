@@ -768,20 +768,21 @@ export default function InmobDashboard() {
     { stage: "Cerradas", count: ventasCerradas },
   ], [ofertas, aprobadasCount, apartadasFunnel, firmaCount, ventasCerradas]);
 
-  // Alerts
+  // Alerts — use O-/OP- nomenclature
   const alerts = useMemo(() => {
-    const now = Date.now();
+    const nowMs = Date.now();
     const result: Array<{ id: string; type: "warning" | "danger" | "info"; text: string; to: string }> = [];
     ofertas.forEach((o: any) => {
       const p = propMap.get(o.id_propiedad);
       if (!p) return;
-      const days = Math.floor((now - new Date(o.fecha_generacion).getTime()) / (24 * 60 * 60 * 1000));
+      const days = Math.floor((nowMs - new Date(o.fecha_generacion).getTime()) / (24 * 60 * 60 * 1000));
       const agent = o.email_creador?.split("@")[0] || "—";
+      const ofertaLabel = `${o.id_producto ? "OP" : "O"}-${String(o.id).padStart(6, "0")}`;
       if ([1, 4].includes(o.id_estatus_aprobacion) && days > 7) {
-        result.push({ id: `offer-${o.id}`, type: "warning", text: `${agent} — Oferta #${o.id} sin respuesta (${days} días)`, to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}` });
+        result.push({ id: `offer-${o.id}`, type: "warning", text: `${agent} — ${ofertaLabel} sin respuesta (${days} días)`, to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}` });
       }
       if (p.id_estatus_disponibilidad === 4 && days > 5) {
-        result.push({ id: `apt-${o.id}`, type: "danger", text: `${agent} — Apartado sin firma (${days} días)`, to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}` });
+        result.push({ id: `apt-${o.id}`, type: "danger", text: `${agent} — ${ofertaLabel} apartado sin firma (${days} días)`, to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}` });
       }
     });
     return result.slice(0, 5);
