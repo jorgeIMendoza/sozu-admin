@@ -559,6 +559,7 @@ export default function InmobDashboard() {
     const p = propMap.get(o.id_propiedad);
     const cuenta = cuentasMap.get(o.id);
     if (p?.id_estatus_disponibilidad === 5) return "cierre";
+    if (cuenta?.tiene_contrato_firmado) return "firma_contrato";
     if (cuenta?.contrato_draft) return "gen_contrato";
     if (cuenta && p?.id_estatus_disponibilidad === 4) return "apartado";
     const fecha = new Date(o.fecha_generacion);
