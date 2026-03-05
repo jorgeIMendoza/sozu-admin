@@ -460,10 +460,23 @@ export default function InmobDashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard Ejecutivo</h1>
-        <p className="text-sm text-muted-foreground">Vista general del desempeño inmobiliario</p>
+      {/* Header + Project filter */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard Ejecutivo</h1>
+          <p className="text-sm text-muted-foreground">Vista general del desempeño inmobiliario</p>
+        </div>
+        <Select value={selectedProject} onValueChange={setSelectedProject}>
+          <SelectTrigger className="w-[200px] shrink-0">
+            <SelectValue placeholder="Todos los proyectos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los proyectos</SelectItem>
+            {projects.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* KPIs - First row: 4 cards */}
