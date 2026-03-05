@@ -664,8 +664,12 @@ export default function InmobDashboard() {
   // Secondary KPIs — current month
   const conversionGlobal = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100) : 0;
   const ticketPromedio = ventasCerradas > 0
-    ? ofertas.filter((o: any) => propMap.get(o.id_propiedad)?.id_estatus_disponibilidad === 5)
-        .reduce((s: number, o: any) => s + (propMap.get(o.id_propiedad)?.precio_lista || 0), 0) / ventasCerradas
+    ? classifiedOfertas
+        .filter((o: any) => o.stage === "cierre")
+        .reduce((s: number, o: any) => {
+          const cuenta = cuentasMap.get(o.id);
+          return s + (Number(cuenta?.precio_final) || 0);
+        }, 0) / ventasCerradas
     : 0;
   const comisionPromAgente = totalAgentes > 0
     ? comisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0) / totalAgentes
@@ -882,9 +886,9 @@ export default function InmobDashboard() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <DashStatCard icon={Users} title="Agentes activos" value={String(totalAgentes)} subtitle="Operando ahora" variant="primary" to={`${NAV_PREFIX}/agentes`} />
-          <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle={`${pipelineCount} ofertas desde apartado`} variant="primary" to={`${NAV_PREFIX}/pipeline?mes=actual`} trend={trendPipeline} />
-          <DashStatCard icon={FileCheck} title="Ofertas activas" value={String(ofertasActivas)} subtitle="En negociación" variant="primary" to={`${NAV_PREFIX}/pipeline?mes=actual`} trend={trendOfertasActivas} />
-          <DashStatCard icon={Home} title="Apartados" value={String(apartados)} subtitle="Confirmados" variant="primary" to={`${NAV_PREFIX}/pipeline?mes=actual`} trend={trendApartados} />
+          <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle={`${pipelineCount} ofertas desde apartado`} variant="primary" to={`${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`} trend={trendPipeline} />
+          <DashStatCard icon={FileCheck} title="Ofertas activas" value={String(ofertasActivas)} subtitle="En negociación" variant="primary" to={`${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`} trend={trendOfertasActivas} />
+          <DashStatCard icon={Home} title="Apartados" value={String(apartados)} subtitle="Confirmados" variant="primary" to={`${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`} trend={trendApartados} />
         </div>
       )}
 
