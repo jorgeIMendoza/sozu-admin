@@ -213,6 +213,13 @@ export default function InmobPipeline() {
   // Month filter: array of "YYYY-M" keys (M is 0-indexed)
   const currentMonthKey = getCurrentMonthKey();
   const [selectedMonths, setSelectedMonths] = useState<string[]>(() => {
+    // Support new "meses" param (comma-separated month keys from dashboard)
+    const mesesParam = searchParams.get("meses");
+    if (mesesParam) {
+      const keys = mesesParam.split(",").filter(Boolean);
+      if (keys.length > 0) return keys;
+    }
+    // Legacy support
     const mesParam = searchParams.get("mes");
     if (mesParam === "actual") return [currentMonthKey];
     return []; // empty = all (recent + advanced, original behavior)
