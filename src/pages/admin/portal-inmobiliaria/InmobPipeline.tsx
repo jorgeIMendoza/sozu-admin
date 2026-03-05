@@ -265,7 +265,10 @@ export default function InmobPipeline() {
   const agentEmails = useMemo(() => agents.map((a) => a.email), [agents]);
   const agentNameMap = useMemo(() => {
     const m = new Map<string, string>();
-    agents.forEach((a) => m.set(a.email, a.nombre));
+    agents.forEach((a) => {
+      m.set(a.email, a.nombre);
+      m.set(a.email.toLowerCase(), a.nombre);
+    });
     return m;
   }, [agents]);
 
