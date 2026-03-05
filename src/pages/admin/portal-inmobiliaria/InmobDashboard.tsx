@@ -302,47 +302,97 @@ export default function InmobDashboard() {
 
   const isLoading = agentsLoading || ofertasLoading || comisionesLoading;
 
+  // ───── Offer stage classification (mirrors pipeline logic) ─────
+  const classifyDashOffer = useCallback((o: any) => {
+    const p = propMap.get(o.id_propiedad);
+    const cuenta = cuentasMap.get(o.id);
+    if (p?.id_estatus_disponibilidad === 5) return "cierre";
+    if (cuenta?.contrato_draft) return "gen_contrato"; // or firma
+    if (cuenta && p?.id_estatus_disponibilidad === 4) return "apartado";
+    const fecha = new Date(o.fecha_generacion);
+    const expira = new Date(fecha); expira.setDate(expira.getDate() + 5);
+    const vigente = expira >= new Date();
+    if (!vigente && !cuenta) return "expiradas";
+    if (!o.id_esquema_pago_seleccionado) return vigente ? "nuevas" : "expiradas";
+    if (o.id_estatus_aprobacion === 1) return vigente ? "pendientes" : "expiradas";
+    if (o.id_estatus_aprobacion === 2) return "aprobadas";
+    if (o.id_estatus_aprobacion === 3) return vigente ? "rechazadas" : "expiradas";
+    if (o.id_estatus_aprobacion === 4) return vigente ? "revision" : "expiradas";
+    return "nuevas";
+  }, [propMap, cuentasMap]);
+
+  // Classify all offers
+  const classifiedOfertas = useMemo(() => {
+    return ofertas.map((o: any) => ({ ...o, stage: classifyDashOffer(o) }));
+  }, [ofertas, classifyDashOffer]);
+
   // ───── KPI calculations ─────
   const totalAgentes = agents.filter(a => a.activo).length;
 
+  // Pipeline total: count + sum precio_final from Apartado onwards
+  const ADVANCED_STAGES = new Set(["apartado", "gen_contrato", "firma_contrato", "cierre"]);
   const pipelineTotal = useMemo(() => {
     let sum = 0;
-    ofertas.forEach((o: any) => {
-      const p = propMap.get(o.id_propiedad);
-      if (p && p.id_estatus_disponibilidad !== 5) sum += p.precio_lista || 0;
+    classifiedOfertas.forEach((o: any) => {
+      if (ADVANCED_STAGES.has(o.stage)) {
+        const cuenta = cuentasMap.get(o.id);
+        sum += Number(cuenta?.precio_final) || 0;
+      }
     });
     return sum;
-  }, [ofertas, propMap]);
+  }, [classifiedOfertas, cuentasMap]);
 
+  const pipelineCount = useMemo(() => {
+    return classifiedOfertas.filter((o: any) => ADVANCED_STAGES.has(o.stage)).length;
+  }, [classifiedOfertas]);
+
+  // Ofertas activas: before apartado, NOT expiradas, NOT rechazadas
+  const PRE_APARTADO = new Set(["nuevas", "pendientes", "aprobadas", "revision"]);
   const ofertasActivas = useMemo(() => {
-    return ofertas.filter((o: any) => [1, 4].includes(o.id_estatus_aprobacion)).length;
-  }, [ofertas]);
+    return classifiedOfertas.filter((o: any) => PRE_APARTADO.has(o.stage)).length;
+  }, [classifiedOfertas]);
 
+  // Apartados: only those in "apartado" stage
   const apartados = useMemo(() => {
-    return ofertas.filter((o: any) => {
-      const p = propMap.get(o.id_propiedad);
-      return p && p.id_estatus_disponibilidad === 4;
-    }).length;
-  }, [ofertas, propMap]);
+    return classifiedOfertas.filter((o: any) => o.stage === "apartado").length;
+  }, [classifiedOfertas]);
 
   const ventasCerradas = useMemo(() => {
-    return ofertas.filter((o: any) => {
-      const p = propMap.get(o.id_propiedad);
-      return p && p.id_estatus_disponibilidad === 5;
-    }).length;
-  }, [ofertas, propMap]);
+    return classifiedOfertas.filter((o: any) => o.stage === "cierre").length;
+  }, [classifiedOfertas]);
 
-  const ingresosCobrados = financialData?.cobrado || 0;
-  const porCobrar = financialData?.porCobrar || 0;
+  // Ingresos cobrados: comisionistas pagadas for the inmobiliaria
+  const ingresosCobrados = useMemo(() => {
+    return inmobComisionistas
+      .filter((c: any) => c.pagada === true)
+      .reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
+  }, [inmobComisionistas]);
+
+  // Por cobrar: comisionistas aprobadas pero no pagadas
+  const porCobrar = useMemo(() => {
+    return inmobComisionistas
+      .filter((c: any) => c.aprobada === true && c.pagada !== true)
+      .reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
+  }, [inmobComisionistas]);
+
+  // Estimados: sum of commission from apartado onwards
+  // Build a set of cuenta_cobranza IDs linked to advanced-stage offers
+  const advancedCuentaIds = useMemo(() => {
+    const ids = new Set<number>();
+    classifiedOfertas.forEach((o: any) => {
+      if (ADVANCED_STAGES.has(o.stage)) {
+        const cuenta = cuentasMap.get(o.id);
+        if (cuenta) ids.add(cuenta.id);
+      }
+    });
+    return ids;
+  }, [classifiedOfertas, cuentasMap]);
 
   const estimados = useMemo(() => {
-    let sum = 0;
-    ofertas.forEach((o: any) => {
-      const p = propMap.get(o.id_propiedad);
-      if (p && p.id_estatus_disponibilidad === 4) sum += p.precio_lista || 0;
-    });
-    return sum;
-  }, [ofertas, propMap]);
+    return inmobComisionistas
+      .filter((c: any) => advancedCuentaIds.has(c.id_cuenta_cobranza))
+      .reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
+  }, [inmobComisionistas, advancedCuentaIds]);
 
   // Secondary KPIs
   const conversionGlobal = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100).toFixed(1) : "0";
