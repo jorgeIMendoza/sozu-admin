@@ -90,6 +90,34 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
   const productoIds = [...new Set(data.map((o: any) => o.id_producto).filter(Boolean))] as number[];
   const ofertaIds = data.map((o: any) => o.id);
 
+  // Resolve names for unknown emails (Sozu internal users not in agentNameMap)
+  const unknownEmails = [...new Set(data.map((o: any) => o.email_creador).filter((e: string) => e && !agentNameMap.has(e)))];
+  const resolvedNameMap = new Map<string, string>();
+  if (unknownEmails.length > 0) {
+    for (let i = 0; i < unknownEmails.length; i += 200) {
+      const batch = unknownEmails.slice(i, i + 200);
+      const { data: usuarios } = await supabase
+        .from("usuarios").select("email, id_persona").in("email", batch) as any;
+      if (usuarios?.length) {
+        const pIds = [...new Set(usuarios.map((u: any) => u.id_persona).filter(Boolean))] as number[];
+        if (pIds.length) {
+          const { data: personas } = await supabase
+            .from("personas").select("id, nombre_legal, nombre_comercial").in("id", pIds) as any;
+          const pMap = new Map<number, string>();
+          (personas || []).forEach((p: any) => pMap.set(p.id, p.nombre_legal || p.nombre_comercial || ""));
+          usuarios.forEach((u: any) => {
+            const name = pMap.get(u.id_persona);
+            if (name) resolvedNameMap.set(u.email, name);
+          });
+        }
+      }
+    }
+  }
+
+  // Merge resolved names into agentNameMap for this enrichment
+  const fullNameMap = new Map(agentNameMap);
+  resolvedNameMap.forEach((name, email) => fullNameMap.set(email, name));
+
   const [propRes, leadRes, cuentaRes, productosRes] = await Promise.all([
     propIds.length > 0
       ? (supabase.from("propiedades").select("id, numero_propiedad, precio_lista, id_estatus_disponibilidad, id_edificio_modelo").in("id", propIds) as any)
