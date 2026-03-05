@@ -279,22 +279,54 @@ export default function WorkflowOfertas() {
     if (!profile) return;
     setLoading(true);
     try {
-      let query = supabase
-        .from('ofertas')
-        .select('id, email_creador, fecha_generacion, fecha_creacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, comentario_justificacion, activo, id_propiedad, id_persona_lead, id_producto')
-        .eq('activo', true)
-        .gte('fecha_generacion', MIN_DATE)
-        .order('fecha_generacion', { ascending: false });
+      let allOfertasData: any[] = [];
 
-      if (isAgente) query = query.eq('email_creador', profile.email);
-      else if (isInmobiliaria && agentes.length > 0) {
-        query = query.in('email_creador', agentes.map(a => a.email));
+      if (hasMonthFilter) {
+        // Fetch ofertas for each selected month range
+        for (const range of dateRanges) {
+          let query = supabase
+            .from('ofertas')
+            .select('id, email_creador, fecha_generacion, fecha_creacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, comentario_justificacion, activo, id_propiedad, id_persona_lead, id_producto')
+            .eq('activo', true)
+            .gte('fecha_generacion', range.start)
+            .lte('fecha_generacion', range.end)
+            .order('fecha_generacion', { ascending: false });
+
+          if (isAgente) query = query.eq('email_creador', profile.email);
+          else if (isInmobiliaria && agentes.length > 0) {
+            query = query.in('email_creador', agentes.map(a => a.email));
+          }
+
+          const { data, error } = await query;
+          if (error) { console.error(error); toast.error('Error al cargar ofertas'); setLoading(false); return; }
+          if (data) allOfertasData.push(...data);
+        }
+        // Dedup
+        const seen = new Set<number>();
+        allOfertasData = allOfertasData.filter(o => { if (seen.has(o.id)) return false; seen.add(o.id); return true; });
+      } else {
+        // No month filter: fetch last 30 days as fallback
+        const fallbackDate = new Date();
+        fallbackDate.setMonth(fallbackDate.getMonth() - 1);
+        let query = supabase
+          .from('ofertas')
+          .select('id, email_creador, fecha_generacion, fecha_creacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, comentario_justificacion, activo, id_propiedad, id_persona_lead, id_producto')
+          .eq('activo', true)
+          .gte('fecha_generacion', fallbackDate.toISOString().slice(0, 10))
+          .order('fecha_generacion', { ascending: false });
+
+        if (isAgente) query = query.eq('email_creador', profile.email);
+        else if (isInmobiliaria && agentes.length > 0) {
+          query = query.in('email_creador', agentes.map(a => a.email));
+        }
+
+        const { data, error } = await query;
+        if (error) { console.error(error); toast.error('Error al cargar ofertas'); setLoading(false); return; }
+        allOfertasData = data || [];
       }
-      // Super admin: load all ofertas, filter client-side
 
-      const { data: ofertasData, error } = await query;
-      if (error) { console.error(error); toast.error('Error al cargar ofertas'); setLoading(false); return; }
-      if (!ofertasData || ofertasData.length === 0) { setOfertas([]); setLoading(false); return; }
+      const ofertasData = allOfertasData;
+      if (ofertasData.length === 0) { setOfertas([]); setLoading(false); return; }
 
       const propiedadIds = [...new Set(ofertasData.map((o: any) => o.id_propiedad).filter(Boolean))] as number[];
       const personaLeadIds = [...new Set(ofertasData.map((o: any) => o.id_persona_lead).filter(Boolean))] as number[];
