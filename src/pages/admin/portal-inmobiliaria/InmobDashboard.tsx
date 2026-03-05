@@ -415,98 +415,20 @@ export default function InmobDashboard() {
     staleTime: 3 * 60_000,
   });
 
-  // Inmobiliaria email for commission queries
-  const { data: inmobiliariaEmail } = useQuery({
-    queryKey: ["inmob-email", personaId],
-    queryFn: async () => {
-      if (!personaId) return null;
-      const { data } = await supabase
-        .from("personas")
-        .select("email")
-        .eq("id", personaId)
-        .single() as any;
-      return data?.email?.toLowerCase() || null;
-    },
-    enabled: !!personaId,
-    staleTime: 10 * 60_000,
-  });
+  // ───── Comisionistas: fetch for ALL Sozu-related emails (agents + internals) ─────
+  // Then compute monto_comision = porcentaje_comision / 100 * precio_final (from cuentas_cobranza)
 
-  // Comisionistas for the inmobiliaria — filtered by current month via cuentas_cobranza creation date
-  const { data: inmobComisionistas = [], isLoading: comisionesLoading } = useQuery({
-    queryKey: ["inmob-dash-comisionistas-inmob", inmobiliariaEmail, selectedMonths],
-    queryFn: async () => {
-      if (!inmobiliariaEmail) return [];
-      const ranges = dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }];
-      const all: any[] = [];
-      for (const range of ranges) {
-        const { data } = await (supabase as any)
-          .from("comisionistas")
-          .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision, fecha_creacion")
-          .eq("email_usuario", inmobiliariaEmail)
-          .eq("activo", true)
-          .gte("fecha_creacion", range.start)
-          .lte("fecha_creacion", range.end);
-        if (data) all.push(...data);
-      }
-      const seen = new Set<number>();
-      return all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
-    },
-    enabled: !!inmobiliariaEmail,
-    staleTime: 3 * 60_000,
-  });
+  // Combine agent emails + internal user emails for comisionistas lookup
+  const allRelevantEmails = useMemo(() => {
+    const emailSet = new Set<string>(agentEmails);
+    // We'll add internal emails after they're resolved (below), but for initial fetch
+    // we can query broadly by cuentas that belong to our offers
+    return [...emailSet];
+  }, [agentEmails]);
 
-  // For Sozu: get ALL comisionistas on the same cuentas to subtract external inmobiliarias' amounts
-  const inmobCuentaIds = useMemo(() => {
-    return [...new Set(inmobComisionistas.map((c: any) => c.id_cuenta_cobranza).filter(Boolean))] as number[];
-  }, [inmobComisionistas]);
-
-  const { data: allComisionistasOnCuentas = [] } = useQuery({
-    queryKey: ["inmob-dash-all-comisionistas-sozu", inmobCuentaIds],
-    queryFn: async () => {
-      if (!inmobCuentaIds.length) return [];
-      const results: any[] = [];
-      for (let i = 0; i < inmobCuentaIds.length; i += 100) {
-        const batch = inmobCuentaIds.slice(i, i + 100);
-        const { data } = await (supabase as any)
-          .from("comisionistas")
-          .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision")
-          .in("id_cuenta_cobranza", batch)
-          .eq("activo", true)
-          .neq("email_usuario", inmobiliariaEmail);
-        if (data) results.push(...data);
-      }
-      return results;
-    },
-    enabled: isSozu && inmobCuentaIds.length > 0 && !!inmobiliariaEmail,
-    staleTime: 3 * 60_000,
-  });
-
-  // Build map: cuenta_id -> sum of external comisionistas' monto
-  const externalComisionByCuenta = useMemo(() => {
-    const map = new Map<number, number>();
-    if (!isSozu) return map;
-    allComisionistasOnCuentas.forEach((c: any) => {
-      const prev = map.get(c.id_cuenta_cobranza) || 0;
-      map.set(c.id_cuenta_cobranza, prev + (Number(c.monto_comision) || 0));
-    });
-    return map;
-  }, [isSozu, allComisionistasOnCuentas]);
-
-  // Inmobiliaria commission percentage (most common from comisionistas)
-  const inmobComisionPorcentaje = useMemo(() => {
-    if (!inmobComisionistas.length) return null;
-    const pcts = inmobComisionistas.map((c: any) => Number(c.porcentaje_comision) || 0).filter((p: number) => p > 0);
-    if (!pcts.length) return null;
-    const freq = new Map<number, number>();
-    pcts.forEach((p: number) => freq.set(p, (freq.get(p) || 0) + 1));
-    let maxP = pcts[0], maxCount = 0;
-    freq.forEach((count, p) => { if (count > maxCount) { maxCount = count; maxP = p; } });
-    return maxP;
-  }, [inmobComisionistas]);
-
-  // Also keep agent-level comisiones for the agent performance table
-  const { data: comisiones = [] } = useQuery({
-    queryKey: ["inmob-dash-comisiones", agentEmails, selectedMonths],
+  // Fetch comisionistas for all agents + enrich with precio_final to compute monto
+  const { data: comisiones = [], isLoading: comisionesLoading } = useQuery({
+    queryKey: ["inmob-dash-comisiones-v2", agentEmails, selectedMonths],
     queryFn: async () => {
       if (!agentEmails.length) return [];
       const ranges = dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }];
@@ -514,7 +436,7 @@ export default function InmobDashboard() {
       for (const range of ranges) {
         const { data } = await (supabase as any)
           .from("comisionistas")
-          .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision, fecha_creacion")
+          .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, fecha_creacion")
           .in("email_usuario", agentEmails)
           .eq("activo", true)
           .gte("fecha_creacion", range.start)
@@ -522,11 +444,43 @@ export default function InmobDashboard() {
         if (data) all.push(...data);
       }
       const seen = new Set<number>();
-      return all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+      const deduped = all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+
+      // Enrich with precio_final from cuentas_cobranza to compute monto
+      if (deduped.length > 0) {
+        const cuentaIds = [...new Set(deduped.map(c => c.id_cuenta_cobranza).filter(Boolean))] as number[];
+        const precioMap = new Map<number, number>();
+        for (let i = 0; i < cuentaIds.length; i += 200) {
+          const batch = cuentaIds.slice(i, i + 200);
+          const { data: cuentas } = await supabase
+            .from("cuentas_cobranza")
+            .select("id, precio_final")
+            .in("id", batch) as any;
+          (cuentas || []).forEach((cc: any) => precioMap.set(cc.id, Number(cc.precio_final) || 0));
+        }
+        deduped.forEach(c => {
+          const precioFinal = precioMap.get(c.id_cuenta_cobranza) || 0;
+          c.monto_comision = (Number(c.porcentaje_comision) || 0) / 100 * precioFinal;
+        });
+      }
+
+      return deduped;
     },
     enabled: agentEmails.length > 0,
     staleTime: 3 * 60_000,
   });
+
+  // Inmobiliaria commission percentage (most common from comisionistas)
+  const inmobComisionPorcentaje = useMemo(() => {
+    if (!comisiones.length) return null;
+    const pcts = comisiones.map((c: any) => Number(c.porcentaje_comision) || 0).filter((p: number) => p > 0);
+    if (!pcts.length) return null;
+    const freq = new Map<number, number>();
+    pcts.forEach((p: number) => freq.set(p, (freq.get(p) || 0) + 1));
+    let maxP = pcts[0], maxCount = 0;
+    freq.forEach((count, p) => { if (count > maxCount) { maxCount = count; maxP = p; } });
+    return maxP;
+  }, [comisiones]);
 
   // Prospectos count
   const { data: prospectosCount = 0 } = useQuery({
