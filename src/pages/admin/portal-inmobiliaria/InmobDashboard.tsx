@@ -560,9 +560,9 @@ export default function InmobDashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <DashStatCard icon={DollarSign} title="Ingresos cobrados" value={fmtShort(ingresosCobrados)} fullValue={fmtCurrency(ingresosCobrados)} subtitle="Pagos aplicados" variant="success" to={`${NAV_PREFIX}/comisiones`} />
-          <DashStatCard icon={Clock} title="Por cobrar" value={fmtShort(porCobrar)} fullValue={fmtCurrency(porCobrar)} subtitle="Pendiente de pago" variant="warning" to={`${NAV_PREFIX}/comisiones`} />
-          <DashStatCard icon={Target} title="Estimados" value={fmtShort(estimados)} fullValue={fmtCurrency(estimados)} subtitle="Basado en apartados" />
+          <DashStatCard icon={DollarSign} title="Ingresos cobrados" value={fmtShort(ingresosCobrados)} fullValue={fmtCurrency(ingresosCobrados)} subtitle="Comisiones pagadas" variant="success" to={`${NAV_PREFIX}/comisiones`} />
+          <DashStatCard icon={Clock} title="Por cobrar" value={fmtShort(porCobrar)} fullValue={fmtCurrency(porCobrar)} subtitle="Comisiones aprobadas pendientes" variant="warning" to={`${NAV_PREFIX}/comisiones`} />
+          <DashStatCard icon={Target} title="Estimados" value={fmtShort(estimados)} fullValue={fmtCurrency(estimados)} subtitle="Comisión desde apartado" />
         </div>
       )}
 
