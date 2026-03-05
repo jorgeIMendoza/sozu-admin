@@ -710,14 +710,23 @@ export default function WorkflowOfertas() {
   proyectos.forEach(p => proyNameToId.set(p.nombre, String(p.id)));
   const selectedProyNames = selectedProyectos.map(id => proyectos.find(p => String(p.id) === id)?.nombre || id);
 
-  const hasActiveFilters = selectedInmobiliaria !== 'all' || selectedAgentes.length > 0 || selectedProyectos.length > 0 || selectedTipoOferta !== 'all';
+  const hasActiveFilters = selectedInmobiliaria !== 'all' || selectedAgentes.length > 0 || selectedProyectos.length > 0 || selectedTipoOferta !== 'all' || selectedMonths.length !== 1 || selectedMonths[0] !== currentMonthKey;
 
   const clearAllFilters = () => {
     setSelectedInmobiliaria('all');
     setSelectedAgentes([]);
     setSelectedProyectos([]);
     setSelectedTipoOferta('all');
+    setSelectedMonths([currentMonthKey]);
   };
+
+  const monthFilterLabel = useMemo(() => {
+    if (selectedMonths.length === 0) return "Todos los meses";
+    return selectedMonths.map((k) => {
+      const [y, m] = k.split("-").map(Number);
+      return `${MONTH_NAMES[m]} ${y}`;
+    }).join(", ");
+  }, [selectedMonths]);
 
   return (
     <div className="space-y-4">
