@@ -347,7 +347,7 @@ const Dashboard = () => {
         </Card>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
             {isInmobiliariaRole && inmobiliariaData
@@ -355,6 +355,19 @@ const Dashboard = () => {
               : 'Proyectos gestionados por Sozu'}
           </h1>
         </div>
+
+        {/* Month filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="justify-start text-left font-normal h-10">
+              <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span className="truncate">{monthFilterLabel}</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <MonthMultiSelector value={selectedMonths} onChange={setSelectedMonths} />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Statistics */}
