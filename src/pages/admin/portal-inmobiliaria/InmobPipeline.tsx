@@ -92,7 +92,7 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
   const ofertaIds = data.map((o: any) => o.id);
 
   // Resolve names for unknown emails (non-agent creators)
-  const unknownEmails = [...new Set(data.map((o: any) => o.email_creador).filter((e: string) => e && !agentNameMap.has(e)))];
+  const unknownEmails = [...new Set(data.map((o: any) => o.email_creador).filter((e: string) => e && !agentNameMap.has(e) && !agentNameMap.has(e.toLowerCase())))];
   const resolvedNameMap = new Map<string, string>();
   if (unknownEmails.length > 0) {
     for (let i = 0; i < unknownEmails.length; i += 200) {
