@@ -858,6 +858,11 @@ export default function InmobDashboard() {
   // Combined comisiones (agents + internals)
   const allComisiones = useMemo(() => [...comisiones, ...internalComisiones], [comisiones, internalComisiones]);
 
+  // Recompute comisionPromAgente with all comisiones
+  const comisionPromAgente = totalAgentes > 0
+    ? allComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0) / totalAgentes
+    : 0;
+
   // Agent performance — includes both agents AND internal non-agent users
   const agentPerformance = useMemo(() => {
     const buildPerf = (email: string, nombre: string, isInternal: boolean) => {
