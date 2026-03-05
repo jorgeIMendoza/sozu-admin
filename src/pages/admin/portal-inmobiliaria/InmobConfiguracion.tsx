@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,8 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, CreditCard, User, Save, Plus, Edit, AlertCircle, Mail } from "lucide-react";
+import { Building2, CreditCard, User, Save, Plus, Edit, AlertCircle, Copy } from "lucide-react";
 import { toast } from "sonner";
 
 export default function InmobConfiguracion() {
@@ -25,6 +26,7 @@ export default function InmobConfiguracion() {
   const [fiscalForm, setFiscalForm] = useState<any>({});
   const [isEditingBank, setIsEditingBank] = useState(false);
   const [bankForm, setBankForm] = useState<any>({});
+  const [copiarDireccion, setCopiarDireccion] = useState(false);
 
   useEffect(() => {
     registrarVista("/admin/portal-inmobiliaria/configuracion");
@@ -70,6 +72,63 @@ export default function InmobConfiguracion() {
     },
   });
 
+  // Fetch paises
+  const { data: paises = [] } = useQuery({
+    queryKey: ["paises"],
+    queryFn: async () => {
+      const { data } = await supabase.from("paises").select("id, nombre").eq("activo", true).order("nombre");
+      return data || [];
+    },
+  });
+
+  // Fetch estados
+  const { data: estados = [] } = useQuery({
+    queryKey: ["estados"],
+    queryFn: async () => {
+      const { data } = await supabase.from("estados_mx").select("id, nombre, id_pais").eq("activo", true).order("nombre");
+      return data || [];
+    },
+  });
+
+  // Fetch municipios (only when a state is selected)
+  const activeEstadoIds = useMemo(() => {
+    const ids = new Set<number>();
+    if (fiscalForm.direccion_id_estado) ids.add(Number(fiscalForm.direccion_id_estado));
+    if (fiscalForm.direccion_fiscal_id_estado) ids.add(Number(fiscalForm.direccion_fiscal_id_estado));
+    return [...ids].filter(Boolean);
+  }, [fiscalForm.direccion_id_estado, fiscalForm.direccion_fiscal_id_estado]);
+
+  const { data: municipios = [] } = useQuery({
+    queryKey: ["municipios", activeEstadoIds],
+    queryFn: async () => {
+      if (!activeEstadoIds.length) return [];
+      const { data } = await supabase.from("municipios_mx").select("id, nombre, id_estado").eq("activo", true).in("id_estado", activeEstadoIds).order("nombre");
+      return data || [];
+    },
+    enabled: activeEstadoIds.length > 0,
+  });
+
+  // Fetch regimenes fiscales
+  const tipoPersona = persona?.tipo_persona || "pm";
+  const { data: regimenes = [] } = useQuery({
+    queryKey: ["regimen", tipoPersona],
+    queryFn: async () => {
+      const filterTypes = tipoPersona === "pm" ? ["pm"] : ["pf"];
+      const { data } = await supabase.from("regimen").select("id, nombre").eq("activo", true).in("tipo", filterTypes).order("nombre");
+      return data || [];
+    },
+  });
+
+  // Fetch usos CFDI
+  const { data: usosCfdi = [] } = useQuery({
+    queryKey: ["uso_cfdi", tipoPersona],
+    queryFn: async () => {
+      const filterTypes = tipoPersona === "pm" ? ["pm", "a"] : ["pf", "a"];
+      const { data } = await supabase.from("uso_cfdi").select("codigo, nombre").eq("activo", true).in("tipo", filterTypes).order("codigo");
+      return data || [];
+    },
+  });
+
   // Pre-fill fiscal form when persona loads
   useEffect(() => {
     if (persona && !isEditingFiscal) {
@@ -77,10 +136,45 @@ export default function InmobConfiguracion() {
     }
   }, [persona]);
 
+  // Copy address to fiscal address
+  useEffect(() => {
+    if (copiarDireccion && isEditingFiscal) {
+      setFiscalForm((prev: any) => ({
+        ...prev,
+        direccion_fiscal_calle: prev.direccion_calle || "",
+        direccion_fiscal_num_ext: prev.direccion_num_ext || "",
+        direccion_fiscal_num_int: prev.direccion_num_int || "",
+        direccion_fiscal_colonia: prev.direccion_colonia || "",
+        direccion_fiscal_codigo_postal: prev.direccion_codigo_postal || "",
+        direccion_fiscal_id_pais: prev.direccion_id_pais || "",
+        direccion_fiscal_id_estado: prev.direccion_id_estado || "",
+        direccion_fiscal_id_municipio: prev.direccion_id_municipio || "",
+      }));
+    }
+  }, [copiarDireccion, isEditingFiscal]);
+
   // Save fiscal data
   const saveFiscalMutation = useMutation({
     mutationFn: async () => {
-      const { id, fecha_creacion, fecha_actualizacion, ...updateData } = fiscalForm;
+      const allowedFields = [
+        "nombre_legal", "nombre_comercial", "telefono", "curp",
+        "rfc", "regimen", "uso_cfdi",
+        "direccion_calle", "direccion_num_ext", "direccion_num_int", "direccion_colonia", "direccion_codigo_postal",
+        "direccion_id_pais", "direccion_id_estado", "direccion_id_municipio",
+        "direccion_fiscal_calle", "direccion_fiscal_num_ext", "direccion_fiscal_num_int", "direccion_fiscal_colonia", "direccion_fiscal_codigo_postal",
+        "direccion_fiscal_id_pais", "direccion_fiscal_id_estado", "direccion_fiscal_id_municipio",
+      ];
+      const updateData: any = {};
+      allowedFields.forEach(f => {
+        if (fiscalForm[f] !== undefined) {
+          // Convert numeric FK fields
+          if (["direccion_id_estado", "direccion_id_municipio", "direccion_fiscal_id_estado", "direccion_fiscal_id_municipio", "regimen"].includes(f)) {
+            updateData[f] = fiscalForm[f] ? parseInt(fiscalForm[f]) : null;
+          } else {
+            updateData[f] = fiscalForm[f] || null;
+          }
+        }
+      });
       const { error } = await supabase
         .from("personas")
         .update(updateData)
@@ -88,18 +182,18 @@ export default function InmobConfiguracion() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Datos fiscales actualizados");
+      toast.success("Datos actualizados correctamente");
       setIsEditingFiscal(false);
+      setCopiarDireccion(false);
       queryClient.invalidateQueries({ queryKey: ["inmob-config-persona"] });
     },
-    onError: () => toast.error("Error al guardar datos fiscales"),
+    onError: () => toast.error("Error al guardar los datos"),
   });
 
   // Save bank account
   const saveBankMutation = useMutation({
     mutationFn: async () => {
       if (bankForm.id) {
-        // Update existing
         const { error } = await supabase
           .from("cuentas_bancarias")
           .update({
@@ -111,7 +205,6 @@ export default function InmobConfiguracion() {
           .eq("id", bankForm.id) as any;
         if (error) throw error;
       } else {
-        // Create new
         const { error } = await supabase
           .from("cuentas_bancarias")
           .insert({
@@ -148,60 +241,133 @@ export default function InmobConfiguracion() {
     setIsEditingBank(true);
   };
 
-  const updateFiscal = (field: string, value: string) => {
+  const updateFiscal = (field: string, value: any) => {
     setFiscalForm((prev: any) => ({ ...prev, [field]: value }));
   };
 
-  const fiscalFields = [
-    { label: "Razón Social", key: "nombre_legal" },
-    { label: "Nombre Comercial", key: "nombre_comercial" },
-    { label: "RFC", key: "rfc" },
-    { label: "Régimen Fiscal", key: "regimen_fiscal" },
-    { label: "Código Postal", key: "codigo_postal" },
-    { label: "Teléfono", key: "telefono" },
-    { label: "CURP", key: "curp" },
-  ];
+  // Filtered states/municipalities for address
+  const estadosDireccion = useMemo(() => {
+    if (!fiscalForm.direccion_id_pais) return estados;
+    return estados.filter((e: any) => e.id_pais === fiscalForm.direccion_id_pais);
+  }, [estados, fiscalForm.direccion_id_pais]);
 
-  const addressFields = [
-    { label: "Calle", key: "calle" },
-    { label: "Número Exterior", key: "numero_exterior" },
-    { label: "Número Interior", key: "numero_interior" },
-    { label: "Colonia", key: "colonia" },
-    { label: "Ciudad", key: "ciudad" },
-    { label: "Estado", key: "estado" },
-    { label: "País", key: "pais" },
-    { label: "Código Postal", key: "codigo_postal" },
-  ];
+  const municipiosDireccion = useMemo(() => {
+    if (!fiscalForm.direccion_id_estado) return [];
+    return municipios.filter((m: any) => m.id_estado === Number(fiscalForm.direccion_id_estado));
+  }, [municipios, fiscalForm.direccion_id_estado]);
 
-  const fiscalAddressFields = [
-    { label: "Calle Fiscal", key: "calle_fiscal" },
-    { label: "Número Exterior Fiscal", key: "numero_exterior_fiscal" },
-    { label: "Número Interior Fiscal", key: "numero_interior_fiscal" },
-    { label: "Colonia Fiscal", key: "colonia_fiscal" },
-    { label: "Ciudad Fiscal", key: "ciudad_fiscal" },
-    { label: "Estado Fiscal", key: "estado_fiscal" },
-    { label: "País Fiscal", key: "pais_fiscal" },
-    { label: "Código Postal Fiscal", key: "codigo_postal_fiscal" },
-  ];
+  const estadosFiscal = useMemo(() => {
+    if (!fiscalForm.direccion_fiscal_id_pais) return estados;
+    return estados.filter((e: any) => e.id_pais === fiscalForm.direccion_fiscal_id_pais);
+  }, [estados, fiscalForm.direccion_fiscal_id_pais]);
 
-  const renderFieldGrid = (fields: { label: string; key: string }[]) => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {fields.map(f => (
-        <div key={f.key} className="space-y-1">
-          <Label className="text-xs text-muted-foreground">{f.label}</Label>
-          {isEditingFiscal ? (
-            <Input
-              value={fiscalForm[f.key] || ""}
-              onChange={e => updateFiscal(f.key, e.target.value)}
-              placeholder={f.label}
-            />
-          ) : (
-            <p className="font-medium text-foreground text-sm">{persona?.[f.key] || "—"}</p>
-          )}
+  const municipiosFiscal = useMemo(() => {
+    if (!fiscalForm.direccion_fiscal_id_estado) return [];
+    return municipios.filter((m: any) => m.id_estado === Number(fiscalForm.direccion_fiscal_id_estado));
+  }, [municipios, fiscalForm.direccion_fiscal_id_estado]);
+
+  // Helper to get display name for IDs
+  const getPaisNombre = (id: any) => paises.find((p: any) => p.id === id)?.nombre || "";
+  const getEstadoNombre = (id: any) => estados.find((e: any) => e.id === Number(id))?.nombre || "";
+  const getMunicipioNombre = (id: any) => municipios.find((m: any) => m.id === Number(id))?.nombre || "";
+  const getRegimenNombre = (id: any) => regimenes.find((r: any) => r.id === Number(id))?.nombre || "";
+  const getUsoCfdiNombre = (codigo: any) => usosCfdi.find((u: any) => u.codigo === codigo)?.nombre || "";
+
+  const renderAddressForm = (prefix: "direccion" | "direccion_fiscal", label: string) => {
+    const keys = {
+      calle: `${prefix}_calle`,
+      numExt: `${prefix}_num_ext`,
+      numInt: `${prefix}_num_int`,
+      colonia: `${prefix}_colonia`,
+      cp: `${prefix}_codigo_postal`,
+      pais: `${prefix}_id_pais`,
+      estado: `${prefix}_id_estado`,
+      municipio: `${prefix}_id_municipio`,
+    };
+    const filteredEstados = prefix === "direccion" ? estadosDireccion : estadosFiscal;
+    const filteredMunicipios = prefix === "direccion" ? municipiosDireccion : municipiosFiscal;
+
+    if (!isEditingFiscal) {
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[
+            { label: "Calle", value: persona?.[keys.calle] },
+            { label: "Número Exterior", value: persona?.[keys.numExt] },
+            { label: "Número Interior", value: persona?.[keys.numInt] },
+            { label: "Colonia", value: persona?.[keys.colonia] },
+            { label: "Código Postal", value: persona?.[keys.cp] },
+            { label: "País", value: getPaisNombre(persona?.[keys.pais]) },
+            { label: "Estado", value: getEstadoNombre(persona?.[keys.estado]) },
+            { label: "Municipio", value: getMunicipioNombre(persona?.[keys.municipio]) },
+          ].map(f => (
+            <div key={f.label} className="space-y-1">
+              <p className="text-xs text-muted-foreground">{f.label}</p>
+              <p className="font-medium text-foreground text-sm">{f.value || "—"}</p>
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
-  );
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-1">
+          <Label className="text-xs">Calle</Label>
+          <Input value={fiscalForm[keys.calle] || ""} onChange={e => updateFiscal(keys.calle, e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Número Exterior</Label>
+          <Input value={fiscalForm[keys.numExt] || ""} onChange={e => updateFiscal(keys.numExt, e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Número Interior</Label>
+          <Input value={fiscalForm[keys.numInt] || ""} onChange={e => updateFiscal(keys.numInt, e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Colonia</Label>
+          <Input value={fiscalForm[keys.colonia] || ""} onChange={e => updateFiscal(keys.colonia, e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Código Postal</Label>
+          <Input value={fiscalForm[keys.cp] || ""} onChange={e => updateFiscal(keys.cp, e.target.value)} maxLength={5} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">País</Label>
+          <Select value={fiscalForm[keys.pais] || ""} onValueChange={v => {
+            updateFiscal(keys.pais, v);
+            updateFiscal(keys.estado, "");
+            updateFiscal(keys.municipio, "");
+          }}>
+            <SelectTrigger><SelectValue placeholder="Seleccionar país" /></SelectTrigger>
+            <SelectContent>
+              {paises.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Estado</Label>
+          <Select value={fiscalForm[keys.estado]?.toString() || ""} onValueChange={v => {
+            updateFiscal(keys.estado, v);
+            updateFiscal(keys.municipio, "");
+          }}>
+            <SelectTrigger><SelectValue placeholder="Seleccionar estado" /></SelectTrigger>
+            <SelectContent>
+              {filteredEstados.map((e: any) => <SelectItem key={e.id} value={e.id.toString()}>{e.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Municipio</Label>
+          <Select value={fiscalForm[keys.municipio]?.toString() || ""} onValueChange={v => updateFiscal(keys.municipio, v)}>
+            <SelectTrigger><SelectValue placeholder="Seleccionar municipio" /></SelectTrigger>
+            <SelectContent>
+              {filteredMunicipios.map((m: any) => <SelectItem key={m.id} value={m.id.toString()}>{m.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    );
+  };
 
   const existingAccount = cuentas[0] || null;
 
@@ -209,12 +375,12 @@ export default function InmobConfiguracion() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-foreground">Configuración</h1>
 
-      {/* Fiscal data */}
+      {/* Fiscal data card */}
       <Card className="sozu-card">
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-base">Datos Fiscales</CardTitle>
+            <CardTitle className="text-base">Datos de la Inmobiliaria</CardTitle>
           </div>
           {!isEditingFiscal ? (
             <Button variant="outline" size="sm" onClick={() => setIsEditingFiscal(true)}>
@@ -222,7 +388,7 @@ export default function InmobConfiguracion() {
             </Button>
           ) : (
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setIsEditingFiscal(false); setFiscalForm({ ...persona }); }}>
+              <Button variant="outline" size="sm" onClick={() => { setIsEditingFiscal(false); setCopiarDireccion(false); setFiscalForm({ ...persona }); }}>
                 Cancelar
               </Button>
               <Button size="sm" onClick={() => saveFiscalMutation.mutate()} disabled={saveFiscalMutation.isPending}>
@@ -237,10 +403,32 @@ export default function InmobConfiguracion() {
               <TabsList className="mb-4">
                 <TabsTrigger value="datos">Datos Generales</TabsTrigger>
                 <TabsTrigger value="direccion">Dirección</TabsTrigger>
-                <TabsTrigger value="direccion_fiscal">Dirección Fiscal</TabsTrigger>
+                <TabsTrigger value="datos_fiscales">Datos Fiscales</TabsTrigger>
               </TabsList>
+
+              {/* Tab 1: Datos Generales */}
               <TabsContent value="datos">
-                {renderFieldGrid(fiscalFields)}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    { label: "Razón Social", key: "nombre_legal" },
+                    { label: "Nombre Comercial", key: "nombre_comercial" },
+                    { label: "Teléfono", key: "telefono" },
+                    { label: "CURP", key: "curp" },
+                  ].map(f => (
+                    <div key={f.key} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">{f.label}</Label>
+                      {isEditingFiscal ? (
+                        <Input
+                          value={fiscalForm[f.key] || ""}
+                          onChange={e => updateFiscal(f.key, e.target.value)}
+                          placeholder={f.label}
+                        />
+                      ) : (
+                        <p className="font-medium text-foreground text-sm">{persona[f.key] || "—"}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
                 {/* Email - non-editable */}
                 <div className="mt-4 space-y-1">
                   <Label className="text-xs text-muted-foreground">Email</Label>
@@ -253,15 +441,88 @@ export default function InmobConfiguracion() {
                   </div>
                 </div>
               </TabsContent>
+
+              {/* Tab 2: Dirección */}
               <TabsContent value="direccion">
-                {renderFieldGrid(addressFields)}
+                {renderAddressForm("direccion", "Dirección")}
               </TabsContent>
-              <TabsContent value="direccion_fiscal">
-                {renderFieldGrid(fiscalAddressFields)}
+
+              {/* Tab 3: Datos Fiscales (RFC, Régimen, Uso CFDI + Dirección Fiscal) */}
+              <TabsContent value="datos_fiscales">
+                <div className="space-y-6">
+                  {/* RFC, Régimen, Uso CFDI */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">RFC</Label>
+                      {isEditingFiscal ? (
+                        <Input
+                          value={fiscalForm.rfc || ""}
+                          onChange={e => updateFiscal("rfc", e.target.value.toUpperCase())}
+                          placeholder="RFC"
+                          maxLength={13}
+                        />
+                      ) : (
+                        <p className="font-medium text-foreground text-sm">{persona.rfc || "—"}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Régimen Fiscal</Label>
+                      {isEditingFiscal ? (
+                        <Select value={fiscalForm.regimen?.toString() || ""} onValueChange={v => updateFiscal("regimen", v)}>
+                          <SelectTrigger><SelectValue placeholder="Seleccionar régimen" /></SelectTrigger>
+                          <SelectContent>
+                            {regimenes.map((r: any) => (
+                              <SelectItem key={r.id} value={r.id.toString()}>{r.nombre}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="font-medium text-foreground text-sm">{getRegimenNombre(persona.regimen) || "—"}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <Label className="text-xs text-muted-foreground">Uso del CFDI</Label>
+                      {isEditingFiscal ? (
+                        <Select value={fiscalForm.uso_cfdi || ""} onValueChange={v => updateFiscal("uso_cfdi", v)}>
+                          <SelectTrigger><SelectValue placeholder="Seleccionar uso CFDI" /></SelectTrigger>
+                          <SelectContent>
+                            {usosCfdi.map((u: any) => (
+                              <SelectItem key={u.codigo} value={u.codigo}>{u.codigo} - {u.nombre}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="font-medium text-foreground text-sm">
+                          {persona.uso_cfdi ? `${persona.uso_cfdi} - ${getUsoCfdiNombre(persona.uso_cfdi)}` : "—"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dirección Fiscal */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-foreground">Dirección Fiscal</h3>
+                      {isEditingFiscal && (
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="copiar-direccion"
+                            checked={copiarDireccion}
+                            onCheckedChange={(checked) => setCopiarDireccion(!!checked)}
+                          />
+                          <label htmlFor="copiar-direccion" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1">
+                            <Copy className="h-3 w-3" /> Copiar de dirección física
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                    {renderAddressForm("direccion_fiscal", "Dirección Fiscal")}
+                  </div>
+                </div>
               </TabsContent>
             </Tabs>
           ) : (
-            <p className="text-muted-foreground">Cargando datos fiscales...</p>
+            <p className="text-muted-foreground">Cargando datos...</p>
           )}
         </CardContent>
       </Card>
