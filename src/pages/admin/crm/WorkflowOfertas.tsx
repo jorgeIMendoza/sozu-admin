@@ -196,6 +196,13 @@ export default function WorkflowOfertas() {
   const [selectedTipoOferta, setSelectedTipoOferta] = useState<string>('all');
   const inmobIdByEmailRef = useRef(new Map<string, number>());
 
+  // Month filter: default to current month
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${now.getMonth()}`;
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([currentMonthKey]);
+  const dateRanges = useMemo(() => buildDateRanges(selectedMonths), [selectedMonths]);
+  const hasMonthFilter = selectedMonths.length > 0;
+
   const isSuperAdmin = profile?.rol_nombre === 'Super Administrador';
   const isInmobiliaria = profile?.rol_id === 4;
   const isAgente = profile?.rol_id === 3 || profile?.rol_id === 9;
