@@ -294,6 +294,7 @@ export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stage
                 )}
               </div>
             )}
+          </div>
         </ScrollArea>
       </DialogContent>
     </Dialog>
