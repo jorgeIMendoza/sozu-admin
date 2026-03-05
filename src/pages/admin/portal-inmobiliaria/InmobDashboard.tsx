@@ -468,11 +468,11 @@ export default function InmobDashboard() {
 
       {/* KPIs - First row: 4 cards */}
       {isLoading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[1,2,3,4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <DashStatCard icon={Users} title="Agentes activos" value={String(totalAgentes)} subtitle="Operando ahora" variant="primary" to={`${NAV_PREFIX}/agentes`} />
           <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle="Valor acumulado" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
           <DashStatCard icon={FileCheck} title="Ofertas activas" value={String(ofertasActivas)} subtitle="En negociación" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
@@ -482,11 +482,11 @@ export default function InmobDashboard() {
 
       {/* KPIs - Second row: 3 cards */}
       {isLoading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {[1,2,3].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <DashStatCard icon={DollarSign} title="Ingresos cobrados" value={fmtShort(ingresosCobrados)} fullValue={fmtCurrency(ingresosCobrados)} subtitle="Pagos aplicados" variant="success" to={`${NAV_PREFIX}/comisiones`} />
           <DashStatCard icon={Clock} title="Por cobrar" value={fmtShort(porCobrar)} fullValue={fmtCurrency(porCobrar)} subtitle="Pendiente de pago" variant="warning" to={`${NAV_PREFIX}/comisiones`} />
           <DashStatCard icon={Target} title="Estimados" value={fmtShort(estimados)} fullValue={fmtCurrency(estimados)} subtitle="Basado en apartados" />
@@ -495,7 +495,7 @@ export default function InmobDashboard() {
 
       {/* Strategic mini-metrics */}
       {!isLoading && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: "Conversión global", value: `${conversionGlobal}%`, icon: Percent },
             { label: "Ticket promedio", value: fmtShort(ticketPromedio), icon: BarChart3 },
