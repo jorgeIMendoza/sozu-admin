@@ -381,6 +381,27 @@ export default function InmobDashboard() {
           .eq("activo", true);
         (data || []).forEach((c: any) => { if (c.id_oferta) m.set(c.id_oferta, c); });
       }
+
+      // Check signed contracts (tipo_documento 42) to match pipeline logic
+      const cuentaIds = [...m.values()].map((c: any) => c.id);
+      if (cuentaIds.length > 0) {
+        const firmadoSet = new Set<number>();
+        for (let i = 0; i < cuentaIds.length; i += 200) {
+          const batch = cuentaIds.slice(i, i + 200);
+          const { data: docs } = await supabase
+            .from("documentos")
+            .select("id_cuenta_cobranza")
+            .in("id_cuenta_cobranza", batch)
+            .eq("id_tipo_documento", 42)
+            .eq("activo", true) as any;
+          (docs || []).forEach((d: any) => firmadoSet.add(d.id_cuenta_cobranza));
+        }
+        // Annotate cuentas with tiene_contrato_firmado
+        m.forEach((c: any, key: number) => {
+          c.tiene_contrato_firmado = firmadoSet.has(c.id);
+        });
+      }
+
       return m;
     },
     enabled: ofertaIds.length > 0,
