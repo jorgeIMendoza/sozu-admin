@@ -547,7 +547,7 @@ export default function InmobDashboard() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <DashStatCard icon={Users} title="Agentes activos" value={String(totalAgentes)} subtitle="Operando ahora" variant="primary" to={`${NAV_PREFIX}/agentes`} />
-          <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle="Valor acumulado" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
+          <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle={`${pipelineCount} ofertas desde apartado`} variant="primary" to={`${NAV_PREFIX}/pipeline`} />
           <DashStatCard icon={FileCheck} title="Ofertas activas" value={String(ofertasActivas)} subtitle="En negociación" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
           <DashStatCard icon={Home} title="Apartados" value={String(apartados)} subtitle="Confirmados" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
         </div>
