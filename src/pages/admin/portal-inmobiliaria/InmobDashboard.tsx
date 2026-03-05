@@ -7,6 +7,9 @@ import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { MonthMultiSelector, getCurrentMonthKey, getMonthFilterLabel, buildDateRangesFromMonths } from "@/components/ui/month-multi-selector";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,7 +23,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Users, TrendingUp, DollarSign, Home, FileText, Target,
-  ArrowRight, BarChart3, Clock, Percent, Building2,
+  ArrowRight, BarChart3, Clock, Percent, Building2, CalendarDays,
   ChevronRight, AlertTriangle, AlertCircle, Info,
   Timer, Receipt, CalendarCheck, UserPlus, Handshake,
   FileCheck, CheckCircle2, Minus, ArrowUp, ArrowDown,
