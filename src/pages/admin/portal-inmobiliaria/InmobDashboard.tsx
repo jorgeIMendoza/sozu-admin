@@ -141,21 +141,25 @@ export default function InmobDashboard() {
     track({ page: "inmob_dashboard", elementId: "page_view", elementType: "page" });
   }, []);
 
-  // Inmobiliaria name
-  const { data: inmobName } = useQuery({
-    queryKey: ["inmob-name", personaId],
+  // Inmobiliaria info (name + check if Sozu)
+  const { data: inmobInfo } = useQuery({
+    queryKey: ["inmob-info", personaId],
     queryFn: async () => {
-      if (!personaId) return "Mi Inmobiliaria";
+      if (!personaId) return { name: "Mi Inmobiliaria", isSozu: false };
       const { data } = await supabase
         .from("personas")
         .select("nombre_comercial, nombre_legal")
         .eq("id", personaId)
         .single() as any;
-      return data?.nombre_comercial || data?.nombre_legal || "Mi Inmobiliaria";
+      const name = data?.nombre_comercial || data?.nombre_legal || "Mi Inmobiliaria";
+      const isSozu = (data?.nombre_legal || "").toLowerCase().includes("real estate ventures");
+      return { name, isSozu };
     },
     enabled: !!personaId,
     staleTime: 10 * 60_000,
   });
+  const inmobName = inmobInfo?.name || "Mi Inmobiliaria";
+  const isSozu = inmobInfo?.isSozu || false;
 
   // Projects for filter
   const { data: projects = [] } = useQuery({
@@ -267,6 +271,56 @@ export default function InmobDashboard() {
     staleTime: 3 * 60_000,
   });
 
+  // For Sozu: get ALL comisionistas on the same cuentas to subtract external inmobiliarias' amounts
+  const inmobCuentaIds = useMemo(() => {
+    return [...new Set(inmobComisionistas.map((c: any) => c.id_cuenta_cobranza).filter(Boolean))] as number[];
+  }, [inmobComisionistas]);
+
+  const { data: allComisionistasOnCuentas = [] } = useQuery({
+    queryKey: ["inmob-dash-all-comisionistas-sozu", inmobCuentaIds],
+    queryFn: async () => {
+      if (!inmobCuentaIds.length) return [];
+      const results: any[] = [];
+      for (let i = 0; i < inmobCuentaIds.length; i += 100) {
+        const batch = inmobCuentaIds.slice(i, i + 100);
+        const { data } = await (supabase as any)
+          .from("comisionistas")
+          .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision")
+          .in("id_cuenta_cobranza", batch)
+          .eq("activo", true)
+          .neq("email_usuario", inmobiliariaEmail);
+        if (data) results.push(...data);
+      }
+      return results;
+    },
+    enabled: isSozu && inmobCuentaIds.length > 0 && !!inmobiliariaEmail,
+    staleTime: 3 * 60_000,
+  });
+
+  // Build map: cuenta_id -> sum of external comisionistas' monto
+  const externalComisionByCuenta = useMemo(() => {
+    const map = new Map<number, number>();
+    if (!isSozu) return map;
+    allComisionistasOnCuentas.forEach((c: any) => {
+      const prev = map.get(c.id_cuenta_cobranza) || 0;
+      map.set(c.id_cuenta_cobranza, prev + (Number(c.monto_comision) || 0));
+    });
+    return map;
+  }, [isSozu, allComisionistasOnCuentas]);
+
+  // Inmobiliaria commission percentage (most common from comisionistas)
+  const inmobComisionPorcentaje = useMemo(() => {
+    if (!inmobComisionistas.length) return null;
+    const pcts = inmobComisionistas.map((c: any) => Number(c.porcentaje_comision) || 0).filter((p: number) => p > 0);
+    if (!pcts.length) return null;
+    // Return most frequent
+    const freq = new Map<number, number>();
+    pcts.forEach((p: number) => freq.set(p, (freq.get(p) || 0) + 1));
+    let maxP = pcts[0], maxCount = 0;
+    freq.forEach((count, p) => { if (count > maxCount) { maxCount = count; maxP = p; } });
+    return maxP;
+  }, [inmobComisionistas]);
+
   // Also keep agent-level comisiones for the agent performance table
   const { data: comisiones = [] } = useQuery({
     queryKey: ["inmob-dash-comisiones", agentEmails],
@@ -361,19 +415,27 @@ export default function InmobDashboard() {
     return classifiedOfertas.filter((o: any) => o.stage === "cierre").length;
   }, [classifiedOfertas]);
 
+  // Helper: get net commission for a comisionista entry (Sozu subtracts external dispersions)
+  const getNetComision = useCallback((c: any) => {
+    const monto = Number(c.monto_comision) || 0;
+    if (!isSozu) return monto;
+    const external = externalComisionByCuenta.get(c.id_cuenta_cobranza) || 0;
+    return Math.max(0, monto - external);
+  }, [isSozu, externalComisionByCuenta]);
+
   // Ingresos cobrados: comisionistas pagadas for the inmobiliaria
   const ingresosCobrados = useMemo(() => {
     return inmobComisionistas
       .filter((c: any) => c.pagada === true)
-      .reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
-  }, [inmobComisionistas]);
+      .reduce((s: number, c: any) => s + getNetComision(c), 0);
+  }, [inmobComisionistas, getNetComision]);
 
   // Por cobrar: comisionistas aprobadas pero no pagadas
   const porCobrar = useMemo(() => {
     return inmobComisionistas
       .filter((c: any) => c.aprobada === true && c.pagada !== true)
-      .reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
-  }, [inmobComisionistas]);
+      .reduce((s: number, c: any) => s + getNetComision(c), 0);
+  }, [inmobComisionistas, getNetComision]);
 
   // Estimados: sum of commission from apartado onwards
   // Build a set of cuenta_cobranza IDs linked to advanced-stage offers
@@ -391,8 +453,8 @@ export default function InmobDashboard() {
   const estimados = useMemo(() => {
     return inmobComisionistas
       .filter((c: any) => advancedCuentaIds.has(c.id_cuenta_cobranza))
-      .reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
-  }, [inmobComisionistas, advancedCuentaIds]);
+      .reduce((s: number, c: any) => s + getNetComision(c), 0);
+  }, [inmobComisionistas, advancedCuentaIds, getNetComision]);
 
   // Secondary KPIs
   const conversionGlobal = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100).toFixed(1) : "0";
@@ -523,7 +585,15 @@ export default function InmobDashboard() {
       {/* Header + Project filter */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard Ejecutivo</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight">Dashboard Ejecutivo</h1>
+            {inmobComisionPorcentaje !== null && (
+              <Badge variant="outline" className="text-sm font-semibold border-primary/30 text-primary">
+                <Percent className="h-3.5 w-3.5 mr-1" />
+                Comisión: {inmobComisionPorcentaje.toFixed(2)}%
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">Vista general del desempeño inmobiliario</p>
         </div>
         <Select value={selectedProject} onValueChange={setSelectedProject}>
