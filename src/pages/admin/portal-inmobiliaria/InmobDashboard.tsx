@@ -896,9 +896,8 @@ export default function InmobDashboard() {
           </div>
           <div className="px-5 pb-5">
             {isLoading ? <Skeleton className="h-64 w-full" /> : (
-              <div className="flex">
-                <ResponsiveContainer width="75%" height={280}>
-                  <RechartsFunnelChart>
+              <ResponsiveContainer width="100%" height={280}>
+                <RechartsFunnelChart>
                     <RechartsTooltip
                       formatter={(value: any, _name: any, props: any) => {
                         const stage = props?.payload;
