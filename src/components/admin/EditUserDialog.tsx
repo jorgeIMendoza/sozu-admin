@@ -359,7 +359,6 @@ export function EditUserDialog({
           throw new Error('No se encontró la entidad de la inmobiliaria seleccionada.');
         }
 
-        {
           // Update existing proyectos_acceso entries
           const { error: updateAccesoError } = await supabase
             .from('proyectos_acceso')
