@@ -224,13 +224,14 @@ export default function InmobDashboard() {
     queryKey: ["inmob-dash-ofertas", agentEmails, monthStart, monthEnd],
     queryFn: async () => {
       if (!agentEmails.length) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("ofertas")
-        .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado, id_proyecto, id_producto")
+        .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado, id_producto")
         .in("email_creador", agentEmails)
         .eq("activo", true)
         .gte("fecha_generacion", monthStart)
         .lte("fecha_generacion", monthEnd) as any;
+      if (error) console.error("[InmobDashboard] ofertas query error:", error);
       return data || [];
     },
     enabled: agentEmails.length > 0,
