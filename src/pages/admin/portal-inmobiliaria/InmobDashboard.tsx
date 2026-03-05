@@ -733,7 +733,7 @@ export default function InmobDashboard() {
       estimados,
       conversion_global: conversionGlobal,
       ticket_promedio: ticketPromedio,
-      comision_prom_agente: comisionPromAgente,
+      comision_prom_agente: comisionPromAgenteBase,
       tiempo_prom_cierre: tiempoPromCierre,
       fecha_actualizacion: new Date().toISOString(),
     };
@@ -741,7 +741,7 @@ export default function InmobDashboard() {
       .from("inmob_kpi_mensual")
       .upsert(kpiData, { onConflict: "persona_id,anio,mes" })
       .then(() => {});
-  }, [personaId, isLoading, pipelineTotal, pipelineCount, ofertasActivas, apartados, ingresosCobrados, porCobrar, estimados, conversionGlobal, ticketPromedio, comisionPromAgente, tiempoPromCierre]);
+  }, [personaId, isLoading, pipelineTotal, pipelineCount, ofertasActivas, apartados, ingresosCobrados, porCobrar, estimados, conversionGlobal, ticketPromedio, comisionPromAgenteBase, tiempoPromCierre]);
 
   // Trend helpers
   const trendPipeline = getTrend(pipelineTotal, prevKpi?.pipeline_total);
@@ -752,7 +752,7 @@ export default function InmobDashboard() {
   const trendEstimados = getTrend(estimados, prevKpi?.estimados);
   const trendConversion = getTrend(conversionGlobal, prevKpi?.conversion_global);
   const trendTicket = getTrend(ticketPromedio, prevKpi?.ticket_promedio);
-  const trendComisionProm = getTrend(comisionPromAgente, prevKpi?.comision_prom_agente);
+  const trendComisionProm = getTrend(comisionPromAgenteBase, prevKpi?.comision_prom_agente);
   const trendTiempoCierre = getTrend(tiempoPromCierre, prevKpi?.tiempo_prom_cierre, true); // lower is better
 
   // Funnel data — 5 stages: Ofertas → Aprobadas → Apartadas → Firma → Cerradas
