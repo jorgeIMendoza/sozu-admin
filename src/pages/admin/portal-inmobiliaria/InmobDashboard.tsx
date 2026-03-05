@@ -54,7 +54,7 @@ const getMonthRange = (year: number, month: number) => {
 /* ───── constants ───── */
 const funnelColors = [
   "hsl(139, 35%, 42%)", "hsl(139, 35%, 49%)", "hsl(139, 35%, 56%)",
-  "hsl(139, 35%, 63%)", "hsl(139, 35%, 70%)", "hsl(139, 35%, 77%)",
+  "hsl(139, 35%, 63%)", "hsl(139, 35%, 70%)",
 ];
 
 const alertIcons = { warning: AlertTriangle, danger: AlertCircle, info: Info };
@@ -671,15 +671,26 @@ export default function InmobDashboard() {
   const trendComisionProm = getTrend(comisionPromAgente, prevKpi?.comision_prom_agente);
   const trendTiempoCierre = getTrend(tiempoPromCierre, prevKpi?.tiempo_prom_cierre, true); // lower is better
 
-  // Funnel data
+  // Funnel data — 5 stages: Ofertas → Aprobadas → Apartadas → Firma → Cerradas
+  const firmaCount = useMemo(() => {
+    return classifiedOfertas.filter((o: any) => o.stage === "gen_contrato" || o.stage === "firma_contrato").length;
+  }, [classifiedOfertas]);
+
+  const apartadasFunnel = useMemo(() => {
+    return classifiedOfertas.filter((o: any) => ADVANCED_STAGES.has(o.stage)).length;
+  }, [classifiedOfertas]);
+
+  const aprobadasCount = useMemo(() => {
+    return classifiedOfertas.filter((o: any) => o.stage === "aprobadas" || ADVANCED_STAGES.has(o.stage)).length;
+  }, [classifiedOfertas]);
+
   const funnelData = useMemo(() => [
-    { stage: "Prospectos", count: prospectosCount, value: 0 },
-    { stage: "Ofertas", count: ofertas.length, value: pipelineTotal },
-    { stage: "Aprobación", count: ofertas.filter((o: any) => o.id_estatus_aprobacion === 2).length, value: 0 },
-    { stage: "Apartado", count: apartados, value: estimados },
-    { stage: "Firma", count: ofertas.filter((o: any) => o.id_estatus_aprobacion === 5).length, value: 0 },
-    { stage: "Escrituración", count: ventasCerradas, value: 0 },
-  ], [prospectosCount, ofertas, apartados, ventasCerradas, pipelineTotal, estimados]);
+    { stage: "Ofertas", count: ofertas.length },
+    { stage: "Aprobadas", count: aprobadasCount },
+    { stage: "Apartadas", count: apartadasFunnel },
+    { stage: "Firma", count: firmaCount },
+    { stage: "Cerradas", count: ventasCerradas },
+  ], [ofertas, aprobadasCount, apartadasFunnel, firmaCount, ventasCerradas]);
 
   // Alerts
   const alerts = useMemo(() => {
@@ -868,24 +879,32 @@ export default function InmobDashboard() {
           </div>
           <div className="px-5 pb-5">
             {isLoading ? <Skeleton className="h-64 w-full" /> : (
-              <ResponsiveContainer width="100%" height={280}>
-                <RechartsFunnelChart>
-                  <RechartsTooltip
-                    formatter={(value: any, name: any, props: any) => {
-                      const stage = props?.payload;
-                      return [`${value} prospectos${stage?.value ? ` · ${fmtShort(stage.value)}` : ""}`, stage?.stage || ""];
-                    }}
-                    contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(0,0%,91%)", boxShadow: "0 4px 12px rgba(0,0,0,0.06)" }}
-                  />
-                  <Funnel dataKey="count" data={funnelData} isAnimationActive>
-                    {funnelData.map((_, i) => (
-                      <Cell key={`cell-${i}`} fill={funnelColors[i]} cursor="pointer" onClick={() => navigate(`${NAV_PREFIX}/pipeline?mes=actual`)} />
-                    ))}
-                    <LabelList position="center" fill="#fff" fontSize={14} fontWeight={700} />
-                    <LabelList position="right" fill="hsl(0,0%,45%)" fontSize={12} dataKey="stage" />
-                  </Funnel>
-                </RechartsFunnelChart>
-              </ResponsiveContainer>
+              <div className="flex">
+                <ResponsiveContainer width="75%" height={280}>
+                  <RechartsFunnelChart>
+                    <RechartsTooltip
+                      formatter={(value: any, _name: any, props: any) => {
+                        const stage = props?.payload;
+                        return [value, stage?.stage || ""];
+                      }}
+                      contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(0,0%,91%)", boxShadow: "0 4px 12px rgba(0,0,0,0.06)" }}
+                    />
+                    <Funnel dataKey="count" data={funnelData} isAnimationActive>
+                      {funnelData.map((_, i) => (
+                        <Cell key={`cell-${i}`} fill={funnelColors[i]} cursor="pointer" onClick={() => navigate(`${NAV_PREFIX}/pipeline?mes=actual`)} />
+                      ))}
+                      <LabelList position="center" fill="#fff" fontSize={14} fontWeight={700} />
+                    </Funnel>
+                  </RechartsFunnelChart>
+                </ResponsiveContainer>
+                <div className="flex flex-col justify-between py-4 w-[25%]">
+                  {funnelData.map((d, i) => (
+                    <p key={i} className="text-xs text-muted-foreground font-medium truncate" style={{ color: funnelColors[i] }}>
+                      {d.stage}
+                    </p>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
