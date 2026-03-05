@@ -247,6 +247,7 @@ export default function InmobPipeline() {
   const [selectedAgentes, setSelectedAgentes] = useState<string[]>([]);
   const [selectedProyectos, setSelectedProyectos] = useState<string[]>([]);
   const [selectedTipoOferta, setSelectedTipoOferta] = useState<string>("all");
+  const [searchOfertaId, setSearchOfertaId] = useState<string>("");
 
   // Month filter: array of "YYYY-M" keys (M is 0-indexed)
   const currentMonthKey = getCurrentMonthKey();
