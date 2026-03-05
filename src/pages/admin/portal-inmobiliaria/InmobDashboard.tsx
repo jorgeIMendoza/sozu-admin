@@ -879,24 +879,32 @@ export default function InmobDashboard() {
           </div>
           <div className="px-5 pb-5">
             {isLoading ? <Skeleton className="h-64 w-full" /> : (
-              <ResponsiveContainer width="100%" height={280}>
-                <RechartsFunnelChart>
-                  <RechartsTooltip
-                    formatter={(value: any, name: any, props: any) => {
-                      const stage = props?.payload;
-                      return [`${value} prospectos${stage?.value ? ` · ${fmtShort(stage.value)}` : ""}`, stage?.stage || ""];
-                    }}
-                    contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(0,0%,91%)", boxShadow: "0 4px 12px rgba(0,0,0,0.06)" }}
-                  />
-                  <Funnel dataKey="count" data={funnelData} isAnimationActive>
-                    {funnelData.map((_, i) => (
-                      <Cell key={`cell-${i}`} fill={funnelColors[i]} cursor="pointer" onClick={() => navigate(`${NAV_PREFIX}/pipeline?mes=actual`)} />
-                    ))}
-                    <LabelList position="center" fill="#fff" fontSize={14} fontWeight={700} />
-                    <LabelList position="right" fill="hsl(0,0%,45%)" fontSize={12} dataKey="stage" />
-                  </Funnel>
-                </RechartsFunnelChart>
-              </ResponsiveContainer>
+              <div className="flex">
+                <ResponsiveContainer width="75%" height={280}>
+                  <RechartsFunnelChart>
+                    <RechartsTooltip
+                      formatter={(value: any, _name: any, props: any) => {
+                        const stage = props?.payload;
+                        return [value, stage?.stage || ""];
+                      }}
+                      contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(0,0%,91%)", boxShadow: "0 4px 12px rgba(0,0,0,0.06)" }}
+                    />
+                    <Funnel dataKey="count" data={funnelData} isAnimationActive>
+                      {funnelData.map((_, i) => (
+                        <Cell key={`cell-${i}`} fill={funnelColors[i]} cursor="pointer" onClick={() => navigate(`${NAV_PREFIX}/pipeline?mes=actual`)} />
+                      ))}
+                      <LabelList position="center" fill="#fff" fontSize={14} fontWeight={700} />
+                    </Funnel>
+                  </RechartsFunnelChart>
+                </ResponsiveContainer>
+                <div className="flex flex-col justify-between py-4 w-[25%]">
+                  {funnelData.map((d, i) => (
+                    <p key={i} className="text-xs text-muted-foreground font-medium truncate" style={{ color: funnelColors[i] }}>
+                      {d.stage}
+                    </p>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
