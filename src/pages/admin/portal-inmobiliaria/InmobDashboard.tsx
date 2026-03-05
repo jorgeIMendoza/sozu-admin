@@ -960,7 +960,7 @@ export default function InmobDashboard() {
 
       {/* Strategic mini-metrics with trends */}
       {!isLoading && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
             { label: "Conversión global", value: `${conversionGlobal.toFixed(1)}%`, icon: Percent, trend: trendConversion },
             { label: "Ticket prom. Prop.", value: fmtShort(ticketPropiedades), icon: Home, trend: trendTicket },
