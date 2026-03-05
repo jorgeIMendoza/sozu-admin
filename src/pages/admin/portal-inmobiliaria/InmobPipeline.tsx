@@ -502,6 +502,15 @@ export default function InmobPipeline() {
   // Filter offers
   const filteredOfertas = useMemo(() => {
     let result = ofertas;
+    if (searchOfertaId.trim()) {
+      const searchNum = searchOfertaId.replace(/^(O|OP)-?/i, "").trim();
+      if (searchNum) {
+        const numVal = parseInt(searchNum, 10);
+        if (!isNaN(numVal)) {
+          result = result.filter((o) => o.id === numVal);
+        }
+      }
+    }
     if (selectedAgentes.length > 0) {
       result = result.filter((o) => selectedAgentes.includes(o.email_creador));
     }
@@ -515,7 +524,7 @@ export default function InmobPipeline() {
       result = result.filter((o) => !!o.id_producto);
     }
     return result;
-  }, [ofertas, selectedAgentes, selectedProyectos, selectedTipoOferta]);
+  }, [ofertas, selectedAgentes, selectedProyectos, selectedTipoOferta, searchOfertaId]);
 
   // Group by stage with cierre deduplication, sorted by fecha descending
   const stageMap = useMemo(() => {
