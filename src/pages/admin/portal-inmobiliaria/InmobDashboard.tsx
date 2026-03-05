@@ -141,21 +141,25 @@ export default function InmobDashboard() {
     track({ page: "inmob_dashboard", elementId: "page_view", elementType: "page" });
   }, []);
 
-  // Inmobiliaria name
-  const { data: inmobName } = useQuery({
-    queryKey: ["inmob-name", personaId],
+  // Inmobiliaria info (name + check if Sozu)
+  const { data: inmobInfo } = useQuery({
+    queryKey: ["inmob-info", personaId],
     queryFn: async () => {
-      if (!personaId) return "Mi Inmobiliaria";
+      if (!personaId) return { name: "Mi Inmobiliaria", isSozu: false };
       const { data } = await supabase
         .from("personas")
         .select("nombre_comercial, nombre_legal")
         .eq("id", personaId)
         .single() as any;
-      return data?.nombre_comercial || data?.nombre_legal || "Mi Inmobiliaria";
+      const name = data?.nombre_comercial || data?.nombre_legal || "Mi Inmobiliaria";
+      const isSozu = (data?.nombre_legal || "").toLowerCase().includes("real estate ventures");
+      return { name, isSozu };
     },
     enabled: !!personaId,
     staleTime: 10 * 60_000,
   });
+  const inmobName = inmobInfo?.name || "Mi Inmobiliaria";
+  const isSozu = inmobInfo?.isSozu || false;
 
   // Projects for filter
   const { data: projects = [] } = useQuery({
