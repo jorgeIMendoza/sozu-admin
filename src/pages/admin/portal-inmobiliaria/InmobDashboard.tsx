@@ -815,10 +815,10 @@ export default function InmobDashboard() {
           const cuenta = cuentasMap.get(o.id);
           return s + (Number(cuenta?.precio_final) || 0);
         }, 0);
-      const userComisiones = allComisiones.filter((c: any) => c.email_usuario === email);
+      const emailLower = email.toLowerCase();
+      const userComisiones = allComisiones.filter((c: any) => (c.email_usuario || "").toLowerCase() === emailLower);
       const ingreso = userComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
       const comision = userComisiones.filter((c: any) => c.pagada).reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
-      const conv = userOfertas.length > 0 ? ((userCierres.length / userOfertas.length) * 100) : 0;
       return {
         nombre,
         isInternal,
