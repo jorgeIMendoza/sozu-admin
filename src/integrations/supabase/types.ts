@@ -4053,6 +4053,63 @@ export type Database = {
           },
         ]
       }
+      inmob_kpi_mensual: {
+        Row: {
+          anio: number
+          apartados: number | null
+          comision_prom_agente: number | null
+          conversion_global: number | null
+          estimados: number | null
+          fecha_actualizacion: string | null
+          id: number
+          ingresos_cobrados: number | null
+          mes: number
+          ofertas_activas: number | null
+          persona_id: number
+          pipeline_count: number | null
+          pipeline_total: number | null
+          por_cobrar: number | null
+          ticket_promedio: number | null
+          tiempo_prom_cierre: number | null
+        }
+        Insert: {
+          anio: number
+          apartados?: number | null
+          comision_prom_agente?: number | null
+          conversion_global?: number | null
+          estimados?: number | null
+          fecha_actualizacion?: string | null
+          id?: number
+          ingresos_cobrados?: number | null
+          mes: number
+          ofertas_activas?: number | null
+          persona_id: number
+          pipeline_count?: number | null
+          pipeline_total?: number | null
+          por_cobrar?: number | null
+          ticket_promedio?: number | null
+          tiempo_prom_cierre?: number | null
+        }
+        Update: {
+          anio?: number
+          apartados?: number | null
+          comision_prom_agente?: number | null
+          conversion_global?: number | null
+          estimados?: number | null
+          fecha_actualizacion?: string | null
+          id?: number
+          ingresos_cobrados?: number | null
+          mes?: number
+          ofertas_activas?: number | null
+          persona_id?: number
+          pipeline_count?: number | null
+          pipeline_total?: number | null
+          por_cobrar?: number | null
+          ticket_promedio?: number | null
+          tiempo_prom_cierre?: number | null
+        }
+        Relationships: []
+      }
       logs_actividad: {
         Row: {
           actividad_id: number
