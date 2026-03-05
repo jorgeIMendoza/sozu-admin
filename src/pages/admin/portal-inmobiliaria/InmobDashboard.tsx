@@ -948,7 +948,27 @@ export default function InmobDashboard() {
                         {funnelData.map((_, i) => (
                           <Cell key={`cell-${i}`} fill={funnelColors[i]} cursor="pointer" onClick={() => navigate(`${NAV_PREFIX}/pipeline?mes=actual`)} />
                         ))}
-                        <LabelList position="center" fill="#fff" fontSize={14} fontWeight={700} />
+                        <LabelList
+                          dataKey="count"
+                          position="center"
+                          content={(props: any) => {
+                            const { x, y, width, height, value } = props;
+                            if (value == null) return null;
+                            return (
+                              <text
+                                x={x + width / 2}
+                                y={y + height / 2}
+                                fill="#fff"
+                                fontSize={14}
+                                fontWeight={700}
+                                textAnchor="middle"
+                                dominantBaseline="central"
+                              >
+                                {value}
+                              </text>
+                            );
+                          }}
+                        />
                       </Funnel>
                     </RechartsFunnelChart>
                   </ResponsiveContainer>
