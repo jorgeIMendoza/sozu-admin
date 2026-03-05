@@ -767,7 +767,7 @@ export default function InmobPipeline() {
                               <span className="truncate max-w-[60%] flex items-center gap-1">
                                 {card.agente_nombre || card.email_creador}
                                 {card.is_internal && (
-                                  <Badge variant="outline" className="text-[8px] px-1 py-0 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0">
+                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-warning/30 text-warning bg-warning/10 shrink-0 rounded-full font-medium">
                                     Usuario Interno
                                   </Badge>
                                 )}
