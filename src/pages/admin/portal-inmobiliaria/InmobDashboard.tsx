@@ -54,7 +54,7 @@ const getMonthRange = (year: number, month: number) => {
 /* ───── constants ───── */
 const funnelColors = [
   "hsl(139, 35%, 42%)", "hsl(139, 35%, 49%)", "hsl(139, 35%, 56%)",
-  "hsl(139, 35%, 63%)", "hsl(139, 35%, 70%)", "hsl(139, 35%, 77%)",
+  "hsl(139, 35%, 63%)", "hsl(139, 35%, 70%)",
 ];
 
 const alertIcons = { warning: AlertTriangle, danger: AlertCircle, info: Info };
@@ -671,15 +671,26 @@ export default function InmobDashboard() {
   const trendComisionProm = getTrend(comisionPromAgente, prevKpi?.comision_prom_agente);
   const trendTiempoCierre = getTrend(tiempoPromCierre, prevKpi?.tiempo_prom_cierre, true); // lower is better
 
-  // Funnel data
+  // Funnel data — 5 stages: Ofertas → Aprobadas → Apartadas → Firma → Cerradas
+  const firmaCount = useMemo(() => {
+    return classifiedOfertas.filter((o: any) => o.stage === "gen_contrato" || o.stage === "firma_contrato").length;
+  }, [classifiedOfertas]);
+
+  const apartadasFunnel = useMemo(() => {
+    return classifiedOfertas.filter((o: any) => ADVANCED_STAGES.has(o.stage)).length;
+  }, [classifiedOfertas]);
+
+  const aprobadasCount = useMemo(() => {
+    return classifiedOfertas.filter((o: any) => o.stage === "aprobadas" || ADVANCED_STAGES.has(o.stage)).length;
+  }, [classifiedOfertas]);
+
   const funnelData = useMemo(() => [
-    { stage: "Prospectos", count: prospectosCount, value: 0 },
-    { stage: "Ofertas", count: ofertas.length, value: pipelineTotal },
-    { stage: "Aprobación", count: ofertas.filter((o: any) => o.id_estatus_aprobacion === 2).length, value: 0 },
-    { stage: "Apartado", count: apartados, value: estimados },
-    { stage: "Firma", count: ofertas.filter((o: any) => o.id_estatus_aprobacion === 5).length, value: 0 },
-    { stage: "Escrituración", count: ventasCerradas, value: 0 },
-  ], [prospectosCount, ofertas, apartados, ventasCerradas, pipelineTotal, estimados]);
+    { stage: "Ofertas", count: ofertas.length },
+    { stage: "Aprobadas", count: aprobadasCount },
+    { stage: "Apartadas", count: apartadasFunnel },
+    { stage: "Firma", count: firmaCount },
+    { stage: "Cerradas", count: ventasCerradas },
+  ], [ofertas, aprobadasCount, apartadasFunnel, firmaCount, ventasCerradas]);
 
   // Alerts
   const alerts = useMemo(() => {
