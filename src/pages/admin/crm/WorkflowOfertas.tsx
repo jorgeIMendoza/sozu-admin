@@ -580,17 +580,17 @@ export default function WorkflowOfertas() {
     } finally {
       setLoading(false);
     }
-  }, [profile, isAgente, isInmobiliaria, isSuperAdmin, agentes]);
+  }, [profile, isAgente, isInmobiliaria, isSuperAdmin, agentes, hasMonthFilter, dateRanges]);
 
   const hasLoadedRef = useRef(false);
   const prevDepsRef = useRef<string>('');
   useEffect(() => {
-    const depsKey = JSON.stringify({ isAgente, isInmobiliaria, isSuperAdmin, agentesLen: agentes.length });
+    const depsKey = JSON.stringify({ isAgente, isInmobiliaria, isSuperAdmin, agentesLen: agentes.length, selectedMonths });
     if (hasLoadedRef.current && depsKey === prevDepsRef.current) return;
     prevDepsRef.current = depsKey;
     hasLoadedRef.current = true;
     loadOfertas();
-  }, [loadOfertas]);
+  }, [loadOfertas, selectedMonths]);
 
   // Derive available agentes from loaded ofertas (super admin)
   const availableAgentes = useMemo(() => {
