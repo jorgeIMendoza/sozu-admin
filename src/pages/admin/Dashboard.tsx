@@ -1,10 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/admin/StatCard";
 import { NoProjectAccess } from "@/components/admin/NoProjectAccess";
-import { Building2, Home, DollarSign, MapPin } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { MonthMultiSelector, getCurrentMonthKey, getMonthFilterLabel, buildDateRangesFromMonths } from "@/components/ui/month-multi-selector";
+import { Building2, Home, DollarSign, MapPin, CalendarDays } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
@@ -25,6 +28,10 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const isInmobiliariaRole = profile?.rol_id === 4;
+
+  // Month filter – defaults to current month
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([getCurrentMonthKey()]);
+  const monthFilterLabel = useMemo(() => getMonthFilterLabel(selectedMonths), [selectedMonths]);
   
   // Project access control
   const { 
@@ -65,7 +72,7 @@ const Dashboard = () => {
 
   // Fetch projects with amounts
   const { data: projectAmounts = [] } = useQuery({
-    queryKey: ['dashboard-project-amounts', accessibleProjectIds],
+    queryKey: ['dashboard-project-amounts', accessibleProjectIds, selectedMonths],
     queryFn: async () => {
       // If user has no access and is not admin, return empty
       if (hasNoAccess) {
@@ -145,10 +152,23 @@ const Dashboard = () => {
           const propiedadIds = propiedades.map(p => p.id);
 
           // Luego las ofertas de esas propiedades (incluyendo id_producto para diferenciar)
-          const { data: ofertas } = await supabase
+          // Apply month filter
+          const dateRanges = buildDateRangesFromMonths(selectedMonths);
+          let ofertasQuery = supabase
             .from('ofertas')
             .select('id, id_producto')
             .in('id_propiedad', propiedadIds);
+
+          // If months are selected, filter by fecha_generacion
+          if (dateRanges.length > 0) {
+            // Build OR filter for multiple month ranges
+            const orFilters = dateRanges.map(r => 
+              `and(fecha_generacion.gte.${r.start},fecha_generacion.lte.${r.end})`
+            ).join(',');
+            ofertasQuery = ofertasQuery.or(orFilters);
+          }
+
+          const { data: ofertas } = await ofertasQuery;
 
           if (!ofertas || ofertas.length === 0) {
             return {
@@ -327,7 +347,7 @@ const Dashboard = () => {
         </Card>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
             {isInmobiliariaRole && inmobiliariaData
@@ -335,6 +355,19 @@ const Dashboard = () => {
               : 'Proyectos gestionados por Sozu'}
           </h1>
         </div>
+
+        {/* Month filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="justify-start text-left font-normal h-10">
+              <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span className="truncate">{monthFilterLabel}</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <MonthMultiSelector value={selectedMonths} onChange={setSelectedMonths} />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Statistics */}
