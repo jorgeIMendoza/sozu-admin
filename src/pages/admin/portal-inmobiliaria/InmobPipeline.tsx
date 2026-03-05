@@ -41,6 +41,7 @@ interface PipelineCard {
   contrato_draft?: string | null;
   tiene_contrato_firmado?: boolean;
   is_producto?: boolean;
+  precio_final_cuenta?: number | null;
   stage?: string;
 }
 
@@ -98,7 +99,7 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
       ? (supabase.from("personas").select("id, nombre_legal, nombre_comercial").in("id", leadIds) as any)
       : { data: [] },
     ofertaIds.length > 0
-      ? (supabase.from("cuentas_cobranza").select("id, id_oferta, contrato_draft").in("id_oferta", ofertaIds).eq("activo", true) as any)
+      ? (supabase.from("cuentas_cobranza").select("id, id_oferta, contrato_draft, precio_final").in("id_oferta", ofertaIds).eq("activo", true) as any)
       : { data: [] },
     productoIds.length > 0
       ? (supabase.from("productos_servicios").select("id, nombre, precio_lista, id_proyecto").in("id", productoIds) as any)
@@ -186,6 +187,7 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
       contrato_draft: cuenta?.contrato_draft,
       tiene_contrato_firmado: cuenta ? firmadoSet.has(cuenta.id) : false,
       is_producto: isProducto,
+      precio_final_cuenta: cuenta?.precio_final ?? null,
     };
     card.stage = classifyOffer(card);
     return card;
