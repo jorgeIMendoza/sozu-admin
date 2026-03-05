@@ -752,12 +752,14 @@ export default function InmobDashboard() {
   const { data: internalUserNames = new Map<string, string>() } = useQuery({
     queryKey: ["inmob-dash-internal-names", classifiedOfertas.map(o => o.email_creador).join(","), agentEmails.join(",")],
     queryFn: async () => {
-      const unknownEmails = [...new Set(classifiedOfertas.map((o: any) => o.email_creador).filter((e: string) => e && !agentEmails.includes(e)))];
+      const unknownEmails = [...new Set(classifiedOfertas
+        .map((o: any) => o.email_creador)
+        .filter((e: string) => e && !agentEmailSetLower.has(e.toLowerCase())))];
       if (!unknownEmails.length) return new Map<string, string>();
       const m = new Map<string, string>();
       for (let i = 0; i < unknownEmails.length; i += 200) {
         const batch = unknownEmails.slice(i, i + 200);
-        const { data: usuarios } = await supabase.from("usuarios").select("email, id_persona").in("email", batch) as any;
+        const { data: usuarios } = await supabase.from("usuarios").select("email, id_persona, nombre").in("email", batch) as any;
         if (usuarios?.length) {
           const pIds = [...new Set(usuarios.map((u: any) => u.id_persona).filter(Boolean))] as number[];
           if (pIds.length) {
