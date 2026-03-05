@@ -747,18 +747,19 @@ export default function InmobDashboard() {
   const trendTiempoCierre = getTrend(tiempoPromCierre, prevKpi?.tiempo_prom_cierre, true); // lower is better
 
   // Funnel data — 5 stages: Ofertas → Aprobadas → Apartadas → Firma → Cerradas
-  // Firma = offers with signed contract (firma_contrato) + cierre (cumulative funnel)
+  // Uses deduped advanced offers for consistency with KPIs and pipeline
   const firmaCount = useMemo(() => {
-    return classifiedOfertas.filter((o: any) => o.stage === "firma_contrato" || o.stage === "cierre").length;
-  }, [classifiedOfertas]);
+    return dedupedAdvancedOfertas.filter((o: any) => o.stage === "firma_contrato" || o.stage === "cierre").length;
+  }, [dedupedAdvancedOfertas]);
 
   const apartadasFunnel = useMemo(() => {
-    return classifiedOfertas.filter((o: any) => ADVANCED_STAGES.has(o.stage)).length;
-  }, [classifiedOfertas]);
+    return dedupedAdvancedOfertas.length;
+  }, [dedupedAdvancedOfertas]);
 
   const aprobadasCount = useMemo(() => {
-    return classifiedOfertas.filter((o: any) => o.stage === "aprobadas" || ADVANCED_STAGES.has(o.stage)).length;
-  }, [classifiedOfertas]);
+    const preAprobadas = classifiedOfertas.filter((o: any) => o.stage === "aprobadas").length;
+    return preAprobadas + dedupedAdvancedOfertas.length;
+  }, [classifiedOfertas, dedupedAdvancedOfertas]);
 
   const funnelData = useMemo(() => [
     { stage: "Ofertas", count: ofertas.length },
