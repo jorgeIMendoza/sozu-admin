@@ -219,10 +219,70 @@ export default function InmobDashboard() {
     staleTime: 5 * 60_000,
   });
 
-  // Ofertas — filtered by current month (fecha_generacion)
-  const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
-    queryKey: ["inmob-dash-ofertas", agentEmails, monthStart, monthEnd],
+  // For Sozu: get all property IDs in their projects so we can fetch ALL offers (not just from agents)
+  const projectIds = useMemo(() => projects.map(p => p.id), [projects]);
+
+  const { data: sozuPropertyIds = [] } = useQuery({
+    queryKey: ["inmob-dash-sozu-propids", projectIds],
     queryFn: async () => {
+      if (!projectIds.length) return [];
+      // proyecto → edificios → edificios_modelos → propiedades
+      const { data: edificios } = await supabase
+        .from("edificios")
+        .select("id")
+        .in("id_proyecto", projectIds)
+        .eq("activo", true) as any;
+      if (!edificios?.length) return [];
+      const edifIds = edificios.map((e: any) => e.id);
+
+      const { data: edifModelos } = await supabase
+        .from("edificios_modelos")
+        .select("id")
+        .in("id_edificio", edifIds)
+        .eq("activo", true) as any;
+      if (!edifModelos?.length) return [];
+      const emIds = edifModelos.map((em: any) => em.id);
+
+      const allPropIds: number[] = [];
+      for (let i = 0; i < emIds.length; i += 200) {
+        const batch = emIds.slice(i, i + 200);
+        const { data: props } = await supabase
+          .from("propiedades")
+          .select("id")
+          .in("id_edificio_modelo", batch)
+          .eq("activo", true) as any;
+        if (props) allPropIds.push(...props.map((p: any) => p.id));
+      }
+      return allPropIds;
+    },
+    enabled: isSozu && projectIds.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
+  // Ofertas — filtered by current month (fecha_generacion)
+  // For Sozu: fetch by property IDs (any creator). For others: by agent emails.
+  const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
+    queryKey: ["inmob-dash-ofertas", isSozu ? sozuPropertyIds : agentEmails, monthStart, monthEnd, isSozu],
+    queryFn: async () => {
+      if (isSozu) {
+        if (!sozuPropertyIds.length) return [];
+        // Fetch all offers for properties in Sozu projects
+        const allOfertas: any[] = [];
+        for (let i = 0; i < sozuPropertyIds.length; i += 200) {
+          const batch = sozuPropertyIds.slice(i, i + 200);
+          const { data, error } = await supabase
+            .from("ofertas")
+            .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado, id_producto")
+            .in("id_propiedad", batch)
+            .eq("activo", true)
+            .gte("fecha_generacion", monthStart)
+            .lte("fecha_generacion", monthEnd) as any;
+          if (error) console.error("[InmobDashboard] ofertas query error:", error);
+          if (data) allOfertas.push(...data);
+        }
+        return allOfertas;
+      }
+
       if (!agentEmails.length) return [];
       const { data, error } = await supabase
         .from("ofertas")
@@ -234,7 +294,7 @@ export default function InmobDashboard() {
       if (error) console.error("[InmobDashboard] ofertas query error:", error);
       return data || [];
     },
-    enabled: agentEmails.length > 0,
+    enabled: isSozu ? sozuPropertyIds.length > 0 : agentEmails.length > 0,
     staleTime: 3 * 60_000,
   });
 
@@ -247,12 +307,15 @@ export default function InmobDashboard() {
     queryKey: ["inmob-dash-props", propIds],
     queryFn: async () => {
       if (!propIds.length) return new Map<number, any>();
-      const { data } = await supabase
-        .from("propiedades")
-        .select("id, id_estatus_disponibilidad, precio_lista, id_proyecto")
-        .in("id", propIds) as any;
       const m = new Map<number, any>();
-      (data || []).forEach((p: any) => m.set(p.id, p));
+      for (let i = 0; i < propIds.length; i += 200) {
+        const batch = propIds.slice(i, i + 200);
+        const { data } = await supabase
+          .from("propiedades")
+          .select("id, id_estatus_disponibilidad, precio_lista")
+          .in("id", batch) as any;
+        (data || []).forEach((p: any) => m.set(p.id, p));
+      }
       return m;
     },
     enabled: propIds.length > 0,
