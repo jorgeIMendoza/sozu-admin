@@ -748,21 +748,22 @@ export default function InmobDashboard() {
     return result.slice(0, 5);
   }, [ofertas, propMap]);
 
-  // Resolve names for non-agent internal users who created offers
-  const { data: internalUserNames = new Map<string, string>() } = useQuery({
+  // Resolve names and roles for non-agent internal users who created offers
+  const { data: internalUserData = { names: new Map<string, string>(), agentRoleEmails: new Set<string>() } } = useQuery({
     queryKey: ["inmob-dash-internal-names", classifiedOfertas.map(o => o.email_creador).join(","), agentEmails.join(",")],
     queryFn: async () => {
       const unknownEmails = [...new Set(classifiedOfertas
         .map((o: any) => o.email_creador)
         .filter((e: string) => e && !agentEmailSetLower.has(e.toLowerCase())))];
-      if (!unknownEmails.length) return new Map<string, string>();
+      if (!unknownEmails.length) return { names: new Map<string, string>(), agentRoleEmails: new Set<string>() };
 
       const m = new Map<string, string>();
+      const agentRoles = new Set<string>();
       for (let i = 0; i < unknownEmails.length; i += 200) {
         const batch = unknownEmails.slice(i, i + 200);
         const { data: usuarios } = await supabase
           .from("usuarios")
-          .select("email, id_persona, nombre")
+          .select("email, id_persona, nombre, rol_id")
           .in("email", batch) as any;
 
         if (!usuarios?.length) continue;
@@ -781,20 +782,26 @@ export default function InmobDashboard() {
         usuarios.forEach((u: any) => {
           const personaName = u.id_persona ? pMap.get(u.id_persona) : "";
           m.set(u.email, personaName || u.nombre || u.email.split("@")[0]);
+          // Roles 3 (Agente Inmobiliario) and 9 (Agente Interno) are agents, not internal users
+          if (u.rol_id === 3 || u.rol_id === 9) {
+            agentRoles.add(u.email.toLowerCase());
+          }
         });
       }
 
-      return m;
+      return { names: m, agentRoleEmails: agentRoles };
     },
     enabled: classifiedOfertas.length > 0 && agentEmails.length > 0,
     staleTime: 5 * 60_000,
   });
 
+  const internalUserNames = internalUserData.names;
+
   const internalEmails = useMemo(() => {
     return [...new Set(classifiedOfertas
       .map((o: any) => o.email_creador)
-      .filter((e: string) => e && !agentEmailSetLower.has(e.toLowerCase())))];
-  }, [classifiedOfertas, agentEmailSetLower]);
+      .filter((e: string) => e && !agentEmailSetLower.has(e.toLowerCase()) && !internalUserData.agentRoleEmails.has(e.toLowerCase())))];
+  }, [classifiedOfertas, agentEmailSetLower, internalUserData.agentRoleEmails]);
 
   const allComisiones = comisiones;
 
