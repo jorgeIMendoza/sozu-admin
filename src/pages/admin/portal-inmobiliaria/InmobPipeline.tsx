@@ -14,7 +14,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ChevronLeft, ChevronRight, User, Building2, Calendar, DollarSign, X, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, User, Building2, Calendar, DollarSign, X, CalendarDays, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -91,14 +92,15 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
   const productoIds = [...new Set(data.map((o: any) => o.id_producto).filter(Boolean))] as number[];
   const ofertaIds = data.map((o: any) => o.id);
 
-  // Resolve names for unknown emails (non-agent creators)
+  // Resolve names and roles for unknown emails (non-agent creators)
   const unknownEmails = [...new Set(data.map((o: any) => o.email_creador).filter((e: string) => e && !agentNameMap.has(e) && !agentNameMap.has(e.toLowerCase())))];
   const resolvedNameMap = new Map<string, string>();
+  const agentRoleEmails = new Set<string>(); // emails with agent roles (3, 9) — NOT internal
   if (unknownEmails.length > 0) {
     for (let i = 0; i < unknownEmails.length; i += 200) {
       const batch = unknownEmails.slice(i, i + 200);
       const { data: usuarios } = await supabase
-        .from("usuarios").select("email, id_persona, nombre").in("email", batch) as any;
+        .from("usuarios").select("email, id_persona, nombre, rol_id").in("email", batch) as any;
       if (usuarios?.length) {
         const pIds = [...new Set(usuarios.map((u: any) => u.id_persona).filter(Boolean))] as number[];
         const pMap = new Map<number, string>();
@@ -112,6 +114,11 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
           const personaName = u.id_persona ? pMap.get(u.id_persona) : "";
           const fallbackName = u.nombre || u.email?.split("@")[0] || "Usuario";
           resolvedNameMap.set(u.email, personaName || fallbackName);
+          // Roles 3 (Agente Inmobiliario) and 9 (Agente Interno) are agents, not internal users
+          if (u.rol_id === 3 || u.rol_id === 9) {
+            agentRoleEmails.add(u.email);
+            agentRoleEmails.add(u.email.toLowerCase());
+          }
         });
       }
     }
@@ -211,7 +218,7 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
       proyecto_nombre: projInfo?.nombre || undefined,
       proyecto_id: projInfo?.id || undefined,
       agente_nombre: fullNameMap.get(o.email_creador) || fullNameMap.get((o.email_creador || "").toLowerCase()) || o.email_creador,
-      is_internal: !agentNameMap.has(o.email_creador) && !agentNameMap.has((o.email_creador || "").toLowerCase()),
+      is_internal: !agentNameMap.has(o.email_creador) && !agentNameMap.has((o.email_creador || "").toLowerCase()) && !agentRoleEmails.has(o.email_creador) && !agentRoleEmails.has((o.email_creador || "").toLowerCase()),
       precio: isProducto ? (producto?.precio_lista || null) : (prop?.precio_lista || null),
       estatus_disponibilidad: prop?.id_estatus_disponibilidad,
       cuenta_cobranza_id: cuenta?.id,
@@ -241,6 +248,7 @@ export default function InmobPipeline() {
   const [selectedAgentes, setSelectedAgentes] = useState<string[]>([]);
   const [selectedProyectos, setSelectedProyectos] = useState<string[]>([]);
   const [selectedTipoOferta, setSelectedTipoOferta] = useState<string>("all");
+  const [searchOfertaId, setSearchOfertaId] = useState<string>("");
 
   // Month filter: array of "YYYY-M" keys (M is 0-indexed)
   const currentMonthKey = getCurrentMonthKey();
@@ -495,6 +503,15 @@ export default function InmobPipeline() {
   // Filter offers
   const filteredOfertas = useMemo(() => {
     let result = ofertas;
+    if (searchOfertaId.trim()) {
+      const searchNum = searchOfertaId.replace(/^(O|OP)-?/i, "").trim();
+      if (searchNum) {
+        const numVal = parseInt(searchNum, 10);
+        if (!isNaN(numVal)) {
+          result = result.filter((o) => o.id === numVal);
+        }
+      }
+    }
     if (selectedAgentes.length > 0) {
       result = result.filter((o) => selectedAgentes.includes(o.email_creador));
     }
@@ -508,7 +525,7 @@ export default function InmobPipeline() {
       result = result.filter((o) => !!o.id_producto);
     }
     return result;
-  }, [ofertas, selectedAgentes, selectedProyectos, selectedTipoOferta]);
+  }, [ofertas, selectedAgentes, selectedProyectos, selectedTipoOferta, searchOfertaId]);
 
   // Group by stage with cierre deduplication, sorted by fecha descending
   const stageMap = useMemo(() => {
@@ -581,13 +598,14 @@ export default function InmobPipeline() {
   availableProyectos.forEach((p) => proyNameToId.set(p.nombre, String(p.id)));
   const selectedProyNames = selectedProyectos.map((id) => availableProyectos.find((p) => String(p.id) === id)?.nombre || id);
 
-  const hasActiveFilters = selectedAgentes.length > 0 || selectedProyectos.length > 0 || selectedTipoOferta !== "all" || selectedMonths.length > 0;
+  const hasActiveFilters = selectedAgentes.length > 0 || selectedProyectos.length > 0 || selectedTipoOferta !== "all" || selectedMonths.length > 0 || searchOfertaId.trim().length > 0;
 
   const clearAllFilters = () => {
     setSelectedAgentes([]);
     setSelectedProyectos([]);
     setSelectedTipoOferta("all");
     setSelectedMonths([]);
+    setSearchOfertaId("");
   };
 
   // Month filter label
@@ -651,7 +669,21 @@ export default function InmobPipeline() {
               </Select>
             </div>
 
-            {/* Month selector */}
+            {/* Offer ID search */}
+            <div className="min-w-[160px]">
+              <label className="text-sm font-medium mb-1 block">Buscar Oferta</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="O-001234"
+                  value={searchOfertaId}
+                  onChange={(e) => setSearchOfertaId(e.target.value)}
+                  className="pl-8 h-10"
+                />
+              </div>
+            </div>
+
+
             <div className="min-w-[180px]">
               <label className="text-sm font-medium mb-1 block">Periodo</label>
               <Popover>
