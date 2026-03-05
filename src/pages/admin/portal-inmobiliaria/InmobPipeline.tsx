@@ -35,16 +35,24 @@ interface PipelineCard {
 }
 
 const STAGES = [
-  { key: "nuevas", label: "Nuevas Ofertas", color: "bg-blue-100 text-blue-800" },
-  { key: "pendientes", label: "Pendientes", color: "bg-yellow-100 text-yellow-800" },
-  { key: "aprobadas", label: "Aprobadas", color: "bg-green-100 text-green-800" },
-  { key: "rechazadas", label: "Rechazadas", color: "bg-red-100 text-red-800" },
-  { key: "revision", label: "En Revisión", color: "bg-purple-100 text-purple-800" },
-  { key: "apartado", label: "Apartado", color: "bg-orange-100 text-orange-800" },
-  { key: "gen_contrato", label: "Gen. Contrato", color: "bg-indigo-100 text-indigo-800" },
-  { key: "firma_contrato", label: "Firma Contrato", color: "bg-teal-100 text-teal-800" },
-  { key: "cierre", label: "Cierre de Venta", color: "bg-emerald-100 text-emerald-800" },
+  { key: "expiradas", label: "Expiradas", color: "bg-muted text-muted-foreground" },
+  { key: "nuevas", label: "Nuevas Ofertas", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+  { key: "pendientes", label: "Pendientes de Aprobación", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
+  { key: "aprobadas", label: "Aprobadas", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+  { key: "rechazadas", label: "Rechazadas", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+  { key: "revision", label: "En Revisión", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
+  { key: "apartado", label: "Apartado", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
+  { key: "gen_contrato", label: "Generación de Contrato", color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200" },
+  { key: "firma_contrato", label: "Firma de Contrato", color: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
+  { key: "cierre", label: "Cierre de Venta", color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200" },
 ];
+
+// Date limit only for recent/new offers
+const RECENT_DATE = (() => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 10);
+})();
 
 function isVigente(fechaGeneracion: string): boolean {
   const fecha = new Date(fechaGeneracion);
@@ -68,17 +76,98 @@ function classifyOffer(o: PipelineCard): string {
   return "nuevas";
 }
 
-const MIN_DATE = (() => {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 1);
-  return d.toISOString().slice(0, 10);
-})();
+async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
+  if (!data.length) return [];
+
+  const propIds = [...new Set(data.map((o: any) => o.id_propiedad).filter(Boolean))] as number[];
+  const leadIds = [...new Set(data.map((o: any) => o.id_persona_lead).filter(Boolean))] as number[];
+  const ofertaIds = data.map((o: any) => o.id);
+
+  const [propRes, leadRes, cuentaRes] = await Promise.all([
+    propIds.length > 0
+      ? (supabase.from("propiedades").select("id, numero_propiedad, precio_lista, id_estatus_disponibilidad, id_edificio_modelo").in("id", propIds) as any)
+      : { data: [] },
+    leadIds.length > 0
+      ? (supabase.from("personas").select("id, nombre_legal, nombre_comercial").in("id", leadIds) as any)
+      : { data: [] },
+    ofertaIds.length > 0
+      ? (supabase.from("cuentas_cobranza").select("id, id_oferta, contrato_draft").in("id_oferta", ofertaIds).eq("activo", true) as any)
+      : { data: [] },
+  ]);
+
+  const propMap = new Map<number, any>();
+  (propRes.data || []).forEach((p: any) => propMap.set(p.id, p));
+
+  const leadMap = new Map<number, string>();
+  (leadRes.data || []).forEach((l: any) => leadMap.set(l.id, l.nombre_legal || l.nombre_comercial || "Sin nombre"));
+
+  const cuentaMap = new Map<number, any>();
+  (cuentaRes.data || []).forEach((c: any) => { if (c.id_oferta) cuentaMap.set(c.id_oferta, c); });
+
+  // Check signed contracts
+  const cuentaIds = (cuentaRes.data || []).map((c: any) => c.id);
+  const firmadoSet = new Set<number>();
+  if (cuentaIds.length > 0) {
+    const { data: docs } = await supabase
+      .from("documentos")
+      .select("id_cuenta_cobranza")
+      .in("id_cuenta_cobranza", cuentaIds)
+      .eq("id_tipo_documento", 42)
+      .eq("activo", true) as any;
+    (docs || []).forEach((d: any) => firmadoSet.add(d.id_cuenta_cobranza));
+  }
+
+  // Resolve projects
+  const emIds = [...new Set((propRes.data || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))] as number[];
+  const proyectoByProp = new Map<number, string>();
+  if (emIds.length > 0) {
+    const { data: ems } = await supabase.from("edificios_modelos").select("id, id_edificio").in("id", emIds) as any;
+    const edIds = [...new Set((ems || []).map((e: any) => e.id_edificio).filter(Boolean))] as number[];
+    if (edIds.length > 0) {
+      const { data: eds } = await supabase.from("edificios").select("id, id_proyecto").in("id", edIds) as any;
+      const projIds = [...new Set((eds || []).map((e: any) => e.id_proyecto).filter(Boolean))] as number[];
+      if (projIds.length > 0) {
+        const { data: projs } = await supabase.from("proyectos").select("id, nombre").in("id", projIds);
+        const projMap = new Map<number, string>();
+        (projs || []).forEach((p: any) => projMap.set(p.id, p.nombre));
+        const edToPj = new Map<number, number>();
+        (eds || []).forEach((e: any) => edToPj.set(e.id, e.id_proyecto));
+        const emToPj = new Map<number, number>();
+        (ems || []).forEach((em: any) => { const pj = edToPj.get(em.id_edificio); if (pj) emToPj.set(em.id, pj); });
+        (propRes.data || []).forEach((p: any) => {
+          const pjId = emToPj.get(p.id_edificio_modelo);
+          if (pjId) proyectoByProp.set(p.id, projMap.get(pjId) || "");
+        });
+      }
+    }
+  }
+
+  return data.map((o: any) => {
+    const prop = o.id_propiedad ? propMap.get(o.id_propiedad) : null;
+    const cuenta = cuentaMap.get(o.id);
+    const card: PipelineCard = {
+      ...o,
+      lead_nombre: o.id_persona_lead ? leadMap.get(o.id_persona_lead) : undefined,
+      propiedad_nombre: prop?.numero_propiedad || undefined,
+      proyecto_nombre: o.id_propiedad ? proyectoByProp.get(o.id_propiedad) : undefined,
+      agente_nombre: agentNameMap.get(o.email_creador),
+      precio: prop?.precio_lista,
+      estatus_disponibilidad: prop?.id_estatus_disponibilidad,
+      cuenta_cobranza_id: cuenta?.id,
+      contrato_draft: cuenta?.contrato_draft,
+      tiene_contrato_firmado: cuenta ? firmadoSet.has(cuenta.id) : false,
+    };
+    card.stage = classifyOffer(card);
+    return card;
+  });
+}
 
 export default function InmobPipeline() {
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
   const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
-  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set());
+  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set(["expiradas"]));
+  const [manuallyToggled, setManuallyToggled] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     registrarVista("/admin/portal-inmobiliaria/pipeline");
@@ -92,131 +181,113 @@ export default function InmobPipeline() {
     return m;
   }, [agents]);
 
-  // Fetch ofertas
+  // Two-query approach: recent offers + advanced offers (no date limit)
   const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
     queryKey: ["inmob-pipeline-ofertas", agentEmails],
     queryFn: async () => {
       if (!agentEmails.length) return [];
-      const { data } = await supabase
+
+      // Query 1: Recent offers (last month) for new/pending/expired
+      const recentQuery = supabase
         .from("ofertas")
         .select("id, email_creador, fecha_generacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, id_propiedad, id_producto, id_persona_lead")
         .in("email_creador", agentEmails)
         .eq("activo", true)
-        .gte("fecha_generacion", MIN_DATE)
-        .order("fecha_generacion", { ascending: false }) as any;
-      if (!data) return [];
+        .gte("fecha_generacion", RECENT_DATE)
+        .order("fecha_generacion", { ascending: false });
 
-      // Enrich with property, project, lead data
-      const propIds = [...new Set(data.map((o: any) => o.id_propiedad).filter(Boolean))] as number[];
-      const leadIds = [...new Set(data.map((o: any) => o.id_persona_lead).filter(Boolean))] as number[];
-      const ofertaIds = data.map((o: any) => o.id);
+      // Query 2: Advanced offers (have cuenta_cobranza or property sold) - NO date limit
+      // We fetch all active offers and then filter to those with cuentas
+      const advancedQuery = supabase
+        .from("ofertas")
+        .select("id, email_creador, fecha_generacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, id_propiedad, id_producto, id_persona_lead")
+        .in("email_creador", agentEmails)
+        .eq("activo", true)
+        .lt("fecha_generacion", RECENT_DATE)
+        .order("fecha_generacion", { ascending: false });
 
-      const [propRes, leadRes, cuentaRes] = await Promise.all([
-        propIds.length > 0
-          ? (supabase.from("propiedades").select("id, numero_propiedad, precio_lista, id_estatus_disponibilidad, id_edificio_modelo").in("id", propIds) as any)
-          : { data: [] },
-        leadIds.length > 0
-          ? (supabase.from("personas").select("id, nombre_legal, nombre_comercial").in("id", leadIds) as any)
-          : { data: [] },
-        ofertaIds.length > 0
-          ? (supabase.from("cuentas_cobranza").select("id, id_oferta, contrato_draft").in("id_oferta", ofertaIds).eq("activo", true) as any)
-          : { data: [] },
+      const [recentRes, advancedRes] = await Promise.all([
+        recentQuery as any,
+        advancedQuery as any,
       ]);
 
-      // Build maps
-      const propMap = new Map<number, any>();
-      (propRes.data || []).forEach((p: any) => propMap.set(p.id, p));
+      const recentData = recentRes.data || [];
+      const olderData = advancedRes.data || [];
 
-      const leadMap = new Map<number, string>();
-      (leadRes.data || []).forEach((l: any) => leadMap.set(l.id, l.nombre_legal || l.nombre_comercial || "Sin nombre"));
-
-      const cuentaMap = new Map<number, any>();
-      (cuentaRes.data || []).forEach((c: any) => { if (c.id_oferta) cuentaMap.set(c.id_oferta, c); });
-
-      // Check signed contracts
-      const cuentaIds = (cuentaRes.data || []).map((c: any) => c.id);
-      const firmadoSet = new Set<number>();
-      if (cuentaIds.length > 0) {
-        const { data: docs } = await supabase
-          .from("documentos")
-          .select("id_cuenta_cobranza")
-          .in("id_cuenta_cobranza", cuentaIds)
-          .eq("id_tipo_documento", 42)
+      // For older offers, filter to only those that have an active cuenta_cobranza
+      let advancedFiltered: any[] = [];
+      if (olderData.length > 0) {
+        const olderIds = olderData.map((o: any) => o.id);
+        const { data: cuentas } = await supabase
+          .from("cuentas_cobranza")
+          .select("id_oferta")
+          .in("id_oferta", olderIds)
           .eq("activo", true) as any;
-        (docs || []).forEach((d: any) => firmadoSet.add(d.id_cuenta_cobranza));
+        const ofertaIdsWithCuenta = new Set((cuentas || []).map((c: any) => c.id_oferta));
+        advancedFiltered = olderData.filter((o: any) => ofertaIdsWithCuenta.has(o.id));
       }
 
-      // Resolve projects
-      const emIds = [...new Set((propRes.data || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))] as number[];
-      const proyectoByProp = new Map<number, string>();
-      if (emIds.length > 0) {
-        const { data: ems } = await supabase.from("edificios_modelos").select("id, id_edificio").in("id", emIds) as any;
-        const edIds = [...new Set((ems || []).map((e: any) => e.id_edificio).filter(Boolean))] as number[];
-        if (edIds.length > 0) {
-          const { data: eds } = await supabase.from("edificios").select("id, id_proyecto").in("id", edIds) as any;
-          const projIds = [...new Set((eds || []).map((e: any) => e.id_proyecto).filter(Boolean))] as number[];
-          if (projIds.length > 0) {
-            const { data: projs } = await supabase.from("proyectos").select("id, nombre").in("id", projIds);
-            const projMap = new Map<number, string>();
-            (projs || []).forEach((p: any) => projMap.set(p.id, p.nombre));
-            const edToPj = new Map<number, number>();
-            (eds || []).forEach((e: any) => edToPj.set(e.id, e.id_proyecto));
-            const emToPj = new Map<number, number>();
-            (ems || []).forEach((em: any) => { const pj = edToPj.get(em.id_edificio); if (pj) emToPj.set(em.id, pj); });
-            (propRes.data || []).forEach((p: any) => {
-              const pjId = emToPj.get(p.id_edificio_modelo);
-              if (pjId) proyectoByProp.set(p.id, projMap.get(pjId) || "");
-            });
-          }
-        }
-      }
-
-      return data.map((o: any) => {
-        const prop = o.id_propiedad ? propMap.get(o.id_propiedad) : null;
-        const cuenta = cuentaMap.get(o.id);
-        const card: PipelineCard = {
-          ...o,
-          lead_nombre: o.id_persona_lead ? leadMap.get(o.id_persona_lead) : undefined,
-          propiedad_nombre: prop?.numero_propiedad || undefined,
-          proyecto_nombre: o.id_propiedad ? proyectoByProp.get(o.id_propiedad) : undefined,
-          agente_nombre: agentNameMap.get(o.email_creador),
-          precio: prop?.precio_lista,
-          estatus_disponibilidad: prop?.id_estatus_disponibilidad,
-          cuenta_cobranza_id: cuenta?.id,
-          contrato_draft: cuenta?.contrato_draft,
-          tiene_contrato_firmado: cuenta ? firmadoSet.has(cuenta.id) : false,
-        };
-        card.stage = classifyOffer(card);
-        return card;
+      // Merge and deduplicate
+      const allData = [...recentData, ...advancedFiltered];
+      const seenIds = new Set<number>();
+      const deduped = allData.filter((o: any) => {
+        if (seenIds.has(o.id)) return false;
+        seenIds.add(o.id);
+        return true;
       });
+
+      return enrichOfertas(deduped, agentNameMap);
     },
     enabled: agentEmails.length > 0,
     staleTime: 2 * 60_000,
   });
 
-  // Group by stage
+  // Group by stage with cierre deduplication
   const stageMap = useMemo(() => {
     const m = new Map<string, PipelineCard[]>();
     STAGES.forEach((s) => m.set(s.key, []));
     ofertas.forEach((o) => {
-      if (o.stage && o.stage !== "expiradas") {
+      if (o.stage) {
         const arr = m.get(o.stage);
         if (arr) arr.push(o);
       }
     });
+
+    // Deduplicate cierre: one per property/product with cuenta
+    const cierre = m.get("cierre") || [];
+    if (cierre.length > 0) {
+      const seen = new Set<string>();
+      m.set("cierre", cierre
+        .filter(o => !!o.cuenta_cobranza_id)
+        .filter(o => {
+          const key = o.id_producto
+            ? `prod-${o.id_producto}-${o.id_propiedad || "none"}`
+            : `prop-${o.id_propiedad}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }));
+    }
+
     return m;
   }, [ofertas]);
 
-  // Auto-collapse empty stages
+  // Auto-collapse empty stages, keep expiradas collapsed by default
   useEffect(() => {
-    const empty = new Set<string>();
-    STAGES.forEach((s) => {
-      if ((stageMap.get(s.key)?.length || 0) === 0) empty.add(s.key);
+    setCollapsedStages((prev) => {
+      const next = new Set(prev);
+      STAGES.forEach((stage) => {
+        if (manuallyToggled.has(stage.key)) return;
+        const count = stageMap.get(stage.key)?.length || 0;
+        if (count === 0) next.add(stage.key);
+        else if (stage.key !== "expiradas") next.delete(stage.key);
+      });
+      return next;
     });
-    setCollapsedStages(empty);
-  }, [stageMap]);
+  }, [stageMap, manuallyToggled]);
 
   const toggleCollapse = (key: string) => {
+    setManuallyToggled((prev) => new Set(prev).add(key));
     setCollapsedStages((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
