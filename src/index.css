@@ -394,43 +394,62 @@ All colors MUST be HSL.
 .sozu-theme {
   /* Base surfaces — clean white */
   --background: 0 0% 100%;
-  --foreground: 0 0% 5%;
+  --foreground: 0 0% 0%;
   --card: 0 0% 100%;
-  --card-foreground: 0 0% 5%;
+  --card-foreground: 0 0% 0%;
   --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 5%;
+  --popover-foreground: 0 0% 0%;
 
-  /* Brand — Black primary */
-  --primary: 0 0% 5%;
+  /* Brand — Green primary (matching reference) */
+  --primary: 139 35% 51%;
   --primary-foreground: 0 0% 100%;
 
-  /* Brand — SOZU Green #57ae75 */
-  --accent: 145 35% 51%;
-  --accent-foreground: 0 0% 100%;
-  --accent-light: 145 35% 96%;
-  --accent-glow: 145 38% 42%;
-
   /* Secondary */
-  --secondary: 0 0% 97%;
-  --secondary-foreground: 0 0% 20%;
+  --secondary: 0 0% 96%;
+  --secondary-foreground: 0 0% 34%;
   --muted: 0 0% 96%;
   --muted-foreground: 0 0% 45%;
+  --accent: 0 0% 96%;
+  --accent-foreground: 0 0% 0%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --warning: 32 95% 55%;
+  --warning-foreground: 0 0% 100%;
+  --success: 139 35% 51%;
+  --success-foreground: 0 0% 100%;
 
   --border: 0 0% 91%;
   --input: 0 0% 91%;
-  --ring: 145 35% 51%;
-  --radius: 0.75rem;
+  --ring: 139 35% 51%;
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 0 0% 34%;
+  --sidebar-primary: 139 35% 51%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 139 35% 96%;
+  --sidebar-accent-foreground: 139 35% 30%;
+  --sidebar-border: 0 0% 93%;
+  --sidebar-ring: 139 35% 51%;
 
   /* SOZU Brand tokens */
-  --sozu-black: 0 0% 5%;
-  --sozu-green: 145 35% 51%;
+  --sozu-green: 139 35% 51%;
+  --sozu-green-light: 139 35% 96%;
+  --sozu-green-dark: 139 35% 38%;
+  --sozu-black: 0 0% 0%;
   --sozu-gray: 0 0% 34%;
+  --sozu-gray-light: 0 0% 93%;
+  --sozu-gray-muted: 0 0% 60%;
   --sozu-white: 0 0% 100%;
 
-  /* Section backgrounds */
-  --section-light: 0 0% 100%;
-  --section-soft: 0 0% 97%;
-  --section-muted: 0 0% 95%;
+  /* Chart colors */
+  --chart-1: 139 35% 51%;
+  --chart-2: 199 89% 48%;
+  --chart-3: 32 95% 55%;
+  --chart-4: 270 50% 55%;
+  --chart-5: 0 72% 51%;
 
   /* Legacy aliases */
   --navy: 0 0% 8%;
@@ -440,6 +459,8 @@ All colors MUST be HSL.
   --emerald-light: 145 35% 62%;
   --emerald-pale: 145 40% 95%;
   --gold: 42 80% 55%;
+  --accent-light: 145 35% 96%;
+  --accent-glow: 145 38% 42%;
 
   /* Gradients */
   --gradient-hero: linear-gradient(160deg, hsl(0 0% 100%) 0%, hsl(145 30% 97%) 50%, hsl(0 0% 98%) 100%);

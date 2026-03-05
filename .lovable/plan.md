@@ -1,46 +1,41 @@
 
 
-# Plan: Clonar diseño exacto del Dashboard de referencia al Portal Inmobiliaria
+## Plan: Agregar Domain-Wide Delegation (subject/sub) al JWT de la cuenta de servicio
 
-## Estrategia
+### Problema actual
+La función `getAccessToken` genera un JWT sin el campo `sub`, por lo que Google Calendar ve las operaciones como hechas por la cuenta de servicio directamente. Esto impide que los invitados reciban correos de notificación del evento.
 
-En lugar de modificar variables globales (que afectarían todo el proyecto), se actualizará el scope `.sozu-theme` en `index.css` para que sus variables CSS coincidan exactamente con las del proyecto de referencia. Luego se reescribirá `InmobDashboard.tsx` usando la misma estructura del `DashboardPage.tsx` de referencia, pero manteniendo las queries reales de Supabase.
+### Cambio necesario
 
-## Cambios
+**Archivo**: `supabase/functions/agendar-capacitacion/index.ts`
 
-### 1. `src/index.css` — Actualizar variables dentro de `.sozu-theme`
-Reemplazar las variables del bloque `.sozu-theme` para que coincidan con el proyecto de referencia:
-- `--primary: 139 35% 51%` (verde SOZU, no negro)
-- `--foreground: 0 0% 0%` (negro puro)
-- `--accent: 0 0% 96%` (gris claro, como secondary)
-- `--success: 139 35% 51%`
-- `--warning: 32 95% 55%`
-- Agregar `--sozu-green`, `--sozu-green-light`, `--sozu-green-dark`, `--sozu-gray-muted`, `--chart-1` a `--chart-5`
-- Actualizar las clases utilitarias `.sozu-card`, `.sozu-stat-card`, `.sozu-table-header` para coincidir exactamente
+1. **Modificar `getAccessToken`** para aceptar un parámetro opcional `subject` (el email del dueño del calendario) y agregarlo al payload JWT:
+   ```
+   sub: subject  // e.g. "jorge.mendoza@sozu.com"
+   ```
 
-### 2. `tailwind.config.ts` — Agregar tokens `sozu` faltantes
-Agregar `sozu.green-light`, `sozu.green-dark`, `sozu.gray-light`, `sozu.gray-muted` al config para que estén disponibles como clases Tailwind.
+2. **Actualizar la llamada** a `getAccessToken(sa)` → `getAccessToken(sa, calendarOwnerEmail)` en el `Deno.serve` principal (línea 519), para que el token se genere impersonando al dueño del calendario.
 
-### 3. `src/pages/admin/portal-inmobiliaria/InmobDashboard.tsx` — Reescritura completa
-Replicar la estructura exacta de `DashboardPage.tsx` de referencia:
-- **StatCard**: Componente con icono en círculo verde, flecha de navegación, título gris arriba, valor grande, subtítulo + badge de trend — exactamente como el `StatCard` de referencia
-- **7 KPI cards** usando `StatCard` con variantes `primary`/`warning`/`success`
-- **4 mini-métricas** en fila horizontal con icono + label + valor
-- **Funnel**: Usar `recharts.FunnelChart` + `Funnel` + `LabelList` + `Cell` con colores degradados verdes (como en referencia), NO el SVG custom actual
-- **Alertas**: Componente con iconos `AlertTriangle`/`AlertCircle`/`Info` y estilos por tipo (`warning`/`danger`/`info`)
-- **Charts**: BarChart y AreaChart con mismos estilos, colores y formateo que la referencia
-- **Tabla**: Mismas columnas con mismos estilos de conversión (badges con ↑↓)
-- **Activity feed**: Con iconos por tipo y timestamps
+3. Agregar el scope `https://www.googleapis.com/auth/calendar.events` al JWT (ya lo tienes en el Admin Console, pero el código solo pide `calendar`).
 
-Se mantienen todas las queries de Supabase existentes (ofertas, propiedades, financialData, comisiones, prospectos) — solo cambia la capa de presentación.
+### Detalle técnico
 
-### 4. `src/components/admin/portal-inmobiliaria/PortalInmobiliariaLayout.tsx` — Sin cambios
-El layout ya tiene sidebar + floating mobile nav correctos.
+```text
+// Antes (línea 18-23):
+payload = { iss, scope: "...calendar", aud, iat, exp }
 
-## Archivos a modificar
-| Archivo | Acción |
-|---------|--------|
-| `src/index.css` | Actualizar bloque `.sozu-theme` |
-| `tailwind.config.ts` | Agregar tokens sozu faltantes |
-| `src/pages/admin/portal-inmobiliaria/InmobDashboard.tsx` | Reescritura completa de UI |
+// Después:
+payload = { iss, sub: subject, scope: "...calendar ...calendar.events", aud, iat, exp }
+```
+
+La llamada cambia de:
+```text
+const token = await getAccessToken(sa);
+```
+A:
+```text
+const token = await getAccessToken(sa, calendarOwnerEmail);
+```
+
+Esto hará que Google Calendar trate las operaciones como si las hiciera el usuario real (calendarOwnerEmail), permitiendo el envío automático de correos a los invitados.
 

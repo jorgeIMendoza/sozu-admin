@@ -85,7 +85,11 @@ export default {
         sozu: {
           black: "hsl(var(--sozu-black, 0 0% 5%))",
           green: "hsl(var(--sozu-green, 145 35% 51%))",
+          "green-light": "hsl(var(--sozu-green-light, 139 35% 96%))",
+          "green-dark": "hsl(var(--sozu-green-dark, 139 35% 38%))",
           gray: "hsl(var(--sozu-gray, 0 0% 34%))",
+          "gray-light": "hsl(var(--sozu-gray-light, 0 0% 93%))",
+          "gray-muted": "hsl(var(--sozu-gray-muted, 0 0% 60%))",
           white: "hsl(var(--sozu-white, 0 0% 100%))",
         },
         sidebar: {
