@@ -912,9 +912,8 @@ export default function InmobDashboard() {
                       <LabelList position="center" fill="#fff" fontSize={14} fontWeight={700} />
                       <LabelList position="right" fill="hsl(0,0%,15%)" fontSize={12} fontWeight={500} dataKey="stage" />
                     </Funnel>
-                  </RechartsFunnelChart>
-                </ResponsiveContainer>
-              </div>
+                </RechartsFunnelChart>
+              </ResponsiveContainer>
             )}
           </div>
         </div>
