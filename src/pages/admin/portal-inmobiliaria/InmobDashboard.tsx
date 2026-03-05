@@ -405,18 +405,23 @@ export default function InmobDashboard() {
 
   // Comisionistas for the inmobiliaria — filtered by current month via cuentas_cobranza creation date
   const { data: inmobComisionistas = [], isLoading: comisionesLoading } = useQuery({
-    queryKey: ["inmob-dash-comisionistas-inmob", inmobiliariaEmail, monthStart, monthEnd],
+    queryKey: ["inmob-dash-comisionistas-inmob", inmobiliariaEmail, selectedMonths],
     queryFn: async () => {
       if (!inmobiliariaEmail) return [];
-      // Get comisionistas, then we'll filter by the cuenta's fecha_creacion in current month
-      const { data } = await (supabase as any)
-        .from("comisionistas")
-        .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision, fecha_creacion")
-        .eq("email_usuario", inmobiliariaEmail)
-        .eq("activo", true)
-        .gte("fecha_creacion", monthStart)
-        .lte("fecha_creacion", monthEnd);
-      return data || [];
+      const ranges = dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }];
+      const all: any[] = [];
+      for (const range of ranges) {
+        const { data } = await (supabase as any)
+          .from("comisionistas")
+          .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision, fecha_creacion")
+          .eq("email_usuario", inmobiliariaEmail)
+          .eq("activo", true)
+          .gte("fecha_creacion", range.start)
+          .lte("fecha_creacion", range.end);
+        if (data) all.push(...data);
+      }
+      const seen = new Set<number>();
+      return all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
     },
     enabled: !!inmobiliariaEmail,
     staleTime: 3 * 60_000,
