@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useInmobAgents } from "@/hooks/useInmobAgents";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
@@ -7,6 +8,7 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -14,16 +16,23 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Users, TrendingUp, DollarSign, Home, FileText, CircleAlert, Target,
-  ArrowUpRight, ArrowDownRight, BarChart3, Clock, Percent, Building2,
-  ChevronRight, AlertTriangle, CalendarCheck, Handshake,
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Users, TrendingUp, DollarSign, Home, FileText, Target,
+  ArrowRight, BarChart3, Clock, Percent, Building2,
+  ChevronRight, AlertTriangle, AlertCircle, Info,
+  Timer, Receipt, CalendarCheck, UserPlus, Handshake,
+  FileCheck, CheckCircle2,
 } from "lucide-react";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  AreaChart, Area,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  AreaChart, Area, Legend,
+  FunnelChart as RechartsFunnelChart, Funnel, LabelList, Cell,
 } from "recharts";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 /* ───── helpers ───── */
 const fmtCurrency = (v: number) =>
@@ -35,13 +44,94 @@ const fmtShort = (v: number) => {
   return fmtCurrency(v);
 };
 
+/* ───── constants ───── */
+const funnelColors = [
+  "hsl(139, 35%, 42%)", "hsl(139, 35%, 49%)", "hsl(139, 35%, 56%)",
+  "hsl(139, 35%, 63%)", "hsl(139, 35%, 70%)", "hsl(139, 35%, 77%)",
+];
+
+const alertIcons = { warning: AlertTriangle, danger: AlertCircle, info: Info };
+const alertStyles = {
+  warning: "text-warning bg-warning/10",
+  danger: "text-destructive bg-destructive/10",
+  info: "text-primary bg-primary/10",
+};
+
+const activityIcons: Record<string, any> = {
+  offer: FileText, apartado: Home, comision: Receipt, prospecto: UserPlus, cita: CalendarCheck,
+  aprobada: Handshake, firmada: CalendarCheck,
+};
+
+type ChartMode = "unidades" | "ingreso" | "comision";
+
+const NAV_PREFIX = "/admin/portal-inmobiliaria";
+
+/* ───── StatCard (inline, matching reference exactly) ───── */
+const variantAccent: Record<string, string> = {
+  default: "group-hover:text-foreground",
+  primary: "text-primary",
+  warning: "text-warning",
+  success: "text-success",
+};
+
+function DashStatCard({ title, value, subtitle, fullValue, icon: Icon, trend, variant = "default", to }: {
+  title: string; value: string; subtitle?: string; fullValue?: string;
+  icon: any; trend?: { value: string; positive: boolean };
+  variant?: "default" | "primary" | "warning" | "success"; to?: string;
+}) {
+  const navigate = useNavigate();
+  const card = (
+    <div
+      onClick={() => to && navigate(to)}
+      className={cn(
+        "group relative flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition-all duration-200",
+        "hover:shadow-md hover:-translate-y-0.5 hover:border-primary/20",
+        to && "cursor-pointer"
+      )}
+    >
+      <div className="flex w-full items-center justify-between">
+        <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10", variantAccent[variant])}>
+          <Icon className="h-[18px] w-[18px]" />
+        </div>
+        {to && <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />}
+      </div>
+      <div className="space-y-0.5">
+        <p className="text-xs font-medium text-muted-foreground">{title}</p>
+        <p className="text-2xl font-bold tracking-tight">{value}</p>
+        <div className="flex items-center gap-2">
+          {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
+          {trend && (
+            <span className={cn("text-[11px] font-semibold", trend.positive ? "text-success" : "text-destructive")}>
+              {trend.positive ? "↑" : "↓"} {trend.value}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (fullValue) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{card}</TooltipTrigger>
+          <TooltipContent>{fullValue}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+  return card;
+}
+
 /* ───── main ───── */
 export default function InmobDashboard() {
+  const navigate = useNavigate();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
   const { personaId } = useInmobiliariaPersonaId();
   const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
   const [selectedProject, setSelectedProject] = useState<string>("all");
+  const [chartMode, setChartMode] = useState<ChartMode>("unidades");
 
   const agentEmails = useMemo(() => agents.map(a => a.email), [agents]);
   const agentPersonaIds = useMemo(() => agents.map(a => a.personaId), [agents]);
@@ -245,7 +335,7 @@ export default function InmobDashboard() {
   }, [ofertas, propMap]);
 
   // Secondary KPIs
-  const conversionGlobal = ofertas.length > 0 ? Math.round((ventasCerradas / ofertas.length) * 100) : 0;
+  const conversionGlobal = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100).toFixed(1) : "0";
   const ticketPromedio = ventasCerradas > 0
     ? ofertas.filter((o: any) => propMap.get(o.id_propiedad)?.id_estatus_disponibilidad === 5)
         .reduce((s: number, o: any) => s + (propMap.get(o.id_propiedad)?.precio_lista || 0), 0) / ventasCerradas
@@ -254,32 +344,38 @@ export default function InmobDashboard() {
     ? comisiones.reduce((s: number, c: any) => s + (c.monto_comision || 0), 0) / totalAgentes
     : 0;
 
-  // Funnel data
-  const funnelStages = useMemo(() => [
-    { label: "Prospectos", value: prospectosCount },
-    { label: "Ofertas", value: ofertas.length },
-    { label: "Aprobación", value: ofertas.filter((o: any) => o.id_estatus_aprobacion === 2).length },
-    { label: "Apartado", value: apartados },
-    { label: "Firma", value: ofertas.filter((o: any) => o.id_estatus_aprobacion === 5).length },
-    { label: "Escrituración", value: ventasCerradas },
-  ], [prospectosCount, ofertas, apartados, ventasCerradas]);
+  // Funnel data (for recharts FunnelChart)
+  const funnelData = useMemo(() => [
+    { stage: "Prospectos", count: prospectosCount, value: 0 },
+    { stage: "Ofertas", count: ofertas.length, value: pipelineTotal },
+    { stage: "Aprobación", count: ofertas.filter((o: any) => o.id_estatus_aprobacion === 2).length, value: 0 },
+    { stage: "Apartado", count: apartados, value: estimados },
+    { stage: "Firma", count: ofertas.filter((o: any) => o.id_estatus_aprobacion === 5).length, value: 0 },
+    { stage: "Escrituración", count: ventasCerradas, value: 0 },
+  ], [prospectosCount, ofertas, apartados, ventasCerradas, pipelineTotal, estimados]);
 
   // Alerts
-  const alertas = useMemo(() => {
+  const alerts = useMemo(() => {
     const now = Date.now();
-    return ofertas
-      .filter((o: any) => {
-        const p = propMap.get(o.id_propiedad);
-        if (!p || p.id_estatus_disponibilidad !== 4) return false;
-        const d = new Date(o.fecha_generacion).getTime();
-        return (now - d) > 7 * 24 * 60 * 60 * 1000;
-      })
-      .slice(0, 5)
-      .map((o: any) => ({
-        id: o.id,
-        days: Math.floor((now - new Date(o.fecha_generacion).getTime()) / (24 * 60 * 60 * 1000)),
-        agent: o.email_creador?.split("@")[0] || "—",
-      }));
+    const result: Array<{ id: string; type: "warning" | "danger" | "info"; text: string; to: string }> = [];
+
+    ofertas.forEach((o: any) => {
+      const p = propMap.get(o.id_propiedad);
+      if (!p) return;
+      const days = Math.floor((now - new Date(o.fecha_generacion).getTime()) / (24 * 60 * 60 * 1000));
+      const agent = o.email_creador?.split("@")[0] || "—";
+
+      // Ofertas sin respuesta > 7 días
+      if ([1, 4].includes(o.id_estatus_aprobacion) && days > 7) {
+        result.push({ id: `offer-${o.id}`, type: "warning", text: `${agent} — Oferta #${o.id} sin respuesta (${days} días)`, to: `${NAV_PREFIX}/pipeline` });
+      }
+      // Apartado sin firma > 5 días
+      if (p.id_estatus_disponibilidad === 4 && days > 5) {
+        result.push({ id: `apt-${o.id}`, type: "danger", text: `${agent} — Apartado sin firma (${days} días)`, to: `${NAV_PREFIX}/pipeline` });
+      }
+    });
+
+    return result.slice(0, 5);
   }, [ofertas, propMap]);
 
   // Agent performance
@@ -295,7 +391,7 @@ export default function InmobDashboard() {
       const agentComisiones = comisiones.filter((c: any) => c.email_usuario === agent.email);
       const ingreso = agentComisiones.reduce((s: number, c: any) => s + (c.monto_comision || 0), 0);
       const comision = agentComisiones.filter((c: any) => c.pagada).reduce((s: number, c: any) => s + (c.monto_comision || 0), 0);
-      const conv = agentOfertas.length > 0 ? Math.round((agentVentas / agentOfertas.length) * 100) : 0;
+      const conv = agentOfertas.length > 0 ? ((agentVentas / agentOfertas.length) * 100) : 0;
 
       return {
         nombre: agent.nombre,
@@ -306,19 +402,22 @@ export default function InmobDashboard() {
         pipeline: agentPipeline,
         ingreso,
         comision,
-        conversion: conv,
+        conversion: Math.round(conv * 10) / 10,
       };
     }).sort((a, b) => b.ventas - a.ventas);
   }, [agents, ofertas, propMap, comisiones]);
 
   // Bar chart data (by agent)
-  const [chartTab, setChartTab] = useState<"unidades" | "ingreso" | "comision">("unidades");
-  const barData = useMemo(() => {
+  const agentChartData = useMemo(() => {
     return agentPerformance.slice(0, 8).map(a => ({
       name: a.nombre.split(" ")[0],
-      value: chartTab === "unidades" ? a.ventas : chartTab === "ingreso" ? a.ingreso : a.comision,
+      ventas: a.ventas,
+      ingreso: a.ingreso,
+      comision: a.comision,
     }));
-  }, [agentPerformance, chartTab]);
+  }, [agentPerformance]);
+
+  const chartDataKey = { unidades: "ventas", ingreso: "ingreso", comision: "comision" }[chartMode] as string;
 
   // Area chart - monthly (simplified)
   const areaData = useMemo(() => {
@@ -327,8 +426,8 @@ export default function InmobDashboard() {
     return Array.from({ length: 6 }, (_, i) => {
       const m = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
       return {
-        name: months[m.getMonth()],
-        cobrado: Math.round(ingresosCobrados / 6 * (0.6 + Math.random() * 0.8)),
+        mes: months[m.getMonth()],
+        real: Math.round(ingresosCobrados / 6 * (0.6 + Math.random() * 0.8)),
         porCobrar: Math.round(porCobrar / 6 * (0.5 + Math.random() * 0.9)),
         estimado: Math.round(estimados / 6 * (0.4 + Math.random())),
       };
@@ -340,400 +439,289 @@ export default function InmobDashboard() {
     return ofertas
       .filter((o: any) => o.fecha_generacion)
       .sort((a: any, b: any) => new Date(b.fecha_generacion).getTime() - new Date(a.fecha_generacion).getTime())
-      .slice(0, 6)
-      .map((o: any) => ({
-        id: o.id,
-        type: o.id_estatus_aprobacion === 2 ? "aprobada" : o.id_estatus_aprobacion === 5 ? "firmada" : "oferta",
-        agent: o.email_creador?.split("@")[0] || "—",
-        date: o.fecha_generacion,
-      }));
+      .slice(0, 5)
+      .map((o: any) => {
+        const type = o.id_estatus_aprobacion === 2 ? "aprobada" : o.id_estatus_aprobacion === 5 ? "firmada" : "offer";
+        return {
+          id: o.id,
+          icon: type,
+          text: type === "aprobada" ? "Oferta aprobada" : type === "firmada" ? "Contrato firmado" : "Nueva oferta generada",
+          detail: `${o.email_creador?.split("@")[0] || "—"} · Oferta #${o.id}`,
+          time: formatDistanceToNow(new Date(o.fecha_generacion), { addSuffix: true, locale: es }),
+          to: `${NAV_PREFIX}/pipeline`,
+        };
+      });
   }, [ofertas]);
 
-  /* SOZU green for this theme context: --accent is the green */
-  const SOZU_GREEN = "hsl(var(--accent))";
-  const SOZU_GREEN_BG = "hsl(var(--accent) / 0.12)";
+  // Average conversion for table comparison
+  const avgConversion = agentPerformance.length > 0
+    ? agentPerformance.reduce((s, a) => s + a.conversion, 0) / agentPerformance.length
+    : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Building2 className="h-4 w-4 text-accent" />
-          <span className="font-medium text-foreground">{inmobName || "Mi Inmobiliaria"}</span>
-          <ChevronRight className="h-3 w-3" />
-          <span>Dashboard</span>
-        </div>
-        <Select value={selectedProject} onValueChange={setSelectedProject}>
-          <SelectTrigger className="w-[200px] h-9 text-sm">
-            <SelectValue placeholder="Todos los proyectos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los proyectos</SelectItem>
-            {projects.map(p => (
-              <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard Ejecutivo</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard Ejecutivo</h1>
         <p className="text-sm text-muted-foreground">Vista general del desempeño inmobiliario</p>
       </div>
 
-      {/* First row: 4 KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <MainKpi icon={Users} label="Agentes activos" value={totalAgentes} sub="Operando ahora" loading={isLoading} color="accent" />
-        <MainKpi icon={TrendingUp} label="Pipeline total" value={fmtShort(pipelineTotal)} sub="Valor acumulado" loading={isLoading} color="accent" />
-        <MainKpi icon={FileText} label="Ofertas activas" value={ofertasActivas} sub="En negociación" loading={isLoading} color="accent" />
-        <MainKpi icon={Home} label="Apartados" value={apartados} sub="Confirmados" loading={isLoading} color="accent" />
-      </div>
+      {/* KPIs - First row: 4 cards */}
+      {isLoading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <DashStatCard icon={Users} title="Agentes activos" value={String(totalAgentes)} subtitle="Operando ahora" variant="primary" to={`${NAV_PREFIX}/agentes`} />
+          <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle="Valor acumulado" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
+          <DashStatCard icon={FileCheck} title="Ofertas activas" value={String(ofertasActivas)} subtitle="En negociación" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
+          <DashStatCard icon={Home} title="Apartados" value={String(apartados)} subtitle="Confirmados" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
+        </div>
+      )}
 
-      {/* Second row: 3 KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <MainKpi icon={DollarSign} label="Ingresos cobrados" value={fmtShort(ingresosCobrados)} sub="Últimos 12 meses" loading={isLoading} color="accent" />
-        <MainKpi icon={CircleAlert} label="Por cobrar" value={fmtShort(porCobrar)} sub="Pendiente de pago" loading={isLoading} color="warning" />
-        <MainKpi icon={Target} label="Estimados" value={fmtShort(estimados)} sub="Basado en apartados" loading={isLoading} color="muted" />
-      </div>
+      {/* KPIs - Second row: 3 cards */}
+      {isLoading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          {[1,2,3].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <DashStatCard icon={DollarSign} title="Ingresos cobrados" value={fmtShort(ingresosCobrados)} fullValue={fmtCurrency(ingresosCobrados)} subtitle="Pagos aplicados" variant="success" to={`${NAV_PREFIX}/comisiones`} />
+          <DashStatCard icon={Clock} title="Por cobrar" value={fmtShort(porCobrar)} fullValue={fmtCurrency(porCobrar)} subtitle="Pendiente de pago" variant="warning" to={`${NAV_PREFIX}/comisiones`} />
+          <DashStatCard icon={Target} title="Estimados" value={fmtShort(estimados)} fullValue={fmtCurrency(estimados)} subtitle="Basado en apartados" />
+        </div>
+      )}
 
-      {/* 4 secondary KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SecondaryKpi icon={Percent} label="Conversión global" value={`${conversionGlobal}%`} loading={isLoading} />
-        <SecondaryKpi icon={DollarSign} label="Ticket promedio" value={fmtShort(ticketPromedio)} loading={isLoading} />
-        <SecondaryKpi icon={BarChart3} label="Comisión prom/agente" value={fmtShort(comisionPromAgente)} loading={isLoading} />
-        <SecondaryKpi icon={Clock} label="Tiempo prom. cierre" value="— días" loading={isLoading} />
-      </div>
-
-      {/* Funnel + Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <Card className="lg:col-span-3">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Embudo de Conversión Comercial</p>
-                <CardTitle className="text-base font-semibold">Pipeline Global</CardTitle>
+      {/* Strategic mini-metrics */}
+      {!isLoading && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { label: "Conversión global", value: `${conversionGlobal}%`, icon: Percent },
+            { label: "Ticket promedio", value: fmtShort(ticketPromedio), icon: BarChart3 },
+            { label: "Comisión prom/agente", value: fmtShort(comisionPromAgente), icon: DollarSign },
+            { label: "Tiempo prom. cierre", value: "— días", icon: Timer },
+          ].map((m) => (
+            <div key={m.label} className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+              <m.icon className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted-foreground truncate">{m.label}</p>
+                <p className="text-sm font-bold">{m.value}</p>
               </div>
-              <a href="/admin/portal-inmobiliaria/pipeline" className="text-xs text-accent hover:underline font-medium flex items-center gap-1">
-                Ver pipeline <ChevronRight className="h-3 w-3" />
-              </a>
             </div>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? <Skeleton className="h-64 w-full" /> : <FunnelChart stages={funnelStages} />}
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" />
-              <CardTitle className="text-base font-semibold">Alertas Estratégicas</CardTitle>
+          ))}
+        </div>
+      )}
+
+      {/* Pipeline Funnel + Alerts */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Funnel */}
+        <div className="lg:col-span-3 rounded-xl border border-border bg-card">
+          <div className="flex items-center justify-between p-5 pb-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Embudo de conversión comercial</p>
+              <p className="text-base font-semibold">Pipeline Global</p>
             </div>
-          </CardHeader>
-          <CardContent>
+            <button onClick={() => navigate(`${NAV_PREFIX}/pipeline`)} className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors">
+              Ver pipeline <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="px-5 pb-5">
             {isLoading ? <Skeleton className="h-64 w-full" /> : (
-              <div className="space-y-3">
-                {alertas.length === 0 && <p className="text-sm text-muted-foreground">Sin alertas pendientes</p>}
-                {alertas.map(a => (
-                  <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border border-border">
-                    <div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-destructive" />
-                    </div>
-                    <div className="text-sm">
-                      <p className="font-medium text-foreground">Oferta #{a.id} sin firma</p>
-                      <p className="text-muted-foreground">{a.agent} · {a.days} días apartada</p>
-                    </div>
-                  </div>
-                ))}
+              <ResponsiveContainer width="100%" height={280}>
+                <RechartsFunnelChart>
+                  <RechartsTooltip
+                    formatter={(value: any, name: any, props: any) => {
+                      const stage = props?.payload;
+                      return [`${value} prospectos${stage?.value ? ` · ${fmtShort(stage.value)}` : ""}`, stage?.stage || ""];
+                    }}
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(0,0%,91%)", boxShadow: "0 4px 12px rgba(0,0,0,0.06)" }}
+                  />
+                  <Funnel dataKey="count" data={funnelData} isAnimationActive>
+                    {funnelData.map((_, i) => (
+                      <Cell key={`cell-${i}`} fill={funnelColors[i]} cursor="pointer" onClick={() => navigate(`${NAV_PREFIX}/pipeline`)} />
+                    ))}
+                    <LabelList position="center" fill="#fff" fontSize={14} fontWeight={700} />
+                    <LabelList position="right" fill="hsl(0,0%,45%)" fontSize={12} dataKey="stage" />
+                  </Funnel>
+                </RechartsFunnelChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Alerts */}
+        <div className="lg:col-span-2 rounded-xl border border-border bg-card">
+          <div className="flex items-center gap-2 p-5 pb-2">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            <p className="text-base font-semibold">Alertas estratégicas</p>
+          </div>
+          <div className="px-5 pb-5">
+            {isLoading ? <Skeleton className="h-64 w-full" /> : alerts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground gap-2">
+                <CheckCircle2 className="h-8 w-8 text-primary/40" />
+                <p className="text-sm">Operación estable — sin pendientes críticos</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {alerts.map((alert) => {
+                  const AlertIcon = alertIcons[alert.type];
+                  return (
+                    <button key={alert.id} onClick={() => navigate(alert.to)} className="group flex w-full items-start gap-3 rounded-lg p-2.5 text-left transition-colors hover:bg-muted/50">
+                      <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-full", alertStyles[alert.type])}>
+                        <AlertIcon className="h-3.5 w-3.5" />
+                      </div>
+                      <p className="flex-1 text-sm leading-snug">{alert.text}</p>
+                      <span className="text-[11px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">Ver →</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
-      {/* Charts row */}
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Sales by Agent */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Ventas por Agente</CardTitle>
-              <div className="flex gap-1">
-                {(["unidades", "ingreso", "comision"] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setChartTab(tab)}
-                    className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
-                      chartTab === tab
-                        ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    {tab === "unidades" ? "Unidades" : tab === "ingreso" ? "Ingreso" : "Comisión"}
-                  </button>
-                ))}
-              </div>
+        {/* Ventas por Agente */}
+        <div className="rounded-xl border border-border bg-card">
+          <div className="flex items-center justify-between p-5 pb-2">
+            <p className="text-base font-semibold">Ventas por Agente</p>
+            <div className="flex gap-1 rounded-lg bg-muted p-0.5">
+              {([["unidades", "Unidades"], ["ingreso", "Ingreso"], ["comision", "Comisión"]] as [ChartMode, string][]).map(([key, label]) => (
+                <button key={key} onClick={() => setChartMode(key)} className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-all", chartMode === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  {label}
+                </button>
+              ))}
             </div>
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div className="px-5 pb-5">
             {isLoading ? <Skeleton className="h-64 w-full" /> : (
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={barData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
-                    formatter={(v: number) => chartTab === "unidades" ? v : fmtCurrency(v)}
-                  />
-                  <Bar dataKey="value" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} />
+                <BarChart data={agentChartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(0,0%,91%)" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(0,0%,45%)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(0,0%,45%)" }} tickFormatter={chartMode !== "unidades" ? (v) => `$${(v / 1000000).toFixed(1)}M` : undefined} axisLine={false} tickLine={false} />
+                  <RechartsTooltip formatter={(value: any) => [chartMode !== "unidades" ? fmtCurrency(value) : value, chartMode === "unidades" ? "Ventas" : chartMode === "ingreso" ? "Ingreso" : "Comisión"]} />
+                  <Bar dataKey={chartDataKey} fill="hsl(139, 35%, 51%)" radius={[4, 4, 0, 0]} cursor="pointer" onClick={() => navigate(`${NAV_PREFIX}/agentes`)} />
                 </BarChart>
               </ResponsiveContainer>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Income Real vs Projected */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Ingreso Real vs Proyectado</CardTitle>
-              <a href="/admin/portal-inmobiliaria/comisiones" className="text-xs text-accent hover:underline font-medium flex items-center gap-1">
-                Ver comisiones <ChevronRight className="h-3 w-3" />
-              </a>
-            </div>
-          </CardHeader>
-          <CardContent>
+        {/* Ingreso Real vs Proyectado */}
+        <div className="rounded-xl border border-border bg-card">
+          <div className="flex items-center justify-between p-5 pb-2">
+            <p className="text-base font-semibold">Ingreso Real vs Proyectado</p>
+            <button onClick={() => navigate(`${NAV_PREFIX}/comisiones`)} className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors">
+              Ver comisiones <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="px-5 pb-5">
             {isLoading ? <Skeleton className="h-64 w-full" /> : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={areaData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => fmtShort(v)} />
-                  <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }} formatter={(v: number) => fmtCurrency(v)} />
-                  <Area type="monotone" dataKey="cobrado" stackId="1" stroke="hsl(var(--accent))" fill="hsl(var(--accent))" fillOpacity={0.3} name="Cobrado" />
-                  <Area type="monotone" dataKey="porCobrar" stackId="2" stroke="hsl(var(--warning))" fill="hsl(var(--warning))" fillOpacity={0.2} name="Por cobrar" strokeDasharray="5 5" />
-                  <Area type="monotone" dataKey="estimado" stackId="3" stroke="hsl(var(--muted-foreground))" fill="hsl(var(--muted-foreground))" fillOpacity={0.1} name="Estimado" strokeDasharray="3 3" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(0,0%,91%)" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "hsl(0,0%,45%)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(0,0%,45%)" }} tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`} axisLine={false} tickLine={false} />
+                  <RechartsTooltip formatter={(value: any) => [fmtCurrency(value)]} />
+                  <Legend />
+                  <Area type="monotone" dataKey="real" stackId="1" stroke="hsl(139,35%,51%)" fill="hsl(139,35%,51%)" fillOpacity={0.3} name="Cobrado" />
+                  <Area type="monotone" dataKey="porCobrar" stackId="2" stroke="hsl(199,89%,48%)" fill="hsl(199,89%,48%)" fillOpacity={0.2} name="Por cobrar" strokeDasharray="5 5" />
+                  <Area type="monotone" dataKey="estimado" stackId="3" stroke="hsl(0,0%,60%)" fill="hsl(0,0%,60%)" fillOpacity={0.1} name="Estimado" strokeDasharray="3 3" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Agent performance table */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-semibold">Desempeño por Agente</CardTitle>
-            <a href="/admin/portal-inmobiliaria/agentes" className="text-xs text-accent hover:underline font-medium flex items-center gap-1">
-              Ver agentes <ChevronRight className="h-3 w-3" />
-            </a>
-          </div>
-        </CardHeader>
-        <CardContent>
+      <div className="rounded-xl border border-border bg-card">
+        <div className="flex items-center justify-between p-5 pb-2">
+          <p className="text-base font-semibold">Desempeño por Agente</p>
+          <button onClick={() => navigate(`${NAV_PREFIX}/agentes`)} className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors">
+            Ver agentes <ChevronRight className="h-3 w-3" />
+          </button>
+        </div>
+        <div className="px-5 pb-5">
           {isLoading ? <Skeleton className="h-48 w-full" /> : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-xs">Agente</TableHead>
-                    <TableHead className="text-xs text-center">Ofertas</TableHead>
-                    <TableHead className="text-xs text-center">Apartados</TableHead>
-                    <TableHead className="text-xs text-center">Ventas</TableHead>
-                    <TableHead className="text-xs text-right">Pipeline</TableHead>
-                    <TableHead className="text-xs text-right">Ingreso</TableHead>
-                    <TableHead className="text-xs text-right">Comisión</TableHead>
-                    <TableHead className="text-xs text-center">Conversión</TableHead>
+                    <TableHead className="sozu-table-header">Agente</TableHead>
+                    <TableHead className="sozu-table-header text-center">Prospectos</TableHead>
+                    <TableHead className="sozu-table-header text-center">Ofertas</TableHead>
+                    <TableHead className="sozu-table-header text-center">Apartados</TableHead>
+                    <TableHead className="sozu-table-header text-center">Ventas</TableHead>
+                    <TableHead className="sozu-table-header text-right">Pipeline activo</TableHead>
+                    <TableHead className="sozu-table-header text-right">Ingreso</TableHead>
+                    <TableHead className="sozu-table-header text-right">Comisión</TableHead>
+                    <TableHead className="sozu-table-header text-center">Conversión</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {agentPerformance.slice(0, 10).map((a, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="font-medium text-sm">{a.nombre}</TableCell>
-                      <TableCell className="text-center text-sm">{a.ofertas}</TableCell>
-                      <TableCell className="text-center text-sm">{a.apartados}</TableCell>
-                      <TableCell className="text-center text-sm">{a.ventas}</TableCell>
-                      <TableCell className="text-right text-sm">{fmtShort(a.pipeline)}</TableCell>
-                      <TableCell className="text-right text-sm">{fmtShort(a.ingreso)}</TableCell>
-                      <TableCell className="text-right text-sm">{fmtShort(a.comision)}</TableCell>
-                      <TableCell className="text-center text-sm">
-                        <span className={`inline-flex items-center gap-1 ${a.conversion >= 20 ? "text-accent" : a.conversion > 0 ? "text-warning" : "text-muted-foreground"}`}>
-                          {a.conversion > 0 && (a.conversion >= 20 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />)}
-                          {a.conversion}%
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {agentPerformance.slice(0, 10).map((agent, i) => {
+                    const convStatus = agent.conversion > avgConversion * 1.1 ? "high" : agent.conversion < avgConversion * 0.8 ? "low" : "mid";
+                    return (
+                      <TableRow key={i} className="cursor-pointer hover:bg-muted/30" onClick={() => navigate(`${NAV_PREFIX}/agentes`)}>
+                        <TableCell className="font-medium">{agent.nombre}</TableCell>
+                        <TableCell className="text-center">{agent.prospectos}</TableCell>
+                        <TableCell className="text-center">{agent.ofertas}</TableCell>
+                        <TableCell className="text-center">{agent.apartados}</TableCell>
+                        <TableCell className="text-center font-medium">{agent.ventas}</TableCell>
+                        <TableCell className="text-right">{fmtShort(agent.pipeline)}</TableCell>
+                        <TableCell className="text-right">
+                          <span onClick={(e) => { e.stopPropagation(); navigate(`${NAV_PREFIX}/comisiones`); }} className="hover:text-primary transition-colors">{fmtShort(agent.ingreso)}</span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span onClick={(e) => { e.stopPropagation(); navigate(`${NAV_PREFIX}/comisiones`); }} className="hover:text-primary transition-colors">{fmtShort(agent.comision)}</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={convStatus === "high" ? "default" : convStatus === "low" ? "destructive" : "secondary"} className="text-[11px]">
+                            {convStatus === "high" ? "↑" : convStatus === "low" ? "↓" : "–"} {agent.conversion}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                   {agentPerformance.length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground text-sm py-8">Sin datos de agentes</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">Sin datos de agentes</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Activity timeline */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Actividad Reciente</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? <Skeleton className="h-40 w-full" /> : (
-            <div className="space-y-4">
-              {recentActivity.length === 0 && <p className="text-sm text-muted-foreground">Sin actividad reciente</p>}
-              {recentActivity.map((act, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                    act.type === "aprobada" ? "bg-accent/10 text-accent"
-                    : act.type === "firmada" ? "bg-accent/20 text-accent"
-                    : "bg-muted text-muted-foreground"
-                  }`}>
-                    {act.type === "aprobada" ? <Handshake className="h-4 w-4" /> : act.type === "firmada" ? <CalendarCheck className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">
-                      {act.type === "aprobada" ? "Oferta aprobada" : act.type === "firmada" ? "Contrato firmado" : "Nueva oferta generada"}
-                      <span className="text-muted-foreground font-normal"> #{act.id}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {act.agent} · {formatDistanceToNow(new Date(act.date), { addSuffix: true, locale: es })}
-                    </p>
-                  </div>
+      {/* Activity feed */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <p className="text-base font-semibold mb-4">Actividad reciente</p>
+        <div className="space-y-1">
+          {isLoading ? <Skeleton className="h-40 w-full" /> : recentActivity.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">Sin actividad reciente</p>
+          ) : recentActivity.map((item) => {
+            const FeedIcon = activityIcons[item.icon] || FileText;
+            return (
+              <button key={item.id} onClick={() => navigate(item.to)} className="group flex w-full items-center gap-4 rounded-lg p-3 text-left transition-colors hover:bg-muted/40">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
+                  <FeedIcon className="h-4 w-4" />
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{item.text}</p>
+                  <p className="text-xs text-muted-foreground">{item.detail}</p>
+                </div>
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">{item.time}</span>
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
-  );
-}
-
-/* ───── Sub-components ───── */
-
-function MainKpi({ icon: Icon, label, value, sub, loading, color = "accent" }: {
-  icon: any; label: string; value: string | number; sub: string; loading: boolean; color?: "accent" | "warning" | "muted";
-}) {
-  const iconBg = {
-    accent: "bg-[hsl(139,35%,51%)] text-white",
-    warning: "bg-[hsl(37,91%,55%)] text-white",
-    muted: "bg-[hsl(0,0%,75%)] text-white",
-  };
-
-  return (
-    <Card className="sozu-card">
-      <CardContent className="p-5 flex flex-col items-start gap-3">
-        {loading ? <Skeleton className="h-24 w-full" /> : (
-          <>
-            <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${iconBg[color]}`}>
-              <Icon className="h-5 w-5" />
-            </div>
-            <p className="text-xs text-muted-foreground font-medium">{label}</p>
-            <div>
-              <p className="text-2xl font-bold text-foreground leading-tight">{value}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function SecondaryKpi({ icon: Icon, label, value, loading }: {
-  icon: any; label: string; value: string; loading: boolean;
-}) {
-  return (
-    <Card className="sozu-card">
-      <CardContent className="p-4">
-        {loading ? <Skeleton className="h-10 w-full" /> : (
-          <div className="flex items-center gap-3">
-            <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground truncate">{label}</p>
-              <p className="text-lg font-bold text-foreground">{value}</p>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ───── SVG Funnel Chart ───── */
-function FunnelChart({ stages }: { stages: { label: string; value: number }[] }) {
-  const totalStages = stages.length;
-  const svgWidth = 520;
-  const svgHeight = 320;
-  const stageHeight = svgHeight / totalStages;
-  const funnelWidth = 340;
-  const topWidth = funnelWidth * 0.95;
-  const bottomWidth = funnelWidth * 0.22;
-  const funnelCenterX = funnelWidth / 2;
-  const labelX = funnelWidth + 16;
-
-  const colors = [
-    "hsl(145, 38%, 32%)",
-    "hsl(145, 36%, 38%)",
-    "hsl(145, 35%, 45%)",
-    "hsl(139, 35%, 51%)",
-    "hsl(145, 40%, 60%)",
-    "hsl(145, 42%, 72%)",
-  ];
-
-  return (
-    <svg
-      viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-      className="w-full h-auto"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      {stages.map((stage, i) => {
-        const t1 = i / totalStages;
-        const t2 = (i + 1) / totalStages;
-        const w1 = topWidth - (topWidth - bottomWidth) * t1;
-        const w2 = topWidth - (topWidth - bottomWidth) * t2;
-        const y1 = i * stageHeight;
-        const y2 = (i + 1) * stageHeight;
-
-        const x1Left = funnelCenterX - w1 / 2;
-        const x1Right = funnelCenterX + w1 / 2;
-        const x2Left = funnelCenterX - w2 / 2;
-        const x2Right = funnelCenterX + w2 / 2;
-
-        const points = `${x1Left},${y1 + 1} ${x1Right},${y1 + 1} ${x2Right},${y2 - 1} ${x2Left},${y2 - 1}`;
-
-        return (
-          <g key={stage.label}>
-            <polygon
-              points={points}
-              fill={colors[i] || colors[colors.length - 1]}
-            />
-            <text
-              x={funnelCenterX}
-              y={y1 + stageHeight / 2 + 1}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fill="white"
-              fontWeight="700"
-              fontSize="17"
-            >
-              {stage.value}
-            </text>
-            <text
-              x={labelX}
-              y={y1 + stageHeight / 2 + 1}
-              dominantBaseline="middle"
-              fill="hsl(0,0%,45%)"
-              fontSize="13"
-              fontWeight="500"
-            >
-              {stage.label}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
   );
 }
