@@ -698,7 +698,8 @@ export default function InmobDashboard() {
     };
     return { ticketPromedio: avg(cierres), ticketPropiedades: avg(props), ticketProductos: avg(prods) };
   }, [dedupedAdvancedOfertas, cuentasMap]);
-  const comisionPromAgente = totalAgentes > 0
+  // comisionPromAgente is computed later after allComisiones is available
+  const comisionPromAgenteBase = totalAgentes > 0
     ? comisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0) / totalAgentes
     : 0;
 
