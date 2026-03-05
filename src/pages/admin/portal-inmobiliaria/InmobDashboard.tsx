@@ -23,7 +23,7 @@ import {
   ArrowRight, BarChart3, Clock, Percent, Building2,
   ChevronRight, AlertTriangle, AlertCircle, Info,
   Timer, Receipt, CalendarCheck, UserPlus, Handshake,
-  FileCheck, CheckCircle2,
+  FileCheck, CheckCircle2, Minus, ArrowUp, ArrowDown,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -42,6 +42,13 @@ const fmtShort = (v: number) => {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
   return fmtCurrency(v);
+};
+
+/** Returns [startOfMonth, endOfMonth] as ISO strings for a given year/month */
+const getMonthRange = (year: number, month: number) => {
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
+  return { start: start.toISOString(), end: end.toISOString(), startDate: start, endDate: end };
 };
 
 /* ───── constants ───── */
@@ -66,6 +73,32 @@ type ChartMode = "unidades" | "ingreso" | "comision";
 
 const NAV_PREFIX = "/admin/portal-inmobiliaria";
 
+const ADVANCED_STAGES = new Set(["apartado", "gen_contrato", "firma_contrato", "cierre"]);
+const PRE_APARTADO = new Set(["nuevas", "pendientes", "aprobadas", "revision"]);
+
+/* ───── Trend logic ───── */
+/**
+ * Compares current vs previous and returns trend info.
+ * @param lowerIsBetter - if true, a decrease is considered positive (e.g. tiempo de cierre)
+ */
+function getTrend(current: number, previous: number | null | undefined, lowerIsBetter = false): { label: string; color: string; icon: any } | null {
+  if (previous == null || previous === 0 && current === 0) return null;
+  const diff = current - previous;
+  const pctChange = previous !== 0 ? Math.abs(diff / previous * 100) : 100;
+  const pctLabel = `${pctChange.toFixed(0)}%`;
+
+  if (Math.abs(diff) < 0.01) {
+    return { label: `= ${pctLabel}`, color: "text-blue-500", icon: Minus };
+  }
+  const increased = diff > 0;
+  const isPositive = lowerIsBetter ? !increased : increased;
+  return {
+    label: `${increased ? "+" : "-"}${pctLabel}`,
+    color: isPositive ? "text-emerald-600" : "text-destructive",
+    icon: increased ? ArrowUp : ArrowDown,
+  };
+}
+
 /* ───── StatCard (inline, matching reference exactly) ───── */
 const variantAccent: Record<string, string> = {
   default: "group-hover:text-foreground",
@@ -76,7 +109,7 @@ const variantAccent: Record<string, string> = {
 
 function DashStatCard({ title, value, subtitle, fullValue, icon: Icon, trend, variant = "default", to }: {
   title: string; value: string; subtitle?: string; fullValue?: string;
-  icon: any; trend?: { value: string; positive: boolean };
+  icon: any; trend?: { label: string; color: string; icon: any } | null;
   variant?: "default" | "primary" | "warning" | "success"; to?: string;
 }) {
   const navigate = useNavigate();
@@ -101,8 +134,8 @@ function DashStatCard({ title, value, subtitle, fullValue, icon: Icon, trend, va
         <div className="flex items-center gap-2">
           {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
           {trend && (
-            <span className={cn("text-[11px] font-semibold", trend.positive ? "text-success" : "text-destructive")}>
-              {trend.positive ? "↑" : "↓"} {trend.value}
+            <span className={cn("flex items-center gap-0.5 text-[11px] font-semibold", trend.color)}>
+              <trend.icon className="h-3 w-3" /> {trend.label}
             </span>
           )}
         </div>
@@ -135,6 +168,12 @@ export default function InmobDashboard() {
 
   const agentEmails = useMemo(() => agents.map(a => a.email), [agents]);
   const agentPersonaIds = useMemo(() => agents.map(a => a.personaId), [agents]);
+
+  // Current month boundaries
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-indexed
+  const { start: monthStart, end: monthEnd } = getMonthRange(currentYear, currentMonth);
 
   useEffect(() => {
     registrarVista("/admin/portal-inmobiliaria/dashboard");
@@ -180,16 +219,18 @@ export default function InmobDashboard() {
     staleTime: 5 * 60_000,
   });
 
-  // Ofertas
+  // Ofertas — filtered by current month (fecha_generacion)
   const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
-    queryKey: ["inmob-dash-ofertas", agentEmails],
+    queryKey: ["inmob-dash-ofertas", agentEmails, monthStart, monthEnd],
     queryFn: async () => {
       if (!agentEmails.length) return [];
       const { data } = await supabase
         .from("ofertas")
         .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado, id_proyecto, id_producto")
         .in("email_creador", agentEmails)
-        .eq("activo", true) as any;
+        .eq("activo", true)
+        .gte("fecha_generacion", monthStart)
+        .lte("fecha_generacion", monthEnd) as any;
       return data || [];
     },
     enabled: agentEmails.length > 0,
@@ -228,7 +269,7 @@ export default function InmobDashboard() {
         const batch = ofertaIds.slice(i, i + 100);
         const { data } = await (supabase as any)
           .from("cuentas_cobranza")
-          .select("id, id_oferta, precio_final, contrato_draft")
+          .select("id, id_oferta, precio_final, contrato_draft, fecha_creacion")
           .in("id_oferta", batch)
           .eq("activo", true);
         (data || []).forEach((c: any) => { if (c.id_oferta) m.set(c.id_oferta, c); });
@@ -255,16 +296,19 @@ export default function InmobDashboard() {
     staleTime: 10 * 60_000,
   });
 
-  // Comisionistas for the inmobiliaria (financial KPIs - using inmobiliaria's own email)
+  // Comisionistas for the inmobiliaria — filtered by current month via cuentas_cobranza creation date
   const { data: inmobComisionistas = [], isLoading: comisionesLoading } = useQuery({
-    queryKey: ["inmob-dash-comisionistas-inmob", inmobiliariaEmail],
+    queryKey: ["inmob-dash-comisionistas-inmob", inmobiliariaEmail, monthStart, monthEnd],
     queryFn: async () => {
       if (!inmobiliariaEmail) return [];
+      // Get comisionistas, then we'll filter by the cuenta's fecha_creacion in current month
       const { data } = await (supabase as any)
         .from("comisionistas")
-        .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision")
+        .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision, fecha_creacion")
         .eq("email_usuario", inmobiliariaEmail)
-        .eq("activo", true);
+        .eq("activo", true)
+        .gte("fecha_creacion", monthStart)
+        .lte("fecha_creacion", monthEnd);
       return data || [];
     },
     enabled: !!inmobiliariaEmail,
@@ -313,7 +357,6 @@ export default function InmobDashboard() {
     if (!inmobComisionistas.length) return null;
     const pcts = inmobComisionistas.map((c: any) => Number(c.porcentaje_comision) || 0).filter((p: number) => p > 0);
     if (!pcts.length) return null;
-    // Return most frequent
     const freq = new Map<number, number>();
     pcts.forEach((p: number) => freq.set(p, (freq.get(p) || 0) + 1));
     let maxP = pcts[0], maxCount = 0;
@@ -323,14 +366,16 @@ export default function InmobDashboard() {
 
   // Also keep agent-level comisiones for the agent performance table
   const { data: comisiones = [] } = useQuery({
-    queryKey: ["inmob-dash-comisiones", agentEmails],
+    queryKey: ["inmob-dash-comisiones", agentEmails, monthStart, monthEnd],
     queryFn: async () => {
       if (!agentEmails.length) return [];
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("comisionistas")
-        .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision")
+        .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision, fecha_creacion")
         .in("email_usuario", agentEmails)
-        .eq("activo", true) as any;
+        .eq("activo", true)
+        .gte("fecha_creacion", monthStart)
+        .lte("fecha_creacion", monthEnd);
       return data || [];
     },
     enabled: agentEmails.length > 0,
@@ -354,6 +399,26 @@ export default function InmobDashboard() {
     staleTime: 3 * 60_000,
   });
 
+  // Previous month KPIs for trend comparison
+  const { data: prevKpi } = useQuery({
+    queryKey: ["inmob-kpi-prev", personaId, currentYear, currentMonth],
+    queryFn: async () => {
+      if (!personaId) return null;
+      const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+      const { data } = await (supabase as any)
+        .from("inmob_kpi_mensual")
+        .select("*")
+        .eq("persona_id", personaId)
+        .eq("anio", prevYear)
+        .eq("mes", prevMonth + 1) // stored 1-indexed
+        .maybeSingle();
+      return data || null;
+    },
+    enabled: !!personaId,
+    staleTime: 5 * 60_000,
+  });
+
   const isLoading = agentsLoading || ofertasLoading || comisionesLoading;
 
   // ───── Offer stage classification (mirrors pipeline logic) ─────
@@ -361,7 +426,7 @@ export default function InmobDashboard() {
     const p = propMap.get(o.id_propiedad);
     const cuenta = cuentasMap.get(o.id);
     if (p?.id_estatus_disponibilidad === 5) return "cierre";
-    if (cuenta?.contrato_draft) return "gen_contrato"; // or firma
+    if (cuenta?.contrato_draft) return "gen_contrato";
     if (cuenta && p?.id_estatus_disponibilidad === 4) return "apartado";
     const fecha = new Date(o.fecha_generacion);
     const expira = new Date(fecha); expira.setDate(expira.getDate() + 5);
@@ -380,11 +445,10 @@ export default function InmobDashboard() {
     return ofertas.map((o: any) => ({ ...o, stage: classifyDashOffer(o) }));
   }, [ofertas, classifyDashOffer]);
 
-  // ───── KPI calculations ─────
+  // ───── KPI calculations (current month only) ─────
   const totalAgentes = agents.filter(a => a.activo).length;
 
   // Pipeline total: count + sum precio_final from Apartado onwards
-  const ADVANCED_STAGES = new Set(["apartado", "gen_contrato", "firma_contrato", "cierre"]);
   const pipelineTotal = useMemo(() => {
     let sum = 0;
     classifiedOfertas.forEach((o: any) => {
@@ -401,7 +465,6 @@ export default function InmobDashboard() {
   }, [classifiedOfertas]);
 
   // Ofertas activas: before apartado, NOT expiradas, NOT rechazadas
-  const PRE_APARTADO = new Set(["nuevas", "pendientes", "aprobadas", "revision"]);
   const ofertasActivas = useMemo(() => {
     return classifiedOfertas.filter((o: any) => PRE_APARTADO.has(o.stage)).length;
   }, [classifiedOfertas]);
@@ -423,22 +486,21 @@ export default function InmobDashboard() {
     return Math.max(0, monto - external);
   }, [isSozu, externalComisionByCuenta]);
 
-  // Ingresos cobrados: comisionistas pagadas for the inmobiliaria
+  // Ingresos cobrados: comisionistas pagadas for the inmobiliaria (current month)
   const ingresosCobrados = useMemo(() => {
     return inmobComisionistas
       .filter((c: any) => c.pagada === true)
       .reduce((s: number, c: any) => s + getNetComision(c), 0);
   }, [inmobComisionistas, getNetComision]);
 
-  // Por cobrar: comisionistas aprobadas pero no pagadas
+  // Por cobrar: comisionistas aprobadas pero no pagadas (current month)
   const porCobrar = useMemo(() => {
     return inmobComisionistas
       .filter((c: any) => c.aprobada === true && c.pagada !== true)
       .reduce((s: number, c: any) => s + getNetComision(c), 0);
   }, [inmobComisionistas, getNetComision]);
 
-  // Estimados: sum of commission from apartado onwards
-  // Build a set of cuenta_cobranza IDs linked to advanced-stage offers
+  // Estimados: sum of commission from apartado onwards (current month)
   const advancedCuentaIds = useMemo(() => {
     const ids = new Set<number>();
     classifiedOfertas.forEach((o: any) => {
@@ -456,17 +518,70 @@ export default function InmobDashboard() {
       .reduce((s: number, c: any) => s + getNetComision(c), 0);
   }, [inmobComisionistas, advancedCuentaIds, getNetComision]);
 
-  // Secondary KPIs
-  const conversionGlobal = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100).toFixed(1) : "0";
+  // Secondary KPIs — current month
+  const conversionGlobal = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100) : 0;
   const ticketPromedio = ventasCerradas > 0
     ? ofertas.filter((o: any) => propMap.get(o.id_propiedad)?.id_estatus_disponibilidad === 5)
         .reduce((s: number, o: any) => s + (propMap.get(o.id_propiedad)?.precio_lista || 0), 0) / ventasCerradas
     : 0;
   const comisionPromAgente = totalAgentes > 0
-    ? comisiones.reduce((s: number, c: any) => s + (c.monto_comision || 0), 0) / totalAgentes
+    ? comisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0) / totalAgentes
     : 0;
 
-  // Funnel data (for recharts FunnelChart)
+  // Tiempo promedio de cierre: days from oferta creation to cierre
+  const tiempoPromCierre = useMemo(() => {
+    const cierres = classifiedOfertas.filter((o: any) => o.stage === "cierre");
+    if (cierres.length === 0) return 0;
+    const totalDays = cierres.reduce((sum: number, o: any) => {
+      const fechaOferta = new Date(o.fecha_generacion);
+      // Use cuenta fecha_creacion as proxy for cierre date, or now if not available
+      const cuenta = cuentasMap.get(o.id);
+      const fechaCierre = cuenta?.fecha_creacion ? new Date(cuenta.fecha_creacion) : new Date();
+      const diffMs = fechaCierre.getTime() - fechaOferta.getTime();
+      return sum + Math.max(0, Math.floor(diffMs / (24 * 60 * 60 * 1000)));
+    }, 0);
+    return Math.round(totalDays / cierres.length);
+  }, [classifiedOfertas, cuentasMap]);
+
+  // ───── Persist current month KPIs and compare ─────
+  useEffect(() => {
+    if (!personaId || isLoading) return;
+    const kpiData = {
+      persona_id: personaId,
+      anio: currentYear,
+      mes: currentMonth + 1, // 1-indexed
+      pipeline_total: pipelineTotal,
+      pipeline_count: pipelineCount,
+      ofertas_activas: ofertasActivas,
+      apartados,
+      ingresos_cobrados: ingresosCobrados,
+      por_cobrar: porCobrar,
+      estimados,
+      conversion_global: conversionGlobal,
+      ticket_promedio: ticketPromedio,
+      comision_prom_agente: comisionPromAgente,
+      tiempo_prom_cierre: tiempoPromCierre,
+      fecha_actualizacion: new Date().toISOString(),
+    };
+    (supabase as any)
+      .from("inmob_kpi_mensual")
+      .upsert(kpiData, { onConflict: "persona_id,anio,mes" })
+      .then(() => {});
+  }, [personaId, isLoading, pipelineTotal, pipelineCount, ofertasActivas, apartados, ingresosCobrados, porCobrar, estimados, conversionGlobal, ticketPromedio, comisionPromAgente, tiempoPromCierre]);
+
+  // Trend helpers
+  const trendPipeline = getTrend(pipelineTotal, prevKpi?.pipeline_total);
+  const trendOfertasActivas = getTrend(ofertasActivas, prevKpi?.ofertas_activas);
+  const trendApartados = getTrend(apartados, prevKpi?.apartados);
+  const trendIngresos = getTrend(ingresosCobrados, prevKpi?.ingresos_cobrados);
+  const trendPorCobrar = getTrend(porCobrar, prevKpi?.por_cobrar);
+  const trendEstimados = getTrend(estimados, prevKpi?.estimados);
+  const trendConversion = getTrend(conversionGlobal, prevKpi?.conversion_global);
+  const trendTicket = getTrend(ticketPromedio, prevKpi?.ticket_promedio);
+  const trendComisionProm = getTrend(comisionPromAgente, prevKpi?.comision_prom_agente);
+  const trendTiempoCierre = getTrend(tiempoPromCierre, prevKpi?.tiempo_prom_cierre, true); // lower is better
+
+  // Funnel data
   const funnelData = useMemo(() => [
     { stage: "Prospectos", count: prospectosCount, value: 0 },
     { stage: "Ofertas", count: ofertas.length, value: pipelineTotal },
@@ -480,23 +595,18 @@ export default function InmobDashboard() {
   const alerts = useMemo(() => {
     const now = Date.now();
     const result: Array<{ id: string; type: "warning" | "danger" | "info"; text: string; to: string }> = [];
-
     ofertas.forEach((o: any) => {
       const p = propMap.get(o.id_propiedad);
       if (!p) return;
       const days = Math.floor((now - new Date(o.fecha_generacion).getTime()) / (24 * 60 * 60 * 1000));
       const agent = o.email_creador?.split("@")[0] || "—";
-
-      // Ofertas sin respuesta > 7 días
       if ([1, 4].includes(o.id_estatus_aprobacion) && days > 7) {
         result.push({ id: `offer-${o.id}`, type: "warning", text: `${agent} — Oferta #${o.id} sin respuesta (${days} días)`, to: `${NAV_PREFIX}/pipeline` });
       }
-      // Apartado sin firma > 5 días
       if (p.id_estatus_disponibilidad === 4 && days > 5) {
         result.push({ id: `apt-${o.id}`, type: "danger", text: `${agent} — Apartado sin firma (${days} días)`, to: `${NAV_PREFIX}/pipeline` });
       }
     });
-
     return result.slice(0, 5);
   }, [ofertas, propMap]);
 
@@ -511,31 +621,17 @@ export default function InmobDashboard() {
         return s + (p && p.id_estatus_disponibilidad !== 5 ? p.precio_lista || 0 : 0);
       }, 0);
       const agentComisiones = comisiones.filter((c: any) => c.email_usuario === agent.email);
-      const ingreso = agentComisiones.reduce((s: number, c: any) => s + (c.monto_comision || 0), 0);
-      const comision = agentComisiones.filter((c: any) => c.pagada).reduce((s: number, c: any) => s + (c.monto_comision || 0), 0);
+      const ingreso = agentComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
+      const comision = agentComisiones.filter((c: any) => c.pagada).reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
       const conv = agentOfertas.length > 0 ? ((agentVentas / agentOfertas.length) * 100) : 0;
-
-      return {
-        nombre: agent.nombre,
-        prospectos: 0,
-        ofertas: agentOfertas.length,
-        apartados: agentApartados,
-        ventas: agentVentas,
-        pipeline: agentPipeline,
-        ingreso,
-        comision,
-        conversion: Math.round(conv * 10) / 10,
-      };
+      return { nombre: agent.nombre, prospectos: 0, ofertas: agentOfertas.length, apartados: agentApartados, ventas: agentVentas, pipeline: agentPipeline, ingreso, comision, conversion: Math.round(conv * 10) / 10 };
     }).sort((a, b) => b.ventas - a.ventas);
   }, [agents, ofertas, propMap, comisiones]);
 
-  // Bar chart data (by agent)
+  // Bar chart data
   const agentChartData = useMemo(() => {
     return agentPerformance.slice(0, 8).map(a => ({
-      name: a.nombre.split(" ")[0],
-      ventas: a.ventas,
-      ingreso: a.ingreso,
-      comision: a.comision,
+      name: a.nombre.split(" ")[0], ventas: a.ventas, ingreso: a.ingreso, comision: a.comision,
     }));
   }, [agentPerformance]);
 
@@ -544,7 +640,6 @@ export default function InmobDashboard() {
   // Area chart - monthly (simplified)
   const areaData = useMemo(() => {
     const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-    const now = new Date();
     return Array.from({ length: 6 }, (_, i) => {
       const m = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
       return {
@@ -556,7 +651,7 @@ export default function InmobDashboard() {
     });
   }, [ingresosCobrados, porCobrar, estimados]);
 
-  // Activity timeline (from recent ofertas)
+  // Activity timeline
   const recentActivity = useMemo(() => {
     return ofertas
       .filter((o: any) => o.fecha_generacion)
@@ -575,17 +670,19 @@ export default function InmobDashboard() {
       });
   }, [ofertas]);
 
-  // Average conversion for table comparison
   const avgConversion = agentPerformance.length > 0
     ? agentPerformance.reduce((s, a) => s + a.conversion, 0) / agentPerformance.length
     : 0;
+
+  // Month label
+  const monthLabel = now.toLocaleString("es-MX", { month: "long", year: "numeric" });
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header + Project filter */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold tracking-tight">Dashboard Ejecutivo</h1>
             {inmobComisionPorcentaje !== null && (
               <Badge variant="outline" className="text-sm font-semibold border-primary/30 text-primary">
@@ -593,8 +690,11 @@ export default function InmobDashboard() {
                 Comisión: {inmobComisionPorcentaje.toFixed(2)}%
               </Badge>
             )}
+            <Badge variant="secondary" className="text-xs capitalize">
+              {monthLabel}
+            </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">Vista general del desempeño inmobiliario</p>
+          <p className="text-sm text-muted-foreground">Vista general del desempeño inmobiliario — mes corriente</p>
         </div>
         <Select value={selectedProject} onValueChange={setSelectedProject}>
           <SelectTrigger className="w-[200px] shrink-0">
@@ -617,9 +717,9 @@ export default function InmobDashboard() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <DashStatCard icon={Users} title="Agentes activos" value={String(totalAgentes)} subtitle="Operando ahora" variant="primary" to={`${NAV_PREFIX}/agentes`} />
-          <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle={`${pipelineCount} ofertas desde apartado`} variant="primary" to={`${NAV_PREFIX}/pipeline`} />
-          <DashStatCard icon={FileCheck} title="Ofertas activas" value={String(ofertasActivas)} subtitle="En negociación" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
-          <DashStatCard icon={Home} title="Apartados" value={String(apartados)} subtitle="Confirmados" variant="primary" to={`${NAV_PREFIX}/pipeline`} />
+          <DashStatCard icon={TrendingUp} title="Pipeline total" value={fmtShort(pipelineTotal)} fullValue={fmtCurrency(pipelineTotal)} subtitle={`${pipelineCount} ofertas desde apartado`} variant="primary" to={`${NAV_PREFIX}/pipeline`} trend={trendPipeline} />
+          <DashStatCard icon={FileCheck} title="Ofertas activas" value={String(ofertasActivas)} subtitle="En negociación" variant="primary" to={`${NAV_PREFIX}/pipeline`} trend={trendOfertasActivas} />
+          <DashStatCard icon={Home} title="Apartados" value={String(apartados)} subtitle="Confirmados" variant="primary" to={`${NAV_PREFIX}/pipeline`} trend={trendApartados} />
         </div>
       )}
 
@@ -630,26 +730,33 @@ export default function InmobDashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <DashStatCard icon={DollarSign} title="Ingresos cobrados" value={fmtShort(ingresosCobrados)} fullValue={fmtCurrency(ingresosCobrados)} subtitle="Comisiones pagadas" variant="success" to={`${NAV_PREFIX}/comisiones`} />
-          <DashStatCard icon={Clock} title="Por cobrar" value={fmtShort(porCobrar)} fullValue={fmtCurrency(porCobrar)} subtitle="Comisiones aprobadas pendientes" variant="warning" to={`${NAV_PREFIX}/comisiones`} />
-          <DashStatCard icon={Target} title="Estimados" value={fmtShort(estimados)} fullValue={fmtCurrency(estimados)} subtitle="Comisión desde apartado" />
+          <DashStatCard icon={DollarSign} title="Ingresos cobrados" value={fmtShort(ingresosCobrados)} fullValue={fmtCurrency(ingresosCobrados)} subtitle="Comisiones pagadas" variant="success" to={`${NAV_PREFIX}/comisiones`} trend={trendIngresos} />
+          <DashStatCard icon={Clock} title="Por cobrar" value={fmtShort(porCobrar)} fullValue={fmtCurrency(porCobrar)} subtitle="Aprobadas pendientes" variant="warning" to={`${NAV_PREFIX}/comisiones`} trend={trendPorCobrar} />
+          <DashStatCard icon={Target} title="Estimados" value={fmtShort(estimados)} fullValue={fmtCurrency(estimados)} subtitle="Comisión desde apartado" trend={trendEstimados} />
         </div>
       )}
 
-      {/* Strategic mini-metrics */}
+      {/* Strategic mini-metrics with trends */}
       {!isLoading && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Conversión global", value: `${conversionGlobal}%`, icon: Percent },
-            { label: "Ticket promedio", value: fmtShort(ticketPromedio), icon: BarChart3 },
-            { label: "Comisión prom/agente", value: fmtShort(comisionPromAgente), icon: DollarSign },
-            { label: "Tiempo prom. cierre", value: "— días", icon: Timer },
+            { label: "Conversión global", value: `${conversionGlobal.toFixed(1)}%`, icon: Percent, trend: trendConversion },
+            { label: "Ticket promedio", value: fmtShort(ticketPromedio), icon: BarChart3, trend: trendTicket },
+            { label: "Comisión prom/agente", value: fmtShort(comisionPromAgente), icon: DollarSign, trend: trendComisionProm },
+            { label: "Tiempo prom. cierre", value: tiempoPromCierre > 0 ? `${tiempoPromCierre} días` : "— días", icon: Timer, trend: trendTiempoCierre },
           ].map((m) => (
             <div key={m.label} className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
               <m.icon className="h-4 w-4 text-muted-foreground shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-[11px] text-muted-foreground truncate">{m.label}</p>
-                <p className="text-sm font-bold">{m.value}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-bold">{m.value}</p>
+                  {m.trend && (
+                    <span className={cn("flex items-center gap-0.5 text-[10px] font-semibold", m.trend.color)}>
+                      <m.trend.icon className="h-2.5 w-2.5" /> {m.trend.label}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
