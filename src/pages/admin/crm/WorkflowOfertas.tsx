@@ -796,6 +796,21 @@ export default function WorkflowOfertas() {
               </Select>
             </div>
 
+            <div className="min-w-[200px]">
+              <label className="text-sm font-medium mb-1 block">Periodo</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-10 w-full justify-start text-xs font-normal">
+                    <CalendarDays className="h-3.5 w-3.5 mr-1.5 shrink-0" />
+                    <span className="truncate">{monthFilterLabel}</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <MonthMultiSelector value={selectedMonths} onChange={setSelectedMonths} />
+                </PopoverContent>
+              </Popover>
+            </div>
+
             {hasActiveFilters && (
               <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-xs h-10">
                 <X className="h-3 w-3 mr-1" />
