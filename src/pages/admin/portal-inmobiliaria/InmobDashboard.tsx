@@ -267,24 +267,32 @@ export default function InmobDashboard() {
     staleTime: 5 * 60_000,
   });
 
-  // For Sozu: get emails from OTHER inmobiliarias (both their agents AND the inmobiliaria owners) to exclude
+  // For Sozu: get emails of ALL external agents (not owned by this inmobiliaria) to exclude.
+  // This includes agents from other inmobiliarias AND independent agents (id_persona_duena_lead IS NULL).
   const { data: inmobAgentEmails = new Set<string>() } = useQuery({
-    queryKey: ["all-inmob-agent-emails-external-v2", personaId],
+    queryKey: ["all-inmob-agent-emails-external-v3", personaId],
     queryFn: async () => {
       if (!personaId) return new Set<string>();
-      // Get all tipo 19 relations NOT owned by this inmobiliaria
-      const { data: rels } = await supabase
+
+      // 1. Get ALL tipo 19 agent relations
+      const { data: allRels } = await supabase
         .from("entidades_relacionadas")
         .select("id_persona, id_persona_duena_lead")
         .eq("id_tipo_entidad", 19)
-        .eq("activo", true)
-        .neq("id_persona_duena_lead", personaId) as any;
-      if (!rels?.length) return new Set<string>();
+        .eq("activo", true) as any;
+      if (!allRels?.length) return new Set<string>();
 
-      // Collect both agent persona IDs AND owner (inmobiliaria) persona IDs
-      const agentPIds = [...new Set(rels.map((r: any) => r.id_persona).filter(Boolean))] as number[];
-      const ownerPIds = [...new Set(rels.map((r: any) => r.id_persona_duena_lead).filter(Boolean))] as number[];
-      const allPIds = [...new Set([...agentPIds, ...ownerPIds])];
+      // 2. Separate: agents owned by this inmobiliaria vs everyone else (other owners + NULL owners)
+      const externalAgentPIds: number[] = [];
+      const externalOwnerPIds: number[] = [];
+      allRels.forEach((r: any) => {
+        if (r.id_persona_duena_lead === personaId) return; // skip our own agents
+        if (r.id_persona) externalAgentPIds.push(r.id_persona);
+        if (r.id_persona_duena_lead) externalOwnerPIds.push(r.id_persona_duena_lead);
+      });
+
+      const allPIds = [...new Set([...externalAgentPIds, ...externalOwnerPIds])];
+      if (!allPIds.length) return new Set<string>();
 
       const allEmails = new Set<string>();
       for (let i = 0; i < allPIds.length; i += 200) {
