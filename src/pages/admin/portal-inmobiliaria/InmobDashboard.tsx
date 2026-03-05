@@ -602,27 +602,24 @@ export default function InmobDashboard() {
     return dedupedAdvancedOfertas.filter((o: any) => o.stage === "cierre").length;
   }, [dedupedAdvancedOfertas]);
 
-  // Helper: get net commission for a comisionista entry (Sozu subtracts external dispersions)
-  const getNetComision = useCallback((c: any) => {
-    const monto = Number(c.monto_comision) || 0;
-    if (!isSozu) return monto;
-    const external = externalComisionByCuenta.get(c.id_cuenta_cobranza) || 0;
-    return Math.max(0, monto - external);
-  }, [isSozu, externalComisionByCuenta]);
+  // Helper: get commission monto (already computed in query)
+  const getComisionMonto = useCallback((c: any) => {
+    return Number(c.monto_comision) || 0;
+  }, []);
 
-  // Ingresos cobrados: comisionistas pagadas for the inmobiliaria (current month)
+  // Ingresos cobrados: comisionistas pagadas (current month)
   const ingresosCobrados = useMemo(() => {
-    return inmobComisionistas
+    return comisiones
       .filter((c: any) => c.pagada === true)
-      .reduce((s: number, c: any) => s + getNetComision(c), 0);
-  }, [inmobComisionistas, getNetComision]);
+      .reduce((s: number, c: any) => s + getComisionMonto(c), 0);
+  }, [comisiones, getComisionMonto]);
 
   // Por cobrar: comisionistas aprobadas pero no pagadas (current month)
   const porCobrar = useMemo(() => {
-    return inmobComisionistas
+    return comisiones
       .filter((c: any) => c.aprobada === true && c.pagada !== true)
-      .reduce((s: number, c: any) => s + getNetComision(c), 0);
-  }, [inmobComisionistas, getNetComision]);
+      .reduce((s: number, c: any) => s + getComisionMonto(c), 0);
+  }, [comisiones, getComisionMonto]);
 
   // Estimados: sum of commission from apartado onwards (current month)
   const advancedCuentaIds = useMemo(() => {
@@ -635,10 +632,10 @@ export default function InmobDashboard() {
   }, [dedupedAdvancedOfertas, cuentasMap]);
 
   const estimados = useMemo(() => {
-    return inmobComisionistas
+    return comisiones
       .filter((c: any) => advancedCuentaIds.has(c.id_cuenta_cobranza))
-      .reduce((s: number, c: any) => s + getNetComision(c), 0);
-  }, [inmobComisionistas, advancedCuentaIds, getNetComision]);
+      .reduce((s: number, c: any) => s + getComisionMonto(c), 0);
+  }, [comisiones, advancedCuentaIds, getComisionMonto]);
 
   // Secondary KPIs — current month
   const conversionGlobal = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100) : 0;
