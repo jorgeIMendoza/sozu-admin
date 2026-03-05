@@ -416,49 +416,56 @@ export default function InmobDashboard() {
     staleTime: 3 * 60_000,
   });
 
-  // ───── Comisionistas: fetch for ALL agent emails ─────
-  // Compute monto_comision = porcentaje_comision / 100 * precio_final (from cuentas_cobranza)
-  // Fetch comisionistas for all agents + enrich with precio_final to compute monto
+  const cuentaCobranzaIds = useMemo(() => {
+    const ids = new Set<number>();
+    cuentasMap.forEach((c: any) => {
+      if (c?.id) ids.add(c.id);
+    });
+    return [...ids];
+  }, [cuentasMap]);
+
+  // ───── Comisionistas for current filtered offers (by cuentas), independent of email source ─────
   const { data: comisiones = [], isLoading: comisionesLoading } = useQuery({
-    queryKey: ["inmob-dash-comisiones-v2", agentEmails, selectedMonths],
+    queryKey: ["inmob-dash-comisiones-by-cuenta", cuentaCobranzaIds],
     queryFn: async () => {
-      if (!agentEmails.length) return [];
-      const ranges = dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }];
+      if (!cuentaCobranzaIds.length) return [];
+
       const all: any[] = [];
-      for (const range of ranges) {
+      for (let i = 0; i < cuentaCobranzaIds.length; i += 200) {
+        const batch = cuentaCobranzaIds.slice(i, i + 200);
         const { data } = await (supabase as any)
           .from("comisionistas")
           .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, fecha_creacion")
-          .in("email_usuario", agentEmails)
-          .eq("activo", true)
-          .gte("fecha_creacion", range.start)
-          .lte("fecha_creacion", range.end);
+          .in("id_cuenta_cobranza", batch)
+          .eq("activo", true);
         if (data) all.push(...data);
       }
-      const seen = new Set<number>();
-      const deduped = all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
 
-      // Enrich with precio_final from cuentas_cobranza to compute monto
-      if (deduped.length > 0) {
-        const cuentaIds = [...new Set(deduped.map(c => c.id_cuenta_cobranza).filter(Boolean))] as number[];
-        const precioMap = new Map<number, number>();
-        for (let i = 0; i < cuentaIds.length; i += 200) {
-          const batch = cuentaIds.slice(i, i + 200);
-          const { data: cuentas } = await supabase
-            .from("cuentas_cobranza")
-            .select("id, precio_final")
-            .in("id", batch) as any;
-          (cuentas || []).forEach((cc: any) => precioMap.set(cc.id, Number(cc.precio_final) || 0));
-        }
-        deduped.forEach(c => {
-          const precioFinal = precioMap.get(c.id_cuenta_cobranza) || 0;
-          c.monto_comision = (Number(c.porcentaje_comision) || 0) / 100 * precioFinal;
-        });
+      const seen = new Set<number>();
+      const deduped = all.filter((c) => {
+        if (seen.has(c.id)) return false;
+        seen.add(c.id);
+        return true;
+      });
+
+      const precioMap = new Map<number, number>();
+      for (let i = 0; i < cuentaCobranzaIds.length; i += 200) {
+        const batch = cuentaCobranzaIds.slice(i, i + 200);
+        const { data: cuentas } = await supabase
+          .from("cuentas_cobranza")
+          .select("id, precio_final")
+          .in("id", batch) as any;
+        (cuentas || []).forEach((cc: any) => precioMap.set(cc.id, Number(cc.precio_final) || 0));
       }
+
+      deduped.forEach((c) => {
+        const precioFinal = precioMap.get(c.id_cuenta_cobranza) || 0;
+        c.monto_comision = (Number(c.porcentaje_comision) || 0) / 100 * precioFinal;
+      });
 
       return deduped;
     },
-    enabled: agentEmails.length > 0,
+    enabled: cuentaCobranzaIds.length > 0,
     staleTime: 3 * 60_000,
   });
 
