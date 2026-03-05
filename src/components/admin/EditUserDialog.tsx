@@ -342,7 +342,7 @@ export function EditUserDialog({
         const finalEmail = oldEmail !== newEmail ? newEmail : oldEmail;
         
         // Resolve the entidad_relacionada ID for the new inmobiliaria
-        const { data: inmobEntidad } = await supabase
+        const { data: inmobEntidad, error: inmobEntidadError } = await supabase
           .from('entidades_relacionadas')
           .select('id')
           .eq('id_persona', newInmobiliariaId)
@@ -350,7 +350,16 @@ export function EditUserDialog({
           .eq('activo', true)
           .maybeSingle();
 
-        if (inmobEntidad) {
+        if (inmobEntidadError) {
+          console.error('Error finding inmobiliaria entity:', inmobEntidadError);
+          throw inmobEntidadError;
+        }
+
+        if (!inmobEntidad) {
+          throw new Error('No se encontró la entidad de la inmobiliaria seleccionada.');
+        }
+
+        {
           // Update existing proyectos_acceso entries
           const { error: updateAccesoError } = await supabase
             .from('proyectos_acceso')
