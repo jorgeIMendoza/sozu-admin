@@ -7,6 +7,9 @@ import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { MonthMultiSelector, getCurrentMonthKey, getMonthFilterLabel, buildDateRangesFromMonths } from "@/components/ui/month-multi-selector";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,7 +23,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Users, TrendingUp, DollarSign, Home, FileText, Target,
-  ArrowRight, BarChart3, Clock, Percent, Building2,
+  ArrowRight, BarChart3, Clock, Percent, Building2, CalendarDays,
   ChevronRight, AlertTriangle, AlertCircle, Info,
   Timer, Receipt, CalendarCheck, UserPlus, Handshake,
   FileCheck, CheckCircle2, Minus, ArrowUp, ArrowDown,
@@ -165,15 +168,19 @@ export default function InmobDashboard() {
   const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
   const [selectedProject, setSelectedProject] = useState<string>("all");
   const [chartMode, setChartMode] = useState<ChartMode>("unidades");
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([getCurrentMonthKey()]);
+  const monthFilterLabel = useMemo(() => getMonthFilterLabel(selectedMonths), [selectedMonths]);
 
   const agentEmails = useMemo(() => agents.map(a => a.email), [agents]);
   const agentPersonaIds = useMemo(() => agents.map(a => a.personaId), [agents]);
 
-  // Current month boundaries
+  // Month boundaries from selector
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth(); // 0-indexed
-  const { start: monthStart, end: monthEnd } = getMonthRange(currentYear, currentMonth);
+  const dateRanges = useMemo(() => buildDateRangesFromMonths(selectedMonths), [selectedMonths]);
+  const monthStart = dateRanges.length > 0 ? dateRanges[0].start : getMonthRange(currentYear, currentMonth).start;
+  const monthEnd = dateRanges.length > 0 ? dateRanges[dateRanges.length - 1].end : getMonthRange(currentYear, currentMonth).end;
 
   useEffect(() => {
     registrarVista("/admin/portal-inmobiliaria/dashboard");
@@ -791,23 +798,33 @@ export default function InmobDashboard() {
                 Comisión: {inmobComisionPorcentaje.toFixed(2)}%
               </Badge>
             )}
-            <Badge variant="secondary" className="text-xs capitalize">
-              {monthLabel}
-            </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">Vista general del desempeño inmobiliario — mes corriente</p>
+          <p className="text-sm text-muted-foreground">Vista general del desempeño inmobiliario</p>
         </div>
-        <Select value={selectedProject} onValueChange={setSelectedProject}>
-          <SelectTrigger className="w-[200px] shrink-0">
-            <SelectValue placeholder="Todos los proyectos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los proyectos</SelectItem>
-            {projects.map((p) => (
-              <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 shrink-0">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="justify-start text-left font-normal h-10">
+                <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span className="truncate">{monthFilterLabel}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <MonthMultiSelector value={selectedMonths} onChange={setSelectedMonths} />
+            </PopoverContent>
+          </Popover>
+          <Select value={selectedProject} onValueChange={setSelectedProject}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Todos los proyectos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los proyectos</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* KPIs - First row: 4 cards */}
@@ -879,9 +896,8 @@ export default function InmobDashboard() {
           </div>
           <div className="px-5 pb-5">
             {isLoading ? <Skeleton className="h-64 w-full" /> : (
-              <div className="flex">
-                <ResponsiveContainer width="75%" height={280}>
-                  <RechartsFunnelChart>
+              <ResponsiveContainer width="100%" height={280}>
+                <RechartsFunnelChart>
                     <RechartsTooltip
                       formatter={(value: any, _name: any, props: any) => {
                         const stage = props?.payload;
@@ -894,17 +910,10 @@ export default function InmobDashboard() {
                         <Cell key={`cell-${i}`} fill={funnelColors[i]} cursor="pointer" onClick={() => navigate(`${NAV_PREFIX}/pipeline?mes=actual`)} />
                       ))}
                       <LabelList position="center" fill="#fff" fontSize={14} fontWeight={700} />
+                      <LabelList position="right" fill="hsl(0,0%,15%)" fontSize={12} fontWeight={500} dataKey="stage" />
                     </Funnel>
-                  </RechartsFunnelChart>
-                </ResponsiveContainer>
-                <div className="flex flex-col justify-between py-4 w-[25%]">
-                  {funnelData.map((d, i) => (
-                    <p key={i} className="text-xs text-muted-foreground font-medium truncate" style={{ color: funnelColors[i] }}>
-                      {d.stage}
-                    </p>
-                  ))}
-                </div>
-              </div>
+                </RechartsFunnelChart>
+              </ResponsiveContainer>
             )}
           </div>
         </div>
