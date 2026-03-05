@@ -495,7 +495,7 @@ export default function InmobDashboard() {
 
       {/* Strategic mini-metrics */}
       {!isLoading && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: "Conversión global", value: `${conversionGlobal}%`, icon: Percent },
             { label: "Ticket promedio", value: fmtShort(ticketPromedio), icon: BarChart3 },
