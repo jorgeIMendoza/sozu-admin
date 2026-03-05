@@ -183,7 +183,7 @@ export default function InmobDashboard() {
       if (!agentEmails.length) return [];
       const { data } = await supabase
         .from("ofertas")
-        .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado, id_proyecto")
+        .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado, id_proyecto, id_producto")
         .in("email_creador", agentEmails)
         .eq("activo", true) as any;
       return data || [];
@@ -213,52 +213,62 @@ export default function InmobDashboard() {
     staleTime: 3 * 60_000,
   });
 
-  // Cuentas cobranza + pagos for financial KPIs
-  const { data: financialData } = useQuery({
-    queryKey: ["inmob-dash-financials", propIds],
+  // Cuentas cobranza for pipeline stage classification
+  const ofertaIds = useMemo(() => ofertas.map((o: any) => o.id), [ofertas]);
+  const { data: cuentasMap = new Map() } = useQuery({
+    queryKey: ["inmob-dash-cuentas", ofertaIds],
     queryFn: async () => {
-      if (!propIds.length) return { cobrado: 0, porCobrar: 0 };
-      const { data: cuentas } = await (supabase as any)
-        .from("cuentas_cobranza")
-        .select("id, precio_final, activo")
-        .in("id_propiedad", propIds)
-        .eq("activo", true);
-
-      if (!cuentas?.length) return { cobrado: 0, porCobrar: 0 };
-
-      const cuentaIds = (cuentas as any[]).map((c: any) => c.id);
-      let allPagos: any[] = [];
-      for (let i = 0; i < cuentaIds.length; i += 50) {
-        const batch = cuentaIds.slice(i, i + 50);
-        const { data: acuerdos } = await (supabase
-          .from("acuerdos_pago")
-          .select("id")
-          .in("id_cuenta_cobranza", batch)
-          .eq("activo", true) as any);
-        const acuerdoIds = (acuerdos || []).map((a: any) => a.id);
-        if (!acuerdoIds.length) continue;
-        const { data: pagos } = await (supabase
-          .from("aplicaciones_pago")
-          .select("monto, activo")
-          .in("id_acuerdo_pago", acuerdoIds)
-          .eq("activo", true) as any);
-        if (pagos) allPagos = [...allPagos, ...pagos];
+      if (!ofertaIds.length) return new Map<number, any>();
+      const m = new Map<number, any>();
+      for (let i = 0; i < ofertaIds.length; i += 100) {
+        const batch = ofertaIds.slice(i, i + 100);
+        const { data } = await (supabase as any)
+          .from("cuentas_cobranza")
+          .select("id, id_oferta, precio_final, contrato_draft")
+          .in("id_oferta", batch)
+          .eq("activo", true);
+        (data || []).forEach((c: any) => { if (c.id_oferta) m.set(c.id_oferta, c); });
       }
-
-      const totalCobrado = allPagos.reduce((s: number, p: any) => s + (Number(p.monto) || 0), 0);
-      const totalPrecio = cuentas.reduce((s: number, c: any) => s + (Number(c.precio_final) || 0), 0);
-
-      return {
-        cobrado: totalCobrado,
-        porCobrar: Math.max(0, totalPrecio - totalCobrado),
-      };
+      return m;
     },
-    enabled: propIds.length > 0,
+    enabled: ofertaIds.length > 0,
     staleTime: 3 * 60_000,
   });
 
-  // Comisiones
-  const { data: comisiones = [], isLoading: comisionesLoading } = useQuery({
+  // Inmobiliaria email for commission queries
+  const { data: inmobiliariaEmail } = useQuery({
+    queryKey: ["inmob-email", personaId],
+    queryFn: async () => {
+      if (!personaId) return null;
+      const { data } = await supabase
+        .from("personas")
+        .select("email")
+        .eq("id", personaId)
+        .single() as any;
+      return data?.email?.toLowerCase() || null;
+    },
+    enabled: !!personaId,
+    staleTime: 10 * 60_000,
+  });
+
+  // Comisionistas for the inmobiliaria (financial KPIs - using inmobiliaria's own email)
+  const { data: inmobComisionistas = [], isLoading: comisionesLoading } = useQuery({
+    queryKey: ["inmob-dash-comisionistas-inmob", inmobiliariaEmail],
+    queryFn: async () => {
+      if (!inmobiliariaEmail) return [];
+      const { data } = await (supabase as any)
+        .from("comisionistas")
+        .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision")
+        .eq("email_usuario", inmobiliariaEmail)
+        .eq("activo", true);
+      return data || [];
+    },
+    enabled: !!inmobiliariaEmail,
+    staleTime: 3 * 60_000,
+  });
+
+  // Also keep agent-level comisiones for the agent performance table
+  const { data: comisiones = [] } = useQuery({
     queryKey: ["inmob-dash-comisiones", agentEmails],
     queryFn: async () => {
       if (!agentEmails.length) return [];
