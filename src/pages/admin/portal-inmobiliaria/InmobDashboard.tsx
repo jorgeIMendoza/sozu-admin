@@ -499,17 +499,23 @@ export default function InmobDashboard() {
 
   // Also keep agent-level comisiones for the agent performance table
   const { data: comisiones = [] } = useQuery({
-    queryKey: ["inmob-dash-comisiones", agentEmails, monthStart, monthEnd],
+    queryKey: ["inmob-dash-comisiones", agentEmails, selectedMonths],
     queryFn: async () => {
       if (!agentEmails.length) return [];
-      const { data } = await (supabase as any)
-        .from("comisionistas")
-        .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision, fecha_creacion")
-        .in("email_usuario", agentEmails)
-        .eq("activo", true)
-        .gte("fecha_creacion", monthStart)
-        .lte("fecha_creacion", monthEnd);
-      return data || [];
+      const ranges = dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }];
+      const all: any[] = [];
+      for (const range of ranges) {
+        const { data } = await (supabase as any)
+          .from("comisionistas")
+          .select("id, email_usuario, porcentaje_comision, aprobada, pagada, id_cuenta_cobranza, monto_comision, fecha_creacion")
+          .in("email_usuario", agentEmails)
+          .eq("activo", true)
+          .gte("fecha_creacion", range.start)
+          .lte("fecha_creacion", range.end);
+        if (data) all.push(...data);
+      }
+      const seen = new Set<number>();
+      return all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
     },
     enabled: agentEmails.length > 0,
     staleTime: 3 * 60_000,
@@ -716,8 +722,9 @@ export default function InmobDashboard() {
   const trendTiempoCierre = getTrend(tiempoPromCierre, prevKpi?.tiempo_prom_cierre, true); // lower is better
 
   // Funnel data — 5 stages: Ofertas → Aprobadas → Apartadas → Firma → Cerradas
+  // Firma = offers with signed contract (firma_contrato) + cierre (cumulative funnel)
   const firmaCount = useMemo(() => {
-    return classifiedOfertas.filter((o: any) => o.stage === "gen_contrato" || o.stage === "firma_contrato").length;
+    return classifiedOfertas.filter((o: any) => o.stage === "firma_contrato" || o.stage === "cierre").length;
   }, [classifiedOfertas]);
 
   const apartadasFunnel = useMemo(() => {
