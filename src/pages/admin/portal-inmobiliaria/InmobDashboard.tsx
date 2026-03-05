@@ -415,17 +415,8 @@ export default function InmobDashboard() {
     staleTime: 3 * 60_000,
   });
 
-  // ───── Comisionistas: fetch for ALL Sozu-related emails (agents + internals) ─────
-  // Then compute monto_comision = porcentaje_comision / 100 * precio_final (from cuentas_cobranza)
-
-  // Combine agent emails + internal user emails for comisionistas lookup
-  const allRelevantEmails = useMemo(() => {
-    const emailSet = new Set<string>(agentEmails);
-    // We'll add internal emails after they're resolved (below), but for initial fetch
-    // we can query broadly by cuentas that belong to our offers
-    return [...emailSet];
-  }, [agentEmails]);
-
+  // ───── Comisionistas: fetch for ALL agent emails ─────
+  // Compute monto_comision = porcentaje_comision / 100 * precio_final (from cuentas_cobranza)
   // Fetch comisionistas for all agents + enrich with precio_final to compute monto
   const { data: comisiones = [], isLoading: comisionesLoading } = useQuery({
     queryKey: ["inmob-dash-comisiones-v2", agentEmails, selectedMonths],
