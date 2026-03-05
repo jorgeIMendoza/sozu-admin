@@ -342,7 +342,7 @@ export function EditUserDialog({
         const finalEmail = oldEmail !== newEmail ? newEmail : oldEmail;
         
         // Resolve the entidad_relacionada ID for the new inmobiliaria
-        const { data: inmobEntidad } = await supabase
+        const { data: inmobEntidad, error: inmobEntidadError } = await supabase
           .from('entidades_relacionadas')
           .select('id')
           .eq('id_persona', newInmobiliariaId)
@@ -350,15 +350,28 @@ export function EditUserDialog({
           .eq('activo', true)
           .maybeSingle();
 
-        if (inmobEntidad) {
+        if (inmobEntidadError) {
+          console.error('Error finding inmobiliaria entity:', inmobEntidadError);
+          throw inmobEntidadError;
+        }
+
+        if (!inmobEntidad) {
+          throw new Error('No se encontró la entidad de la inmobiliaria seleccionada.');
+        }
+
           // Update existing proyectos_acceso entries
-          await supabase
+          const { error: updateAccesoError } = await supabase
             .from('proyectos_acceso')
             .update({ 
               id_entidad_relacionada_dueno: inmobEntidad.id,
               fecha_actualizacion: new Date().toISOString()
             })
             .eq('usuario_id', finalEmail);
+          
+          if (updateAccesoError) {
+            console.error('Error updating proyectos_acceso:', updateAccesoError);
+            throw updateAccesoError;
+          }
 
           // Also copy any project access from the inmobiliaria primary user
           const { data: inmobiliariaPersona } = await supabase
@@ -393,21 +406,25 @@ export function EditUserDialog({
                 }));
 
               if (newAccessEntries.length > 0) {
-                await supabase
+                const { error: insertAccesoError } = await supabase
                   .from("proyectos_acceso")
                   .insert(newAccessEntries);
+                if (insertAccesoError) {
+                  console.error('Error inserting proyectos_acceso:', insertAccesoError);
+                  throw insertAccesoError;
+                }
                 console.log(`Added ${newAccessEntries.length} project access entries for inmobiliaria user`);
               }
             }
           }
         }
-      }
 
       return { oldEmail, newEmail, newNombre, newInmobiliariaId };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       queryClient.invalidateQueries({ queryKey: ['agent_inmobiliaria'] });
+      queryClient.invalidateQueries({ queryKey: ['inmob_user_inmobiliaria'] });
       queryClient.invalidateQueries({ queryKey: ['email_confirmado'] });
 
       registrarActualizacion('usuario', 
