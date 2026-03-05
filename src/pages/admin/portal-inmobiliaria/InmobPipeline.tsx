@@ -597,13 +597,14 @@ export default function InmobPipeline() {
   availableProyectos.forEach((p) => proyNameToId.set(p.nombre, String(p.id)));
   const selectedProyNames = selectedProyectos.map((id) => availableProyectos.find((p) => String(p.id) === id)?.nombre || id);
 
-  const hasActiveFilters = selectedAgentes.length > 0 || selectedProyectos.length > 0 || selectedTipoOferta !== "all" || selectedMonths.length > 0;
+  const hasActiveFilters = selectedAgentes.length > 0 || selectedProyectos.length > 0 || selectedTipoOferta !== "all" || selectedMonths.length > 0 || searchOfertaId.trim().length > 0;
 
   const clearAllFilters = () => {
     setSelectedAgentes([]);
     setSelectedProyectos([]);
     setSelectedTipoOferta("all");
     setSelectedMonths([]);
+    setSearchOfertaId("");
   };
 
   // Month filter label
