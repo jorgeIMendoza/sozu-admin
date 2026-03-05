@@ -819,6 +819,7 @@ export default function InmobDashboard() {
       const userComisiones = allComisiones.filter((c: any) => (c.email_usuario || "").toLowerCase() === emailLower);
       const ingreso = userComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
       const comision = userComisiones.filter((c: any) => c.pagada).reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
+      const conv = userOfertas.length > 0 ? ((userCierres.length / userOfertas.length) * 100) : 0;
       return {
         nombre,
         isInternal,
