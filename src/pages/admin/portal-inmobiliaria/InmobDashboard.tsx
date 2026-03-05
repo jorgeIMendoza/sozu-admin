@@ -695,18 +695,17 @@ export default function InmobDashboard() {
 
   // Tiempo promedio de cierre: days from oferta creation to cierre
   const tiempoPromCierre = useMemo(() => {
-    const cierres = classifiedOfertas.filter((o: any) => o.stage === "cierre");
+    const cierres = dedupedAdvancedOfertas.filter((o: any) => o.stage === "cierre");
     if (cierres.length === 0) return 0;
     const totalDays = cierres.reduce((sum: number, o: any) => {
       const fechaOferta = new Date(o.fecha_generacion);
-      // Use cuenta fecha_creacion as proxy for cierre date, or now if not available
       const cuenta = cuentasMap.get(o.id);
       const fechaCierre = cuenta?.fecha_creacion ? new Date(cuenta.fecha_creacion) : new Date();
       const diffMs = fechaCierre.getTime() - fechaOferta.getTime();
       return sum + Math.max(0, Math.floor(diffMs / (24 * 60 * 60 * 1000)));
     }, 0);
     return Math.round(totalDays / cierres.length);
-  }, [classifiedOfertas, cuentasMap]);
+  }, [dedupedAdvancedOfertas, cuentasMap]);
 
   // ───── Persist current month KPIs and compare ─────
   useEffect(() => {
