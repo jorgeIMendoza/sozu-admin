@@ -266,24 +266,28 @@ export default function InmobDashboard() {
     staleTime: 5 * 60_000,
   });
 
-  // For Sozu: get inmobiliaria agent emails from OTHER inmobiliarias to exclude from offers
-  // (Sozu's own tipo 19 agents should NOT be excluded)
+  // For Sozu: get emails from OTHER inmobiliarias (both their agents AND the inmobiliaria owners) to exclude
   const { data: inmobAgentEmails = new Set<string>() } = useQuery({
-    queryKey: ["all-inmob-agent-emails-external", personaId],
+    queryKey: ["all-inmob-agent-emails-external-v2", personaId],
     queryFn: async () => {
       if (!personaId) return new Set<string>();
-      // Get tipo 19 agents NOT owned by this inmobiliaria
+      // Get all tipo 19 relations NOT owned by this inmobiliaria
       const { data: rels } = await supabase
         .from("entidades_relacionadas")
-        .select("id_persona")
+        .select("id_persona, id_persona_duena_lead")
         .eq("id_tipo_entidad", 19)
         .eq("activo", true)
         .neq("id_persona_duena_lead", personaId) as any;
       if (!rels?.length) return new Set<string>();
-      const pIds = [...new Set(rels.map((r: any) => r.id_persona).filter(Boolean))] as number[];
+
+      // Collect both agent persona IDs AND owner (inmobiliaria) persona IDs
+      const agentPIds = [...new Set(rels.map((r: any) => r.id_persona).filter(Boolean))] as number[];
+      const ownerPIds = [...new Set(rels.map((r: any) => r.id_persona_duena_lead).filter(Boolean))] as number[];
+      const allPIds = [...new Set([...agentPIds, ...ownerPIds])];
+
       const allEmails = new Set<string>();
-      for (let i = 0; i < pIds.length; i += 200) {
-        const batch = pIds.slice(i, i + 200);
+      for (let i = 0; i < allPIds.length; i += 200) {
+        const batch = allPIds.slice(i, i + 200);
         const { data: usuarios } = await supabase
           .from("usuarios").select("email").in("id_persona", batch) as any;
         (usuarios || []).forEach((u: any) => { if (u.email) allEmails.add(u.email.toLowerCase()); });
