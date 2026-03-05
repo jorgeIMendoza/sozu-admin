@@ -224,7 +224,7 @@ export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stage
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
                 <span className="truncate">Agente: {card.agente_nombre || card.email_creador}</span>
                 {card.is_internal && (
-                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30">
+                  <Badge variant="outline" className="text-[10px] px-2 py-0 border-warning/30 text-warning bg-warning/10 rounded-full font-medium">
                     Usuario Interno
                   </Badge>
                 )}
