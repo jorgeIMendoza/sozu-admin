@@ -838,7 +838,7 @@ export default function InmobDashboard() {
       const emailLower = email.toLowerCase();
       const userComisiones = allComisiones.filter((c: any) => (c.email_usuario || "").toLowerCase() === emailLower);
       const ingreso = userCierres.reduce((s: number, o: any) => { const cuenta = cuentasMap.get(o.id); return s + (Number(cuenta?.precio_final) || 0); }, 0);
-      const comision = userComisiones.filter((c: any) => c.pagada).reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
+      const comision = userComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
       const conv = userOfertas.length > 0 ? ((userCierres.length / userOfertas.length) * 100) : 0;
       return {
         nombre,
@@ -896,7 +896,7 @@ export default function InmobDashboard() {
     queryKey: ["inmob-dash-area-6m", isSozu ? sozuPropertyIds.length : agentEmails.join(","), isSozu, inmobAgentEmails.size],
     queryFn: async () => {
       let allCuentaIds: number[] = [];
-      const cuentaInfoMap = new Map<number, { precio_final: number; porcentaje_comision_venta: number; id_propiedad: number }>();
+      const cuentaInfoMap = new Map<number, { precio_final: number; porcentaje_comision_venta: number; id_propiedad: number; fecha_creacion?: string }>();
 
       if (isSozu) {
         if (!sozuPropertyIds.length) return null;
@@ -908,8 +908,8 @@ export default function InmobDashboard() {
         }
         for (let i = 0; i < ofIds.length; i += 200) {
           const batch = ofIds.slice(i, i + 200);
-          const { data } = await (supabase as any).from("cuentas_cobranza").select("id, precio_final, porcentaje_comision_venta, id_propiedad").in("id_oferta", batch).eq("activo", true);
-          (data || []).forEach((c: any) => { allCuentaIds.push(c.id); cuentaInfoMap.set(c.id, { precio_final: Number(c.precio_final) || 0, porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0, id_propiedad: c.id_propiedad }); });
+          const { data } = await (supabase as any).from("cuentas_cobranza").select("id, precio_final, porcentaje_comision_venta, id_propiedad, fecha_creacion").in("id_oferta", batch).eq("activo", true);
+          (data || []).forEach((c: any) => { allCuentaIds.push(c.id); cuentaInfoMap.set(c.id, { precio_final: Number(c.precio_final) || 0, porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0, id_propiedad: c.id_propiedad, fecha_creacion: c.fecha_creacion }); });
         }
       } else {
         if (!agentEmails.length) return null;
@@ -917,8 +917,8 @@ export default function InmobDashboard() {
         const ofIds = (ofs || []).map((o: any) => o.id);
         for (let i = 0; i < ofIds.length; i += 200) {
           const batch = ofIds.slice(i, i + 200);
-          const { data } = await (supabase as any).from("cuentas_cobranza").select("id, precio_final, porcentaje_comision_venta, id_propiedad").in("id_oferta", batch).eq("activo", true);
-          (data || []).forEach((c: any) => { allCuentaIds.push(c.id); cuentaInfoMap.set(c.id, { precio_final: Number(c.precio_final) || 0, porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0, id_propiedad: c.id_propiedad }); });
+          const { data } = await (supabase as any).from("cuentas_cobranza").select("id, precio_final, porcentaje_comision_venta, id_propiedad, fecha_creacion").in("id_oferta", batch).eq("activo", true);
+          (data || []).forEach((c: any) => { allCuentaIds.push(c.id); cuentaInfoMap.set(c.id, { precio_final: Number(c.precio_final) || 0, porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0, id_propiedad: c.id_propiedad, fecha_creacion: c.fecha_creacion }); });
         }
       }
       if (!allCuentaIds.length) return null;
@@ -967,14 +967,23 @@ export default function InmobDashboard() {
           return s + ((ci?.precio_final || 0) * (Number(c.porcentaje_comision) || 0) / 100);
         }, 0);
 
-      // Por cobrar: comisionistas no pagadas, enganche date in this month
+      // Por cobrar: comisionistas no pagadas cuya cuenta tiene enganche en este mes
+      // OR comisionistas no pagadas sin enganche pero con fecha_creacion de la cuenta en este mes
       const porCobrarMes = comisionistas
         .filter((c: any) => !c.pagada)
         .filter((c: any) => {
           const eng = engancheMap.get(c.id_cuenta_cobranza);
-          if (!eng) return false;
-          const d = new Date(eng);
-          return d >= start && d <= end;
+          if (eng) {
+            const d = new Date(eng);
+            return d >= start && d <= end;
+          }
+          // Fallback: use cuenta creation date from cuentaInfoMap fecha_creacion
+          const ci = cuentaInfoMap.get(c.id_cuenta_cobranza);
+          if (ci && (ci as any).fecha_creacion) {
+            const d = new Date((ci as any).fecha_creacion);
+            return d >= start && d <= end;
+          }
+          return false;
         })
         .reduce((s: number, c: any) => {
           const ci = cuentaInfoMap.get(c.id_cuenta_cobranza);
@@ -982,13 +991,20 @@ export default function InmobDashboard() {
         }, 0);
 
       // Estimado: cuentas en apartado (prop status 4), enganche in this month
+      // OR cuenta with fecha_creacion in this month if no enganche
       let estimadoMes = 0;
       cuentaInfoMap.forEach((ci, cuentaId) => {
         if (propStatusMap.get(ci.id_propiedad) !== 4) return;
         const eng = engancheMap.get(cuentaId);
-        if (!eng) return;
-        const d = new Date(eng);
-        if (d < start || d > end) return;
+        let dateInRange = false;
+        if (eng) {
+          const d = new Date(eng);
+          dateInRange = d >= start && d <= end;
+        } else if ((ci as any).fecha_creacion) {
+          const d = new Date((ci as any).fecha_creacion);
+          dateInRange = d >= start && d <= end;
+        }
+        if (!dateInRange) return;
         const pct = ci.porcentaje_comision_venta > 0 ? ci.porcentaje_comision_venta : 5;
         estimadoMes += ci.precio_final * pct / 100;
       });
@@ -1242,7 +1258,7 @@ export default function InmobDashboard() {
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(0,0%,45%)" }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: "hsl(0,0%,45%)" }} tickFormatter={chartMode !== "unidades" ? (v) => `$${(v / 1000000).toFixed(1)}M` : undefined} axisLine={false} tickLine={false} />
                   <RechartsTooltip formatter={(value: any) => [chartMode !== "unidades" ? fmtCurrency(value) : value, chartMode === "unidades" ? "Ventas" : chartMode === "ingreso" ? "Ingreso" : "Comisión"]} />
-                  <Bar dataKey={chartDataKey} fill="hsl(139, 35%, 51%)" radius={[4, 4, 0, 0]} cursor="pointer" onClick={() => navigate(`${NAV_PREFIX}/agentes`)} />
+                  <Bar dataKey={chartDataKey} fill="hsl(139, 35%, 51%)" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(_data: any, index: number) => { const agent = agentChartData[index]; if (agent) navigate(`${NAV_PREFIX}/agentes?q=${encodeURIComponent(agent.name)}`); }} />
                 </BarChart>
               </ResponsiveContainer>
             )}
