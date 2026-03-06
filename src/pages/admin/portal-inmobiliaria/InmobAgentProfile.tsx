@@ -241,7 +241,7 @@ export default function InmobAgentProfile() {
         const edId = emToEd.get(prop.id_edificio_modelo);
         const pjId = edId ? edToPj.get(edId) : null;
         const name = pjId ? projMap.get(pjId) : null;
-        if (name) m.set(propId, name);
+        if (name) m.set(propId as number, name as string);
       }
       return m;
     },
