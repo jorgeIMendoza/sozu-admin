@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  ArrowLeft, Users, FileText, Home, ShoppingCart, DollarSign, TrendingUp, Mail, Calendar,
+  ArrowLeft, Users, FileText, Home, ShoppingCart, DollarSign, TrendingUp, Mail, Calendar, HelpCircle,
 } from "lucide-react";
 
 const fmtCurrency = (v: number) =>
@@ -484,7 +485,20 @@ export default function InmobAgentProfile() {
               {agent.activo ? "Activo" : "Inactivo"}
             </Badge>
           )}
-          <span className="text-sm text-muted-foreground">↗ {conversionRate}% conv.</span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-sm text-muted-foreground cursor-help flex items-center gap-1">
+                  {conversionRate}% conv.
+                  <HelpCircle className="h-3 w-3" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs text-xs leading-relaxed">
+                <p className="font-semibold mb-1">Conversión = (Ventas Cerradas / Ofertas) × 100</p>
+                <p className="text-muted-foreground">Ratio de efectividad del agente basado en el total histórico de ofertas generadas.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
 
