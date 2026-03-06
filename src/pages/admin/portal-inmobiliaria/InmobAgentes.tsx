@@ -538,7 +538,7 @@ export default function InmobAgentes() {
 
       try {
         const { data: resetData, error: resetError } = await supabase.functions.invoke("reset-user-password", {
-          body: { email: emails[0] },
+          body: { email: directEmail },
         });
         if (resetError) throw resetError;
         if (resetData?.error) {
