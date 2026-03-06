@@ -213,22 +213,35 @@ export default function InmobDashboard() {
     if (!isSozu && chartMode === "comision") setChartMode("unidades");
   }, [isSozu, chartMode]);
 
-  // Projects for filter
+  // Projects for filter (from inmobiliaria main user access)
   const { data: projects = [] } = useQuery({
-    queryKey: ["inmob-projects", agentEmails],
+    queryKey: ["inmob-projects", personaId],
     queryFn: async () => {
-      if (!agentEmails.length) return [];
+      if (!personaId) return [];
+
+      const { data: inmobUsers } = await supabase
+        .from("usuarios")
+        .select("email")
+        .eq("id_persona", personaId)
+        .eq("activo", true) as any;
+
+      const inmobEmails = (inmobUsers || []).map((u: any) => u.email).filter(Boolean);
+      if (!inmobEmails.length) return [];
+
       const { data } = await supabase
         .from("proyectos_acceso")
         .select("proyecto_id, proyectos(id, nombre)")
-        .in("usuario_id", agentEmails) as any;
+        .in("usuario_id", inmobEmails)
+        .eq("activo", true) as any;
+
       const map = new Map<number, string>();
       (data || []).forEach((d: any) => {
         if (d.proyectos) map.set(d.proyectos.id, d.proyectos.nombre);
       });
+
       return Array.from(map.entries()).map(([id, nombre]) => ({ id, nombre }));
     },
-    enabled: agentEmails.length > 0,
+    enabled: !!personaId,
     staleTime: 5 * 60_000,
   });
 
