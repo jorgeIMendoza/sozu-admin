@@ -888,6 +888,10 @@ export default function InmobDashboard() {
 
   // Agent performance — includes both agents AND internal non-agent users
   const agentPerformance = useMemo(() => {
+    // Build a map from email → personaId for agents
+    const emailToPersonaId = new Map<string, number>();
+    agents.forEach(a => emailToPersonaId.set(a.email.toLowerCase(), a.personaId));
+
     const buildPerf = (email: string, nombre: string, isInternal: boolean) => {
       const emailLower = (email || "").toLowerCase();
       const userOfertas = classifiedOfertas.filter((o: any) => (o.email_creador || "").toLowerCase() === emailLower);
@@ -910,11 +914,16 @@ export default function InmobDashboard() {
 
       const ingreso = userCierres.reduce((s: number, o: any) => { const cuenta = cuentasMap.get(o.id); return s + (Number(cuenta?.precio_final) || 0); }, 0);
       const conv = userOfertas.length > 0 ? ((userCierres.length / userOfertas.length) * 100) : 0;
+
+      // Prospectos: from per-agent map (date-filtered)
+      const agentPersonaId = emailToPersonaId.get(emailLower);
+      const prospectos = agentPersonaId ? (prospectosByAgent.get(agentPersonaId) || 0) : 0;
+
       return {
         email,
         nombre,
         isInternal,
-        prospectos: 0,
+        prospectos,
         ofertas: userOfertas.length,
         apartados: userApartadosCount,
         ventas: userCierres.length,
