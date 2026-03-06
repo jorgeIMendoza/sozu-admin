@@ -1,7 +1,7 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, BarChart3, UserSearch,
-  Calendar, DollarSign, FileText, Settings, ArrowLeft, LucideIcon, LogOut,
+  Calendar, DollarSign, FileText, Settings, ArrowLeft, LucideIcon, LogOut, Percent,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { APP_VERSION } from "@/lib/config";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
+import { Badge } from "@/components/ui/badge";
 
 const PORTAL_INMOB_MENU_ID = 17;
 
@@ -43,20 +44,55 @@ export const PortalInmobiliariaLayout = () => {
   const { personaId } = useInmobiliariaPersonaId();
 
   // Fetch agency name
-  const { data: agencyName } = useQuery({
-    queryKey: ["inmob-agency-name", personaId],
+  const { data: agencyInfo } = useQuery({
+    queryKey: ["inmob-agency-info", personaId],
     queryFn: async () => {
-      if (!personaId) return "Mi Inmobiliaria";
+      if (!personaId) return { name: "Mi Inmobiliaria", comisionPct: null as number | null };
       const { data } = await (supabase as any)
         .from("personas")
         .select("nombre_comercial, nombre_legal")
         .eq("id", personaId)
         .single();
-      return data?.nombre_comercial || data?.nombre_legal || "Mi Inmobiliaria";
+      const name = data?.nombre_comercial || data?.nombre_legal || "Mi Inmobiliaria";
+
+      // Get most common commission percentage from comisionistas of this inmob's agents
+      // Get agent persona ids
+      const { data: rels } = await supabase
+        .from("entidades_relacionadas")
+        .select("id_persona")
+        .eq("id_persona_duena_lead", personaId)
+        .eq("id_tipo_entidad", 19)
+        .eq("activo", true) as any;
+      let comisionPct: number | null = null;
+      if (rels?.length) {
+        const pIds = rels.map((r: any) => r.id_persona).filter(Boolean);
+        const { data: usuarios } = await supabase.from("usuarios").select("email").in("id_persona", pIds) as any;
+        if (usuarios?.length) {
+          const emails = usuarios.map((u: any) => u.email);
+          const { data: comisionistas } = await (supabase as any)
+            .from("comisionistas")
+            .select("porcentaje_comision")
+            .in("email_usuario", emails)
+            .eq("activo", true);
+          if (comisionistas?.length) {
+            const pcts = comisionistas.map((c: any) => Number(c.porcentaje_comision) || 0).filter((p: number) => p > 0);
+            if (pcts.length) {
+              const freq = new Map<number, number>();
+              pcts.forEach((p: number) => freq.set(p, (freq.get(p) || 0) + 1));
+              let maxP = pcts[0], maxCount = 0;
+              freq.forEach((count, p) => { if (count > maxCount) { maxCount = count; maxP = p; } });
+              comisionPct = maxP;
+            }
+          }
+        }
+      }
+      return { name, comisionPct };
     },
     enabled: !!personaId,
     staleTime: 10 * 60_000,
   });
+  const agencyName = agencyInfo?.name || "Mi Inmobiliaria";
+  const comisionPct = agencyInfo?.comisionPct;
 
   // Fetch tabs from DB
   const { data: tabs = FALLBACK_TABS } = useQuery({
@@ -96,6 +132,12 @@ export const PortalInmobiliariaLayout = () => {
           <p className="text-sm font-semibold text-foreground truncate mt-0.5">
             {agencyName || "Cargando..."}
           </p>
+          {comisionPct !== null && comisionPct !== undefined && (
+            <Badge variant="outline" className="mt-1.5 text-[10px] font-semibold border-primary/30 text-primary">
+              <Percent className="h-3 w-3 mr-0.5" />
+              Comisión: {comisionPct.toFixed(2)}%
+            </Badge>
+          )}
         </div>
 
         {/* Navigation */}
