@@ -486,10 +486,10 @@ export default function InmobAgentes() {
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
         <TabsList>
           <TabsTrigger value="activos" className="gap-1.5">
-            <Users className="h-3.5 w-3.5" /> Activos <Badge variant="secondary" className="ml-1 text-[10px]">{activeAgents.length}</Badge>
+            <Users className="h-3.5 w-3.5" /> Activos <Badge variant="secondary" className="ml-1 text-[10px]">{filteredActiveAgents.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="desactivados" className="gap-1.5">
-            <Power className="h-3.5 w-3.5" /> Desactivados <Badge variant="secondary" className="ml-1 text-[10px]">{inactiveAgents.length}</Badge>
+            <Power className="h-3.5 w-3.5" /> Desactivados <Badge variant="secondary" className="ml-1 text-[10px]">{filteredInactiveAgents.length}</Badge>
           </TabsTrigger>
         </TabsList>
 
