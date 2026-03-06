@@ -147,7 +147,11 @@ function UsersTable({
                         <p className="text-xs text-muted-foreground">
                           Inmobiliaria: {usuario.inmobiliaria_nombre}
                         </p>
-                      ) : usuario.personas?.nombre_legal && (usuario.rol_id === ROLE_AGENTE_INMOBILIARIO || usuario.rol_id === ROLE_AGENTE_INTERNO) && (
+                      ) : usuario.rol_id === ROLE_AGENTE_INMOBILIARIO && !usuario.inmobiliaria_nombre ? (
+                        <p className="text-xs text-amber-600">
+                          Agente independiente
+                        </p>
+                      ) : usuario.personas?.nombre_legal && (usuario.rol_id === ROLE_AGENTE_INTERNO) && (
                         <p className="text-xs text-muted-foreground">
                           Persona: {usuario.personas.nombre_legal}
                         </p>
@@ -1079,20 +1083,42 @@ export default function Usuarios() {
             </div>
             {[ROLE_AGENTE_INMOBILIARIO.toString(), ROLE_AGENTE_INTERNO.toString(), ROLE_INMOBILIARIA.toString()].includes(selectedRoleFilter) && (
               <div className="w-full sm:w-64">
-                <Select value={selectedInmobiliariaFilter} onValueChange={setSelectedInmobiliariaFilter}>
-                  <SelectTrigger className="border-border">
-                    <SelectValue placeholder="Filtrar por inmobiliaria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las inmobiliarias</SelectItem>
-                    <SelectItem value="sin_inmobiliaria">Sin inmobiliaria</SelectItem>
-                    {[...new Set(usuarios.filter(u => u.inmobiliaria_nombre && u.rol_id?.toString() === selectedRoleFilter).map(u => u.inmobiliaria_nombre!))].sort().map((nombre) => (
-                      <SelectItem key={nombre} value={nombre}>
-                        {nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between border-border font-normal">
+                      {selectedInmobiliariaFilter === "all" 
+                        ? "Todas las inmobiliarias" 
+                        : selectedInmobiliariaFilter === "sin_inmobiliaria"
+                          ? "Sin inmobiliaria"
+                          : selectedInmobiliariaFilter}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar inmobiliaria..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontró inmobiliaria</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem value="all" onSelect={() => setSelectedInmobiliariaFilter("all")}>
+                            <Check className={cn("mr-2 h-4 w-4", selectedInmobiliariaFilter === "all" ? "opacity-100" : "opacity-0")} />
+                            Todas las inmobiliarias
+                          </CommandItem>
+                          <CommandItem value="sin_inmobiliaria" onSelect={() => setSelectedInmobiliariaFilter("sin_inmobiliaria")}>
+                            <Check className={cn("mr-2 h-4 w-4", selectedInmobiliariaFilter === "sin_inmobiliaria" ? "opacity-100" : "opacity-0")} />
+                            Sin inmobiliaria
+                          </CommandItem>
+                          {[...new Set(usuarios.filter(u => u.inmobiliaria_nombre && u.rol_id?.toString() === selectedRoleFilter).map(u => u.inmobiliaria_nombre!))].sort().map((nombre) => (
+                            <CommandItem key={nombre} value={nombre} onSelect={() => setSelectedInmobiliariaFilter(nombre)}>
+                              <Check className={cn("mr-2 h-4 w-4", selectedInmobiliariaFilter === nombre ? "opacity-100" : "opacity-0")} />
+                              {nombre}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             )}
           </div>
