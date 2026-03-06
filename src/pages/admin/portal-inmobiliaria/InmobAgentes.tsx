@@ -186,13 +186,18 @@ export default function InmobAgentes() {
 
         return usuarios
           .filter((u: any) => {
-            // Keep Sozu staff/non-agent users, but exclude external agents from other inmobiliarias.
             if (u.rol_id === 3) {
+              const ownerId = ownerByPersona.get(u.id_persona);
+              // Only include if linked to this inmobiliaria (Sozu)
+              return ownerId === personaId;
+            }
+            if (u.rol_id === 9) {
+              // Include agentes internos only if linked to this inmobiliaria
               const ownerId = ownerByPersona.get(u.id_persona);
               return ownerId === personaId;
             }
-            // Exclude agent interno (role 9) from this extra bucket.
-            return u.rol_id !== 9;
+            // Other roles (staff) - include as internal users
+            return true;
           })
           .map((u: any) => {
             const p = personaMap.get(u.id_persona);
@@ -212,6 +217,45 @@ export default function InmobAgentes() {
       return [];
     },
     enabled: !!personaId && isSozu,
+    staleTime: 5 * 60_000,
+  });
+
+  // Fetch inmobiliaria info for base agents to show their inmobiliaria name or "independent"
+  const { data: agentInmobMap = new Map() } = useQuery({
+    queryKey: ["inmob-agentes-inmob-info", agents.map(a => a.personaId).join(",")],
+    queryFn: async () => {
+      const pIds = agents.map(a => a.personaId).filter(Boolean);
+      if (!pIds.length) return new Map<number, string | null>();
+
+      const { data: rels } = await supabase
+        .from("entidades_relacionadas")
+        .select("id_persona, id_persona_duena_lead")
+        .in("id_persona", pIds)
+        .eq("id_tipo_entidad", 19)
+        .eq("activo", true) as any;
+
+      const ownerIds = [...new Set((rels || []).map((r: any) => r.id_persona_duena_lead).filter(Boolean))] as number[];
+      const ownerNames = new Map<number, string>();
+      if (ownerIds.length) {
+        const { data: personas } = await supabase
+          .from("personas")
+          .select("id, nombre_comercial, nombre_legal")
+          .in("id", ownerIds) as any;
+        (personas || []).forEach((p: any) => ownerNames.set(p.id, p.nombre_comercial || p.nombre_legal || ""));
+      }
+
+      const result = new Map<number, string | null>();
+      (rels || []).forEach((r: any) => {
+        const name = r.id_persona_duena_lead ? (ownerNames.get(r.id_persona_duena_lead) || null) : null;
+        result.set(r.id_persona, name);
+      });
+      // Mark agents without a relation as independent
+      pIds.forEach(pid => {
+        if (!result.has(pid)) result.set(pid, null);
+      });
+      return result;
+    },
+    enabled: agents.length > 0,
     staleTime: 5 * 60_000,
   });
 
