@@ -52,8 +52,42 @@ export default function InmobAgentProfile() {
   const navigate = useNavigate();
   const decodedEmail = email ? decodeURIComponent(email) : "";
   const { data: agents = [] } = useInmobAgents();
+  const { personaId: inmobPersonaId } = useInmobiliariaPersonaId();
 
   const agent = useMemo(() => agents.find(a => (a.email || "").toLowerCase() === decodedEmail.toLowerCase()), [agents, decodedEmail]);
+
+  // Check if Sozu (Real Estate Ventures)
+  const { data: isSozu = false } = useQuery({
+    queryKey: ["agent-profile-is-sozu", inmobPersonaId],
+    queryFn: async () => {
+      if (!inmobPersonaId) return false;
+      const { data } = await supabase
+        .from("personas")
+        .select("nombre_legal")
+        .eq("id", inmobPersonaId)
+        .maybeSingle() as any;
+      return (data?.nombre_legal || "").toLowerCase().includes("real estate ventures");
+    },
+    enabled: !!inmobPersonaId,
+    staleTime: 10 * 60_000,
+  });
+
+  // Inmob user emails (for commission filtering in non-Sozu)
+  const { data: inmobUserEmails = [] } = useQuery({
+    queryKey: ["agent-profile-inmob-emails", inmobPersonaId],
+    queryFn: async () => {
+      if (!inmobPersonaId) return [];
+      const { data } = await supabase
+        .from("usuarios")
+        .select("email")
+        .eq("id_persona", inmobPersonaId)
+        .eq("activo", true) as any;
+      return (data || []).map((u: any) => (u.email || "").trim().toLowerCase()).filter(Boolean);
+    },
+    enabled: !!inmobPersonaId,
+    staleTime: 5 * 60_000,
+  });
+  const inmobUserEmailSet = useMemo(() => new Set(inmobUserEmails), [inmobUserEmails]);
 
   // ALL ofertas for this agent (no date filter)
   const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
