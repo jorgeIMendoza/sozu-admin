@@ -522,6 +522,11 @@ export default function InmobConfiguracion() {
                   </div>
                 </div>
               </TabsContent>
+
+              {/* Tab 4: Proyectos */}
+              <TabsContent value="proyectos">
+                <InmobProyectosAcceso personaId={personaId} userEmail={profile?.email} />
+              </TabsContent>
             </Tabs>
           ) : (
             <p className="text-muted-foreground">Cargando datos...</p>
