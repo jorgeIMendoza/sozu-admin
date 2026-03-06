@@ -528,12 +528,13 @@ export default function InmobAgentes() {
       const directEmail = (agent.email || "").trim().toLowerCase();
       if (!directEmail) throw new Error("No se encontró el email del agente");
 
-      const { error } = await supabase
+      const { error, count } = await supabase
         .from("usuarios")
-        .update({ activo: true, fecha_actualizacion: new Date().toISOString() })
+        .update({ activo: true, fecha_actualizacion: new Date().toISOString() }, { count: "exact" })
         .eq("email", directEmail) as any;
 
       if (error) throw error;
+      if (!count) throw new Error("No se encontró el usuario o no tienes permisos para reactivarlo");
 
       try {
         const { data: resetData, error: resetError } = await supabase.functions.invoke("reset-user-password", {
