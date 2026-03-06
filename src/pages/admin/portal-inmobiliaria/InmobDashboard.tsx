@@ -12,6 +12,7 @@ import { MonthMultiSelector, getCurrentMonthKey, getMonthFilterLabel, buildDateR
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -1302,7 +1303,7 @@ export default function InmobDashboard() {
           <div className="flex items-center justify-between p-5 pb-2">
             <p className="text-base font-semibold">Ventas por Agente</p>
             <div className="flex gap-1 rounded-lg bg-muted p-0.5">
-              {([["unidades", "Unidades"], ["ingreso", "Ingreso"], ["comision", "Comisión"]] as [ChartMode, string][]).map(([key, label]) => (
+              {([["unidades", "Unidades"], ["ingreso", "Ingreso"], ["comision", "Comisión Inmobiliaria"]] as [ChartMode, string][]).map(([key, label]) => (
                 <button key={key} onClick={() => setChartMode(key)} className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-all", chartMode === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                   {label}
                 </button>
@@ -1373,7 +1374,20 @@ export default function InmobDashboard() {
                     <TableHead className="sozu-table-header text-right">Pipeline activo</TableHead>
                     <TableHead className="sozu-table-header text-right">Ingreso</TableHead>
                     <TableHead className="sozu-table-header text-right">Comisión Inmobiliaria</TableHead>
-                    <TableHead className="sozu-table-header text-center">Conversión</TableHead>
+                    <TableHead className="sozu-table-header text-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help border-b border-dotted border-muted-foreground/50">Conversión</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">
+                          <p className="font-semibold mb-1">Conversión = (Ventas / Ofertas) × 100</p>
+                          <p><span className="inline-block w-2 h-2 rounded-full bg-primary mr-1" />Verde: superior al 110% del promedio del grupo</p>
+                          <p><span className="inline-block w-2 h-2 rounded-full bg-destructive mr-1" />Rojo: inferior al 80% del promedio del grupo</p>
+                          <p><span className="inline-block w-2 h-2 rounded-full bg-secondary mr-1" />Gris: dentro del rango promedio</p>
+                          <p className="mt-1 text-muted-foreground">Promedio actual: {avgConversion.toFixed(1)}%</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
