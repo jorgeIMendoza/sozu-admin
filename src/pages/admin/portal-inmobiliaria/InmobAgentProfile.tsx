@@ -93,7 +93,7 @@ export default function InmobAgentProfile() {
         const batch = cuentaIds.slice(i, i + 200);
         const { data } = await (supabase as any)
           .from("comisionistas")
-          .select("id, id_cuenta_cobranza, porcentaje_comision, pagada, aprobada")
+          .select("id_cuenta_cobranza, email_usuario, porcentaje_comision, pagada, aprobada")
           .in("id_cuenta_cobranza", batch)
           .eq("email_usuario", decodedEmail)
           .eq("activo", true);
