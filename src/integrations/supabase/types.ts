@@ -7246,6 +7246,10 @@ export type Database = {
       }
       borrar_sp_esquemas_pago_proyecto: { Args: never; Returns: undefined }
       borrar_sp_vistas: { Args: never; Returns: undefined }
+      can_access_agent_owned_lead: {
+        Args: { _owner_persona_id: number }
+        Returns: boolean
+      }
       can_view_all_prospects: { Args: never; Returns: boolean }
       check_email_blocked_role: { Args: { p_email: string }; Returns: boolean }
       check_sat_notification_conditions: {
