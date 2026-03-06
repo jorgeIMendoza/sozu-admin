@@ -9,9 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PhoneDisplay } from "@/components/admin/PhoneDisplay";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  ArrowLeft, Users, FileText, Home, ShoppingCart, DollarSign, TrendingUp,
+  ArrowLeft, Users, FileText, Home, ShoppingCart, DollarSign, TrendingUp, Mail, Calendar,
 } from "lucide-react";
 
 const fmtCurrency = (v: number) =>
@@ -57,7 +56,7 @@ export default function InmobAgentProfile() {
       const m = new Map<number, any>();
       for (let i = 0; i < propIds.length; i += 200) {
         const batch = propIds.slice(i, i + 200);
-        const { data } = await supabase.from("propiedades").select("id, id_estatus_disponibilidad, precio_lista").in("id", batch) as any;
+        const { data } = await supabase.from("propiedades").select("id, id_estatus_disponibilidad, precio_lista, numero_propiedad, edificios_modelos(id, edificios(nombre))").in("id", batch) as any;
         (data || []).forEach((p: any) => m.set(p.id, p));
       }
       return m;
@@ -74,7 +73,7 @@ export default function InmobAgentProfile() {
       const m = new Map<number, any>();
       for (let i = 0; i < ofertaIds.length; i += 200) {
         const batch = ofertaIds.slice(i, i + 200);
-        const { data } = await (supabase as any).from("cuentas_cobranza").select("id, id_oferta, precio_final").in("id_oferta", batch).eq("activo", true);
+        const { data } = await (supabase as any).from("cuentas_cobranza").select("id, id_oferta, precio_final, id_propiedad").in("id_oferta", batch).eq("activo", true);
         (data || []).forEach((c: any) => { if (c.id_oferta) m.set(c.id_oferta, c); });
       }
       return m;
@@ -123,6 +122,35 @@ export default function InmobAgentProfile() {
     staleTime: 3 * 60_000,
   });
 
+  // Citas recientes
+  const { data: citasRecientes = [] } = useQuery({
+    queryKey: ["agent-profile-citas", agent?.personaId],
+    queryFn: async () => {
+      if (!agent?.personaId) return [];
+      const { data } = await (supabase as any)
+        .from("citas")
+        .select("id, titulo, fecha_hora, estatus")
+        .eq("id_persona_agente", agent.personaId)
+        .eq("activo", true)
+        .order("fecha_hora", { ascending: false })
+        .limit(5);
+      return data || [];
+    },
+    enabled: !!agent?.personaId,
+    staleTime: 3 * 60_000,
+  });
+
+  // Proyectos for property names
+  const { data: proyectosMap = new Map() } = useQuery({
+    queryKey: ["agent-profile-proyectos", propIds],
+    queryFn: async () => {
+      const m = new Map<number, string>();
+      const edifIds = [...new Set([...propMap.values()].map(p => p.edificios_modelos?.edificios?.nombre).filter(Boolean))];
+      return m; // We use prop data directly
+    },
+    enabled: false,
+  });
+
   // KPI computations
   const soldOfferIds = useMemo(() => ofertas.filter((o: any) => propMap.get(o.id_propiedad)?.id_estatus_disponibilidad === 5).map((o: any) => o.id), [ofertas, propMap]);
   const apartadoCount = useMemo(() => ofertas.filter((o: any) => {
@@ -137,6 +165,57 @@ export default function InmobAgentProfile() {
       return s + ((Number(cuenta?.precio_final) || 0) * (Number(c.porcentaje_comision) || 0) / 100);
     }, 0);
   }, [comisiones, cuentasMap]);
+
+  // Conversion rate
+  const conversionRate = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100).toFixed(1) : "0.0";
+
+  // Pipeline activo: ofertas con cuenta en estatus 4 (apartado) que aún no son vendidas
+  const pipelineActivo = useMemo(() => {
+    return ofertas
+      .filter((o: any) => {
+        const p = propMap.get(o.id_propiedad);
+        const cuenta = cuentasMap.get(o.id);
+        if (!cuenta || !p) return false;
+        return p.id_estatus_disponibilidad === 4 || p.id_estatus_disponibilidad === 5;
+      })
+      .map((o: any) => {
+        const p = propMap.get(o.id_propiedad);
+        const cuenta = cuentasMap.get(o.id);
+        const edificioNombre = p?.edificios_modelos?.edificios?.nombre || "";
+        const numProp = p?.numero_propiedad || "";
+        const isSold = p?.id_estatus_disponibilidad === 5;
+        const stageLabel = isSold ? "Cierre de Venta" :
+          o.id_estatus_aprobacion === 2 ? "Aprobación desarrollador" : "Apartado";
+        return {
+          id: o.id,
+          nombre: `${edificioNombre}${numProp ? ` · ${numProp}` : ""}`.trim() || `Oferta ${o.id}`,
+          proyecto: edificioNombre || "—",
+          stage: stageLabel,
+          precio: Number(cuenta?.precio_final) || 0,
+        };
+      })
+      .slice(0, 10);
+  }, [ofertas, propMap, cuentasMap]);
+
+  // Comisiones enriched
+  const comisionesEnriched = useMemo(() => {
+    return comisiones.map((c: any) => {
+      const cuenta = [...cuentasMap.values()].find((cc: any) => cc.id === c.id_cuenta_cobranza);
+      const ofertaId = cuenta ? [...cuentasMap.entries()].find(([_, v]) => v.id === c.id_cuenta_cobranza)?.[0] : null;
+      const oferta = ofertaId ? ofertas.find((o: any) => o.id === ofertaId) : null;
+      const prop = oferta ? propMap.get(oferta.id_propiedad) : null;
+      const edificioNombre = prop?.edificios_modelos?.edificios?.nombre || "";
+      const numProp = prop?.numero_propiedad || "";
+      const monto = (Number(cuenta?.precio_final) || 0) * (Number(c.porcentaje_comision) || 0) / 100;
+      const statusLabel = c.pagada ? "Pagada" : c.aprobada ? "Aprobada" : "Pendiente";
+      return {
+        id: c.id,
+        nombre: `${edificioNombre}${numProp ? ` · ${numProp}` : ""}`.trim() || "—",
+        monto,
+        status: statusLabel,
+      };
+    }).slice(0, 10);
+  }, [comisiones, cuentasMap, ofertas, propMap]);
 
   const getInitials = (name: string) => name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
@@ -156,28 +235,31 @@ export default function InmobAgentProfile() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(`${NAV_PREFIX}/agentes`)}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Avatar className="h-14 w-14">
-            <AvatarFallback className="bg-primary/10 text-primary text-lg font-bold">
+          <Button variant="ghost" size="icon" onClick={() => navigate(`${NAV_PREFIX}/agentes`)}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <Avatar className="h-12 w-12">
+            <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold">
               {agent ? getInitials(agent.nombre) : ".."}
             </AvatarFallback>
           </Avatar>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold">{agent?.nombre || "Cargando..."}</h1>
-              {agent && (
-                <Badge variant={agent.activo ? "default" : "destructive"} className="text-xs">
-                  {agent.activo ? "Activo" : "Inactivo"}
-                </Badge>
-              )}
+            <h1 className="text-xl font-bold">{agent?.nombre || "Cargando..."}</h1>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Mail className="h-3.5 w-3.5" />
+              <span>{agent?.email}</span>
             </div>
-            <p className="text-sm text-muted-foreground">{agent?.email}</p>
-            {agent && <PhoneDisplay telefono={agent.telefono} clavePaisTelefono={agent.clavePaisTelefono} className="text-sm" />}
           </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {agent && (
+            <Badge variant={agent.activo ? "default" : "destructive"} className="text-xs">
+              {agent.activo ? "Activo" : "Inactivo"}
+            </Badge>
+          )}
+          <span className="text-sm text-muted-foreground">↗ {conversionRate}% conv.</span>
         </div>
       </div>
 
@@ -189,72 +271,113 @@ export default function InmobAgentProfile() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
-            { icon: Users, label: "Prospectos", value: String(prospectosCount) },
-            { icon: FileText, label: "Ofertas", value: String(ofertas.length) },
-            { icon: Home, label: "Apartados", value: String(apartadoCount) },
-            { icon: ShoppingCart, label: "Ventas Cerradas", value: String(ventasCerradas) },
-            { icon: DollarSign, label: "Ingreso", value: fmtShort(ingreso) },
-            { icon: TrendingUp, label: "Comisión Acumulada", value: fmtShort(comisionAcumulada) },
+            { icon: Users, label: "PROSPECTOS", value: String(prospectosCount) },
+            { icon: FileText, label: "OFERTAS", value: String(ofertas.length) },
+            { icon: Home, label: "APARTADOS", value: String(apartadoCount) },
+            { icon: ShoppingCart, label: "VENTAS CERRADAS", value: String(ventasCerradas) },
+            { icon: DollarSign, label: "INGRESO GENERADO", value: fmtShort(ingreso) },
+            { icon: TrendingUp, label: "COMISIÓN ACUMULADA", value: fmtShort(comisionAcumulada) },
           ].map(kpi => (
             <div key={kpi.label} className="rounded-xl border border-border bg-card p-4">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-2">
                 <kpi.icon className="h-4 w-4 text-muted-foreground" />
-                <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
               </div>
-              <p className="text-xl font-bold">{kpi.value}</p>
+              <p className="text-2xl font-bold">{kpi.value}</p>
             </div>
           ))}
         </div>
       )}
 
-      {/* Recent offers */}
+      {/* Pipeline activo */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Ofertas recientes</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Pipeline activo</CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="sozu-table-header">
-                <TableHead>ID</TableHead>
-                <TableHead>Fecha</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead className="text-right">Precio Final</TableHead>
-                <TableHead className="text-center">Estatus</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ofertas.slice(0, 20).map((o: any) => {
-                const cuenta = cuentasMap.get(o.id);
-                const prop = propMap.get(o.id_propiedad);
-                const label = `${o.id_producto ? "OP" : "O"}-${String(o.id).padStart(6, "0")}`;
-                const estatus = prop?.id_estatus_disponibilidad === 5 ? "Vendida" :
-                  prop?.id_estatus_disponibilidad === 4 ? "Apartada" :
-                  o.id_estatus_aprobacion === 2 ? "Aprobada" :
-                  o.id_estatus_aprobacion === 3 ? "Rechazada" : "Pendiente";
-                return (
-                  <TableRow key={o.id}>
-                    <TableCell className="font-mono text-sm">{label}</TableCell>
-                    <TableCell className="text-sm">{new Date(o.fecha_generacion).toLocaleDateString("es-MX")}</TableCell>
-                    <TableCell className="text-sm">{o.id_producto ? "Producto" : "Propiedad"}</TableCell>
-                    <TableCell className="text-right text-sm">{cuenta ? fmtCurrency(Number(cuenta.precio_final) || 0) : "—"}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={estatus === "Vendida" ? "default" : estatus === "Rechazada" ? "destructive" : "secondary"} className="text-xs">
-                        {estatus}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {ofertas.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Sin ofertas</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+        <CardContent className="pt-0">
+          {pipelineActivo.length === 0 ? (
+            <p className="text-muted-foreground text-sm py-4 text-center">Sin pipeline activo</p>
+          ) : (
+            <div className="space-y-3">
+              {pipelineActivo.map((item) => (
+                <div key={item.id} className="flex items-center justify-between py-2">
+                  <div>
+                    <p className="text-sm font-medium">{item.nombre}</p>
+                    <p className="text-xs text-muted-foreground">{item.proyecto}</p>
+                  </div>
+                  <div className="flex items-center gap-3 text-right">
+                    <Badge variant="outline" className="text-xs">{item.stage}</Badge>
+                    <span className="text-sm font-semibold">{fmtCurrency(item.precio)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Comisiones + Citas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Comisiones */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Comisiones</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {comisionesEnriched.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-4 text-center">Sin comisiones</p>
+            ) : (
+              <div className="space-y-3">
+                {comisionesEnriched.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between py-2">
+                    <div>
+                      <p className="text-sm font-semibold">{c.nombre}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold">{fmtCurrency(c.monto)}</p>
+                      <Badge
+                        variant={c.status === "Pagada" ? "default" : "outline"}
+                        className={`text-[10px] ${c.status === "Pagada" ? "bg-emerald-600" : ""}`}
+                      >
+                        {c.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Citas recientes */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Citas recientes</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {citasRecientes.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-4 text-center">Sin citas recientes</p>
+            ) : (
+              <div className="space-y-3">
+                {citasRecientes.map((cita: any) => (
+                  <div key={cita.id} className="flex items-center justify-between py-2">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">{cita.titulo || "Cita"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(cita.fecha_hora).toLocaleDateString("es-MX")} · {new Date(cita.fecha_hora).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-xs">{cita.estatus || "Programada"}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

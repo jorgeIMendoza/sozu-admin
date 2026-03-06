@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useInmobAgents } from "@/hooks/useInmobAgents";
+import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PhoneDisplay } from "@/components/admin/PhoneDisplay";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
@@ -20,7 +23,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Users, TrendingUp, FileText, ShoppingCart, MoreHorizontal, Eye, Pencil, Power, KeyRound } from "lucide-react";
+import { Search, Users, TrendingUp, FileText, ShoppingCart, MoreHorizontal, Eye, Pencil, Power, KeyRound, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 
 const fmtCurrency = (v: number) =>
@@ -35,7 +38,9 @@ export default function InmobAgentes() {
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
   const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
+  const { personaId } = useInmobiliariaPersonaId();
   const [search, setSearch] = useState(searchParams.get("q") || "");
+  const [activeTab, setActiveTab] = useState<"activos" | "desactivados">("activos");
 
   // Edit dialog state
   const [editAgent, setEditAgent] = useState<any | null>(null);
@@ -43,6 +48,9 @@ export default function InmobAgentes() {
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Project access dialog state
+  const [projectAccessAgent, setProjectAccessAgent] = useState<any | null>(null);
 
   useEffect(() => {
     registrarVista("/admin/portal-inmobiliaria/agentes");
@@ -91,7 +99,6 @@ export default function InmobAgentes() {
     queryKey: ["inmob-agentes-ingreso", agentEmails],
     queryFn: async () => {
       if (!agentEmails.length) return new Map<string, number>();
-      // Get ofertas for agents
       const { data: ofertas } = await supabase
         .from("ofertas")
         .select("id, email_creador, id_propiedad")
@@ -99,7 +106,6 @@ export default function InmobAgentes() {
         .eq("activo", true) as any;
       if (!ofertas?.length) return new Map<string, number>();
 
-      // Get sold properties
       const propIds = [...new Set(ofertas.map((o: any) => o.id_propiedad).filter(Boolean))] as number[];
       const soldSet = new Set<number>();
       if (propIds.length > 0) {
@@ -111,13 +117,11 @@ export default function InmobAgentes() {
         (props || []).forEach((p: any) => soldSet.add(p.id));
       }
 
-      // Filter to sold offers only
       const soldOfertas = ofertas.filter((o: any) => o.id_propiedad && soldSet.has(o.id_propiedad));
       const soldOfertaIds = soldOfertas.map((o: any) => o.id);
       if (!soldOfertaIds.length) return new Map<string, number>();
 
-      // Get cuentas_cobranza
-      const cuentaMap = new Map<number, number>(); // oferta_id → precio_final
+      const cuentaMap = new Map<number, number>();
       for (let i = 0; i < soldOfertaIds.length; i += 200) {
         const batch = soldOfertaIds.slice(i, i + 200);
         const { data: cuentas } = await (supabase as any)
@@ -167,16 +171,21 @@ export default function InmobAgentes() {
 
   const isLoading = agentsLoading || ofertasLoading || prospectosLoading || ingresoLoading;
 
+  // Separate active vs inactive
+  const activeAgents = useMemo(() => agents.filter(a => a.activo), [agents]);
+  const inactiveAgents = useMemo(() => agents.filter(a => !a.activo), [agents]);
+
   const filteredAgents = useMemo(() => {
-    if (!search) return agents;
+    const list = activeTab === "activos" ? activeAgents : inactiveAgents;
+    if (!search) return list;
     const q = search.toLowerCase();
-    return agents.filter(
+    return list.filter(
       (a) => a.nombre.toLowerCase().includes(q) || a.email.toLowerCase().includes(q)
     );
-  }, [agents, search]);
+  }, [activeAgents, inactiveAgents, activeTab, search]);
 
-  // Summary KPIs
-  const totalAgentes = agents.length;
+  // Summary KPIs (all agents)
+  const totalAgentes = activeAgents.length;
   const totalOfertas = Array.from(ofertasByAgent.values()).reduce((s, v) => s + v.total, 0);
   const totalVendidas = Array.from(ofertasByAgent.values()).reduce((s, v) => s + v.vendidas, 0);
   const totalProspectos = Array.from(prospectosByAgent.values()).reduce((s, v) => s + v, 0);
@@ -193,21 +202,18 @@ export default function InmobAgentes() {
     if (!editAgent) return;
     setSaving(true);
     try {
-      // Update persona
       const { error: personaError } = await supabase
         .from("personas")
         .update({ nombre_legal: editName, telefono: editPhone })
         .eq("id", editAgent.personaId) as any;
       if (personaError) throw personaError;
 
-      // Update usuario name
       const { error: userError } = await supabase
         .from("usuarios")
         .update({ nombre: editName })
         .eq("email", editAgent.email) as any;
       if (userError) throw userError;
 
-      // Update email if changed
       if (editEmail !== editAgent.email) {
         const { error: emailError } = await supabase
           .from("usuarios")
@@ -226,35 +232,83 @@ export default function InmobAgentes() {
     }
   };
 
-  const handleToggleActive = async (agent: any) => {
-    const newStatus = !agent.activo;
+  const handleDeactivate = async (agent: any) => {
     const { error } = await supabase
       .from("usuarios")
-      .update({ activo: newStatus })
+      .update({ activo: false })
       .eq("email", agent.email) as any;
     if (error) {
-      toast.error("Error al cambiar estatus");
+      toast.error("Error al desactivar agente");
     } else {
-      toast.success(newStatus ? "Agente activado" : "Agente desactivado");
+      toast.success("Agente desactivado. Ya no tendrá acceso al sistema.");
       queryClient.invalidateQueries({ queryKey: ["inmob-agents-full"] });
     }
   };
 
+  const handleReactivate = async (agent: any) => {
+    // Reactivate user
+    const { error } = await supabase
+      .from("usuarios")
+      .update({ activo: true })
+      .eq("email", agent.email) as any;
+    if (error) {
+      toast.error("Error al reactivar agente");
+      return;
+    }
+    // Reset password to Temporal123!
+    try {
+      const { error: resetError } = await supabase.functions.invoke("reset-user-password", {
+        body: { email: agent.email },
+      });
+      if (resetError) throw resetError;
+      toast.success("Agente reactivado. Contraseña reseteada a Temporal123!");
+    } catch {
+      toast.success("Agente reactivado, pero hubo un error al resetear la contraseña.");
+    }
+    queryClient.invalidateQueries({ queryKey: ["inmob-agents-full"] });
+  };
+
   const handleResetPassword = async (agent: any) => {
     try {
-      const { error } = await supabase.functions.invoke("reset-user-password", {
+      const { data, error } = await supabase.functions.invoke("reset-user-password", {
         body: { email: agent.email },
       });
       if (error) throw error;
-      toast.success("Se envió un correo de restablecimiento de contraseña");
-    } catch {
-      toast.error("Error al resetear contraseña");
+      toast.success("Contraseña reseteada a Temporal123!");
+    } catch (err: any) {
+      console.error("Reset password error:", err);
+      toast.error("Error al resetear contraseña: " + (err?.message || "Intenta de nuevo"));
     }
   };
 
   const getInitials = (name: string) => {
     return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
   };
+
+  // ─── Inmobiliaria projects (for agent project access) ───
+  const { data: inmobProjects = [] } = useQuery({
+    queryKey: ["inmob-config-proyectos-list", personaId],
+    queryFn: async () => {
+      if (!personaId) return [];
+      // Get inmobiliaria's own user email
+      const { data: inmobUser } = await supabase
+        .from("usuarios")
+        .select("email")
+        .eq("id_persona", personaId) as any;
+      if (!inmobUser?.length) return [];
+      const inmobEmail = inmobUser[0].email;
+      const { data } = await supabase
+        .from("proyectos_acceso")
+        .select("proyecto_id, proyectos(id, nombre)")
+        .eq("usuario_id", inmobEmail) as any;
+      return (data || []).map((d: any) => ({
+        id: d.proyectos?.id,
+        nombre: d.proyectos?.nombre || `Proyecto ${d.proyecto_id}`,
+      })).filter((p: any) => p.id);
+    },
+    enabled: !!personaId,
+    staleTime: 5 * 60_000,
+  });
 
   return (
     <div className="space-y-6">
@@ -265,7 +319,7 @@ export default function InmobAgentes() {
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MiniKpi icon={Users} label="Agentes" value={totalAgentes} loading={isLoading} />
+        <MiniKpi icon={Users} label="Agentes Activos" value={totalAgentes} loading={isLoading} />
         <MiniKpi icon={FileText} label="Ofertas Totales" value={totalOfertas} loading={isLoading} />
         <MiniKpi icon={ShoppingCart} label="Ventas Cerradas" value={totalVendidas} loading={isLoading} />
         <MiniKpi icon={TrendingUp} label="Prospectos" value={totalProspectos} loading={isLoading} />
@@ -282,103 +336,53 @@ export default function InmobAgentes() {
         />
       </div>
 
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-6 space-y-3">
-              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="sozu-table-header">
-                  <TableHead>Agente</TableHead>
-                  <TableHead className="text-center">Prospectos</TableHead>
-                  <TableHead className="text-center">Ofertas</TableHead>
-                  <TableHead className="text-center">Ventas</TableHead>
-                  <TableHead className="text-right">Ingreso</TableHead>
-                  <TableHead className="text-center">Conversión</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAgents.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {search ? "Sin resultados" : "No hay agentes vinculados a tu inmobiliaria"}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredAgents.map((agent) => {
-                    const stats = ofertasByAgent.get(agent.email) || { total: 0, vendidas: 0 };
-                    const prospectos = prospectosByAgent.get(agent.email) || 0;
-                    const ingreso = ingresoByAgent.get(agent.email) || 0;
-                    const conversion = stats.total > 0 ? Math.round((stats.vendidas / stats.total) * 100) : 0;
-                    return (
-                      <TableRow key={agent.email}>
-                        {/* Agent column with avatar, name, email, phone */}
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-9 w-9 shrink-0">
-                              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                                {getInitials(agent.nombre)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-sm truncate">{agent.nombre}</p>
-                                {!agent.activo && (
-                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Inactivo</Badge>
-                                )}
-                              </div>
-                              <p className="text-xs text-muted-foreground truncate">{agent.email}</p>
-                              <PhoneDisplay telefono={agent.telefono} clavePaisTelefono={agent.clavePaisTelefono} className="text-xs" />
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">{prospectos}</TableCell>
-                        <TableCell className="text-center">{stats.total}</TableCell>
-                        <TableCell className="text-center font-semibold">{stats.vendidas}</TableCell>
-                        <TableCell className="text-right font-medium">{fmtCurrency(ingreso)}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={conversion > 30 ? "default" : "secondary"} className="text-xs">
-                            {conversion}%
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => navigate(`${NAV_PREFIX}/agentes/${encodeURIComponent(agent.email)}`)}>
-                                <Eye className="h-4 w-4 mr-2" /> Ver perfil 360°
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openEditDialog(agent)}>
-                                <Pencil className="h-4 w-4 mr-2" /> Editar información
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleToggleActive(agent)}>
-                                <Power className="h-4 w-4 mr-2" /> {agent.activo ? "Desactivar" : "Activar"}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleResetPassword(agent)}>
-                                <KeyRound className="h-4 w-4 mr-2" /> Resetear contraseña
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+        <TabsList>
+          <TabsTrigger value="activos" className="gap-1.5">
+            <Users className="h-3.5 w-3.5" /> Activos <Badge variant="secondary" className="ml-1 text-[10px]">{activeAgents.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="desactivados" className="gap-1.5">
+            <Power className="h-3.5 w-3.5" /> Desactivados <Badge variant="secondary" className="ml-1 text-[10px]">{inactiveAgents.length}</Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="activos">
+          <AgentTable
+            agents={filteredAgents}
+            isLoading={isLoading}
+            search={search}
+            ofertasByAgent={ofertasByAgent}
+            prospectosByAgent={prospectosByAgent}
+            ingresoByAgent={ingresoByAgent}
+            getInitials={getInitials}
+            onEdit={openEditDialog}
+            onDeactivate={handleDeactivate}
+            onResetPassword={handleResetPassword}
+            onProjectAccess={setProjectAccessAgent}
+            navigate={navigate}
+            isActiveTab
+          />
+        </TabsContent>
+
+        <TabsContent value="desactivados">
+          <AgentTable
+            agents={filteredAgents}
+            isLoading={isLoading}
+            search={search}
+            ofertasByAgent={ofertasByAgent}
+            prospectosByAgent={prospectosByAgent}
+            ingresoByAgent={ingresoByAgent}
+            getInitials={getInitials}
+            onReactivate={handleReactivate}
+            onEdit={openEditDialog}
+            onResetPassword={handleResetPassword}
+            onProjectAccess={setProjectAccessAgent}
+            navigate={navigate}
+            isActiveTab={false}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Edit Agent Dialog */}
       <Dialog open={!!editAgent} onOpenChange={(open) => { if (!open) setEditAgent(null); }}>
@@ -407,7 +411,236 @@ export default function InmobAgentes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Project Access Dialog */}
+      <AgentProjectAccessDialog
+        agent={projectAccessAgent}
+        inmobProjects={inmobProjects}
+        onClose={() => setProjectAccessAgent(null)}
+      />
     </div>
+  );
+}
+
+/* ───── Agent Table ───── */
+function AgentTable({
+  agents, isLoading, search, ofertasByAgent, prospectosByAgent, ingresoByAgent,
+  getInitials, onEdit, onDeactivate, onReactivate, onResetPassword, onProjectAccess,
+  navigate, isActiveTab,
+}: {
+  agents: any[]; isLoading: boolean; search: string;
+  ofertasByAgent: Map<string, any>; prospectosByAgent: Map<string, number>; ingresoByAgent: Map<string, number>;
+  getInitials: (name: string) => string;
+  onEdit: (a: any) => void; onDeactivate?: (a: any) => void; onReactivate?: (a: any) => void;
+  onResetPassword: (a: any) => void; onProjectAccess: (a: any) => void;
+  navigate: any; isActiveTab: boolean;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="sozu-table-header">
+                <TableHead>Agente</TableHead>
+                <TableHead className="text-center">Prospectos</TableHead>
+                <TableHead className="text-center">Ofertas</TableHead>
+                <TableHead className="text-center">Ventas</TableHead>
+                <TableHead className="text-right">Ingreso</TableHead>
+                <TableHead className="text-center">Conversión</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {agents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    {search ? "Sin resultados" : isActiveTab ? "No hay agentes activos" : "No hay agentes desactivados"}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                agents.map((agent) => {
+                  const stats = ofertasByAgent.get(agent.email) || { total: 0, vendidas: 0 };
+                  const prospectos = prospectosByAgent.get(agent.email) || 0;
+                  const ingreso = ingresoByAgent.get(agent.email) || 0;
+                  const conversion = stats.total > 0 ? Math.round((stats.vendidas / stats.total) * 100) : 0;
+                  return (
+                    <TableRow key={agent.email}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9 shrink-0">
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                              {getInitials(agent.nombre)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm truncate">{agent.nombre}</p>
+                            <p className="text-xs text-muted-foreground truncate">{agent.email}</p>
+                            <PhoneDisplay telefono={agent.telefono} clavePaisTelefono={agent.clavePaisTelefono} className="text-xs" />
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">{prospectos}</TableCell>
+                      <TableCell className="text-center">{stats.total}</TableCell>
+                      <TableCell className="text-center font-semibold">{stats.vendidas}</TableCell>
+                      <TableCell className="text-right font-medium">{fmtCurrency(ingreso)}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={conversion > 30 ? "default" : "secondary"} className="text-xs">
+                          {conversion}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => navigate(`${NAV_PREFIX}/agentes/${encodeURIComponent(agent.email)}`)}>
+                              <Eye className="h-4 w-4 mr-2" /> Ver perfil 360°
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onEdit(agent)}>
+                              <Pencil className="h-4 w-4 mr-2" /> Editar información
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onProjectAccess(agent)}>
+                              <FolderOpen className="h-4 w-4 mr-2" /> Acceso a proyectos
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {isActiveTab && onDeactivate && (
+                              <DropdownMenuItem onClick={() => onDeactivate(agent)} className="text-destructive">
+                                <Power className="h-4 w-4 mr-2" /> Desactivar
+                              </DropdownMenuItem>
+                            )}
+                            {!isActiveTab && onReactivate && (
+                              <DropdownMenuItem onClick={() => onReactivate(agent)} className="text-emerald-600">
+                                <Power className="h-4 w-4 mr-2" /> Reactivar
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => onResetPassword(agent)}>
+                              <KeyRound className="h-4 w-4 mr-2" /> Resetear contraseña
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ───── Agent Project Access Dialog ───── */
+function AgentProjectAccessDialog({ agent, inmobProjects, onClose }: {
+  agent: any | null; inmobProjects: { id: number; nombre: string }[]; onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [agentProjects, setAgentProjects] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(false);
+
+  // Fetch agent's current project access
+  const { data: currentAccess, isLoading } = useQuery({
+    queryKey: ["agent-project-access", agent?.email],
+    queryFn: async () => {
+      if (!agent?.email) return [];
+      const { data } = await supabase
+        .from("proyectos_acceso")
+        .select("proyecto_id")
+        .eq("usuario_id", agent.email) as any;
+      return (data || []).map((d: any) => d.proyecto_id as number);
+    },
+    enabled: !!agent?.email,
+  });
+
+  useEffect(() => {
+    if (currentAccess) {
+      setAgentProjects(new Set(currentAccess));
+    }
+  }, [currentAccess]);
+
+  const handleToggle = async (projectId: number, enabled: boolean) => {
+    setLoading(true);
+    try {
+      if (enabled) {
+        // Add access
+        const { error } = await supabase
+          .from("proyectos_acceso")
+          .insert({ usuario_id: agent.email, proyecto_id: projectId }) as any;
+        if (error && !error.message?.includes("duplicate")) throw error;
+        setAgentProjects(prev => new Set([...prev, projectId]));
+        toast.success("Acceso al proyecto habilitado");
+      } else {
+        // Remove access
+        const { error } = await supabase
+          .from("proyectos_acceso")
+          .delete()
+          .eq("usuario_id", agent.email)
+          .eq("proyecto_id", projectId) as any;
+        if (error) throw error;
+        setAgentProjects(prev => { const next = new Set(prev); next.delete(projectId); return next; });
+        toast.success("Acceso al proyecto removido");
+      }
+      queryClient.invalidateQueries({ queryKey: ["agent-project-access", agent.email] });
+    } catch (err: any) {
+      toast.error("Error: " + (err.message || "Intenta de nuevo"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!agent) return null;
+
+  return (
+    <Dialog open={!!agent} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Acceso a Proyectos</DialogTitle>
+          <DialogDescription>{agent.nombre} ({agent.email})</DialogDescription>
+        </DialogHeader>
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+          <p className="font-medium text-primary">El acceso a proyectos se hereda del usuario principal</p>
+          <p className="text-muted-foreground mt-1">
+            Los Agentes Inmobiliarios heredan automáticamente el acceso a proyectos de su Inmobiliaria padre.
+            Si se requiere, también se puede administrar independientemente a un usuario para que pueda tener
+            acceso a todos los proyectos de su inmobiliaria o quitar alguno desde el portal de la inmobiliaria.
+          </p>
+        </div>
+        <div className="space-y-2 mt-2">
+          <p className="text-sm font-medium">Proyectos disponibles:</p>
+          {isLoading ? (
+            <p className="text-muted-foreground text-sm py-4">Cargando...</p>
+          ) : inmobProjects.length === 0 ? (
+            <p className="text-muted-foreground text-center py-6">No hay proyectos asignados a tu inmobiliaria</p>
+          ) : (
+            inmobProjects.map((p) => (
+              <div key={p.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                <div className="flex items-center gap-3">
+                  <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{p.nombre}</span>
+                </div>
+                <Switch
+                  checked={agentProjects.has(p.id)}
+                  onCheckedChange={(checked) => handleToggle(p.id, checked)}
+                  disabled={loading}
+                />
+              </div>
+            ))
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
