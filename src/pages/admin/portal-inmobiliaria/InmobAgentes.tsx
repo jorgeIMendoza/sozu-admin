@@ -498,19 +498,26 @@ export default function InmobAgentes() {
   const handleResetPassword = async (agent: any) => {
     setResetTarget(agent);
   };
+
+  const confirmResetPassword = async () => {
+    if (!resetTarget) return;
     try {
+      const emails = await resolveAgentEmails(resetTarget);
+      if (!emails.length) throw new Error("No se encontró el usuario");
+
       const { data: resetData, error } = await supabase.functions.invoke("reset-user-password", {
-        body: { email: agent.email },
+        body: { email: emails[0] },
       });
       if (error) throw error;
       if (resetData?.error) {
         toast.error("Para resetear la contraseña de este usuario tienes que solicitar al administrador.");
-        return;
+      } else {
+        toast.success("Contraseña reseteada a Temporal123!");
       }
-      toast.success("Contraseña reseteada a Temporal123!");
-    } catch (err: any) {
-      console.error("Reset password error:", err);
+    } catch {
       toast.error("Para resetear la contraseña de este usuario tienes que solicitar al administrador.");
+    } finally {
+      setResetTarget(null);
     }
   };
 
