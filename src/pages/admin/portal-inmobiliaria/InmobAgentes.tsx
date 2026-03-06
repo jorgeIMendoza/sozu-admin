@@ -42,6 +42,22 @@ export default function InmobAgentes() {
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [activeTab, setActiveTab] = useState<"activos" | "desactivados">("activos");
 
+  const { data: isSozu = false } = useQuery({
+    queryKey: ["inmob-agentes-is-sozu", personaId],
+    queryFn: async () => {
+      if (!personaId) return false;
+      const { data } = await supabase
+        .from("personas")
+        .select("nombre_legal")
+        .eq("id", personaId)
+        .maybeSingle() as any;
+      const nombreLegal = (data?.nombre_legal || "").toLowerCase();
+      return nombreLegal.includes("real estate ventures");
+    },
+    enabled: !!personaId,
+    staleTime: 10 * 60_000,
+  });
+
   // Edit dialog state
   const [editAgent, setEditAgent] = useState<any | null>(null);
   const [editName, setEditName] = useState("");
