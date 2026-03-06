@@ -50,7 +50,7 @@ export default function InmobAgentProfile() {
   const decodedEmail = email ? decodeURIComponent(email) : "";
   const { data: agents = [] } = useInmobAgents();
 
-  const agent = useMemo(() => agents.find(a => a.email === decodedEmail), [agents, decodedEmail]);
+  const agent = useMemo(() => agents.find(a => (a.email || "").toLowerCase() === decodedEmail.toLowerCase()), [agents, decodedEmail]);
 
   // ALL ofertas for this agent (no date filter)
   const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
