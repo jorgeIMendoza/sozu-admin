@@ -379,44 +379,50 @@ export default function InmobAgentes() {
   };
 
   const handleDeactivate = async (agent: any) => {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("usuarios")
       .update({ activo: false })
-      .eq("email", agent.email) as any;
-    if (error) {
+      .eq("id_persona", agent.personaId)
+      .select("email, activo") as any;
+
+    if (error || !data?.length) {
       toast.error("Error al desactivar agente");
     } else {
       toast.success("Agente desactivado. Ya no tendrá acceso al sistema.");
       queryClient.invalidateQueries({ queryKey: ["inmob-agents-full"] });
+      queryClient.invalidateQueries({ queryKey: ["inmob-agentes-sozu-extra-users"] });
     }
   };
 
   const handleReactivate = async (agent: any) => {
-    // Reactivate user
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("usuarios")
       .update({ activo: true })
-      .eq("email", agent.email) as any;
-    if (error) {
+      .eq("id_persona", agent.personaId)
+      .select("email, activo") as any;
+
+    if (error || !data?.length) {
       toast.error("Error al reactivar agente");
       return;
     }
-    // Reset password to Temporal123!
+
     try {
       const { error: resetError } = await supabase.functions.invoke("reset-user-password", {
         body: { email: agent.email },
       });
       if (resetError) throw resetError;
       toast.success("Agente reactivado. Contraseña reseteada a Temporal123!");
-    } catch {
-      toast.success("Agente reactivado, pero hubo un error al resetear la contraseña.");
+    } catch (err: any) {
+      toast.error("Agente reactivado, pero falló el reseteo: " + (err?.message || "Intenta de nuevo"));
     }
+
     queryClient.invalidateQueries({ queryKey: ["inmob-agents-full"] });
+    queryClient.invalidateQueries({ queryKey: ["inmob-agentes-sozu-extra-users"] });
   };
 
   const handleResetPassword = async (agent: any) => {
     try {
-      const { data, error } = await supabase.functions.invoke("reset-user-password", {
+      const { error } = await supabase.functions.invoke("reset-user-password", {
         body: { email: agent.email },
       });
       if (error) throw error;
