@@ -147,7 +147,11 @@ function UsersTable({
                         <p className="text-xs text-muted-foreground">
                           Inmobiliaria: {usuario.inmobiliaria_nombre}
                         </p>
-                      ) : usuario.personas?.nombre_legal && (usuario.rol_id === ROLE_AGENTE_INMOBILIARIO || usuario.rol_id === ROLE_AGENTE_INTERNO) && (
+                      ) : usuario.rol_id === ROLE_AGENTE_INMOBILIARIO && !usuario.inmobiliaria_nombre ? (
+                        <p className="text-xs text-amber-600">
+                          Agente independiente
+                        </p>
+                      ) : usuario.personas?.nombre_legal && (usuario.rol_id === ROLE_AGENTE_INTERNO) && (
                         <p className="text-xs text-muted-foreground">
                           Persona: {usuario.personas.nombre_legal}
                         </p>
