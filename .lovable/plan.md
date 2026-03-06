@@ -1,18 +1,41 @@
 
-## Plan: Show "Comisión" for all inmobiliarias (not just Sozu)
 
-Currently, the "Comisión" tab in the bar chart and the "Comisión" column in the agent performance table are restricted to Sozu only (`isSozu` checks). The commission calculation logic (`comisionByCuentaId`) already handles both Sozu and non-Sozu cases correctly. The fix is to remove the `isSozu` gates on the UI elements.
+## Plan: Agregar Domain-Wide Delegation (subject/sub) al JWT de la cuenta de servicio
 
-### Changes in `InmobDashboard.tsx`:
+### Problema actual
+La función `getAccessToken` genera un JWT sin el campo `sub`, por lo que Google Calendar ve las operaciones como hechas por la cuenta de servicio directamente. Esto impide que los invitados reciban correos de notificación del evento.
 
-1. **Remove the `useEffect` that resets chart mode** (lines 231-233) — no longer needed since all inmobiliarias can view commission.
+### Cambio necesario
 
-2. **Chart toggle buttons** (line 1309): Remove the `isSozu` condition that hides the "Comisión" tab. Show it for all inmobiliarias.
+**Archivo**: `supabase/functions/agendar-capacitacion/index.ts`
 
-3. **Table header** (line 1379): Remove `isSozu &&` gate on the "Comisión" column header. Rename to "Comisión Inmobiliaria".
+1. **Modificar `getAccessToken`** para aceptar un parámetro opcional `subject` (el email del dueño del calendario) y agregarlo al payload JWT:
+   ```
+   sub: subject  // e.g. "jorge.mendoza@sozu.com"
+   ```
 
-4. **Table body cells** (lines 1404-1408): Remove `isSozu &&` gate on the commission cell.
+2. **Actualizar la llamada** a `getAccessToken(sa)` → `getAccessToken(sa, calendarOwnerEmail)` en el `Deno.serve` principal (línea 519), para que el token se genere impersonando al dueño del calendario.
 
-5. **Empty row colspan** (line 1418): Update colspan from conditional `isSozu ? 9 : 8` to always `9`.
+3. Agregar el scope `https://www.googleapis.com/auth/calendar.events` al JWT (ya lo tienes en el Admin Console, pero el código solo pide `calendar`).
 
-6. **Update label** in chart tooltip (line 1323) and chart toggle (line 1309) to say "Comisión" (keep as is, it's clear in context).
+### Detalle técnico
+
+```text
+// Antes (línea 18-23):
+payload = { iss, scope: "...calendar", aud, iat, exp }
+
+// Después:
+payload = { iss, sub: subject, scope: "...calendar ...calendar.events", aud, iat, exp }
+```
+
+La llamada cambia de:
+```text
+const token = await getAccessToken(sa);
+```
+A:
+```text
+const token = await getAccessToken(sa, calendarOwnerEmail);
+```
+
+Esto hará que Google Calendar trate las operaciones como si las hiciera el usuario real (calendarOwnerEmail), permitiendo el envío automático de correos a los invitados.
+
