@@ -55,6 +55,15 @@ export default function InmobAgentProfile() {
   const { personaId: inmobPersonaId } = useInmobiliariaPersonaId();
 
   const agent = useMemo(() => agents.find(a => (a.email || "").toLowerCase() === decodedEmail.toLowerCase()), [agents, decodedEmail]);
+  const agentEmails = useMemo(() => {
+    if (!agent?.personaId) return decodedEmail ? [decodedEmail] : [];
+    const emails = agents
+      .filter((a) => a.personaId === agent.personaId)
+      .map((a) => (a.email || "").trim())
+      .filter(Boolean);
+    const unique = [...new Set(emails)];
+    return unique.length ? unique : (decodedEmail ? [decodedEmail] : []);
+  }, [agent?.personaId, agents, decodedEmail]);
 
   // Check if Sozu (Real Estate Ventures)
   const { data: isSozu = false } = useQuery({
@@ -91,26 +100,39 @@ export default function InmobAgentProfile() {
 
   // ALL ofertas for this agent (no date filter)
   const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
-    queryKey: ["agent-profile-ofertas", decodedEmail],
+    queryKey: ["agent-profile-ofertas", agentEmails],
     queryFn: async () => {
+      if (!agentEmails.length) return [];
       const all: any[] = [];
-      let from = 0;
-      while (true) {
-        const { data } = await (supabase as any)
-          .from("ofertas")
-          .select("id, fecha_generacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, id_propiedad, id_producto, id_persona_lead")
-          .eq("email_creador", decodedEmail)
-          .eq("activo", true)
-          .order("fecha_generacion", { ascending: false })
-          .range(from, from + 999);
-        if (!data?.length) break;
-        all.push(...data);
-        if (data.length < 1000) break;
-        from += 1000;
+
+      for (let i = 0; i < agentEmails.length; i += 30) {
+        const emailBatch = agentEmails.slice(i, i + 30);
+        let from = 0;
+
+        while (true) {
+          const { data } = await (supabase as any)
+            .from("ofertas")
+            .select("id, email_creador, fecha_generacion, id_esquema_pago_seleccionado, id_estatus_aprobacion, id_propiedad, id_producto, id_persona_lead")
+            .in("email_creador", emailBatch)
+            .eq("activo", true)
+            .order("fecha_generacion", { ascending: false })
+            .range(from, from + 999);
+
+          if (!data?.length) break;
+          all.push(...data);
+          if (data.length < 1000) break;
+          from += 1000;
+        }
       }
-      return all;
+
+      const seen = new Set<number>();
+      return all.filter((o: any) => {
+        if (seen.has(o.id)) return false;
+        seen.add(o.id);
+        return true;
+      });
     },
-    enabled: !!decodedEmail,
+    enabled: agentEmails.length > 0,
     staleTime: 3 * 60_000,
   });
 
@@ -148,76 +170,33 @@ export default function InmobAgentProfile() {
     staleTime: 3 * 60_000,
   });
 
-  // Check signed contracts
-  const cuentaIds = useMemo(() => [...cuentasMap.values()].map((c: any) => c.id), [cuentasMap]);
-  const { data: firmadoSet = new Set<number>() } = useQuery({
-    queryKey: ["agent-profile-firmados", cuentaIds],
-    queryFn: async () => {
-      const s = new Set<number>();
-      if (!cuentaIds.length) return s;
-      for (let i = 0; i < cuentaIds.length; i += 200) {
-        const batch = cuentaIds.slice(i, i + 200);
-        const { data } = await (supabase as any)
-          .from("documentos")
-          .select("id_cuenta_cobranza")
-          .in("id_cuenta_cobranza", batch)
-          .eq("id_tipo_documento", 42)
-          .eq("activo", true);
-        (data || []).forEach((d: any) => s.add(d.id_cuenta_cobranza));
-      }
-      return s;
-    },
-    enabled: cuentaIds.length > 0,
-    staleTime: 3 * 60_000,
-  });
+  const agentCuentaIds = useMemo(() => {
+    const ids = new Set<number>();
+    ofertas.forEach((o: any) => {
+      const cuenta = cuentasMap.get(o.id);
+      if (cuenta?.id) ids.add(Number(cuenta.id));
+    });
+    return [...ids];
+  }, [ofertas, cuentasMap]);
 
-  // Comisiones: ALL comisionistas entries for this agent email (not limited to their own offers)
+  // Comisionistas ligados a las cuentas del agente (para no-Sozu)
   const { data: comisiones = [] } = useQuery({
-    queryKey: ["agent-profile-comisiones-all", decodedEmail],
+    queryKey: ["agent-profile-comisiones-by-cuenta", agentCuentaIds],
     queryFn: async () => {
+      if (!agentCuentaIds.length) return [];
       const all: any[] = [];
-      let from = 0;
-      while (true) {
+      for (let i = 0; i < agentCuentaIds.length; i += 200) {
+        const batch = agentCuentaIds.slice(i, i + 200);
         const { data } = await (supabase as any)
           .from("comisionistas")
-          .select("id_cuenta_cobranza, email_usuario, porcentaje_comision, pagada, aprobada")
-          .eq("email_usuario", decodedEmail)
-          .eq("activo", true)
-          .range(from, from + 999);
-        if (!data?.length) break;
-        all.push(...data);
-        if (data.length < 1000) break;
-        from += 1000;
+          .select("id_cuenta_cobranza, email_usuario, porcentaje_comision")
+          .in("id_cuenta_cobranza", batch)
+          .eq("activo", true);
+        if (data) all.push(...data);
       }
       return all;
     },
-    enabled: !!decodedEmail,
-    staleTime: 3 * 60_000,
-  });
-
-  // Fetch precio_final for all comision cuentas (may include cuentas not from this agent's offers)
-  const comisionCuentaIds = useMemo(() => {
-    const ids = new Set<number>();
-    comisiones.forEach((c: any) => ids.add(c.id_cuenta_cobranza));
-    return [...ids];
-  }, [comisiones]);
-
-  const { data: comisionCuentasMap = new Map() } = useQuery({
-    queryKey: ["agent-profile-comision-cuentas", comisionCuentaIds],
-    queryFn: async () => {
-      const m = new Map<number, number>();
-      for (let i = 0; i < comisionCuentaIds.length; i += 200) {
-        const batch = comisionCuentaIds.slice(i, i + 200);
-        const { data } = await (supabase as any)
-          .from("cuentas_cobranza")
-          .select("id, precio_final")
-          .in("id", batch)
-          .eq("activo", true);
-        (data || []).forEach((c: any) => m.set(c.id, Number(c.precio_final) || 0));
-      }
-      return m;
-    },
-    enabled: comisionCuentaIds.length > 0,
+    enabled: agentCuentaIds.length > 0,
     staleTime: 3 * 60_000,
   });
 
