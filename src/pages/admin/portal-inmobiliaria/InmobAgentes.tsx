@@ -39,12 +39,13 @@ export default function InmobAgentes() {
   const queryClient = useQueryClient();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
+  const { profile } = useAuth();
   const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
   const { personaId } = useInmobiliariaPersonaId();
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [activeTab, setActiveTab] = useState<"activos" | "desactivados">("activos");
-
-  const { data: isSozu = false } = useQuery({
+  const [resetTarget, setResetTarget] = useState<any | null>(null);
+  const currentUserEmail = (profile?.email || "").toLowerCase();
     queryKey: ["inmob-agentes-is-sozu", personaId],
     queryFn: async () => {
       if (!personaId) return false;
