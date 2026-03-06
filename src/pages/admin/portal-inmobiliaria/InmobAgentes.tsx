@@ -160,46 +160,62 @@ export default function InmobAgentes() {
       const { data: usuarios } = await supabase
         .from("usuarios")
         .select("email, id_persona, activo, rol_id")
-        .in("email", unknownEmails)
-        .neq("rol_id", 9) as any;
+        .in("email", unknownEmails) as any;
 
       if (!usuarios?.length) return [];
 
       const personaIds = [...new Set(usuarios.map((u: any) => u.id_persona).filter(Boolean))] as number[];
       const personaMap = new Map<number, any>();
       if (personaIds.length) {
-        const { data: personas } = await supabase
-          .from("personas")
-          .select("id, nombre_legal, nombre_comercial, telefono, clave_pais_telefono")
-          .in("id", personaIds) as any;
+        const [{ data: personas }, { data: rels }] = await Promise.all([
+          supabase
+            .from("personas")
+            .select("id, nombre_legal, nombre_comercial, telefono, clave_pais_telefono")
+            .in("id", personaIds) as any,
+          supabase
+            .from("entidades_relacionadas")
+            .select("id_persona, id_persona_duena_lead")
+            .in("id_persona", personaIds)
+            .eq("id_tipo_entidad", 19)
+            .eq("activo", true) as any,
+        ]);
         (personas || []).forEach((p: any) => personaMap.set(p.id, p));
+
+        const ownerByPersona = new Map<number, number | null>();
+        (rels || []).forEach((r: any) => ownerByPersona.set(r.id_persona, r.id_persona_duena_lead ?? null));
+
+        return usuarios
+          .filter((u: any) => {
+            // Keep Sozu staff/non-agent users, but exclude external agents from other inmobiliarias.
+            if (u.rol_id === 3) {
+              const ownerId = ownerByPersona.get(u.id_persona);
+              return ownerId === personaId;
+            }
+            // Exclude agent interno (role 9) from this extra bucket.
+            return u.rol_id !== 9;
+          })
+          .map((u: any) => {
+            const p = personaMap.get(u.id_persona);
+            return {
+              email: u.email,
+              personaId: u.id_persona,
+              nombre: p?.nombre_legal || p?.nombre_comercial || u.email,
+              telefono: p?.telefono || "",
+              clavePaisTelefono: p?.clave_pais_telefono || "",
+              activo: u.activo ?? true,
+              roleId: u.rol_id,
+              isInternal: u.rol_id !== 3 && u.rol_id !== 9,
+            };
+          });
       }
 
-      return usuarios.map((u: any) => {
-        const p = personaMap.get(u.id_persona);
-        return {
-          email: u.email,
-          personaId: u.id_persona,
-          nombre: p?.nombre_legal || p?.nombre_comercial || u.email,
-          telefono: p?.telefono || "",
-          clavePaisTelefono: p?.clave_pais_telefono || "",
-          activo: u.activo ?? true,
-          isInternal: true, // Mark as non-agent user (internal)
-        };
-      });
+      return [];
     },
     enabled: !!personaId && isSozu,
     staleTime: 5 * 60_000,
   });
 
-  // Filter out agentes inmobiliarios without an inmobiliaria relationship
-  const filteredBaseAgents = useMemo(() => {
-    // For Sozu, exclude agentes inmobiliarios (from useInmobAgents) that don't have
-    // an inmobiliaria relationship — they are independent agents not from Sozu
-    // useInmobAgents already filters by entidades_relacionadas tipo 19 with id_persona_duena_lead = personaId
-    // so all agents returned are linked to this inmobiliaria — no extra filtering needed
-    return agents;
-  }, [agents]);
+  const filteredBaseAgents = useMemo(() => agents, [agents]);
 
   const allAgents = useMemo(() => {
     const byEmail = new Map<string, any>();
@@ -208,8 +224,8 @@ export default function InmobAgentes() {
       const key = (u.email || "").toLowerCase();
       if (!byEmail.has(key)) byEmail.set(key, u);
     });
-    return [...byEmail.values()];
-  }, [filteredBaseAgents, sozuExtraUsers]);
+    return [...byEmail.values()].filter((a: any) => (a.email || "").toLowerCase() !== currentUserEmail);
+  }, [filteredBaseAgents, sozuExtraUsers, currentUserEmail]);
 
   const agentEmails = useMemo(() => allAgents.map((a) => a.email), [allAgents]);
 
