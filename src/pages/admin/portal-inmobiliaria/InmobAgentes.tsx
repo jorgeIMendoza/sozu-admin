@@ -791,11 +791,21 @@ function AgentTable({
                             </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-medium text-sm truncate">{agent.nombre}</p>
                               {agent.isInternal && (
                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-amber-500/50 text-amber-700 dark:text-amber-400">
                                   Usuario interno
+                                </Badge>
+                              )}
+                              {agent.isIndependent && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-green-500/50 text-green-700 dark:text-green-400">
+                                  Agente independiente
+                                </Badge>
+                              )}
+                              {agent.inmobiliariaName && !agent.isInternal && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-purple-500/50 text-purple-700 dark:text-purple-400">
+                                  {agent.inmobiliariaName}
                                 </Badge>
                               )}
                             </div>
