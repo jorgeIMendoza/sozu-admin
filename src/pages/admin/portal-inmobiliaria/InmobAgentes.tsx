@@ -351,11 +351,13 @@ export default function InmobAgentes() {
     queryKey: ["inmob-agentes-ingreso", agentEmails],
     queryFn: async () => {
       if (!agentEmails.length) return new Map<string, number>();
-      const { data: ofertas } = await supabase
-        .from("ofertas")
-        .select("id, email_creador, id_propiedad")
-        .in("email_creador", agentEmails)
-        .eq("activo", true) as any;
+      const ofertas = await fetchAllPaginated<any>(() =>
+        supabase
+          .from("ofertas")
+          .select("id, email_creador, id_propiedad")
+          .in("email_creador", agentEmails)
+          .eq("activo", true)
+      );
       if (!ofertas?.length) return new Map<string, number>();
 
       const propIds = [...new Set(ofertas.map((o: any) => o.id_propiedad).filter(Boolean))] as number[];
