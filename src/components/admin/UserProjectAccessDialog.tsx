@@ -108,13 +108,13 @@ function AgentReadOnlyAccess({ userPersonaId, isSecondaryInmobiliaria, isAgenteI
           <Building2 className="h-4 w-4 text-green-600" />
         )}
         <AlertDescription className={showInheritedDisclaimer ? "text-blue-800 dark:text-blue-200" : "text-green-800 dark:text-green-200"}>
-          {showInheritedDisclaimer ? (
+           {showInheritedDisclaimer ? (
             <>
               <strong>El acceso a proyectos se hereda del usuario principal</strong>
               <p className="mt-1 text-sm">
                 {isSecondaryInmobiliaria
                   ? 'Los usuarios secundarios de Inmobiliaria heredan automáticamente el acceso a proyectos del usuario principal de la agencia. Para modificar los accesos, edita los permisos del usuario principal.'
-                  : `Los ${isAgenteInterno ? 'Agentes Internos' : 'Agentes Inmobiliarios'} heredan automáticamente el acceso a proyectos de su Inmobiliaria padre. Para modificar los accesos, edita los permisos del usuario con rol "Inmobiliaria" correspondiente.`
+                  : `Los ${isAgenteInterno ? 'Agentes Internos' : 'Agentes Inmobiliarios'} heredan automáticamente el acceso a proyectos de su Inmobiliaria padre. Si se requiere, también se puede administrar independientemente a un usuario para que pueda tener acceso a todos los proyectos de su inmobiliaria o quitar alguno desde el portal de la inmobiliaria.`
                 }
               </p>
             </>

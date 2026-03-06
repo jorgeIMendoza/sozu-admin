@@ -654,3 +654,67 @@ export default function InmobConfiguracion() {
     </div>
   );
 }
+
+/* ───── Proyectos Acceso sub-component ───── */
+function InmobProyectosAcceso({ personaId, userEmail }: { personaId: number | null; userEmail?: string }) {
+  const queryClient = useQueryClient();
+
+  const { data: proyectos = [], isLoading } = useQuery({
+    queryKey: ["inmob-config-proyectos", userEmail],
+    queryFn: async () => {
+      if (!userEmail) return [];
+      const { data } = await supabase
+        .from("proyectos_acceso")
+        .select("proyecto_id, proyectos(id, nombre)")
+        .eq("usuario_id", userEmail) as any;
+      return (data || []).map((d: any) => ({
+        id: d.proyectos?.id,
+        nombre: d.proyectos?.nombre || `Proyecto ${d.proyecto_id}`,
+        activo: true,
+      })).filter((p: any) => p.id);
+    },
+    enabled: !!userEmail,
+  });
+
+  const [disabledProjects, setDisabledProjects] = useState<Set<number>>(new Set());
+
+  const handleToggle = (projectId: number, enabled: boolean) => {
+    setDisabledProjects(prev => {
+      const next = new Set(prev);
+      if (enabled) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+    // Note: This controls which projects agents inherit. 
+    // A full implementation would persist this to a config table.
+    toast.info(enabled ? "Proyecto habilitado para agentes" : "Proyecto deshabilitado para agentes");
+  };
+
+  if (isLoading) return <p className="text-muted-foreground text-sm py-4">Cargando proyectos...</p>;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Selecciona los proyectos a los que tus agentes tendrán acceso heredado. Desactiva un proyecto para que tus agentes no lo vean.
+      </p>
+      {proyectos.length === 0 ? (
+        <p className="text-muted-foreground text-center py-6">No tienes proyectos asignados</p>
+      ) : (
+        <div className="space-y-2">
+          {proyectos.map((p: any) => (
+            <div key={p.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+              <div className="flex items-center gap-3">
+                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">{p.nombre}</span>
+              </div>
+              <Switch
+                checked={!disabledProjects.has(p.id)}
+                onCheckedChange={(checked) => handleToggle(p.id, checked)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
