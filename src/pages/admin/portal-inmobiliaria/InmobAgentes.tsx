@@ -920,7 +920,8 @@ function AgentProjectAccessDialog({ agent, inmobProjects, onClose }: {
       const { data } = await supabase
         .from("proyectos_acceso")
         .select("proyecto_id")
-        .eq("usuario_id", agent.email) as any;
+        .eq("usuario_id", agent.email)
+        .eq("activo", true) as any;
       return (data || []).map((d: any) => d.proyecto_id as number);
     },
     enabled: !!agent?.email,
