@@ -365,6 +365,38 @@ function AgentProjectAccessEditable({ userEmail, userPersonaId, isAgenteInterno,
   );
 }
 
+// Small badge component to show inmobiliaria name or "Agente independiente" in dialog header
+function AgentInmobiliariaBadge({ userPersonaId }: { userPersonaId?: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['agent-inmob-badge', userPersonaId],
+    queryFn: async () => {
+      if (!userPersonaId) return null;
+      const { data: rel } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_persona_duena_lead')
+        .eq('id_persona', userPersonaId)
+        .eq('id_tipo_entidad', 19)
+        .eq('activo', true)
+        .maybeSingle() as any;
+      if (!rel?.id_persona_duena_lead) return null;
+      const { data: persona } = await supabase
+        .from('personas')
+        .select('nombre_comercial, nombre_legal')
+        .eq('id', rel.id_persona_duena_lead)
+        .maybeSingle() as any;
+      return persona?.nombre_comercial || persona?.nombre_legal || null;
+    },
+    enabled: !!userPersonaId,
+    staleTime: 5 * 60_000,
+  });
+
+  if (isLoading) return null;
+  if (data) {
+    return <Badge variant="secondary" className="w-fit text-xs">{data}</Badge>;
+  }
+  return <Badge variant="outline" className="w-fit text-xs bg-amber-500/10 text-amber-700 border-amber-500/20">Agente independiente</Badge>;
+}
+
 export function UserProjectAccessDialog({ userId, userName, userEmail, userRole, userRoleId, userPersonaId, isUsuarioPrincipal }: UserProjectAccessDialogProps) {
   const [open, setOpen] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState<number[]>([]);
