@@ -854,6 +854,7 @@ export default function InmobDashboard() {
       const comision = userComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
       const conv = userOfertas.length > 0 ? ((userCierres.length / userOfertas.length) * 100) : 0;
       return {
+        email,
         nombre,
         isInternal,
         prospectos: 0,
@@ -885,7 +886,12 @@ export default function InmobDashboard() {
   // Bar chart data
   const agentChartData = useMemo(() => {
     return agentPerformance.slice(0, 8).map(a => ({
-      name: a.nombre.split(" ")[0], ventas: a.ventas, ingreso: a.ingreso, comision: a.comision, isInternal: a.isInternal,
+      name: a.nombre.split(" ")[0],
+      ventas: a.ventas,
+      ingreso: a.ingreso,
+      comision: a.comision,
+      isInternal: a.isInternal,
+      searchValue: a.email || a.nombre,
     }));
   }, [agentPerformance]);
 
@@ -1271,7 +1277,7 @@ export default function InmobDashboard() {
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(0,0%,45%)" }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: "hsl(0,0%,45%)" }} tickFormatter={chartMode !== "unidades" ? (v) => `$${(v / 1000000).toFixed(1)}M` : undefined} axisLine={false} tickLine={false} />
                   <RechartsTooltip formatter={(value: any) => [chartMode !== "unidades" ? fmtCurrency(value) : value, chartMode === "unidades" ? "Ventas" : chartMode === "ingreso" ? "Ingreso" : "Comisión"]} />
-                  <Bar dataKey={chartDataKey} fill="hsl(139, 35%, 51%)" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(_data: any, index: number) => { const agent = agentChartData[index]; if (agent) navigate(`${NAV_PREFIX}/agentes?q=${encodeURIComponent(agent.name)}`); }} />
+                  <Bar dataKey={chartDataKey} fill="hsl(139, 35%, 51%)" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(_data: any, index: number) => { const agent = agentChartData[index]; if (agent?.searchValue) navigate(`${NAV_PREFIX}/agentes?q=${encodeURIComponent(agent.searchValue)}`); }} />
                 </BarChart>
               </ResponsiveContainer>
             )}
