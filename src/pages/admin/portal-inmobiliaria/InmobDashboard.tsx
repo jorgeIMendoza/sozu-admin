@@ -1402,7 +1402,7 @@ export default function InmobDashboard() {
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={convStatus === "high" ? "default" : convStatus === "low" ? "destructive" : "secondary"} className="text-[11px]">
-                            {convStatus === "high" ? "↑" : convStatus === "low" ? "↓" : "–"} {agent.conversion}%
+                            {agent.conversion}%
                           </Badge>
                         </TableCell>
                       </TableRow>
