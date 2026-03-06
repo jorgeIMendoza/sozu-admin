@@ -887,7 +887,7 @@ export default function InmobDashboard() {
           return s + (Number(cuenta?.precio_final) || 0);
         }, 0);
 
-      // Comisión por agente = suma de TODOS los comisionistas de las cuentas ligadas a sus ofertas
+      // Comisión por agente = suma de la comisión de inmobiliaria por cuenta ligada a sus ofertas
       const userCuentaIds = new Set<number>();
       userOfertas.forEach((o: any) => {
         const cuenta = cuentasMap.get(o.id);
