@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, CreditCard, User, Save, Plus, Edit, AlertCircle, Copy } from "lucide-react";
+import { Building2, CreditCard, User, Save, Plus, Edit, AlertCircle, Copy, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 
 export default function InmobConfiguracion() {
@@ -404,6 +405,7 @@ export default function InmobConfiguracion() {
                 <TabsTrigger value="datos">Datos Generales</TabsTrigger>
                 <TabsTrigger value="direccion">Dirección</TabsTrigger>
                 <TabsTrigger value="datos_fiscales">Datos Fiscales</TabsTrigger>
+                <TabsTrigger value="proyectos">Proyectos</TabsTrigger>
               </TabsList>
 
               {/* Tab 1: Datos Generales */}
