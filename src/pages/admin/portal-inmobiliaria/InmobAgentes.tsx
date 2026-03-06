@@ -263,13 +263,27 @@ export default function InmobAgentes() {
 
   const allAgents = useMemo(() => {
     const byEmail = new Map<string, any>();
-    filteredBaseAgents.forEach((a) => byEmail.set(a.email.toLowerCase(), a));
+    // For base agents, enrich with inmobiliaria info
+    filteredBaseAgents.forEach((a) => {
+      const inmobName = agentInmobMap.get(a.personaId);
+      const isIndependent = agentInmobMap.has(a.personaId) && inmobName === null;
+      // For non-Sozu inmobiliarias, exclude agents that belong to a DIFFERENT inmobiliaria
+      if (!isSozu && inmobName && inmobName !== "" && agentInmobMap.get(a.personaId) !== undefined) {
+        // The agent has an inmobiliaria - only include if it matches current inmobiliaria
+        // Base agents from useInmobAgents are already filtered, so include all
+      }
+      byEmail.set(a.email.toLowerCase(), {
+        ...a,
+        inmobiliariaName: inmobName || null,
+        isIndependent,
+      });
+    });
     sozuExtraUsers.forEach((u: any) => {
       const key = (u.email || "").toLowerCase();
       if (!byEmail.has(key)) byEmail.set(key, u);
     });
     return [...byEmail.values()].filter((a: any) => (a.email || "").toLowerCase() !== currentUserEmail);
-  }, [filteredBaseAgents, sozuExtraUsers, currentUserEmail]);
+  }, [filteredBaseAgents, sozuExtraUsers, currentUserEmail, agentInmobMap, isSozu]);
 
   const agentEmails = useMemo(() => allAgents.map((a) => a.email), [allAgents]);
 
