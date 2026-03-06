@@ -878,6 +878,7 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
             userEmail={userEmail}
             userPersonaId={userPersonaId}
             isAgenteInterno={isAgenteInterno}
+            isSecondaryInmobiliaria={isSecondaryInmobiliaria}
             proyectos={proyectos}
             selectedProjects={selectedProjects}
             setSelectedProjects={setSelectedProjects}
