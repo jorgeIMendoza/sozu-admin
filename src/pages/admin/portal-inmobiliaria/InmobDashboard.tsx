@@ -831,6 +831,16 @@ export default function InmobDashboard() {
 
   const allComisiones = comisiones;
 
+  const comisionByCuentaId = useMemo(() => {
+    const map = new Map<number, number>();
+    allComisiones.forEach((c: any) => {
+      const cuentaId = Number(c.id_cuenta_cobranza);
+      if (!cuentaId) return;
+      map.set(cuentaId, (map.get(cuentaId) || 0) + (Number(c.monto_comision) || 0));
+    });
+    return map;
+  }, [allComisiones]);
+
   // Recompute comisionPromAgente with all comisiones
   const comisionPromAgente = totalAgentes > 0
     ? allComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0) / totalAgentes
@@ -839,19 +849,26 @@ export default function InmobDashboard() {
   // Agent performance — includes both agents AND internal non-agent users
   const agentPerformance = useMemo(() => {
     const buildPerf = (email: string, nombre: string, isInternal: boolean) => {
-      const userOfertas = classifiedOfertas.filter((o: any) => o.email_creador === email);
-      const userCierres = dedupedAdvancedOfertas.filter((o: any) => o.email_creador === email && o.stage === "cierre");
-      const userApartadosCount = dedupedAdvancedOfertas.filter((o: any) => o.email_creador === email && ADVANCED_STAGES.has(o.stage) && o.stage !== "cierre").length;
+      const emailLower = (email || "").toLowerCase();
+      const userOfertas = classifiedOfertas.filter((o: any) => (o.email_creador || "").toLowerCase() === emailLower);
+      const userCierres = dedupedAdvancedOfertas.filter((o: any) => (o.email_creador || "").toLowerCase() === emailLower && o.stage === "cierre");
+      const userApartadosCount = dedupedAdvancedOfertas.filter((o: any) => (o.email_creador || "").toLowerCase() === emailLower && ADVANCED_STAGES.has(o.stage) && o.stage !== "cierre").length;
       const userPipeline = dedupedAdvancedOfertas
-        .filter((o: any) => o.email_creador === email)
+        .filter((o: any) => (o.email_creador || "").toLowerCase() === emailLower)
         .reduce((s: number, o: any) => {
           const cuenta = cuentasMap.get(o.id);
           return s + (Number(cuenta?.precio_final) || 0);
         }, 0);
-      const emailLower = email.toLowerCase();
-      const userComisiones = allComisiones.filter((c: any) => (c.email_usuario || "").toLowerCase() === emailLower);
+
+      // Comisión por agente = suma de TODOS los comisionistas de las cuentas ligadas a sus ofertas
+      const userCuentaIds = new Set<number>();
+      userOfertas.forEach((o: any) => {
+        const cuenta = cuentasMap.get(o.id);
+        if (cuenta?.id) userCuentaIds.add(Number(cuenta.id));
+      });
+      const comision = Array.from(userCuentaIds).reduce((s, cuentaId) => s + (comisionByCuentaId.get(cuentaId) || 0), 0);
+
       const ingreso = userCierres.reduce((s: number, o: any) => { const cuenta = cuentasMap.get(o.id); return s + (Number(cuenta?.precio_final) || 0); }, 0);
-      const comision = userComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
       const conv = userOfertas.length > 0 ? ((userCierres.length / userOfertas.length) * 100) : 0;
       return {
         email,
@@ -872,7 +889,7 @@ export default function InmobDashboard() {
 
     // Add internal non-agent users who have offers
     const internalRows = internalEmails
-      .filter(email => classifiedOfertas.some((o: any) => o.email_creador === email))
+      .filter(email => classifiedOfertas.some((o: any) => (o.email_creador || "").toLowerCase() === email.toLowerCase()))
       .map(email => {
         const name = internalUserNames.get(email) || email.split("@")[0];
         return buildPerf(email, name, true);
@@ -881,7 +898,7 @@ export default function InmobDashboard() {
     return [...agentRows, ...internalRows]
       .filter(r => r.ofertas > 0 || r.ventas > 0)
       .sort((a, b) => b.ventas - a.ventas);
-  }, [agents, classifiedOfertas, dedupedAdvancedOfertas, cuentasMap, allComisiones, internalEmails, internalUserNames]);
+  }, [agents, classifiedOfertas, dedupedAdvancedOfertas, cuentasMap, comisionByCuentaId, internalEmails, internalUserNames]);
 
   // Bar chart data
   const agentChartData = useMemo(() => {
