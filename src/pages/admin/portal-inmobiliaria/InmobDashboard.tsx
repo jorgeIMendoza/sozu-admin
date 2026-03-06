@@ -227,10 +227,6 @@ export default function InmobDashboard() {
   });
   const inmobUserEmailSet = useMemo(() => new Set(inmobUserEmails.map((e) => e.toLowerCase())), [inmobUserEmails]);
 
-  // Reset chart mode if "comision" selected but not Sozu
-  useEffect(() => {
-    if (!isSozu && chartMode === "comision") setChartMode("unidades");
-  }, [isSozu, chartMode]);
 
   // Projects for filter (from inmobiliaria main user access)
   const { data: projects = [] } = useQuery({
@@ -1306,7 +1302,7 @@ export default function InmobDashboard() {
           <div className="flex items-center justify-between p-5 pb-2">
             <p className="text-base font-semibold">Ventas por Agente</p>
             <div className="flex gap-1 rounded-lg bg-muted p-0.5">
-              {([["unidades", "Unidades"], ["ingreso", "Ingreso"], ...(isSozu ? [["comision", "Comisión"]] : [])] as [ChartMode, string][]).map(([key, label]) => (
+              {([["unidades", "Unidades"], ["ingreso", "Ingreso"], ["comision", "Comisión"]] as [ChartMode, string][]).map(([key, label]) => (
                 <button key={key} onClick={() => setChartMode(key)} className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-all", chartMode === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                   {label}
                 </button>
@@ -1376,7 +1372,7 @@ export default function InmobDashboard() {
                     <TableHead className="sozu-table-header text-center">Ventas</TableHead>
                     <TableHead className="sozu-table-header text-right">Pipeline activo</TableHead>
                     <TableHead className="sozu-table-header text-right">Ingreso</TableHead>
-                    {isSozu && <TableHead className="sozu-table-header text-right">Comisión</TableHead>}
+                    <TableHead className="sozu-table-header text-right">Comisión Inmobiliaria</TableHead>
                     <TableHead className="sozu-table-header text-center">Conversión</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1401,11 +1397,9 @@ export default function InmobDashboard() {
                         <TableCell className="text-right">
                           <span onClick={(e) => { e.stopPropagation(); navigate(`${NAV_PREFIX}/comisiones`); }} className="hover:text-primary transition-colors">{fmtShort(agent.ingreso)}</span>
                         </TableCell>
-                        {isSozu && (
-                          <TableCell className="text-right">
-                            <span onClick={(e) => { e.stopPropagation(); navigate(`${NAV_PREFIX}/comisiones`); }} className="hover:text-primary transition-colors">{fmtShort(agent.comision)}</span>
-                          </TableCell>
-                        )}
+                        <TableCell className="text-right">
+                          <span onClick={(e) => { e.stopPropagation(); navigate(`${NAV_PREFIX}/comisiones`); }} className="hover:text-primary transition-colors">{fmtShort(agent.comision)}</span>
+                        </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={convStatus === "high" ? "default" : convStatus === "low" ? "destructive" : "secondary"} className="text-[11px]">
                             {convStatus === "high" ? "↑" : convStatus === "low" ? "↓" : "–"} {agent.conversion}%
@@ -1415,7 +1409,7 @@ export default function InmobDashboard() {
                     );
                   })}
                   {agentPerformance.length === 0 && (
-                    <TableRow><TableCell colSpan={isSozu ? 9 : 8} className="text-center text-muted-foreground py-8">Sin datos de agentes</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">Sin datos de agentes</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
