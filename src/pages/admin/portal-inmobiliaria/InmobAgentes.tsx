@@ -363,12 +363,15 @@ export default function InmobAgentes() {
       const propIds = [...new Set(ofertas.map((o: any) => o.id_propiedad).filter(Boolean))] as number[];
       const soldSet = new Set<number>();
       if (propIds.length > 0) {
-        const { data: props } = await supabase
-          .from("propiedades")
-          .select("id")
-          .in("id", propIds)
-          .eq("id_estatus_disponibilidad", 5) as any;
-        (props || []).forEach((p: any) => soldSet.add(p.id));
+        for (let i = 0; i < propIds.length; i += 200) {
+          const batch = propIds.slice(i, i + 200);
+          const { data: props } = await supabase
+            .from("propiedades")
+            .select("id")
+            .in("id", batch)
+            .eq("id_estatus_disponibilidad", 5) as any;
+          (props || []).forEach((p: any) => soldSet.add(p.id));
+        }
       }
 
       const soldOfertas = ofertas.filter((o: any) => o.id_propiedad && soldSet.has(o.id_propiedad));
