@@ -286,8 +286,10 @@ export default function InmobAgentes() {
   const { data: prospectosByAgent = new Map(), isLoading: prospectosLoading } = useQuery({
     queryKey: ["inmob-agentes-prospectos", agentEmails],
     queryFn: async () => {
-      if (!agentEmails.length) return new Map<string, number>();
-      const personaIds = agents.map((a) => a.personaId);
+      if (!allAgents.length) return new Map<string, number>();
+      const personaIds = allAgents.map((a) => a.personaId).filter(Boolean);
+      if (!personaIds.length) return new Map<string, number>();
+
       const { data } = await supabase
         .from("entidades_relacionadas")
         .select("id_persona_duena_lead")
@@ -297,14 +299,14 @@ export default function InmobAgentes() {
 
       const map = new Map<string, number>();
       (data || []).forEach((d: any) => {
-        const agent = agents.find((a) => a.personaId === d.id_persona_duena_lead);
+        const agent = allAgents.find((a) => a.personaId === d.id_persona_duena_lead);
         if (agent) {
           map.set(agent.email, (map.get(agent.email) || 0) + 1);
         }
       });
       return map;
     },
-    enabled: agentEmails.length > 0 && agents.length > 0,
+    enabled: agentEmails.length > 0 && allAgents.length > 0,
     staleTime: 3 * 60_000,
   });
 
