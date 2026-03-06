@@ -8,16 +8,23 @@ import { useAuth } from "@/contexts/AuthContext";
  * (proyectos_acceso.id_entidad_relacionada_dueno -> entidades_relacionadas.id_persona)
  * to avoid stale/mislinked profile.id_persona values.
  */
+// Sozu (Real Estate Ventures) persona ID — used as default for Super Admin
+const SOZU_PERSONA_ID = 186;
+
 export function useInmobiliariaPersonaId() {
   const { profile } = useAuth();
   const directId = profile?.id_persona;
   const email = profile?.email;
   const isInmobRole = profile?.rol_nombre === "Inmobiliaria";
+  const isSuperAdmin = profile?.rol_id === 1;
 
   const { data: resolvedId, isLoading } = useQuery({
     queryKey: ["inmob-persona-id-resolve", email],
     queryFn: async (): Promise<number | null> => {
       if (!email) return null;
+
+      // Super Admin → behave as Sozu inmobiliaria
+      if (isSuperAdmin) return SOZU_PERSONA_ID;
 
       // 1) Resolve from active project ownership links (preferred source of truth)
       const { data: accesos } = await (supabase as any)
@@ -38,7 +45,6 @@ export function useInmobiliariaPersonaId() {
 
         const ownerPersonaIds = [...new Set((ownerEntidades || []).map((e: any) => e.id_persona).filter(Boolean))];
         if (ownerPersonaIds.length > 0) {
-          // If multiple owners exist, pick the most frequent one in accesos
           const entidadToPersona = new Map<number, number>();
           (ownerEntidades || []).forEach((e: any) => entidadToPersona.set(e.id, e.id_persona));
           const freq = new Map<number, number>();
@@ -86,13 +92,13 @@ export function useInmobiliariaPersonaId() {
 
       return null;
     },
-    enabled: isInmobRole && !!email,
+    enabled: (isInmobRole || isSuperAdmin) && !!email,
     staleTime: 10 * 60_000,
   });
 
   return {
     personaId: resolvedId ?? directId ?? null,
-    isLoading: isInmobRole ? isLoading : false,
+    isLoading: (isInmobRole || isSuperAdmin) ? isLoading : false,
   };
 }
 
