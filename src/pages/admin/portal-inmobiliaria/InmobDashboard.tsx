@@ -208,6 +208,25 @@ export default function InmobDashboard() {
   const inmobName = inmobInfo?.name || "Mi Inmobiliaria";
   const isSozu = inmobInfo?.isSozu || false;
 
+  // Emails de usuarios de la inmobiliaria actual (base para mapear comisiones propias)
+  const { data: inmobUserEmails = [] } = useQuery({
+    queryKey: ["inmob-user-emails", personaId],
+    queryFn: async () => {
+      if (!personaId) return [] as string[];
+      const { data } = await supabase
+        .from("usuarios")
+        .select("email")
+        .eq("id_persona", personaId)
+        .eq("activo", true) as any;
+      return (data || [])
+        .map((u: any) => (u.email || "").trim())
+        .filter(Boolean);
+    },
+    enabled: !!personaId,
+    staleTime: 5 * 60_000,
+  });
+  const inmobUserEmailSet = useMemo(() => new Set(inmobUserEmails.map((e) => e.toLowerCase())), [inmobUserEmails]);
+
   // Reset chart mode if "comision" selected but not Sozu
   useEffect(() => {
     if (!isSozu && chartMode === "comision") setChartMode("unidades");
@@ -215,23 +234,14 @@ export default function InmobDashboard() {
 
   // Projects for filter (from inmobiliaria main user access)
   const { data: projects = [] } = useQuery({
-    queryKey: ["inmob-projects", personaId],
+    queryKey: ["inmob-projects", personaId, inmobUserEmails.join(",")],
     queryFn: async () => {
-      if (!personaId) return [];
-
-      const { data: inmobUsers } = await supabase
-        .from("usuarios")
-        .select("email")
-        .eq("id_persona", personaId)
-        .eq("activo", true) as any;
-
-      const inmobEmails = (inmobUsers || []).map((u: any) => u.email).filter(Boolean);
-      if (!inmobEmails.length) return [];
+      if (!inmobUserEmails.length) return [];
 
       const { data } = await supabase
         .from("proyectos_acceso")
         .select("proyecto_id, proyectos(id, nombre)")
-        .in("usuario_id", inmobEmails)
+        .in("usuario_id", inmobUserEmails)
         .eq("activo", true) as any;
 
       const map = new Map<number, string>();
@@ -410,7 +420,7 @@ export default function InmobDashboard() {
         const batch = ofertaIds.slice(i, i + 100);
         const { data } = await (supabase as any)
           .from("cuentas_cobranza")
-          .select("id, id_oferta, precio_final, contrato_draft, fecha_creacion")
+          .select("id, id_oferta, precio_final, porcentaje_comision_venta, iva_incluido, contrato_draft, fecha_creacion")
           .in("id_oferta", batch)
           .eq("activo", true);
         (data || []).forEach((c: any) => { if (c.id_oferta) m.set(c.id_oferta, c); });
@@ -833,17 +843,34 @@ export default function InmobDashboard() {
 
   const comisionByCuentaId = useMemo(() => {
     const map = new Map<number, number>();
+
+    if (isSozu) {
+      // Sozu: comisión sale del % configurado en la cuenta (con/sin IVA según bandera)
+      cuentasMap.forEach((cuenta: any) => {
+        const cuentaId = Number(cuenta?.id);
+        if (!cuentaId) return;
+        const base = (Number(cuenta?.precio_final) || 0) * (Number(cuenta?.porcentaje_comision_venta) || 0) / 100;
+        const monto = (cuenta?.iva_incluido ? base * 1.16 : base);
+        map.set(cuentaId, monto);
+      });
+      return map;
+    }
+
+    // Otras inmobiliarias: usar SOLO comisionistas de la inmobiliaria actual
     allComisiones.forEach((c: any) => {
       const cuentaId = Number(c.id_cuenta_cobranza);
       if (!cuentaId) return;
+      const email = (c.email_usuario || "").toLowerCase();
+      if (!inmobUserEmailSet.has(email)) return;
       map.set(cuentaId, (map.get(cuentaId) || 0) + (Number(c.monto_comision) || 0));
     });
-    return map;
-  }, [allComisiones]);
 
-  // Recompute comisionPromAgente with all comisiones
+    return map;
+  }, [allComisiones, cuentasMap, isSozu, inmobUserEmailSet]);
+
+  // Recompute comisionPromAgente with commission-to-inmobiliaria source of truth
   const comisionPromAgente = totalAgentes > 0
-    ? allComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0) / totalAgentes
+    ? Array.from(comisionByCuentaId.values()).reduce((s: number, v: number) => s + v, 0) / totalAgentes
     : 0;
 
   // Agent performance — includes both agents AND internal non-agent users
@@ -860,7 +887,7 @@ export default function InmobDashboard() {
           return s + (Number(cuenta?.precio_final) || 0);
         }, 0);
 
-      // Comisión por agente = suma de TODOS los comisionistas de las cuentas ligadas a sus ofertas
+      // Comisión por agente = suma de la comisión de inmobiliaria por cuenta ligada a sus ofertas
       const userCuentaIds = new Set<number>();
       userOfertas.forEach((o: any) => {
         const cuenta = cuentasMap.get(o.id);
