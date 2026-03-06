@@ -1340,7 +1340,7 @@ export default function InmobDashboard() {
                   {agentPerformance.slice(0, 10).map((agent, i) => {
                     const convStatus = agent.conversion > avgConversion * 1.1 ? "high" : agent.conversion < avgConversion * 0.8 ? "low" : "mid";
                     return (
-                      <TableRow key={i} className="cursor-pointer hover:bg-muted/30" onClick={() => navigate(`${NAV_PREFIX}/agentes?q=${encodeURIComponent(agent.nombre)}`)}>
+                      <TableRow key={i} className="cursor-pointer hover:bg-muted/30" onClick={() => navigate(`${NAV_PREFIX}/agentes?q=${encodeURIComponent(agent.email || agent.nombre)}`)}>
                         <TableCell className="font-medium">
                           {agent.nombre}
                           {agent.isInternal && (
