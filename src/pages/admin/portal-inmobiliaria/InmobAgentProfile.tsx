@@ -24,6 +24,8 @@ const fmtShort = (v: number) => {
 
 const NAV_PREFIX = "/admin/portal-inmobiliaria";
 
+const ADVANCED_STAGES = new Set(["apartado", "gen_contrato", "firma_contrato", "cierre"]);
+
 function isVigente(fechaGeneracion: string): boolean {
   const expira = new Date(fechaGeneracion);
   expira.setDate(expira.getDate() + 5);
