@@ -208,6 +208,11 @@ export default function InmobDashboard() {
   const inmobName = inmobInfo?.name || "Mi Inmobiliaria";
   const isSozu = inmobInfo?.isSozu || false;
 
+  // Reset chart mode if "comision" selected but not Sozu
+  useEffect(() => {
+    if (!isSozu && chartMode === "comision") setChartMode("unidades");
+  }, [isSozu, chartMode]);
+
   // Projects for filter
   const { data: projects = [] } = useQuery({
     queryKey: ["inmob-projects", agentEmails],
@@ -832,7 +837,7 @@ export default function InmobDashboard() {
         }, 0);
       const emailLower = email.toLowerCase();
       const userComisiones = allComisiones.filter((c: any) => (c.email_usuario || "").toLowerCase() === emailLower);
-      const ingreso = userComisiones.reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
+      const ingreso = userCierres.reduce((s: number, o: any) => { const cuenta = cuentasMap.get(o.id); return s + (Number(cuenta?.precio_final) || 0); }, 0);
       const comision = userComisiones.filter((c: any) => c.pagada).reduce((s: number, c: any) => s + (Number(c.monto_comision) || 0), 0);
       const conv = userOfertas.length > 0 ? ((userCierres.length / userOfertas.length) * 100) : 0;
       return {
@@ -873,48 +878,124 @@ export default function InmobDashboard() {
 
   const chartDataKey = { unidades: "ventas", ingreso: "ingreso", comision: "comision" }[chartMode] as string;
 
-  // Area chart - monthly breakdown from real data (comisionistas grouped by month)
-  const areaData = useMemo(() => {
-    const MONTH_LABELS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-
-    let monthKeys: string[];
-    if (selectedMonths.length > 0) {
-      monthKeys = [...selectedMonths].sort();
-    } else {
-      monthKeys = Array.from({ length: 6 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-        return `${d.getFullYear()}-${d.getMonth()}`;
-      });
-    }
-
-    return monthKeys.map(key => {
-      const [y, m] = key.split("-").map(Number);
-      const mStart = new Date(y, m, 1);
-      const mEnd = new Date(y, m + 1, 0, 23, 59, 59, 999);
-
-      const real = allComisiones
-        .filter((c: any) => c.pagada && c.fecha_creacion)
-        .filter((c: any) => { const d = new Date(c.fecha_creacion); return d >= mStart && d <= mEnd; })
-        .reduce((s: number, c: any) => s + getComisionMonto(c), 0);
-
-      const porCobrarMes = allComisiones
-        .filter((c: any) => c.aprobada && !c.pagada && c.fecha_creacion)
-        .filter((c: any) => { const d = new Date(c.fecha_creacion); return d >= mStart && d <= mEnd; })
-        .reduce((s: number, c: any) => s + getComisionMonto(c), 0);
-
-      const estimadoMes = allComisiones
-        .filter((c: any) => advancedCuentaIds.has(c.id_cuenta_cobranza) && c.fecha_creacion)
-        .filter((c: any) => { const d = new Date(c.fecha_creacion); return d >= mStart && d <= mEnd; })
-        .reduce((s: number, c: any) => s + getComisionMonto(c), 0);
-
+  // ───── Area chart: always 6 months, independent of filter ─────
+  const sixMonthWindow = useMemo(() => {
+    const LABELS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
       return {
-        mes: `${MONTH_LABELS[m]}${y !== now.getFullYear() ? ` ${y}` : ""}`,
-        real,
-        porCobrar: porCobrarMes,
-        estimado: estimadoMes,
+        start: d,
+        end,
+        label: `${LABELS[d.getMonth()]}${d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : ""}`,
       };
     });
-  }, [selectedMonths, allComisiones, advancedCuentaIds, getComisionMonto]);
+  }, []);
+
+  const { data: areaChartRaw } = useQuery({
+    queryKey: ["inmob-dash-area-6m", isSozu ? sozuPropertyIds.length : agentEmails.join(","), isSozu, inmobAgentEmails.size],
+    queryFn: async () => {
+      let allCuentaIds: number[] = [];
+      const cuentaInfoMap = new Map<number, { precio_final: number; porcentaje_comision_venta: number; id_propiedad: number }>();
+
+      if (isSozu) {
+        if (!sozuPropertyIds.length) return null;
+        const ofIds: number[] = [];
+        for (let i = 0; i < sozuPropertyIds.length; i += 200) {
+          const batch = sozuPropertyIds.slice(i, i + 200);
+          const { data } = await supabase.from("ofertas").select("id, email_creador").in("id_propiedad", batch).eq("activo", true) as any;
+          (data || []).filter((o: any) => !inmobAgentEmails.has((o.email_creador || "").toLowerCase())).forEach((o: any) => ofIds.push(o.id));
+        }
+        for (let i = 0; i < ofIds.length; i += 200) {
+          const batch = ofIds.slice(i, i + 200);
+          const { data } = await (supabase as any).from("cuentas_cobranza").select("id, precio_final, porcentaje_comision_venta, id_propiedad").in("id_oferta", batch).eq("activo", true);
+          (data || []).forEach((c: any) => { allCuentaIds.push(c.id); cuentaInfoMap.set(c.id, { precio_final: Number(c.precio_final) || 0, porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0, id_propiedad: c.id_propiedad }); });
+        }
+      } else {
+        if (!agentEmails.length) return null;
+        const { data: ofs } = await supabase.from("ofertas").select("id").in("email_creador", agentEmails).eq("activo", true) as any;
+        const ofIds = (ofs || []).map((o: any) => o.id);
+        for (let i = 0; i < ofIds.length; i += 200) {
+          const batch = ofIds.slice(i, i + 200);
+          const { data } = await (supabase as any).from("cuentas_cobranza").select("id, precio_final, porcentaje_comision_venta, id_propiedad").in("id_oferta", batch).eq("activo", true);
+          (data || []).forEach((c: any) => { allCuentaIds.push(c.id); cuentaInfoMap.set(c.id, { precio_final: Number(c.precio_final) || 0, porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0, id_propiedad: c.id_propiedad }); });
+        }
+      }
+      if (!allCuentaIds.length) return null;
+
+      const comisionistas: any[] = [];
+      for (let i = 0; i < allCuentaIds.length; i += 200) {
+        const batch = allCuentaIds.slice(i, i + 200);
+        const { data } = await (supabase as any).from("comisionistas").select("id, id_cuenta_cobranza, porcentaje_comision, pagada, fecha_actualizacion").in("id_cuenta_cobranza", batch).eq("activo", true);
+        if (data) comisionistas.push(...data);
+      }
+
+      const acuerdos: any[] = [];
+      for (let i = 0; i < allCuentaIds.length; i += 200) {
+        const batch = allCuentaIds.slice(i, i + 200);
+        const { data } = await supabase.from("acuerdos_pago").select("id_cuenta_cobranza, fecha_pago, orden").in("id_cuenta_cobranza", batch).eq("activo", true).order("orden", { ascending: true }) as any;
+        if (data) acuerdos.push(...data);
+      }
+      const engancheMap = new Map<number, string>();
+      acuerdos.forEach((a: any) => { if (!engancheMap.has(a.id_cuenta_cobranza)) engancheMap.set(a.id_cuenta_cobranza, a.fecha_pago); });
+
+      const propIds = [...new Set([...cuentaInfoMap.values()].map(c => c.id_propiedad).filter(Boolean))];
+      const propStatusMap = new Map<number, number>();
+      for (let i = 0; i < propIds.length; i += 200) {
+        const batch = propIds.slice(i, i + 200);
+        const { data } = await supabase.from("propiedades").select("id, id_estatus_disponibilidad").in("id", batch) as any;
+        (data || []).forEach((p: any) => propStatusMap.set(p.id, p.id_estatus_disponibilidad));
+      }
+
+      return { comisionistas, engancheMap, cuentaInfoMap, propStatusMap };
+    },
+    enabled: isSozu ? sozuPropertyIds.length > 0 : agentEmails.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
+  const areaData = useMemo(() => {
+    if (!areaChartRaw) return sixMonthWindow.map(m => ({ mes: m.label, real: 0, porCobrar: 0, estimado: 0 }));
+    const { comisionistas, engancheMap, cuentaInfoMap, propStatusMap } = areaChartRaw;
+
+    return sixMonthWindow.map(({ label, start, end }) => {
+      // Cobrado: comisionistas pagadas, fecha_actualizacion in this month
+      const real = comisionistas
+        .filter((c: any) => c.pagada && c.fecha_actualizacion)
+        .filter((c: any) => { const d = new Date(c.fecha_actualizacion); return d >= start && d <= end; })
+        .reduce((s: number, c: any) => {
+          const ci = cuentaInfoMap.get(c.id_cuenta_cobranza);
+          return s + ((ci?.precio_final || 0) * (Number(c.porcentaje_comision) || 0) / 100);
+        }, 0);
+
+      // Por cobrar: comisionistas no pagadas, enganche date in this month
+      const porCobrarMes = comisionistas
+        .filter((c: any) => !c.pagada)
+        .filter((c: any) => {
+          const eng = engancheMap.get(c.id_cuenta_cobranza);
+          if (!eng) return false;
+          const d = new Date(eng);
+          return d >= start && d <= end;
+        })
+        .reduce((s: number, c: any) => {
+          const ci = cuentaInfoMap.get(c.id_cuenta_cobranza);
+          return s + ((ci?.precio_final || 0) * (Number(c.porcentaje_comision) || 0) / 100);
+        }, 0);
+
+      // Estimado: cuentas en apartado (prop status 4), enganche in this month
+      let estimadoMes = 0;
+      cuentaInfoMap.forEach((ci, cuentaId) => {
+        if (propStatusMap.get(ci.id_propiedad) !== 4) return;
+        const eng = engancheMap.get(cuentaId);
+        if (!eng) return;
+        const d = new Date(eng);
+        if (d < start || d > end) return;
+        const pct = ci.porcentaje_comision_venta > 0 ? ci.porcentaje_comision_venta : 5;
+        estimadoMes += ci.precio_final * pct / 100;
+      });
+
+      return { mes: label, real, porCobrar: porCobrarMes, estimado: estimadoMes };
+    });
+  }, [areaChartRaw, sixMonthWindow]);
 
   // Activity timeline — use O-/OP- nomenclature
   const recentActivity = useMemo(() => {
@@ -1146,7 +1227,7 @@ export default function InmobDashboard() {
           <div className="flex items-center justify-between p-5 pb-2">
             <p className="text-base font-semibold">Ventas por Agente</p>
             <div className="flex gap-1 rounded-lg bg-muted p-0.5">
-              {([["unidades", "Unidades"], ["ingreso", "Ingreso"], ["comision", "Comisión"]] as [ChartMode, string][]).map(([key, label]) => (
+              {([["unidades", "Unidades"], ["ingreso", "Ingreso"], ...(isSozu ? [["comision", "Comisión"]] : [])] as [ChartMode, string][]).map(([key, label]) => (
                 <button key={key} onClick={() => setChartMode(key)} className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-all", chartMode === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                   {label}
                 </button>
@@ -1216,7 +1297,7 @@ export default function InmobDashboard() {
                     <TableHead className="sozu-table-header text-center">Ventas</TableHead>
                     <TableHead className="sozu-table-header text-right">Pipeline activo</TableHead>
                     <TableHead className="sozu-table-header text-right">Ingreso</TableHead>
-                    <TableHead className="sozu-table-header text-right">Comisión</TableHead>
+                    {isSozu && <TableHead className="sozu-table-header text-right">Comisión</TableHead>}
                     <TableHead className="sozu-table-header text-center">Conversión</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1224,7 +1305,7 @@ export default function InmobDashboard() {
                   {agentPerformance.slice(0, 10).map((agent, i) => {
                     const convStatus = agent.conversion > avgConversion * 1.1 ? "high" : agent.conversion < avgConversion * 0.8 ? "low" : "mid";
                     return (
-                      <TableRow key={i} className="cursor-pointer hover:bg-muted/30" onClick={() => navigate(`${NAV_PREFIX}/agentes`)}>
+                      <TableRow key={i} className="cursor-pointer hover:bg-muted/30" onClick={() => navigate(`${NAV_PREFIX}/agentes?q=${encodeURIComponent(agent.nombre)}`)}>
                         <TableCell className="font-medium">
                           {agent.nombre}
                           {agent.isInternal && (
@@ -1241,9 +1322,11 @@ export default function InmobDashboard() {
                         <TableCell className="text-right">
                           <span onClick={(e) => { e.stopPropagation(); navigate(`${NAV_PREFIX}/comisiones`); }} className="hover:text-primary transition-colors">{fmtShort(agent.ingreso)}</span>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <span onClick={(e) => { e.stopPropagation(); navigate(`${NAV_PREFIX}/comisiones`); }} className="hover:text-primary transition-colors">{fmtShort(agent.comision)}</span>
-                        </TableCell>
+                        {isSozu && (
+                          <TableCell className="text-right">
+                            <span onClick={(e) => { e.stopPropagation(); navigate(`${NAV_PREFIX}/comisiones`); }} className="hover:text-primary transition-colors">{fmtShort(agent.comision)}</span>
+                          </TableCell>
+                        )}
                         <TableCell className="text-center">
                           <Badge variant={convStatus === "high" ? "default" : convStatus === "low" ? "destructive" : "secondary"} className="text-[11px]">
                             {convStatus === "high" ? "↑" : convStatus === "low" ? "↓" : "–"} {agent.conversion}%
@@ -1253,7 +1336,7 @@ export default function InmobDashboard() {
                     );
                   })}
                   {agentPerformance.length === 0 && (
-                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">Sin datos de agentes</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isSozu ? 9 : 8} className="text-center text-muted-foreground py-8">Sin datos de agentes</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
