@@ -50,7 +50,7 @@ export default function InmobAgentProfile() {
   });
 
   // Properties for sold status
-  const propIds = useMemo(() => [...new Set(ofertas.map((o: any) => o.id_propiedad).filter(Boolean))], [ofertas]);
+  const propIds = useMemo(() => [...new Set(ofertas.map((o: any) => o.id_propiedad).filter(Boolean))] as number[], [ofertas]);
   const { data: propMap = new Map() } = useQuery({
     queryKey: ["agent-profile-props", propIds],
     queryFn: async () => {
