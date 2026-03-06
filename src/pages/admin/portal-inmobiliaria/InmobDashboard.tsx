@@ -947,7 +947,7 @@ export default function InmobDashboard() {
     return [...agentRows, ...internalRows]
       .filter(r => r.ofertas > 0 || r.ventas > 0)
       .sort((a, b) => b.ventas - a.ventas);
-  }, [agents, classifiedOfertas, dedupedAdvancedOfertas, cuentasMap, comisionByCuentaId, internalEmails, internalUserNames]);
+  }, [agents, classifiedOfertas, dedupedAdvancedOfertas, cuentasMap, comisionByCuentaId, internalEmails, internalUserNames, prospectosByAgent]);
 
   // Bar chart data
   const agentChartData = useMemo(() => {
