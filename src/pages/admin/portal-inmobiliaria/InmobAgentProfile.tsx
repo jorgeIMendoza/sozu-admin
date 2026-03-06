@@ -358,20 +358,15 @@ export default function InmobAgentProfile() {
 
   // Comisión Inmobiliaria: matching dashboard's comisionByCuentaId logic
   const comisionInmobiliaria = useMemo(() => {
-    // Get all cuentas for this agent's offers
-    const agentCuentaIds = new Set<number>();
-    ofertas.forEach((o: any) => {
-      const cuenta = cuentasMap.get(o.id);
-      if (cuenta?.id) agentCuentaIds.add(Number(cuenta.id));
+    const agentCuentaIdSet = new Set(agentCuentaIds);
+    const cuentaById = new Map<number, any>();
+    cuentasMap.forEach((c: any) => {
+      if (c?.id) cuentaById.set(Number(c.id), c);
     });
 
     if (isSozu) {
-      // Sozu: commission from porcentaje_comision_venta on the cuenta (with IVA if applicable)
       let total = 0;
-      // Build a cuentaId → cuenta lookup from cuentasMap values
-      const cuentaById = new Map<number, any>();
-      cuentasMap.forEach((c: any) => { if (c?.id) cuentaById.set(Number(c.id), c); });
-      agentCuentaIds.forEach((cuentaId) => {
+      agentCuentaIdSet.forEach((cuentaId) => {
         const cuenta = cuentaById.get(cuentaId);
         if (!cuenta) return;
         const base = (Number(cuenta.precio_final) || 0) * (Number(cuenta.porcentaje_comision_venta) || 0) / 100;
@@ -380,18 +375,19 @@ export default function InmobAgentProfile() {
       return total;
     }
 
-    // Non-Sozu: sum comisionistas.monto_comision filtered by inmob user emails
     let total = 0;
     comisiones.forEach((c: any) => {
       const cuentaId = Number(c.id_cuenta_cobranza);
-      if (!agentCuentaIds.has(cuentaId)) return;
+      if (!agentCuentaIdSet.has(cuentaId)) return;
       const email = (c.email_usuario || "").toLowerCase();
       if (!inmobUserEmailSet.has(email)) return;
-      const precioFinal = comisionCuentasMap.get(cuentaId) || 0;
+      const cuenta = cuentaById.get(cuentaId);
+      const precioFinal = Number(cuenta?.precio_final) || 0;
       total += precioFinal * (Number(c.porcentaje_comision) || 0) / 100;
     });
+
     return total;
-  }, [ofertas, cuentasMap, isSozu, comisiones, comisionCuentasMap, inmobUserEmailSet]);
+  }, [agentCuentaIds, cuentasMap, isSozu, comisiones, inmobUserEmailSet]);
 
   const conversionRate = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100).toFixed(1) : "0.0";
 
