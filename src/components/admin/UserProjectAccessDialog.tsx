@@ -252,27 +252,38 @@ function AgentProjectAccessEditable({ userEmail, userPersonaId, isAgenteInterno,
     enabled: isIndependent,
   });
 
+  useEffect(() => {
+    if (isSecondaryInmobiliaria && inmobData?.inmobProjects) {
+      const inheritedActiveIds = inmobData.inmobProjects
+        .filter((p: any) => p.activo)
+        .map((p: any) => p.id);
+      setSelectedProjects(inheritedActiveIds);
+    }
+  }, [isSecondaryInmobiliaria, inmobData, setSelectedProjects]);
+
   const handleToggle = async (projectId: number, enabled: boolean) => {
     setLoading(true);
+    const targetEmail = (isSecondaryInmobiliaria && inmobData?.sourceEmail) ? inmobData.sourceEmail : userEmail;
+
     try {
       if (enabled) {
         // Try to update existing record first (may have been set to activo=false)
         const { data: existing } = await supabase
           .from('proyectos_acceso')
           .select('proyecto_id')
-          .eq('usuario_id', userEmail)
+          .eq('usuario_id', targetEmail)
           .eq('proyecto_id', projectId) as any;
         if (existing && existing.length > 0) {
           const { error } = await supabase
             .from('proyectos_acceso')
             .update({ activo: true } as any)
-            .eq('usuario_id', userEmail)
+            .eq('usuario_id', targetEmail)
             .eq('proyecto_id', projectId) as any;
           if (error) throw error;
         } else {
           const { error } = await supabase
             .from('proyectos_acceso')
-            .insert({ usuario_id: userEmail, proyecto_id: projectId } as any) as any;
+            .insert({ usuario_id: targetEmail, proyecto_id: projectId } as any) as any;
           if (error && !error.message?.includes('duplicate')) throw error;
         }
         setSelectedProjects((prev: number[]) => [...prev, projectId]);
@@ -282,13 +293,13 @@ function AgentProjectAccessEditable({ userEmail, userPersonaId, isAgenteInterno,
         const { error } = await supabase
           .from('proyectos_acceso')
           .update({ activo: false } as any)
-          .eq('usuario_id', userEmail)
+          .eq('usuario_id', targetEmail)
           .eq('proyecto_id', projectId) as any;
         if (error) throw error;
         setSelectedProjects((prev: number[]) => prev.filter(id => id !== projectId));
         toast.success('Acceso al proyecto removido');
       }
-      queryClient.invalidateQueries({ queryKey: ['user-project-access-with-owner', userEmail] });
+      queryClient.invalidateQueries({ queryKey: ['user-project-access-with-owner', targetEmail] });
     } catch (err: any) {
       toast.error('Error: ' + (err.message || 'Intenta de nuevo'));
     } finally {
