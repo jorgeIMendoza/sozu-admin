@@ -514,22 +514,38 @@ export default function InmobDashboard() {
     return maxP;
   }, [comisiones]);
 
-  // Prospectos count
-  const { data: prospectosCount = 0 } = useQuery({
-    queryKey: ["inmob-dash-prospectos", agentPersonaIds],
+  // Prospectos per agent (date-filtered for dashboard)
+  const { data: prospectosByAgent = new Map<number, number>() } = useQuery({
+    queryKey: ["inmob-dash-prospectos-by-agent", agentPersonaIds, monthStart, monthEnd],
     queryFn: async () => {
-      if (!agentPersonaIds.length) return 0;
-      const { count } = await supabase
-        .from("entidades_relacionadas")
-        .select("id", { count: "exact", head: true })
-        .in("id_persona_duena_lead", agentPersonaIds)
-        .eq("id_tipo_entidad", 7)
-        .eq("activo", true) as any;
-      return count || 0;
+      if (!agentPersonaIds.length) return new Map<number, number>();
+      const all: any[] = [];
+      for (let i = 0; i < agentPersonaIds.length; i += 200) {
+        const batch = agentPersonaIds.slice(i, i + 200);
+        const { data } = await supabase
+          .from("entidades_relacionadas")
+          .select("id_persona_duena_lead")
+          .in("id_persona_duena_lead", batch)
+          .eq("id_tipo_entidad", 7)
+          .eq("activo", true)
+          .gte("fecha_creacion", monthStart)
+          .lte("fecha_creacion", monthEnd) as any;
+        if (data) all.push(...data);
+      }
+      const map = new Map<number, number>();
+      all.forEach((r: any) => {
+        map.set(r.id_persona_duena_lead, (map.get(r.id_persona_duena_lead) || 0) + 1);
+      });
+      return map;
     },
     enabled: agentPersonaIds.length > 0,
     staleTime: 3 * 60_000,
   });
+  const prospectosCount = useMemo(() => {
+    let total = 0;
+    prospectosByAgent.forEach(v => total += v);
+    return total;
+  }, [prospectosByAgent]);
 
   // Previous month KPIs for trend comparison
   const { data: prevKpi } = useQuery({
@@ -872,6 +888,10 @@ export default function InmobDashboard() {
 
   // Agent performance — includes both agents AND internal non-agent users
   const agentPerformance = useMemo(() => {
+    // Build a map from email → personaId for agents
+    const emailToPersonaId = new Map<string, number>();
+    agents.forEach(a => emailToPersonaId.set(a.email.toLowerCase(), a.personaId));
+
     const buildPerf = (email: string, nombre: string, isInternal: boolean) => {
       const emailLower = (email || "").toLowerCase();
       const userOfertas = classifiedOfertas.filter((o: any) => (o.email_creador || "").toLowerCase() === emailLower);
@@ -894,11 +914,16 @@ export default function InmobDashboard() {
 
       const ingreso = userCierres.reduce((s: number, o: any) => { const cuenta = cuentasMap.get(o.id); return s + (Number(cuenta?.precio_final) || 0); }, 0);
       const conv = userOfertas.length > 0 ? ((userCierres.length / userOfertas.length) * 100) : 0;
+
+      // Prospectos: from per-agent map (date-filtered)
+      const agentPersonaId = emailToPersonaId.get(emailLower);
+      const prospectos = agentPersonaId ? (prospectosByAgent.get(agentPersonaId) || 0) : 0;
+
       return {
         email,
         nombre,
         isInternal,
-        prospectos: 0,
+        prospectos,
         ofertas: userOfertas.length,
         apartados: userApartadosCount,
         ventas: userCierres.length,
@@ -922,7 +947,7 @@ export default function InmobDashboard() {
     return [...agentRows, ...internalRows]
       .filter(r => r.ofertas > 0 || r.ventas > 0)
       .sort((a, b) => b.ventas - a.ventas);
-  }, [agents, classifiedOfertas, dedupedAdvancedOfertas, cuentasMap, comisionByCuentaId, internalEmails, internalUserNames]);
+  }, [agents, classifiedOfertas, dedupedAdvancedOfertas, cuentasMap, comisionByCuentaId, internalEmails, internalUserNames, prospectosByAgent]);
 
   // Bar chart data
   const agentChartData = useMemo(() => {
