@@ -156,11 +156,12 @@ function AgentReadOnlyAccess({ userPersonaId, isSecondaryInmobiliaria, isAgenteI
     </div>
   );
 }
-// Editable project access for agents (Agente Inmobiliario / Agente Interno)
-function AgentProjectAccessEditable({ userEmail, userPersonaId, isAgenteInterno, proyectos, selectedProjects, setSelectedProjects, onClose, queryClient }: {
+// Editable project access for agents (Agente Inmobiliario / Agente Interno) and secondary Inmobiliaria users
+function AgentProjectAccessEditable({ userEmail, userPersonaId, isAgenteInterno, isSecondaryInmobiliaria, proyectos, selectedProjects, setSelectedProjects, onClose, queryClient }: {
   userEmail: string;
   userPersonaId?: number;
   isAgenteInterno: boolean;
+  isSecondaryInmobiliaria?: boolean;
   proyectos?: Proyecto[];
   selectedProjects: number[];
   setSelectedProjects: React.Dispatch<React.SetStateAction<number[]>>;
@@ -171,19 +172,28 @@ function AgentProjectAccessEditable({ userEmail, userPersonaId, isAgenteInterno,
 
   // Get the inmobiliaria's persona id for this agent
   const { data: inmobData, isLoading: inmobLoading } = useQuery({
-    queryKey: ['agent-inmob-projects-for-access', userPersonaId],
+    queryKey: ['agent-inmob-projects-for-access', userPersonaId, isSecondaryInmobiliaria],
     queryFn: async () => {
       if (!userPersonaId) return null;
-      const { data: rel } = await supabase
-        .from('entidades_relacionadas')
-        .select('id_persona_duena_lead')
-        .eq('id_persona', userPersonaId)
-        .eq('id_tipo_entidad', 19)
-        .eq('activo', true)
-        .maybeSingle() as any;
-      
-      if (!rel?.id_persona_duena_lead) return null;
-      const inmobPersonaId = rel.id_persona_duena_lead;
+
+      let inmobPersonaId: number;
+
+      if (isSecondaryInmobiliaria) {
+        // For secondary inmobiliaria users, their persona IS the inmobiliaria
+        inmobPersonaId = userPersonaId;
+      } else {
+        // For agents, look up the parent inmobiliaria
+        const { data: rel } = await supabase
+          .from('entidades_relacionadas')
+          .select('id_persona_duena_lead')
+          .eq('id_persona', userPersonaId)
+          .eq('id_tipo_entidad', 19)
+          .eq('activo', true)
+          .maybeSingle() as any;
+        
+        if (!rel?.id_persona_duena_lead) return null;
+        inmobPersonaId = rel.id_persona_duena_lead;
+      }
       
       const { data: persona } = await supabase
         .from('personas')
@@ -191,10 +201,13 @@ function AgentProjectAccessEditable({ userEmail, userPersonaId, isAgenteInterno,
         .eq('id', inmobPersonaId)
         .maybeSingle() as any;
 
+      // Find the PRIMARY inmobiliaria user (usuario_principal = true or first user with this persona)
       const { data: inmobUser } = await supabase
         .from('usuarios')
         .select('email')
         .eq('id_persona', inmobPersonaId)
+        .eq('rol_id', 4)
+        .limit(1)
         .maybeSingle() as any;
 
       if (!inmobUser?.email) return null;
@@ -239,16 +252,32 @@ function AgentProjectAccessEditable({ userEmail, userPersonaId, isAgenteInterno,
     setLoading(true);
     try {
       if (enabled) {
-        const { error } = await supabase
+        // Try to update existing record first (may have been set to activo=false)
+        const { data: existing } = await supabase
           .from('proyectos_acceso')
-          .insert({ usuario_id: userEmail, proyecto_id: projectId }) as any;
-        if (error && !error.message?.includes('duplicate')) throw error;
+          .select('proyecto_id')
+          .eq('usuario_id', userEmail)
+          .eq('proyecto_id', projectId) as any;
+        if (existing && existing.length > 0) {
+          const { error } = await supabase
+            .from('proyectos_acceso')
+            .update({ activo: true } as any)
+            .eq('usuario_id', userEmail)
+            .eq('proyecto_id', projectId) as any;
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('proyectos_acceso')
+            .insert({ usuario_id: userEmail, proyecto_id: projectId } as any) as any;
+          if (error && !error.message?.includes('duplicate')) throw error;
+        }
         setSelectedProjects((prev: number[]) => [...prev, projectId]);
         toast.success('Acceso al proyecto habilitado');
       } else {
+        // Set activo to false instead of deleting
         const { error } = await supabase
           .from('proyectos_acceso')
-          .delete()
+          .update({ activo: false } as any)
           .eq('usuario_id', userEmail)
           .eq('proyecto_id', projectId) as any;
         if (error) throw error;
@@ -328,7 +357,9 @@ function AgentProjectAccessEditable({ userEmail, userPersonaId, isAgenteInterno,
         <AlertDescription className="text-blue-800 dark:text-blue-200">
           <strong>El acceso a proyectos se hereda del usuario principal</strong>
           <p className="mt-1 text-sm">
-            {`Los ${isAgenteInterno ? 'Agentes Internos' : 'Agentes Inmobiliarios'} heredan automáticamente el acceso a proyectos de su Inmobiliaria padre${inmobData ? ` (${inmobData.inmobName})` : ''}. Puedes habilitar o deshabilitar proyectos individualmente.`}
+            {isSecondaryInmobiliaria
+              ? `Este usuario secundario de Inmobiliaria hereda los proyectos del usuario principal${inmobData ? ` (${inmobData.inmobName})` : ''}. Puedes habilitar o deshabilitar proyectos individualmente.`
+              : `Los ${isAgenteInterno ? 'Agentes Internos' : 'Agentes Inmobiliarios'} heredan automáticamente el acceso a proyectos de su Inmobiliaria padre${inmobData ? ` (${inmobData.inmobName})` : ''}. Puedes habilitar o deshabilitar proyectos individualmente.`}
           </p>
         </AlertDescription>
       </Alert>
@@ -844,21 +875,12 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
               </Button>
             </div>
           </div>
-        ) : isSecondaryInmobiliaria ? (
-          <AgentReadOnlyAccess
-            userPersonaId={userPersonaId}
-            isSecondaryInmobiliaria={isSecondaryInmobiliaria}
-            isAgenteInterno={isAgenteInterno}
-            userRole={userRole}
-            proyectos={proyectos}
-            selectedProjects={selectedProjects}
-            onClose={() => setOpen(false)}
-          />
-        ) : isAgente ? (
+        ) : isSecondaryInmobiliaria || isAgente ? (
           <AgentProjectAccessEditable
             userEmail={userEmail}
             userPersonaId={userPersonaId}
             isAgenteInterno={isAgenteInterno}
+            isSecondaryInmobiliaria={isSecondaryInmobiliaria}
             proyectos={proyectos}
             selectedProjects={selectedProjects}
             setSelectedProjects={setSelectedProjects}
