@@ -493,7 +493,7 @@ export default function InmobAgentProfile() {
             { icon: Home, label: "APARTADOS", value: String(apartadoCount) },
             { icon: ShoppingCart, label: "VENTAS CERRADAS", value: String(ventasCerradas) },
             { icon: DollarSign, label: "INGRESO GENERADO", value: fmtShort(ingreso) },
-            { icon: TrendingUp, label: "COMISIÓN ACUMULADA", value: fmtShort(comisionAcumulada) },
+            { icon: TrendingUp, label: "COMISIÓN INMOBILIARIA", value: fmtShort(comisionInmobiliaria) },
           ].map(kpi => (
             <div key={kpi.label} className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-2">
