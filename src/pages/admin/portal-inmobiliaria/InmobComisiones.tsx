@@ -368,11 +368,6 @@ async function fetchSozuComisiones(agentEmails: string[], dateRanges: { start: s
     });
   }
 
-  // Resolve agent names
-  rows.forEach(r => {
-    // Will be overwritten below
-  });
-
   // Get agent names from usuarios
   const emailsToResolve = [...new Set(rows.map(r => r.agente))];
   if (emailsToResolve.length > 0) {
