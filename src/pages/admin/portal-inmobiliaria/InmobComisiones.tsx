@@ -446,6 +446,13 @@ export default function InmobComisiones() {
           )}
         </>
       )}
+
+      <PdfViewerDialog
+        open={!!pdfUrl}
+        onOpenChange={open => { if (!open) setPdfUrl(null); }}
+        url={pdfUrl || ""}
+        title="Factura de comisión"
+      />
     </div>
   );
 }
@@ -521,7 +528,7 @@ async function fetchSozuComisiones(agentEmails: string[], dateRanges: { start: s
 
   const { data: cuentas } = await (supabase as any)
     .from("cuentas_cobranza")
-    .select("id, id_oferta, precio_final, porcentaje_comision_venta, iva_incluido, es_pagada_comision_venta, fecha_pago_comision, activo")
+    .select("id, id_oferta, precio_final, porcentaje_comision_venta, iva_incluido, es_pagada_comision_venta, fecha_pago_comision, activo, url_factura_comision, es_draft_factura_comision")
     .in("id_oferta", ofertaIds)
     .is("id_cuenta_cobranza_padre", null);
 
