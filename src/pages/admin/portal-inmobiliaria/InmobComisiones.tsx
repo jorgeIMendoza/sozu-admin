@@ -801,6 +801,7 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
       ivaIncluido: false,
       estatus,
       fechaPago,
+      facturaUrl: facturaUrlMap.get(cuentaId) || null,
     });
   }
 
