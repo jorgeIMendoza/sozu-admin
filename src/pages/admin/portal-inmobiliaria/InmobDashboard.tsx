@@ -652,8 +652,8 @@ export default function InmobDashboard() {
 
   // Classify all offers
   const classifiedOfertas = useMemo(() => {
-    return ofertas.map((o: any) => ({ ...o, stage: classifyDashOffer(o) }));
-  }, [ofertas, classifyDashOffer]);
+    return filteredOfertas.map((o: any) => ({ ...o, stage: classifyDashOffer(o) }));
+  }, [filteredOfertas, classifyDashOffer]);
 
   // ───── Dedup cierre (same logic as pipeline) ─────
   // Pipeline deduplicates cierre by property/product key and requires cuenta_cobranza_id
@@ -747,7 +747,7 @@ export default function InmobDashboard() {
   }, [comisiones, advancedCuentaIds, getComisionMonto]);
 
   // Secondary KPIs — current month
-  const conversionGlobal = ofertas.length > 0 ? ((ventasCerradas / ofertas.length) * 100) : 0;
+  const conversionGlobal = filteredOfertas.length > 0 ? ((ventasCerradas / filteredOfertas.length) * 100) : 0;
   const { ticketPromedio, ticketPropiedades, ticketProductos } = useMemo(() => {
     const cierres = dedupedAdvancedOfertas.filter((o: any) => o.stage === "cierre");
     const props = cierres.filter((o: any) => !o.id_producto);
@@ -831,18 +831,18 @@ export default function InmobDashboard() {
   }, [classifiedOfertas, dedupedAdvancedOfertas]);
 
   const funnelData = useMemo(() => [
-    { stage: "Ofertas", count: ofertas.length },
+    { stage: "Ofertas", count: filteredOfertas.length },
     { stage: "Aprobadas", count: aprobadasCount },
     { stage: "Apartadas", count: apartadasFunnel },
     { stage: "Firma", count: firmaCount },
     { stage: "Cerradas", count: ventasCerradas },
-  ], [ofertas, aprobadasCount, apartadasFunnel, firmaCount, ventasCerradas]);
+  ], [filteredOfertas, aprobadasCount, apartadasFunnel, firmaCount, ventasCerradas]);
 
   // Alerts — use O-/OP- nomenclature
   const alerts = useMemo(() => {
     const nowMs = Date.now();
     const result: Array<{ id: string; type: "warning" | "danger" | "info"; text: string; to: string }> = [];
-    ofertas.forEach((o: any) => {
+    filteredOfertas.forEach((o: any) => {
       const p = propMap.get(o.id_propiedad);
       if (!p) return;
       const days = Math.floor((nowMs - new Date(o.fecha_generacion).getTime()) / (24 * 60 * 60 * 1000));
@@ -856,7 +856,7 @@ export default function InmobDashboard() {
       }
     });
     return result.slice(0, 5);
-  }, [ofertas, propMap]);
+  }, [filteredOfertas, propMap]);
 
   // Resolve names and roles for non-agent internal users who created offers
   const { data: internalUserData = { names: new Map<string, string>(), agentRoleEmails: new Set<string>() } } = useQuery({
@@ -1161,7 +1161,7 @@ export default function InmobDashboard() {
 
   // Activity timeline — use O-/OP- nomenclature
   const recentActivity = useMemo(() => {
-    return ofertas
+    return filteredOfertas
       .filter((o: any) => o.fecha_generacion)
       .sort((a: any, b: any) => new Date(b.fecha_generacion).getTime() - new Date(a.fecha_generacion).getTime())
       .slice(0, 5)
@@ -1177,7 +1177,7 @@ export default function InmobDashboard() {
           to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`,
         };
       });
-  }, [ofertas]);
+  }, [filteredOfertas]);
 
   const avgConversion = conversionGlobal;
 
