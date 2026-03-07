@@ -309,7 +309,7 @@ async function fetchSozuComisiones(agentEmails: string[], dateRanges: { start: s
   });
 
   // Build lookup maps
-  const ofertaMap = new Map(ofertas.map((o: any) => [o.id, o]));
+  const ofertaMap = new Map<number, any>(ofertas.map((o: any) => [o.id, o]));
   const propMap = new Map((propiedades || []).map((p: any) => [p.id, p]));
   const emMap = new Map((ems || []).map((e: any) => [e.id, e]));
   const edifMap = new Map((edificios || []).map((e: any) => [e.id, e]));
