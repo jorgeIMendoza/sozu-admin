@@ -1,13 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/admin/StatCard";
 import { NoProjectAccess } from "@/components/admin/NoProjectAccess";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MonthMultiSelector, getCurrentMonthKey, getMonthFilterLabel, buildDateRangesFromMonths } from "@/components/ui/month-multi-selector";
-import { Building2, Home, DollarSign, MapPin, CalendarDays } from "lucide-react";
+import { Building2, Home, DollarSign, MapPin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
@@ -29,9 +26,7 @@ const Dashboard = () => {
   const { profile } = useAuth();
   const isInmobiliariaRole = profile?.rol_id === 4;
 
-  // Month filter – defaults to current month
-  const [selectedMonths, setSelectedMonths] = useState<string[]>([getCurrentMonthKey()]);
-  const monthFilterLabel = useMemo(() => getMonthFilterLabel(selectedMonths), [selectedMonths]);
+  
   
   // Project access control
   const { 
