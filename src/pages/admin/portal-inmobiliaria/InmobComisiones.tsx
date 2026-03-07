@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
@@ -20,8 +20,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DollarSign, Search, CalendarDays, CheckCircle2, Clock, Eye, CalendarCheck, Users,
+  DollarSign, Search, CalendarDays, CheckCircle2, Clock, Eye, CalendarCheck, Users, FileText, Upload, Loader2,
 } from "lucide-react";
+import { PdfViewerDialog } from "@/components/admin/PdfViewerDialog";
+import { toast } from "sonner";
 
 /* ───── helpers ───── */
 const fmt = (n: number) =>
