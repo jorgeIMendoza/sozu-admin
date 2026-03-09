@@ -179,6 +179,11 @@ export function OwnerHistoryDialog({
         const tieneMantenimiento = !!cuentasConMantenimiento[cuenta.id];
         const fechaEntrega = cuentasConMantenimiento[cuenta.id] || null;
         const tipoCancelacion = (cuenta as any).tipos_cancelacion as { nombre: string } | null;
+        const montoPenalizacion = Number((cuenta as any).monto_cobro_cancelacion) || 0;
+        const urlEvidenciaCancelacion = (cuenta as any).url_evidencia_cancelacion || null;
+        const urlEvidenciaReembolso = (cuenta as any).url_evidencia_reembolso || null;
+        const isCancelled = cuenta.id_tipo_cancelacion !== null;
+        const montoReembolso = isCancelled ? Math.max(0, totalPagado - montoPenalizacion) : 0;
 
         return {
           cuenta_id: cuenta.id,
@@ -190,6 +195,10 @@ export function OwnerHistoryDialog({
           tiene_cuenta_mantenimiento: tieneMantenimiento,
           id_tipo_cancelacion: cuenta.id_tipo_cancelacion ?? null,
           nombre_tipo_cancelacion: tipoCancelacion?.nombre || null,
+          monto_penalizacion: montoPenalizacion,
+          monto_reembolso: montoReembolso,
+          url_evidencia_cancelacion: urlEvidenciaCancelacion,
+          url_evidencia_reembolso: urlEvidenciaReembolso,
           compradores: compradoresPorCuenta[cuenta.id] || []
         };
       });
