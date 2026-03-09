@@ -387,7 +387,7 @@ export function OwnerHistoryDialog({
                             {/* Status badge */}
                             {isCancelled ? (
                               <Badge className="bg-red-600 hover:bg-red-700 text-white">
-                                Cancelada
+                                {entry.nombre_tipo_cancelacion || 'Cancelada'}
                               </Badge>
                             ) : isDelivered ? (
                               <Badge className="bg-green-600 hover:bg-green-700 text-white">
