@@ -57,20 +57,12 @@ export function OwnerHistoryDialog({
   const { data: historyData, isLoading } = useQuery({
     queryKey: ['owner-history', propertyId, esReventa],
     queryFn: async () => {
-      // 1. First get ofertas for this property (not products)
-      // For Re-venta properties, we need to include inactive ofertas to show history
-      let ofertasQuery = supabase
+      // 1. Get ALL ofertas for this property (including inactive for history)
+      const { data: ofertasData, error: ofertasError } = await supabase
         .from('ofertas')
         .select('id')
         .eq('id_propiedad', propertyId)
         .is('id_producto', null);
-      
-      // Only filter by activo=true if NOT in reventa
-      if (!esReventa) {
-        ofertasQuery = ofertasQuery.eq('activo', true);
-      }
-      
-      const { data: ofertasData, error: ofertasError } = await ofertasQuery;
 
       if (ofertasError) throw ofertasError;
       if (!ofertasData || ofertasData.length === 0) return { entries: [], esFideicomiso: false };
