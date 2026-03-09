@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, User, CreditCard, BadgeCheck, Clock, History, CalendarCheck, XCircle } from 'lucide-react';
+import { Building2, User, CreditCard, BadgeCheck, Clock, History, CalendarCheck, XCircle, FileText, AlertTriangle, ArrowDownToLine } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -30,6 +30,10 @@ interface OwnerHistoryEntry {
   tiene_cuenta_mantenimiento: boolean;
   id_tipo_cancelacion: number | null;
   nombre_tipo_cancelacion: string | null;
+  monto_penalizacion: number;
+  monto_reembolso: number;
+  url_evidencia_cancelacion: string | null;
+  url_evidencia_reembolso: string | null;
   compradores: {
     id_persona: number;
     nombre_legal: string;
@@ -74,7 +78,7 @@ export function OwnerHistoryDialog({
       // Include: active accounts + cancelled by Rescisión(3) or Reventa(7)
       const { data: cuentasData, error: cuentasError } = await supabase
         .from('cuentas_cobranza')
-        .select('id, precio_final, fecha_compra, fecha_creacion, id_oferta, id_tipo_cancelacion, tipos_cancelacion:id_tipo_cancelacion(nombre)')
+        .select('id, precio_final, fecha_compra, fecha_creacion, id_oferta, id_tipo_cancelacion, tipos_cancelacion:id_tipo_cancelacion(nombre), monto_cobro_cancelacion, url_evidencia_cancelacion, url_evidencia_reembolso')
         .in('id_oferta', ofertaIds)
         .is('id_cuenta_cobranza_padre', null)
         .or('id_tipo_cancelacion.is.null,id_tipo_cancelacion.in.(3,7)')
@@ -175,6 +179,11 @@ export function OwnerHistoryDialog({
         const tieneMantenimiento = !!cuentasConMantenimiento[cuenta.id];
         const fechaEntrega = cuentasConMantenimiento[cuenta.id] || null;
         const tipoCancelacion = (cuenta as any).tipos_cancelacion as { nombre: string } | null;
+        const montoPenalizacion = Number((cuenta as any).monto_cobro_cancelacion) || 0;
+        const urlEvidenciaCancelacion = (cuenta as any).url_evidencia_cancelacion || null;
+        const urlEvidenciaReembolso = (cuenta as any).url_evidencia_reembolso || null;
+        const isCancelled = cuenta.id_tipo_cancelacion !== null;
+        const montoReembolso = isCancelled ? Math.max(0, totalPagado - montoPenalizacion) : 0;
 
         return {
           cuenta_id: cuenta.id,
@@ -186,6 +195,10 @@ export function OwnerHistoryDialog({
           tiene_cuenta_mantenimiento: tieneMantenimiento,
           id_tipo_cancelacion: cuenta.id_tipo_cancelacion ?? null,
           nombre_tipo_cancelacion: tipoCancelacion?.nombre || null,
+          monto_penalizacion: montoPenalizacion,
+          monto_reembolso: montoReembolso,
+          url_evidencia_cancelacion: urlEvidenciaCancelacion,
+          url_evidencia_reembolso: urlEvidenciaReembolso,
           compradores: compradoresPorCuenta[cuenta.id] || []
         };
       });
@@ -204,7 +217,9 @@ export function OwnerHistoryDialog({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-MX', {
+    // For date-only strings (YYYY-MM-DD), append T12:00:00 to avoid timezone shift
+    const normalized = dateString.length === 10 ? `${dateString}T12:00:00` : dateString;
+    return new Date(normalized).toLocaleDateString('es-MX', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
@@ -454,39 +469,86 @@ export function OwnerHistoryDialog({
                             </div>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-2 gap-3 text-sm border-t pt-3">
-                            <div className="flex items-center gap-2">
-                              <CreditCard className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-muted-foreground">Cuenta:</span>
-                              <span className="font-mono font-medium text-xs">
-                                {formatCuentaCobranzaId(entry.cuenta_id)}
-                              </span>
+                          <div className="text-sm border-t pt-3 space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="flex items-center gap-2">
+                                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">Cuenta:</span>
+                                <span className="font-mono font-medium text-xs">
+                                  {formatCuentaCobranzaId(entry.cuenta_id)}
+                                </span>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <CalendarCheck className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">
+                                  {isDelivered ? 'Entrega:' : 'Compra:'}
+                                </span>
+                                <span className="text-xs">
+                                  {formatDate(isDelivered && entry.fecha_entrega ? entry.fecha_entrega : entry.fecha_compra)}
+                                </span>
+                              </div>
+                              
+                              <div>
+                                <span className="text-muted-foreground">Precio:</span>
+                                <span className="ml-2 font-medium">{formatCurrency(entry.precio_final)}</span>
+                              </div>
+                              
+                              <div>
+                                <span className="text-muted-foreground">Pagado:</span>
+                                <span className={cn(
+                                  "ml-2 font-medium",
+                                  entry.completamente_pagada && !isCancelled ? "text-green-600 dark:text-green-400" : ""
+                                )}>
+                                  {formatCurrency(entry.total_pagado)}
+                                </span>
+                              </div>
                             </div>
-                            
-                            <div className="flex items-center gap-2">
-                              <CalendarCheck className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-muted-foreground">
-                                {isDelivered ? 'Entrega:' : 'Compra:'}
-                              </span>
-                              <span className="text-xs">
-                                {formatDate(isDelivered && entry.fecha_entrega ? entry.fecha_entrega : entry.fecha_compra)}
-                              </span>
-                            </div>
-                            
-                            <div>
-                              <span className="text-muted-foreground">Precio:</span>
-                              <span className="ml-2 font-medium">{formatCurrency(entry.precio_final)}</span>
-                            </div>
-                            
-                            <div>
-                              <span className="text-muted-foreground">Pagado:</span>
-                              <span className={cn(
-                                "ml-2 font-medium",
-                                entry.completamente_pagada ? "text-green-600 dark:text-green-400" : ""
-                              )}>
-                                {formatCurrency(entry.total_pagado)}
-                              </span>
-                            </div>
+
+                            {/* Cancelled account breakdown: Penalización, Reembolso, Evidence */}
+                            {isCancelled && entry.total_pagado > 0 && (
+                              <div className="border-t border-red-200 dark:border-red-800 pt-3 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                                  <span className="text-muted-foreground">Penalización:</span>
+                                  <span className="font-medium text-red-600 dark:text-red-400">
+                                    {entry.monto_penalizacion > 0 ? formatCurrency(entry.monto_penalizacion) : 'Sin registro'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-muted-foreground">Reembolso:</span>
+                                  <span className="font-medium">
+                                    {formatCurrency(entry.monto_reembolso)}
+                                  </span>
+                                </div>
+                                {/* Evidence links */}
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {entry.url_evidencia_cancelacion && (
+                                    <a
+                                      href={entry.url_evidencia_cancelacion}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                    >
+                                      <FileText className="h-3 w-3" />
+                                      Convenio de cancelación
+                                    </a>
+                                  )}
+                                  {entry.url_evidencia_reembolso && (
+                                    <a
+                                      href={entry.url_evidencia_reembolso}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                    >
+                                      <FileText className="h-3 w-3" />
+                                      Evidencia de reembolso
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
