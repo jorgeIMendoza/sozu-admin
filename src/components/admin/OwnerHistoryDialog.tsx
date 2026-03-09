@@ -450,7 +450,7 @@ export function OwnerHistoryDialog({
                             <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                               <CalendarCheck className="h-4 w-4" />
                               <span>Fecha de asignación:</span>
-                              <span className="text-foreground">{formatDate(entry.fecha_creacion)}</span>
+                              <span className="text-foreground">{formatDate(entry.fecha_compra)}</span>
                             </div>
                           </div>
                         ) : (
