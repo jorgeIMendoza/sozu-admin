@@ -6,7 +6,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const MIFIEL_API_URL = (Deno.env.get("MIFIEL_API_URL") || "https://app-sandbox.mifiel.com/api/v1").replace(/\/+$/, "").replace(/\/documents$/i, "");
+function getMifielCredentials(environment?: string) {
+  const suffix = environment === "production" ? "_PRD" : "_DEV";
+  return {
+    apiUrl: (Deno.env.get(`MIFIEL_API_URL${suffix}`) || Deno.env.get("MIFIEL_API_URL") || "https://app-sandbox.mifiel.com/api/v1").replace(/\/+$/, "").replace(/\/documents$/i, ""),
+    apiId: Deno.env.get(`MIFIEL_API_ID${suffix}`) || Deno.env.get("MIFIEL_API_ID") || "",
+    apiSecret: Deno.env.get(`MIFIEL_API_SECRET${suffix}`) || Deno.env.get("MIFIEL_API_SECRET") || "",
+  };
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -14,26 +21,25 @@ serve(async (req) => {
   }
 
   try {
-    const MIFIEL_API_ID = Deno.env.get("MIFIEL_API_ID");
-    const MIFIEL_API_SECRET = Deno.env.get("MIFIEL_API_SECRET");
-    if (!MIFIEL_API_ID || !MIFIEL_API_SECRET) {
-      throw new Error("Mifiel credentials not configured");
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const supabaseAdmin = supabaseUrl && supabaseServiceKey
       ? createClient(supabaseUrl, supabaseServiceKey)
       : null;
 
-    const { document_id } = await req.json();
+    const { document_id, environment } = await req.json();
     if (!document_id) {
       throw new Error("document_id is required");
     }
 
-    const authHeader = "Basic " + btoa(`${MIFIEL_API_ID}:${MIFIEL_API_SECRET}`);
+    const { apiUrl, apiId, apiSecret } = getMifielCredentials(environment);
+    if (!apiId || !apiSecret) {
+      throw new Error("Mifiel credentials not configured");
+    }
 
-    const response = await fetch(`${MIFIEL_API_URL}/documents/${document_id}`, {
+    const authHeader = "Basic " + btoa(`${apiId}:${apiSecret}`);
+
+    const response = await fetch(`${apiUrl}/documents/${document_id}`, {
       headers: { Authorization: authHeader },
     });
 
@@ -62,15 +68,15 @@ serve(async (req) => {
     let pdfStorageUrl: string | null = null;
 
     try {
-      const mifielApiBaseUrl = MIFIEL_API_URL.replace(/\/api\/v1$/i, "");
+      const mifielApiBaseUrl = apiUrl.replace(/\/api\/v1$/i, "");
       const signedFilePath = typeof data?.file_signed === "string" ? data.file_signed : null;
       const signedFileUrl = signedFilePath
         ? signedFilePath.startsWith("http")
           ? signedFilePath
           : signedFilePath.startsWith("/api/")
             ? `${mifielApiBaseUrl}${signedFilePath}`
-            : `${MIFIEL_API_URL}${signedFilePath.startsWith("/") ? "" : "/"}${signedFilePath}`
-        : `${MIFIEL_API_URL}/documents/${document_id}/file_signed`;
+            : `${apiUrl}${signedFilePath.startsWith("/") ? "" : "/"}${signedFilePath}`
+        : `${apiUrl}/documents/${document_id}/file_signed`;
 
       const pdfResponse = await fetch(signedFileUrl, {
         headers: { Authorization: authHeader },

@@ -30,6 +30,7 @@ import {
   FileText, Save, Loader2, CheckCircle2, Clock, XCircle, Send, Plus, Trash2,
   Users, Info, PenTool, Fingerprint, RefreshCw, Pencil, Check,
 } from "lucide-react";
+import { ENVIRONMENT } from "@/lib/config";
 
 const PLACEHOLDERS = [
   { key: "nombre_agente", label: "Nombre completo del agente", editable: true },
@@ -208,7 +209,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
       for (const firma of toCheck) {
         try {
           const { data, error } = await supabase.functions.invoke("mifiel-consultar-documento", {
-            body: { document_id: firma.mifiel_document_id },
+            body: { document_id: firma.mifiel_document_id, environment: ENVIRONMENT },
           });
           const notFound = error || !data?.success || data?.upstream_status === 404;
           const mifielStatus = data?.document?.status;
@@ -709,7 +710,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                   // 1. Delete from Mifiel if there's a mifiel_document_id
                   if (firmaToDelete?.mifiel_document_id) {
                     const { data: mifielResult, error: mifielError } = await supabase.functions.invoke("mifiel-cancelar-documento", {
-                      body: { document_id: firmaToDelete.mifiel_document_id },
+                      body: { document_id: firmaToDelete.mifiel_document_id, environment: ENVIRONMENT },
                     });
                     if (mifielError || !mifielResult?.success) {
                       console.error("Mifiel cancel error:", mifielError || mifielResult);

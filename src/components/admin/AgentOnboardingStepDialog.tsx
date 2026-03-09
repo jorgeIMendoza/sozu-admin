@@ -25,6 +25,7 @@ import { es } from "date-fns/locale";
 import type { OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { cn } from "@/lib/utils";
+import { ENVIRONMENT } from "@/lib/config";
 import {
   useStabilityDetection,
   CaptureFlash,
@@ -401,6 +402,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           agente_persona_id: personaId,
           carta_acuerdo_id: "ce94b2d7-dcc8-4f91-a8d8-882264556c3e",
           firma_autografa_agente: firmaAutografa,
+          environment: ENVIRONMENT,
         },
       });
       if (error) throw error;
@@ -429,7 +431,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     setSyncingFirma(true);
     try {
       const { data: mifielData, error: mifielError } = await supabase.functions.invoke('mifiel-consultar-documento', {
-        body: { document_id: firmaExistente.mifiel_document_id },
+        body: { document_id: firmaExistente.mifiel_document_id, environment: ENVIRONMENT },
       });
 
       const upstreamStatus = Number(mifielData?.upstream_status || 0);

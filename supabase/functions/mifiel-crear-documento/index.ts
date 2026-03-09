@@ -7,7 +7,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MIFIEL_API_URL = (Deno.env.get("MIFIEL_API_URL") || "https://app-sandbox.mifiel.com/api/v1").replace(/\/+$/, "").replace(/\/documents$/i, "");
+function getMifielCredentials(environment?: string) {
+  const suffix = environment === "production" ? "_PRD" : "_DEV";
+  return {
+    apiUrl: (Deno.env.get(`MIFIEL_API_URL${suffix}`) || Deno.env.get("MIFIEL_API_URL") || "https://app-sandbox.mifiel.com/api/v1").replace(/\/+$/, "").replace(/\/documents$/i, ""),
+    apiId: Deno.env.get(`MIFIEL_API_ID${suffix}`) || Deno.env.get("MIFIEL_API_ID") || "",
+    apiSecret: Deno.env.get(`MIFIEL_API_SECRET${suffix}`) || Deno.env.get("MIFIEL_API_SECRET") || "",
+  };
+}
 
 // ── Rich HTML-to-PDF renderer ──
 
@@ -424,17 +431,11 @@ serve(async (req) => {
   }
 
   try {
-    const MIFIEL_API_ID = Deno.env.get("MIFIEL_API_ID");
-    const MIFIEL_API_SECRET = Deno.env.get("MIFIEL_API_SECRET");
-    if (!MIFIEL_API_ID || !MIFIEL_API_SECRET) {
-      throw new Error("Mifiel credentials not configured");
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { agente_email, agente_nombre, agente_persona_id, carta_acuerdo_id, firma_autografa_agente } = await req.json();
+    const { agente_email, agente_nombre, agente_persona_id, carta_acuerdo_id, firma_autografa_agente, environment } = await req.json();
     if (!agente_email || !agente_nombre) {
       throw new Error("agente_email y agente_nombre son requeridos");
     }
@@ -541,6 +542,10 @@ serve(async (req) => {
     ];
 
     // 5. Create document in Mifiel
+    const { apiUrl: MIFIEL_API_URL, apiId: MIFIEL_API_ID, apiSecret: MIFIEL_API_SECRET } = getMifielCredentials(environment);
+    if (!MIFIEL_API_ID || !MIFIEL_API_SECRET) {
+      throw new Error("Mifiel credentials not configured");
+    }
     const authHeader = "Basic " + btoa(`${MIFIEL_API_ID}:${MIFIEL_API_SECRET}`);
 
     const formData = new FormData();

@@ -28,7 +28,7 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
 
       const widget = document.createElement("mifiel-widget") as any;
       widget.setAttribute("id", widgetId);
-      const env = import.meta.env.VITE_MIFIEL_ENVIRONMENT || "sandbox";
+    const env = import.meta.env.VITE_ENVIRONMENT || "development";
       widget.setAttribute("environment", env === "production" ? "production" : "sandbox");
       containerRef.current.appendChild(widget);
 
@@ -53,7 +53,7 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
       });
     };
 
-    const mifielEnv = import.meta.env.VITE_MIFIEL_ENVIRONMENT || "sandbox";
+    const mifielEnv = import.meta.env.VITE_ENVIRONMENT || "development";
     const mifielHost = mifielEnv === "production" ? "app.mifiel.com" : "app-sandbox.mifiel.com";
     const scriptSrc = `https://${mifielHost}/widget-component/index.js`;
 
