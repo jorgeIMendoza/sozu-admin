@@ -343,15 +343,19 @@ export function OwnerHistoryDialog({
                     {/* Timeline dot */}
                     <div className={cn(
                       "relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-lg transition-all",
-                      isCurrentOwnerInResale
-                        ? "bg-orange-500 text-white"
-                        : isDelivered 
-                          ? "bg-green-500 text-white" 
-                          : isEntryFideicomiso
-                            ? "bg-blue-500 text-white"
-                            : "bg-amber-500 text-white"
+                      isCancelled
+                        ? "bg-red-500 text-white"
+                        : isCurrentOwnerInResale
+                          ? "bg-orange-500 text-white"
+                          : isDelivered 
+                            ? "bg-green-500 text-white" 
+                            : isEntryFideicomiso
+                              ? "bg-blue-500 text-white"
+                              : "bg-amber-500 text-white"
                     )}>
-                      {isDelivered ? (
+                      {isCancelled ? (
+                        <XCircle className="h-5 w-5" />
+                      ) : isDelivered ? (
                         <BadgeCheck className="h-5 w-5" />
                       ) : (
                         <Clock className="h-5 w-5" />
