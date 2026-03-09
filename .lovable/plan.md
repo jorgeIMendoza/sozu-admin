@@ -1,41 +1,41 @@
 
 
-## Plan: Agregar Domain-Wide Delegation (subject/sub) al JWT de la cuenta de servicio
+# Plan: Insertar acuerdos de penalización y devolución para CC-1748 y CC-1166
 
-### Problema actual
-La función `getAccessToken` genera un JWT sin el campo `sub`, por lo que Google Calendar ve las operaciones como hechas por la cuenta de servicio directamente. Esto impide que los invitados reciban correos de notificación del evento.
+## Resumen
+Actualmente CC-1748 y CC-1166 fueron canceladas antes de que existiera la lógica automatizada del `CancelCuentaDialog`. Falta crear los `acuerdos_pago` de concepto 7 (penalización) y concepto 9 (devolución), además de desactivar los acuerdos no pagados, para que todo quede homologado con el flujo estándar.
 
-### Cambio necesario
+## Datos confirmados
 
-**Archivo**: `supabase/functions/agendar-capacitacion/index.ts`
+| Cuenta | Total Pagado | Penalización | Reembolso |
+|--------|-------------|--------------|-----------|
+| CC-1748 | $898,474.24 | $259,774.47 | $638,699.77 |
+| CCP-1166 | $259,774.47 | $0.00 | $259,774.47 |
+| **Total** | | | **$898,474.24** |
 
-1. **Modificar `getAccessToken`** para aceptar un parámetro opcional `subject` (el email del dueño del calendario) y agregarlo al payload JWT:
-   ```
-   sub: subject  // e.g. "jorge.mendoza@sozu.com"
-   ```
+## Cambios (solo datos, sin cambios de código)
 
-2. **Actualizar la llamada** a `getAccessToken(sa)` → `getAccessToken(sa, calendarOwnerEmail)` en el `Deno.serve` principal (línea 519), para que el token se genere impersonando al dueño del calendario.
+### 1. CC-1748: Insertar acuerdos de cancelación
+- **Acuerdo orden 22** (concepto 7 - Pago por cancelación): $259,774.47, pago_completado = true
+- **Acuerdo orden 23** (concepto 9 - Devolución de pago): $638,699.77, pago_completado = true
+- **Desactivar** acuerdo orden 21 (concepto 3, sin pago completado) → activo = false
 
-3. Agregar el scope `https://www.googleapis.com/auth/calendar.events` al JWT (ya lo tienes en el Admin Console, pero el código solo pide `calendar`).
+### 2. CCP-1166: Insertar acuerdos de cancelación
+- **Acuerdo orden 3** (concepto 9 - Devolución de pago): $259,774.47, pago_completado = true (sin penalización)
+- **Desactivar** acuerdo orden 2 (concepto 3, sin pago completado) → activo = false
 
-### Detalle técnico
+### 3. Insertar pago de reembolso para CC-1748
+- Pago de $638,699.77 en `pagos`, método 2 (Cheque), con url_recibo apuntando al acuse del cheque ya subido
+- Fecha: la misma de la cancelación (usaremos la fecha del cheque si se conoce, o la última fecha de pago)
 
-```text
-// Antes (línea 18-23):
-payload = { iss, scope: "...calendar", aud, iat, exp }
+### 4. Insertar pago de reembolso para CC-1166
+- Pago de $259,774.47 en `pagos`, método 2 (Cheque), con url_recibo del mismo acuse
+- Misma fecha
 
-// Después:
-payload = { iss, sub: subject, scope: "...calendar ...calendar.events", aud, iat, exp }
-```
+### 5. Crear aplicaciones de pago
+- Para CC-1748 concepto 9: vincular el pago de reembolso ($638,699.77) al acuerdo de devolución
+- Para CC-1166 concepto 9: vincular el pago de reembolso ($259,774.47) al acuerdo de devolución
+- Los acuerdos de concepto 7 (penalización) no necesitan aplicación ya que se retienen del dinero ya pagado
 
-La llamada cambia de:
-```text
-const token = await getAccessToken(sa);
-```
-A:
-```text
-const token = await getAccessToken(sa, calendarOwnerEmail);
-```
-
-Esto hará que Google Calendar trate las operaciones como si las hiciera el usuario real (calendarOwnerEmail), permitiendo el envío automático de correos a los invitados.
+Todo esto se ejecutará con el insert tool (operaciones de datos, no de esquema).
 
