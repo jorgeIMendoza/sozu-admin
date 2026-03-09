@@ -2015,7 +2015,7 @@ export default function DetalleCuentaCobranza() {
   const montoDevolucionClienteAcuerdo = acuerdosPago?.find(a => a.id_concepto === 9)?.monto || 0;
   const montoDevolucionCliente = montoDevolucionClienteAcuerdo > 0 
     ? montoDevolucionClienteAcuerdo 
-    : (esCuentaCancelada ? Math.max(0, totalPagadoReal - montoPagoCancelacion) : 0);
+    : (!cuentaDetalle?.activo ? Math.max(0, totalPagadoReal - montoPagoCancelacion) : 0);
   
   // Create a map from acuerdo_pago.id to parcialidad sequential number
   const parcialidadMap: Record<number, number> = {};
