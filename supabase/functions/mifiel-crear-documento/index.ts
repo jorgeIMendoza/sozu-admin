@@ -431,17 +431,11 @@ serve(async (req) => {
   }
 
   try {
-    const MIFIEL_API_ID = Deno.env.get("MIFIEL_API_ID");
-    const MIFIEL_API_SECRET = Deno.env.get("MIFIEL_API_SECRET");
-    if (!MIFIEL_API_ID || !MIFIEL_API_SECRET) {
-      throw new Error("Mifiel credentials not configured");
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { agente_email, agente_nombre, agente_persona_id, carta_acuerdo_id, firma_autografa_agente } = await req.json();
+    const { agente_email, agente_nombre, agente_persona_id, carta_acuerdo_id, firma_autografa_agente, environment } = await req.json();
     if (!agente_email || !agente_nombre) {
       throw new Error("agente_email y agente_nombre son requeridos");
     }
