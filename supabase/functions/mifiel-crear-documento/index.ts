@@ -7,7 +7,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MIFIEL_API_URL = (Deno.env.get("MIFIEL_API_URL") || "https://app-sandbox.mifiel.com/api/v1").replace(/\/+$/, "").replace(/\/documents$/i, "");
+function getMifielCredentials(environment?: string) {
+  const suffix = environment === "production" ? "_PRD" : "_DEV";
+  return {
+    apiUrl: (Deno.env.get(`MIFIEL_API_URL${suffix}`) || Deno.env.get("MIFIEL_API_URL") || "https://app-sandbox.mifiel.com/api/v1").replace(/\/+$/, "").replace(/\/documents$/i, ""),
+    apiId: Deno.env.get(`MIFIEL_API_ID${suffix}`) || Deno.env.get("MIFIEL_API_ID") || "",
+    apiSecret: Deno.env.get(`MIFIEL_API_SECRET${suffix}`) || Deno.env.get("MIFIEL_API_SECRET") || "",
+  };
+}
 
 // ── Rich HTML-to-PDF renderer ──
 
