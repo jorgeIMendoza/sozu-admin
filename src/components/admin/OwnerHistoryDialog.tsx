@@ -20,6 +20,16 @@ interface OwnerHistoryDialogProps {
   trigger?: React.ReactNode;
 }
 
+interface CuentaProducto {
+  cuenta_id: number;
+  producto_nombre: string;
+  precio_final: number;
+  total_pagado: number;
+  monto_penalizacion: number;
+  monto_reembolso: number;
+  url_evidencia_reembolso: string | null;
+}
+
 interface OwnerHistoryEntry {
   cuenta_id: number;
   precio_final: number;
@@ -40,6 +50,10 @@ interface OwnerHistoryEntry {
     rfc: string | null;
     porcentaje_copropiedad: number;
   }[];
+  cuentas_producto: CuentaProducto[];
+  total_pagado_consolidado: number;
+  total_penalizacion_consolidado: number;
+  total_reembolso_consolidado: number;
 }
 
 export function OwnerHistoryDialog({
