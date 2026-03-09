@@ -74,11 +74,11 @@ export function OwnerHistoryDialog({
       // Include: active accounts + cancelled by Rescisión(3) or Reventa(7)
       const { data: cuentasData, error: cuentasError } = await supabase
         .from('cuentas_cobranza')
-        .select('id, precio_final, fecha_creacion, id_oferta, id_tipo_cancelacion')
+        .select('id, precio_final, fecha_compra, fecha_creacion, id_oferta, id_tipo_cancelacion, tipos_cancelacion:id_tipo_cancelacion(nombre)')
         .in('id_oferta', ofertaIds)
         .is('id_cuenta_cobranza_padre', null)
         .or('id_tipo_cancelacion.is.null,id_tipo_cancelacion.in.(3,7)')
-        .order('fecha_creacion', { ascending: true });
+        .order('fecha_compra', { ascending: true });
 
       if (cuentasError) throw cuentasError;
       if (!cuentasData || cuentasData.length === 0) return { entries: [], esFideicomiso: false };
