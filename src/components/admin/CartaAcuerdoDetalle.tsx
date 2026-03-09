@@ -209,7 +209,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
       for (const firma of toCheck) {
         try {
           const { data, error } = await supabase.functions.invoke("mifiel-consultar-documento", {
-            body: { document_id: firma.mifiel_document_id },
+            body: { document_id: firma.mifiel_document_id, environment: ENVIRONMENT },
           });
           const notFound = error || !data?.success || data?.upstream_status === 404;
           const mifielStatus = data?.document?.status;
