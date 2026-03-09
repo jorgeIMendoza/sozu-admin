@@ -542,6 +542,10 @@ serve(async (req) => {
     ];
 
     // 5. Create document in Mifiel
+    const { apiUrl: MIFIEL_API_URL, apiId: MIFIEL_API_ID, apiSecret: MIFIEL_API_SECRET } = getMifielCredentials(environment);
+    if (!MIFIEL_API_ID || !MIFIEL_API_SECRET) {
+      throw new Error("Mifiel credentials not configured");
+    }
     const authHeader = "Basic " + btoa(`${MIFIEL_API_ID}:${MIFIEL_API_SECRET}`);
 
     const formData = new FormData();
