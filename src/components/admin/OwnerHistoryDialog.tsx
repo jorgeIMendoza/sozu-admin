@@ -20,6 +20,16 @@ interface OwnerHistoryDialogProps {
   trigger?: React.ReactNode;
 }
 
+interface CuentaProducto {
+  cuenta_id: number;
+  producto_nombre: string;
+  precio_final: number;
+  total_pagado: number;
+  monto_penalizacion: number;
+  monto_reembolso: number;
+  url_evidencia_reembolso: string | null;
+}
+
 interface OwnerHistoryEntry {
   cuenta_id: number;
   precio_final: number;
@@ -40,6 +50,10 @@ interface OwnerHistoryEntry {
     rfc: string | null;
     porcentaje_copropiedad: number;
   }[];
+  cuentas_producto: CuentaProducto[];
+  total_pagado_consolidado: number;
+  total_penalizacion_consolidado: number;
+  total_reembolso_consolidado: number;
 }
 
 export function OwnerHistoryDialog({
@@ -171,6 +185,79 @@ export function OwnerHistoryDialog({
         });
       });
 
+      // 6. Get product accounts for cancelled entries (same property, different ofertas with id_producto)
+      const cancelledCuentaIds = cuentasData
+        .filter(c => c.id_tipo_cancelacion !== null)
+        .map(c => c.id);
+
+      let productAccountsByParent: Record<number, CuentaProducto[]> = {};
+
+      if (cancelledCuentaIds.length > 0) {
+        const { data: productOfertasData } = await supabase
+          .from('ofertas')
+          .select('id, id_producto')
+          .eq('id_propiedad', propertyId)
+          .not('id_producto', 'is', null);
+
+        if (productOfertasData && productOfertasData.length > 0) {
+          const productOfertaIds = productOfertasData.map(o => o.id);
+          const productIdMap: Record<number, number> = {};
+          productOfertasData.forEach(o => { productIdMap[o.id] = o.id_producto!; });
+
+          const { data: productCuentas } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, precio_final, id_oferta, id_tipo_cancelacion, monto_cobro_cancelacion, url_evidencia_reembolso')
+            .in('id_oferta', productOfertaIds)
+            .or('id_tipo_cancelacion.in.(3,7)');
+
+          if (productCuentas && productCuentas.length > 0) {
+            const productCuentaIds = productCuentas.map(pc => pc.id);
+
+            const { data: productPagos } = await supabase
+              .from('pagos')
+              .select('id_cuenta_cobranza, monto')
+              .in('id_cuenta_cobranza', productCuentaIds)
+              .eq('activo', true);
+
+            const productPagosPorCuenta: Record<number, number> = {};
+            productPagos?.forEach(p => {
+              productPagosPorCuenta[p.id_cuenta_cobranza] = (productPagosPorCuenta[p.id_cuenta_cobranza] || 0) + Number(p.monto || 0);
+            });
+
+            const productIds = [...new Set(Object.values(productIdMap))];
+            const { data: productosData } = await supabase
+              .from('productos_servicios')
+              .select('id, nombre')
+              .in('id', productIds);
+
+            const productNamesMap: Record<number, string> = {};
+            productosData?.forEach(p => { productNamesMap[p.id] = p.nombre; });
+
+            const parentCuentaId = cancelledCuentaIds[0];
+            productCuentas.forEach(pc => {
+              const totalPagado = productPagosPorCuenta[pc.id] || 0;
+              const penalizacion = Number((pc as any).monto_cobro_cancelacion) || 0;
+              const reembolso = totalPagado > 0 ? Math.max(0, totalPagado - penalizacion) : 0;
+              const productoId = productIdMap[pc.id_oferta];
+              const productoNombre = productNamesMap[productoId] || 'Producto';
+
+              if (!productAccountsByParent[parentCuentaId]) {
+                productAccountsByParent[parentCuentaId] = [];
+              }
+              productAccountsByParent[parentCuentaId].push({
+                cuenta_id: pc.id,
+                producto_nombre: productoNombre,
+                precio_final: Number(pc.precio_final) || 0,
+                total_pagado: totalPagado,
+                monto_penalizacion: penalizacion,
+                monto_reembolso: reembolso,
+                url_evidencia_reembolso: (pc as any).url_evidencia_reembolso || null,
+              });
+            });
+          }
+        }
+      }
+
       // Build the history entries
       const entries: OwnerHistoryEntry[] = cuentasData.map(cuenta => {
         const totalPagado = pagosPorCuenta[cuenta.id] || 0;
@@ -184,6 +271,11 @@ export function OwnerHistoryDialog({
         const urlEvidenciaReembolso = (cuenta as any).url_evidencia_reembolso || null;
         const isCancelled = cuenta.id_tipo_cancelacion !== null;
         const montoReembolso = isCancelled ? Math.max(0, totalPagado - montoPenalizacion) : 0;
+        const cuentasProducto = productAccountsByParent[cuenta.id] || [];
+
+        const totalPagadoProductos = cuentasProducto.reduce((sum, cp) => sum + cp.total_pagado, 0);
+        const totalPenalizacionProductos = cuentasProducto.reduce((sum, cp) => sum + cp.monto_penalizacion, 0);
+        const totalReembolsoProductos = cuentasProducto.reduce((sum, cp) => sum + cp.monto_reembolso, 0);
 
         return {
           cuenta_id: cuenta.id,
@@ -199,7 +291,11 @@ export function OwnerHistoryDialog({
           monto_reembolso: montoReembolso,
           url_evidencia_cancelacion: urlEvidenciaCancelacion,
           url_evidencia_reembolso: urlEvidenciaReembolso,
-          compradores: compradoresPorCuenta[cuenta.id] || []
+          compradores: compradoresPorCuenta[cuenta.id] || [],
+          cuentas_producto: cuentasProducto,
+          total_pagado_consolidado: totalPagado + totalPagadoProductos,
+          total_penalizacion_consolidado: montoPenalizacion + totalPenalizacionProductos,
+          total_reembolso_consolidado: montoReembolso + totalReembolsoProductos,
         };
       });
 
@@ -506,22 +602,83 @@ export function OwnerHistoryDialog({
                             </div>
 
                             {/* Cancelled account breakdown: Penalización, Reembolso, Evidence */}
-                            {isCancelled && entry.total_pagado > 0 && (
-                              <div className="border-t border-red-200 dark:border-red-800 pt-3 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <AlertTriangle className="h-4 w-4 text-red-500" />
-                                  <span className="text-muted-foreground">Penalización:</span>
-                                  <span className="font-medium text-red-600 dark:text-red-400">
-                                    {entry.monto_penalizacion > 0 ? formatCurrency(entry.monto_penalizacion) : 'Sin registro'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-muted-foreground">Reembolso:</span>
-                                  <span className="font-medium">
-                                    {formatCurrency(entry.monto_reembolso)}
-                                  </span>
-                                </div>
+                            {isCancelled && entry.total_pagado_consolidado > 0 && (
+                              <div className="border-t border-red-200 dark:border-red-800 pt-3 space-y-3">
+                                {/* If there are product accounts, show detailed breakdown */}
+                                {entry.cuentas_producto.length > 0 ? (
+                                  <>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Desglose por cuenta</p>
+                                    <div className="rounded-md border border-red-200 dark:border-red-800 overflow-hidden">
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="bg-red-50 dark:bg-red-950/40">
+                                            <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Cuenta</th>
+                                            <th className="text-right px-2 py-1.5 font-medium text-muted-foreground">Pagado</th>
+                                            <th className="text-right px-2 py-1.5 font-medium text-muted-foreground">Penalización</th>
+                                            <th className="text-right px-2 py-1.5 font-medium text-muted-foreground">Reembolso</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {/* Main property account */}
+                                          <tr className="border-t border-red-100 dark:border-red-900">
+                                            <td className="px-2 py-1.5">
+                                              <span className="font-mono">{formatCuentaCobranzaId(entry.cuenta_id)}</span>
+                                              <span className="ml-1 text-muted-foreground">(Propiedad)</span>
+                                            </td>
+                                            <td className="text-right px-2 py-1.5">{formatCurrency(entry.total_pagado)}</td>
+                                            <td className="text-right px-2 py-1.5 text-red-600 dark:text-red-400">
+                                              {entry.monto_penalizacion > 0 ? formatCurrency(entry.monto_penalizacion) : '$0.00'}
+                                            </td>
+                                            <td className="text-right px-2 py-1.5">{formatCurrency(entry.monto_reembolso)}</td>
+                                          </tr>
+                                          {/* Product accounts */}
+                                          {entry.cuentas_producto.map(cp => (
+                                            <tr key={cp.cuenta_id} className="border-t border-red-100 dark:border-red-900">
+                                              <td className="px-2 py-1.5">
+                                                <span className="font-mono">{formatCuentaCobranzaId(cp.cuenta_id, 'Producto')}</span>
+                                                <span className="ml-1 text-muted-foreground">({cp.producto_nombre})</span>
+                                              </td>
+                                              <td className="text-right px-2 py-1.5">
+                                                {cp.total_pagado > 0 ? formatCurrency(cp.total_pagado) : '$0.00'}
+                                              </td>
+                                              <td className="text-right px-2 py-1.5 text-red-600 dark:text-red-400">
+                                                {cp.monto_penalizacion > 0 ? formatCurrency(cp.monto_penalizacion) : '$0.00'}
+                                              </td>
+                                              <td className="text-right px-2 py-1.5">
+                                                {cp.monto_reembolso > 0 ? formatCurrency(cp.monto_reembolso) : '$0.00'}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                          {/* Totals row */}
+                                          <tr className="border-t-2 border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/30 font-semibold">
+                                            <td className="px-2 py-1.5">Total</td>
+                                            <td className="text-right px-2 py-1.5">{formatCurrency(entry.total_pagado_consolidado)}</td>
+                                            <td className="text-right px-2 py-1.5 text-red-600 dark:text-red-400">{formatCurrency(entry.total_penalizacion_consolidado)}</td>
+                                            <td className="text-right px-2 py-1.5 font-bold">{formatCurrency(entry.total_reembolso_consolidado)}</td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </>
+                                ) : (
+                                  /* Simple view when no product accounts */
+                                  <>
+                                    <div className="flex items-center gap-2">
+                                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                                      <span className="text-muted-foreground">Penalización:</span>
+                                      <span className="font-medium text-red-600 dark:text-red-400">
+                                        {entry.monto_penalizacion > 0 ? formatCurrency(entry.monto_penalizacion) : 'Sin registro'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
+                                      <span className="text-muted-foreground">Reembolso:</span>
+                                      <span className="font-medium">
+                                        {formatCurrency(entry.monto_reembolso)}
+                                      </span>
+                                    </div>
+                                  </>
+                                )}
                                 {/* Evidence links */}
                                 <div className="flex flex-wrap gap-2 pt-1">
                                   {entry.url_evidencia_cancelacion && (
@@ -543,7 +700,7 @@ export function OwnerHistoryDialog({
                                       className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                                     >
                                       <FileText className="h-3 w-3" />
-                                      Evidencia de reembolso
+                                      Acuse de cheque
                                     </a>
                                   )}
                                 </div>

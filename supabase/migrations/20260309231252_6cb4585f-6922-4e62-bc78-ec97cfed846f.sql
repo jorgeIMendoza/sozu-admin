@@ -1,0 +1,1 @@
+UPDATE cuentas_cobranza SET url_evidencia_reembolso = 'https://tzmhgfjmddkfyffkkmto.supabase.co/storage/v1/object/public/cuentas_canceladas_docs/708%20Acuse%20Cheque.pdf' WHERE id IN (1748, 1166);
