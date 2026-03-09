@@ -466,10 +466,10 @@ export function OwnerHistoryDialog({
                             <div className="flex items-center gap-2">
                               <CalendarCheck className="h-4 w-4 text-muted-foreground" />
                               <span className="text-muted-foreground">
-                                {isDelivered ? 'Entrega:' : 'Inicio:'}
+                                {isDelivered ? 'Entrega:' : 'Compra:'}
                               </span>
                               <span className="text-xs">
-                                {formatDate(isDelivered && entry.fecha_entrega ? entry.fecha_entrega : entry.fecha_creacion)}
+                                {formatDate(isDelivered && entry.fecha_entrega ? entry.fecha_entrega : entry.fecha_compra)}
                               </span>
                             </div>
                             
