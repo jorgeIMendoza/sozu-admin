@@ -1,28 +1,41 @@
 
 
-# Fix: Comprador faltante en CC-1748 + Historial de propietarios no muestra cuentas canceladas
+## Plan: Agregar Domain-Wide Delegation (subject/sub) al JWT de la cuenta de servicio
 
-## Problema 1: CC-1748 sin compradores
-La cuenta de cobranza 1748 no tiene registro en la tabla `compradores`. Se necesita insertar a Mauricio López Rebollar (id_persona 1431) con 100% de copropiedad.
+### Problema actual
+La función `getAccessToken` genera un JWT sin el campo `sub`, por lo que Google Calendar ve las operaciones como hechas por la cuenta de servicio directamente. Esto impide que los invitados reciban correos de notificación del evento.
 
-**Acción**: INSERT en `compradores` para CC-1748.
+### Cambio necesario
 
-## Problema 2: Historial no muestra a Mauricio
-El `OwnerHistoryDialog` tiene dos filtros que excluyen la CC cancelada de Mauricio:
-- Línea 68-69: filtra `ofertas.activo = true` (la oferta 1970 es `activo=false`)
-- Línea 85: filtra `id_tipo_cancelacion IS NULL` (la CC 1748 tiene `id_tipo_cancelacion = 3`)
+**Archivo**: `supabase/functions/agendar-capacitacion/index.ts`
 
-Estos filtros solo se relajan cuando `esReventa = true` (id_tipo_transaccion = 2), pero la propiedad 708 tiene id_tipo_transaccion = 3.
+1. **Modificar `getAccessToken`** para aceptar un parámetro opcional `subject` (el email del dueño del calendario) y agregarlo al payload JWT:
+   ```
+   sub: subject  // e.g. "jorge.mendoza@sozu.com"
+   ```
 
-**Solución**: Cambiar la lógica para **siempre** incluir ofertas inactivas y cuentas con tipos de cancelación históricos (3=Rescisión, 7=Reventa), independientemente del flag `esReventa`. 
+2. **Actualizar la llamada** a `getAccessToken(sa)` → `getAccessToken(sa, calendarOwnerEmail)` en el `Deno.serve` principal (línea 519), para que el token se genere impersonando al dueño del calendario.
 
-### Cambios en `OwnerHistoryDialog.tsx`:
+3. Agregar el scope `https://www.googleapis.com/auth/calendar.events` al JWT (ya lo tienes en el Admin Console, pero el código solo pide `calendar`).
 
-1. **Ofertas**: Quitar el filtro `activo=true` completamente — siempre traer todas las ofertas de la propiedad (sin producto).
+### Detalle técnico
 
-2. **Cuentas**: Reemplazar `.is('id_tipo_cancelacion', null)` por un filtro OR que incluya cuentas sin cancelación **o** con tipos de cancelación 3 y 7. Quitar el filtro `activo=true`.
+```text
+// Antes (línea 18-23):
+payload = { iss, scope: "...calendar", aud, iat, exp }
 
-3. **Agregar campo `id_tipo_cancelacion`** al SELECT de cuentas y al tipo `OwnerHistoryEntry` para poder mostrar visualmente que la cuenta fue cancelada.
+// Después:
+payload = { iss, sub: subject, scope: "...calendar ...calendar.events", aud, iat, exp }
+```
 
-4. **UI**: Mostrar las cuentas canceladas con un estilo visual distinto (color rojo/gris, badge "Cancelada") en el timeline, entre el propietario de origen y el propietario actual.
+La llamada cambia de:
+```text
+const token = await getAccessToken(sa);
+```
+A:
+```text
+const token = await getAccessToken(sa, calendarOwnerEmail);
+```
+
+Esto hará que Google Calendar trate las operaciones como si las hiciera el usuario real (calendarOwnerEmail), permitiendo el envío automático de correos a los invitados.
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, User, CreditCard, BadgeCheck, Clock, History, CalendarCheck } from 'lucide-react';
+import { Building2, User, CreditCard, BadgeCheck, Clock, History, CalendarCheck, XCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -28,6 +28,7 @@ interface OwnerHistoryEntry {
   fecha_creacion: string;
   fecha_entrega: string | null;
   tiene_cuenta_mantenimiento: boolean;
+  id_tipo_cancelacion: number | null;
   compradores: {
     id_persona: number;
     nombre_legal: string;
@@ -56,42 +57,27 @@ export function OwnerHistoryDialog({
   const { data: historyData, isLoading } = useQuery({
     queryKey: ['owner-history', propertyId, esReventa],
     queryFn: async () => {
-      // 1. First get ofertas for this property (not products)
-      // For Re-venta properties, we need to include inactive ofertas to show history
-      let ofertasQuery = supabase
+      // 1. Get ALL ofertas for this property (including inactive for history)
+      const { data: ofertasData, error: ofertasError } = await supabase
         .from('ofertas')
         .select('id')
         .eq('id_propiedad', propertyId)
         .is('id_producto', null);
-      
-      // Only filter by activo=true if NOT in reventa
-      if (!esReventa) {
-        ofertasQuery = ofertasQuery.eq('activo', true);
-      }
-      
-      const { data: ofertasData, error: ofertasError } = await ofertasQuery;
 
       if (ofertasError) throw ofertasError;
       if (!ofertasData || ofertasData.length === 0) return { entries: [], esFideicomiso: false };
 
       const ofertaIds = ofertasData.map(o => o.id);
 
-      // 2. Get cuentas_cobranza for these ofertas (only main accounts, not maintenance)
-      // For Re-venta, include inactive cuentas to show the previous owner history
-      let cuentasQuery = supabase
+      // 2. Get cuentas_cobranza for these ofertas (include cancelled for history)
+      // Include: active accounts + cancelled by Rescisión(3) or Reventa(7)
+      const { data: cuentasData, error: cuentasError } = await supabase
         .from('cuentas_cobranza')
-        .select('id, precio_final, fecha_creacion, id_oferta')
+        .select('id, precio_final, fecha_creacion, id_oferta, id_tipo_cancelacion')
         .in('id_oferta', ofertaIds)
-        .is('id_tipo_cancelacion', null) // Exclude cancelled accounts
         .is('id_cuenta_cobranza_padre', null)
+        .or('id_tipo_cancelacion.is.null,id_tipo_cancelacion.in.(3,7)')
         .order('fecha_creacion', { ascending: true });
-      
-      // Only filter by activo=true if NOT in reventa
-      if (!esReventa) {
-        cuentasQuery = cuentasQuery.eq('activo', true);
-      }
-      
-      const { data: cuentasData, error: cuentasError } = await cuentasQuery;
 
       if (cuentasError) throw cuentasError;
       if (!cuentasData || cuentasData.length === 0) return { entries: [], esFideicomiso: false };
@@ -196,6 +182,7 @@ export function OwnerHistoryDialog({
           fecha_creacion: cuenta.fecha_creacion,
           fecha_entrega: fechaEntrega,
           tiene_cuenta_mantenimiento: tieneMantenimiento,
+          id_tipo_cancelacion: cuenta.id_tipo_cancelacion ?? null,
           compradores: compradoresPorCuenta[cuenta.id] || []
         };
       });
@@ -322,9 +309,10 @@ export function OwnerHistoryDialog({
 
               {/* History Entries */}
               {!isLoading && entries && entries.map((entry, index) => {
-                const isDelivered = entry.tiene_cuenta_mantenimiento;
+                const isCancelled = entry.id_tipo_cancelacion !== null;
+                const isDelivered = entry.tiene_cuenta_mantenimiento && !isCancelled;
                 const isLast = index === entries.length - 1;
-                const isEntryFideicomiso = esFideicomiso && !isDelivered;
+                const isEntryFideicomiso = esFideicomiso && !isDelivered && !isCancelled;
                 // For resale: the last delivered entry is still the current owner
                 const isCurrentOwnerInResale = esReventa && isLast && isDelivered;
                 // Determine if this entry is an intermediate owner
@@ -332,6 +320,7 @@ export function OwnerHistoryDialog({
                 
                 // Determine the label for this entry
                 const getEntryLabel = () => {
+                  if (isCancelled) return 'Propietario Anterior';
                   if (isDelivered && isLast) return 'Propietario Actual';
                   if (isEntryFideicomiso && isLast) return 'Propietario Actual';
                   if (isIntermediateOwner) return 'Propietario';
@@ -354,15 +343,19 @@ export function OwnerHistoryDialog({
                     {/* Timeline dot */}
                     <div className={cn(
                       "relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-lg transition-all",
-                      isCurrentOwnerInResale
-                        ? "bg-orange-500 text-white"
-                        : isDelivered 
-                          ? "bg-green-500 text-white" 
-                          : isEntryFideicomiso
-                            ? "bg-blue-500 text-white"
-                            : "bg-amber-500 text-white"
+                      isCancelled
+                        ? "bg-red-500 text-white"
+                        : isCurrentOwnerInResale
+                          ? "bg-orange-500 text-white"
+                          : isDelivered 
+                            ? "bg-green-500 text-white" 
+                            : isEntryFideicomiso
+                              ? "bg-blue-500 text-white"
+                              : "bg-amber-500 text-white"
                     )}>
-                      {isDelivered ? (
+                      {isCancelled ? (
+                        <XCircle className="h-5 w-5" />
+                      ) : isDelivered ? (
                         <BadgeCheck className="h-5 w-5" />
                       ) : (
                         <Clock className="h-5 w-5" />
@@ -372,13 +365,15 @@ export function OwnerHistoryDialog({
                     <div className="flex-1 pt-1">
                       <div className={cn(
                         "rounded-lg border p-4 shadow-sm transition-all",
-                        isCurrentOwnerInResale
-                          ? "border-orange-200 bg-orange-50/50 dark:border-orange-900 dark:bg-orange-950/30"
-                          : isDelivered 
-                            ? "border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30" 
-                            : isEntryFideicomiso
-                              ? "border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/30"
-                              : "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/30"
+                        isCancelled
+                          ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/30 opacity-75"
+                          : isCurrentOwnerInResale
+                            ? "border-orange-200 bg-orange-50/50 dark:border-orange-900 dark:bg-orange-950/30"
+                            : isDelivered 
+                              ? "border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30" 
+                              : isEntryFideicomiso
+                                ? "border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/30"
+                                : "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/30"
                       )}>
                         {/* Header */}
                         <div className="flex items-center justify-between mb-3">
@@ -386,8 +381,12 @@ export function OwnerHistoryDialog({
                             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                               {getEntryLabel()}
                             </span>
-                            {/* Status badge (Entregada, En Proceso, Fideicomiso) */}
-                            {isDelivered ? (
+                            {/* Status badge */}
+                            {isCancelled ? (
+                              <Badge className="bg-red-600 hover:bg-red-700 text-white">
+                                Cancelada
+                              </Badge>
+                            ) : isDelivered ? (
                               <Badge className="bg-green-600 hover:bg-green-700 text-white">
                                 Entregada
                               </Badge>
