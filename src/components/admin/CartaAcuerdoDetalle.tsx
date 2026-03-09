@@ -30,6 +30,7 @@ import {
   FileText, Save, Loader2, CheckCircle2, Clock, XCircle, Send, Plus, Trash2,
   Users, Info, PenTool, Fingerprint, RefreshCw, Pencil, Check,
 } from "lucide-react";
+import { ENVIRONMENT } from "@/lib/config";
 
 const PLACEHOLDERS = [
   { key: "nombre_agente", label: "Nombre completo del agente", editable: true },
