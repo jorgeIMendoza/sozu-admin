@@ -25,10 +25,11 @@ interface OwnerHistoryEntry {
   precio_final: number;
   total_pagado: number;
   completamente_pagada: boolean;
-  fecha_creacion: string;
+  fecha_compra: string;
   fecha_entrega: string | null;
   tiene_cuenta_mantenimiento: boolean;
   id_tipo_cancelacion: number | null;
+  nombre_tipo_cancelacion: string | null;
   compradores: {
     id_persona: number;
     nombre_legal: string;
