@@ -365,13 +365,15 @@ export function OwnerHistoryDialog({
                     <div className="flex-1 pt-1">
                       <div className={cn(
                         "rounded-lg border p-4 shadow-sm transition-all",
-                        isCurrentOwnerInResale
-                          ? "border-orange-200 bg-orange-50/50 dark:border-orange-900 dark:bg-orange-950/30"
-                          : isDelivered 
-                            ? "border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30" 
-                            : isEntryFideicomiso
-                              ? "border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/30"
-                              : "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/30"
+                        isCancelled
+                          ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/30 opacity-75"
+                          : isCurrentOwnerInResale
+                            ? "border-orange-200 bg-orange-50/50 dark:border-orange-900 dark:bg-orange-950/30"
+                            : isDelivered 
+                              ? "border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30" 
+                              : isEntryFideicomiso
+                                ? "border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/30"
+                                : "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/30"
                       )}>
                         {/* Header */}
                         <div className="flex items-center justify-between mb-3">
