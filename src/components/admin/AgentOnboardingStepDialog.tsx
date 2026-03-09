@@ -320,7 +320,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       if (!firmaEnProgreso || !data.mifiel_document_id) return data;
 
       const { data: mifielData, error: mifielError } = await supabase.functions.invoke('mifiel-consultar-documento', {
-        body: { document_id: data.mifiel_document_id },
+        body: { document_id: data.mifiel_document_id, environment: ENVIRONMENT },
       });
 
       const upstreamStatus = Number(mifielData?.upstream_status || 0);
