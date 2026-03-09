@@ -185,6 +185,79 @@ export function OwnerHistoryDialog({
         });
       });
 
+      // 6. Get product accounts for cancelled entries (same property, different ofertas with id_producto)
+      const cancelledCuentaIds = cuentasData
+        .filter(c => c.id_tipo_cancelacion !== null)
+        .map(c => c.id);
+
+      let productAccountsByParent: Record<number, CuentaProducto[]> = {};
+
+      if (cancelledCuentaIds.length > 0) {
+        const { data: productOfertasData } = await supabase
+          .from('ofertas')
+          .select('id, id_producto')
+          .eq('id_propiedad', propertyId)
+          .not('id_producto', 'is', null);
+
+        if (productOfertasData && productOfertasData.length > 0) {
+          const productOfertaIds = productOfertasData.map(o => o.id);
+          const productIdMap: Record<number, number> = {};
+          productOfertasData.forEach(o => { productIdMap[o.id] = o.id_producto!; });
+
+          const { data: productCuentas } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, precio_final, id_oferta, id_tipo_cancelacion, monto_cobro_cancelacion, url_evidencia_reembolso')
+            .in('id_oferta', productOfertaIds)
+            .or('id_tipo_cancelacion.in.(3,7)');
+
+          if (productCuentas && productCuentas.length > 0) {
+            const productCuentaIds = productCuentas.map(pc => pc.id);
+
+            const { data: productPagos } = await supabase
+              .from('pagos')
+              .select('id_cuenta_cobranza, monto')
+              .in('id_cuenta_cobranza', productCuentaIds)
+              .eq('activo', true);
+
+            const productPagosPorCuenta: Record<number, number> = {};
+            productPagos?.forEach(p => {
+              productPagosPorCuenta[p.id_cuenta_cobranza] = (productPagosPorCuenta[p.id_cuenta_cobranza] || 0) + Number(p.monto || 0);
+            });
+
+            const productIds = [...new Set(Object.values(productIdMap))];
+            const { data: productosData } = await supabase
+              .from('productos_servicios')
+              .select('id, nombre')
+              .in('id', productIds);
+
+            const productNamesMap: Record<number, string> = {};
+            productosData?.forEach(p => { productNamesMap[p.id] = p.nombre; });
+
+            const parentCuentaId = cancelledCuentaIds[0];
+            productCuentas.forEach(pc => {
+              const totalPagado = productPagosPorCuenta[pc.id] || 0;
+              const penalizacion = Number((pc as any).monto_cobro_cancelacion) || 0;
+              const reembolso = totalPagado > 0 ? Math.max(0, totalPagado - penalizacion) : 0;
+              const productoId = productIdMap[pc.id_oferta];
+              const productoNombre = productNamesMap[productoId] || 'Producto';
+
+              if (!productAccountsByParent[parentCuentaId]) {
+                productAccountsByParent[parentCuentaId] = [];
+              }
+              productAccountsByParent[parentCuentaId].push({
+                cuenta_id: pc.id,
+                producto_nombre: productoNombre,
+                precio_final: Number(pc.precio_final) || 0,
+                total_pagado: totalPagado,
+                monto_penalizacion: penalizacion,
+                monto_reembolso: reembolso,
+                url_evidencia_reembolso: (pc as any).url_evidencia_reembolso || null,
+              });
+            });
+          }
+        }
+      }
+
       // Build the history entries
       const entries: OwnerHistoryEntry[] = cuentasData.map(cuenta => {
         const totalPagado = pagosPorCuenta[cuenta.id] || 0;
@@ -198,6 +271,11 @@ export function OwnerHistoryDialog({
         const urlEvidenciaReembolso = (cuenta as any).url_evidencia_reembolso || null;
         const isCancelled = cuenta.id_tipo_cancelacion !== null;
         const montoReembolso = isCancelled ? Math.max(0, totalPagado - montoPenalizacion) : 0;
+        const cuentasProducto = productAccountsByParent[cuenta.id] || [];
+
+        const totalPagadoProductos = cuentasProducto.reduce((sum, cp) => sum + cp.total_pagado, 0);
+        const totalPenalizacionProductos = cuentasProducto.reduce((sum, cp) => sum + cp.monto_penalizacion, 0);
+        const totalReembolsoProductos = cuentasProducto.reduce((sum, cp) => sum + cp.monto_reembolso, 0);
 
         return {
           cuenta_id: cuenta.id,
@@ -213,7 +291,11 @@ export function OwnerHistoryDialog({
           monto_reembolso: montoReembolso,
           url_evidencia_cancelacion: urlEvidenciaCancelacion,
           url_evidencia_reembolso: urlEvidenciaReembolso,
-          compradores: compradoresPorCuenta[cuenta.id] || []
+          compradores: compradoresPorCuenta[cuenta.id] || [],
+          cuentas_producto: cuentasProducto,
+          total_pagado_consolidado: totalPagado + totalPagadoProductos,
+          total_penalizacion_consolidado: montoPenalizacion + totalPenalizacionProductos,
+          total_reembolso_consolidado: montoReembolso + totalReembolsoProductos,
         };
       });
 
