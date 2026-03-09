@@ -174,16 +174,18 @@ export function OwnerHistoryDialog({
         const restante = +(precioFinal - totalPagado).toFixed(2);
         const tieneMantenimiento = !!cuentasConMantenimiento[cuenta.id];
         const fechaEntrega = cuentasConMantenimiento[cuenta.id] || null;
+        const tipoCancelacion = (cuenta as any).tipos_cancelacion as { nombre: string } | null;
 
         return {
           cuenta_id: cuenta.id,
           precio_final: precioFinal,
           total_pagado: totalPagado,
           completamente_pagada: restante <= 0 && precioFinal > 0,
-          fecha_creacion: cuenta.fecha_creacion,
+          fecha_compra: cuenta.fecha_compra || cuenta.fecha_creacion,
           fecha_entrega: fechaEntrega,
           tiene_cuenta_mantenimiento: tieneMantenimiento,
           id_tipo_cancelacion: cuenta.id_tipo_cancelacion ?? null,
+          nombre_tipo_cancelacion: tipoCancelacion?.nombre || null,
           compradores: compradoresPorCuenta[cuenta.id] || []
         };
       });
