@@ -182,6 +182,7 @@ export function OwnerHistoryDialog({
           fecha_creacion: cuenta.fecha_creacion,
           fecha_entrega: fechaEntrega,
           tiene_cuenta_mantenimiento: tieneMantenimiento,
+          id_tipo_cancelacion: cuenta.id_tipo_cancelacion ?? null,
           compradores: compradoresPorCuenta[cuenta.id] || []
         };
       });
