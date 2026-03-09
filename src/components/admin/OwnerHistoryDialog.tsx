@@ -309,9 +309,10 @@ export function OwnerHistoryDialog({
 
               {/* History Entries */}
               {!isLoading && entries && entries.map((entry, index) => {
-                const isDelivered = entry.tiene_cuenta_mantenimiento;
+                const isCancelled = entry.id_tipo_cancelacion !== null;
+                const isDelivered = entry.tiene_cuenta_mantenimiento && !isCancelled;
                 const isLast = index === entries.length - 1;
-                const isEntryFideicomiso = esFideicomiso && !isDelivered;
+                const isEntryFideicomiso = esFideicomiso && !isDelivered && !isCancelled;
                 // For resale: the last delivered entry is still the current owner
                 const isCurrentOwnerInResale = esReventa && isLast && isDelivered;
                 // Determine if this entry is an intermediate owner
@@ -319,6 +320,7 @@ export function OwnerHistoryDialog({
                 
                 // Determine the label for this entry
                 const getEntryLabel = () => {
+                  if (isCancelled) return 'Propietario Anterior';
                   if (isDelivered && isLast) return 'Propietario Actual';
                   if (isEntryFideicomiso && isLast) return 'Propietario Actual';
                   if (isIntermediateOwner) return 'Propietario';
