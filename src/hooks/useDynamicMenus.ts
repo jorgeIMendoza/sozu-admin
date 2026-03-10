@@ -122,6 +122,10 @@
    '/admin/portal-inmobiliaria/comisiones': Banknote,
    '/admin/portal-inmobiliaria/reportes': BarChart3,
    '/admin/portal-inmobiliaria/configuracion': Cog,
+   // Portal Cliente
+   '/admin/portal-cliente/inicio': LayoutDashboard,
+   '/admin/portal-cliente/propiedades': Building,
+   '/admin/portal-cliente/perfil': User,
  };
  
  // Mapeo de iconos por menu_id para los grupos
@@ -142,7 +146,8 @@
     14: Mail,            // Comunicación
     15: Briefcase,        // CRM
      16: User,              // Portal Agente
-     17: Building2,          // Portal Inmobiliaria
+      17: Building2,          // Portal Inmobiliaria
+      18: User,                // Portal Cliente
    };
  
  export interface DynamicMenuItem {

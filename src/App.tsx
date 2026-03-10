@@ -129,6 +129,11 @@ const AgentPerfil = lazyRetry(() => import("./pages/admin/agent-portal/AgentPerf
 const AgentUnidadesProyecto = lazyRetry(() => import("./pages/admin/agent-portal/AgentUnidadesProyecto"));
 const AgentProyectoDetalle = lazyRetry(() => import("./pages/admin/agent-portal/AgentProyectoDetalle"));
 
+// Portal Cliente pages
+const ClienteInicio = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteInicio"));
+const ClientePropiedades = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedades"));
+const ClientePerfil = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePerfil"));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
 
@@ -289,6 +294,10 @@ const App = () => (
                   <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
                   <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />
                   <Route path="agent/inventario/proyecto/:id" element={<AgentProyectoDetalle />} />
+                  {/* Portal Cliente Routes */}
+                  <Route path="portal-cliente/inicio" element={<ClienteInicio />} />
+                  <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                  <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
