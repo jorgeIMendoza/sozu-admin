@@ -56,7 +56,10 @@ const ClienteInicio = () => {
     enabled: !!effectivePersonaId,
   });
 
-  const numPropiedades = propiedadesActivasCount ?? 0;
+
+  // TODO: Replace with real financial data
+  const totals = getPortfolioTotals(mockPortfolio);
+  const progress = totals.totalInvested > 0 ? (totals.totalPaid / totals.totalInvested) * 100 : 0;
 
   return (
     <div className="max-w-lg mx-auto lg:max-w-none space-y-0">
