@@ -270,7 +270,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
       if (uniqueMantoCuentaIds.length > 0) {
         const { data: acuerdosManto, error: mantoError } = await supabase
           .from("acuerdos_pago")
-          .select("id, id_cuenta_cobranza, monto, fecha_pago, conceptos_pago:fk_acpago_concepto(nombre)")
+          .select("id, id_cuenta_cobranza, monto, fecha_pago, conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre)")
           .in("id_cuenta_cobranza", uniqueMantoCuentaIds)
           .eq("pago_completado", false)
           .eq("activo", true)
@@ -278,7 +278,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
           .order("fecha_pago", { ascending: true })
           .limit(10);
 
-        let finalManto = acuerdosManto;
+        let finalManto: any[] | null = acuerdosManto as any;
         if (mantoError) {
           const { data: fallback } = await supabase
             .from("acuerdos_pago")
