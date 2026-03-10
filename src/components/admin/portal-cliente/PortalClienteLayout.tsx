@@ -16,18 +16,21 @@ const PORTAL_CLIENTE_MENU_ID = 18;
 const iconMap: Record<string, LucideIcon> = {
   "/admin/portal-cliente/inicio": LayoutDashboard,
   "/admin/portal-cliente/propiedades": Building2,
+  "/admin/portal-cliente/pagos": CreditCard,
   "/admin/portal-cliente/perfil": User,
 };
 
 const FALLBACK_TABS = [
   { path: "/admin/portal-cliente/inicio", label: "Inicio", icon: LayoutDashboard },
   { path: "/admin/portal-cliente/propiedades", label: "Propiedades", icon: Building2 },
+  { path: "/admin/portal-cliente/pagos", label: "Pagos", icon: CreditCard },
   { path: "/admin/portal-cliente/perfil", label: "Perfil", icon: User },
 ];
 
 const SECTION_LABELS: Record<string, string> = {
   "/admin/portal-cliente/inicio": "Inicio",
   "/admin/portal-cliente/propiedades": "Propiedades",
+  "/admin/portal-cliente/pagos": "Pagos",
   "/admin/portal-cliente/perfil": "Perfil",
 };
 
