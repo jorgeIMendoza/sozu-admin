@@ -72,10 +72,6 @@ const ClienteHistorialPagos = () => {
     <div className="max-w-lg mx-auto lg:max-w-none space-y-0">
       {/* Header */}
       <section className="px-5 pt-5 pb-2 lg:px-0">
-        <button onClick={() => navigate("/admin/portal-cliente/inicio")} className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3 hover:text-foreground transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          Inicio
-        </button>
         <h1 className="font-bold text-xl text-foreground">Historial de pagos</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Consulta todos tus pagos y aplicaciones</p>
       </section>
@@ -254,7 +250,7 @@ function PagoCard({ pago }: { pago: PagoRow }) {
   };
 
   return (
-    <TooltipProvider delayDuration={300}>
+    <TooltipProvider delayDuration={0}>
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
         <button
           onClick={() => setExpanded(!expanded)}
@@ -265,10 +261,16 @@ function PagoCard({ pago }: { pago: PagoRow }) {
               <CreditCard className="w-4 h-4 text-[hsl(var(--inmob-green))] shrink-0" />
               <span className="font-semibold text-sm text-foreground tabular-nums">{fmtMXN(pago.monto)}</span>
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
               <span>{fmtDate(pago.fecha_pago)}</span>
               <span className="w-1 h-1 rounded-full bg-border" />
               <span>{pago.metodo}</span>
+              {pago.clave_rastreo && (
+                <>
+                  <span className="w-1 h-1 rounded-full bg-border" />
+                  <span className="font-mono">{pago.clave_rastreo}</span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
