@@ -122,6 +122,10 @@
    '/admin/portal-inmobiliaria/comisiones': Banknote,
    '/admin/portal-inmobiliaria/reportes': BarChart3,
    '/admin/portal-inmobiliaria/configuracion': Cog,
+   // Portal Cliente
+   '/admin/portal-cliente/inicio': LayoutDashboard,
+   '/admin/portal-cliente/propiedades': Building,
+   '/admin/portal-cliente/perfil': User,
  };
  
  // Mapeo de iconos por menu_id para los grupos
