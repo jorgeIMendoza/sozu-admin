@@ -485,7 +485,8 @@ export function SATNotificationDialog({
                   Cerrar Errores
                 </Button>
               </div>
-            )}
+              );
+            })()}
 
             {/* Current status */}
             <div className="space-y-2">
