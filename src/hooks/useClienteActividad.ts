@@ -165,7 +165,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
         // Use explicit FK name to avoid ambiguity with duplicate foreign keys
         const { data: acuerdosPago, error: apError } = await supabase
           .from("acuerdos_pago")
-          .select("id, id_cuenta_cobranza, id_concepto, monto, fecha_pago, orden, conceptos_pago:fk_acpago_concepto(nombre)")
+          .select("id, id_cuenta_cobranza, id_concepto, monto, fecha_pago, orden, conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre)")
           .in("id_cuenta_cobranza", mainCuentaIds)
           .eq("pago_completado", false)
           .eq("activo", true)
