@@ -238,8 +238,9 @@ export function useClienteActividad(personaId: number | null | undefined) {
             }
           });
 
-          // Add overdue summary items per property
+          // Add overdue summary items per property (skip if total monto is 0)
           overdueByCuenta.forEach((info, cuentaId) => {
+            if (info.totalMonto <= 0) return; // Skip fully paid accounts
             const prop = getPropForCuenta(cuentaId);
             items.push({
               id: `atraso-${cuentaId}`,
