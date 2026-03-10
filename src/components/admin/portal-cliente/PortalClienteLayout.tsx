@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Building2, User, ArrowLeft, LucideIcon, LogOut,
+  LayoutDashboard, Building2, User, ArrowLeft, LucideIcon, LogOut, CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
