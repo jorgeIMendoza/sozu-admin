@@ -72,10 +72,6 @@ const ClienteHistorialPagos = () => {
     <div className="max-w-lg mx-auto lg:max-w-none space-y-0">
       {/* Header */}
       <section className="px-5 pt-5 pb-2 lg:px-0">
-        <button onClick={() => navigate("/admin/portal-cliente/inicio")} className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3 hover:text-foreground transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          Inicio
-        </button>
         <h1 className="font-bold text-xl text-foreground">Historial de pagos</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Consulta todos tus pagos y aplicaciones</p>
       </section>
