@@ -91,6 +91,10 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-inmobiliaria/comisiones',
   '/admin/portal-inmobiliaria/configuracion',
   '/admin/portal-inmobiliaria/agentes/:email',
+  // Portal Cliente
+  '/admin/portal-cliente/inicio',
+  '/admin/portal-cliente/propiedades',
+  '/admin/portal-cliente/perfil',
 ]);
 
 export function isValidRoute(route: string): boolean {

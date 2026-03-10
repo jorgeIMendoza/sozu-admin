@@ -146,7 +146,8 @@
     14: Mail,            // Comunicación
     15: Briefcase,        // CRM
      16: User,              // Portal Agente
-     17: Building2,          // Portal Inmobiliaria
+      17: Building2,          // Portal Inmobiliaria
+      18: User,                // Portal Cliente
    };
  
  export interface DynamicMenuItem {

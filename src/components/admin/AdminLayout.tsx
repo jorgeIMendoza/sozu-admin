@@ -37,7 +37,6 @@ export const AdminLayout = () => {
 
   // Use PortalClienteLayout for portal cliente routes
   if (location.pathname.startsWith("/admin/portal-cliente")) {
-    const { PortalClienteLayout } = require("./portal-cliente/PortalClienteLayout");
     return <PortalClienteLayout />;
   }
 

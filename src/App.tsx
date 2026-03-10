@@ -294,6 +294,10 @@ const App = () => (
                   <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
                   <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />
                   <Route path="agent/inventario/proyecto/:id" element={<AgentProyectoDetalle />} />
+                  {/* Portal Cliente Routes */}
+                  <Route path="portal-cliente/inicio" element={<ClienteInicio />} />
+                  <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                  <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
