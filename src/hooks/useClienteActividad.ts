@@ -291,8 +291,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
           .eq("pago_completado", false)
           .eq("activo", true)
           .not("fecha_pago", "is", null)
-          .order("fecha_pago", { ascending: true })
-          .limit(10);
+          .order("fecha_pago", { ascending: true });
 
         let finalManto: any[] | null = acuerdosManto as any;
         if (mantoError) {
