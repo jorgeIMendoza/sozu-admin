@@ -175,7 +175,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
         console.log("[useClienteActividad] acuerdosPago:", acuerdosPago?.length, "error:", apError);
 
         // If explicit FK fails, try without the join
-        let finalAcuerdos = acuerdosPago;
+        let finalAcuerdos: any[] | null = acuerdosPago as any;
         if (apError) {
           console.warn("[useClienteActividad] FK join failed, trying without join:", apError.message);
           const { data: fallback } = await supabase
