@@ -307,6 +307,7 @@ const App = () => (
               </Routes>
               )}
             </Suspense>
+            </ClienteImpersonationProvider>
             </AgentImpersonationProvider>
           </AuthProvider>
         </BrowserRouter>
