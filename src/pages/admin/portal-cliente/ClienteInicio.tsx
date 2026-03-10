@@ -70,7 +70,7 @@ const ClienteInicio = () => {
           <span className="text-xs text-muted-foreground">Inversionista</span>
           <span className="w-1 h-1 rounded-full bg-border" />
           <span className="text-xs text-muted-foreground">
-            {mockPortfolio.length} propiedad{mockPortfolio.length !== 1 ? "es" : ""} activa{mockPortfolio.length !== 1 ? "s" : ""}
+            {numPropiedades} propiedad{numPropiedades !== 1 ? "es" : ""} activa{numPropiedades !== 1 ? "s" : ""}
           </span>
         </div>
       </section>
