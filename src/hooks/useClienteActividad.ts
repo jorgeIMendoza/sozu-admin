@@ -202,12 +202,15 @@ export function useClienteActividad(personaId: number | null | undefined) {
           finalAcuerdos = fallback;
         }
 
-        if (finalAcuerdos && finalAcuerdos.length > 0) {
+        // Filter out zero-amount acuerdos (fully paid but not marked as completed)
+        const validAcuerdos = (finalAcuerdos || []).filter((ap: any) => ap.monto > 0);
+
+        if (validAcuerdos.length > 0) {
           // Group overdue payments by cuenta (property) to show a summary
           const overdueByCuenta = new Map<number, { count: number; totalMonto: number; oldestDate: string }>();
           const upcomingPayments: any[] = [];
 
-          finalAcuerdos.forEach((ap: any) => {
+          validAcuerdos.forEach((ap: any) => {
             const fechaPago = ap.fecha_pago ? parseISO(ap.fecha_pago) : null;
             if (!fechaPago) return;
 
