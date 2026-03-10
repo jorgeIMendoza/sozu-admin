@@ -187,22 +187,29 @@ const ClienteInicio = () => {
       <section className="px-5 py-5 lg:px-0">
         <h2 className="font-semibold text-sm text-foreground mb-3">Accesos rápidos</h2>
         <div className="grid grid-cols-2 gap-3">
-          <button className="flex flex-col items-start gap-2.5 bg-card rounded-2xl border border-border p-4 transition-all active:scale-[0.97] hover:border-[hsl(var(--inmob-green))]/30 text-left">
+          <button
+            onClick={handleEstadoCuenta}
+            disabled={generatingEdoCuenta || !resumen?.properties?.length}
+            className="flex flex-col items-start gap-2.5 bg-card rounded-2xl border border-border p-4 transition-all active:scale-[0.97] hover:border-[hsl(var(--inmob-green))]/30 text-left disabled:opacity-50"
+          >
             <div className="w-9 h-9 rounded-xl bg-[hsl(var(--inmob-green))]/10 flex items-center justify-center">
-              <Receipt className="w-4 h-4 text-[hsl(var(--inmob-green))]" />
+              {generatingEdoCuenta ? <Loader2 className="w-4 h-4 animate-spin text-[hsl(var(--inmob-green))]" /> : <Receipt className="w-4 h-4 text-[hsl(var(--inmob-green))]" />}
             </div>
             <div>
               <p className="font-semibold text-[13px] text-foreground leading-tight">Estado de cuenta</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Saldo y movimientos</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Descargar PDF</p>
             </div>
           </button>
-          <button className="flex flex-col items-start gap-2.5 bg-card rounded-2xl border border-border p-4 transition-all active:scale-[0.97] hover:border-[hsl(var(--inmob-green))]/30 text-left">
+          <button
+            onClick={() => navigate("/admin/portal-cliente/historial-pagos")}
+            className="flex flex-col items-start gap-2.5 bg-card rounded-2xl border border-border p-4 transition-all active:scale-[0.97] hover:border-[hsl(var(--inmob-green))]/30 text-left"
+          >
             <div className="w-9 h-9 rounded-xl bg-[hsl(var(--inmob-green))]/10 flex items-center justify-center">
               <Clock className="w-4 h-4 text-[hsl(var(--inmob-green))]" />
             </div>
             <div>
               <p className="font-semibold text-[13px] text-foreground leading-tight">Historial de pagos</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Todos tus pagos</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Pagos y aplicaciones</p>
             </div>
           </button>
         </div>
@@ -211,16 +218,24 @@ const ClienteInicio = () => {
       {/* Financial Summary */}
       <section className="px-5 py-4 lg:px-0">
         <h2 className="font-semibold text-sm text-foreground mb-3">Resumen financiero</h2>
+        {resumenLoading ? (
+          <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          </div>
+        ) : (
         <div className="bg-card rounded-2xl border border-border p-4 space-y-4">
           <div className="flex items-baseline justify-between">
             <div>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Total invertido</p>
-              <p className="font-bold text-xl text-foreground tabular-nums mt-0.5">{fmt(totals.totalInvested)}</p>
+              <p className="font-bold text-xl text-foreground tabular-nums mt-0.5">{fmt(totalInvested)}</p>
             </div>
-            <div className="flex items-center gap-1 bg-[hsl(var(--inmob-green))]/10 px-2.5 py-1 rounded-full">
-              <TrendingUp className="w-3 h-3 text-[hsl(var(--inmob-green))]" />
-              <span className="text-xs font-semibold text-[hsl(var(--inmob-green))] tabular-nums">+{totals.appreciationPercent.toFixed(1)}%</span>
+            {appreciationPercent > 0 && (
+            <div className={`flex items-center gap-1 ${isAppreciation ? "bg-[hsl(var(--inmob-green))]/10" : "bg-destructive/10"} px-2.5 py-1 rounded-full`}>
+              {isAppreciation ? <TrendingUp className="w-3 h-3 text-[hsl(var(--inmob-green))]" /> : <TrendingDown className="w-3 h-3 text-destructive" />}
+              <span className={`text-xs font-semibold tabular-nums ${isAppreciation ? "text-[hsl(var(--inmob-green))]" : "text-destructive"}`}>{isAppreciation ? "+" : "-"}{appreciationPercent.toFixed(1)}%</span>
             </div>
+            )}
           </div>
           <div>
             <div className="flex justify-between items-center mb-1.5">
@@ -228,21 +243,22 @@ const ClienteInicio = () => {
               <span className="text-[11px] font-bold text-[hsl(var(--inmob-green))] tabular-nums">{progress.toFixed(0)}%</span>
             </div>
             <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full rounded-full bg-[hsl(var(--inmob-green))]" style={{ width: `${progress}%` }} />
+              <div className="h-full rounded-full bg-[hsl(var(--inmob-green))]" style={{ width: `${Math.min(progress, 100)}%` }} />
             </div>
           </div>
           <div className="flex items-center justify-between pt-1">
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Pagado</p>
-              <p className="font-semibold text-sm text-[hsl(var(--inmob-green))] tabular-nums mt-0.5">{fmt(totals.totalPaid)}</p>
+              <p className="font-semibold text-sm text-[hsl(var(--inmob-green))] tabular-nums mt-0.5">{fmt(totalPaid)}</p>
             </div>
             <div className="w-px h-8 bg-border" />
             <div className="text-right">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Pendiente</p>
-              <p className="font-semibold text-sm text-foreground tabular-nums mt-0.5">{fmt(totals.totalPending)}</p>
+              <p className="font-semibold text-sm text-foreground tabular-nums mt-0.5">{fmt(totalPending)}</p>
             </div>
           </div>
         </div>
+        )}
       </section>
 
       {/* Properties */}
