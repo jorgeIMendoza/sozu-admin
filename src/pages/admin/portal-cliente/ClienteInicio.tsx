@@ -44,14 +44,49 @@ const ClienteInicio = () => {
     queryKey: ["portal-cliente-propiedades-count", effectivePersonaId],
     queryFn: async () => {
       if (!effectivePersonaId) return 0;
-      const { data: ofertas } = await supabase
+
+      // Direct ofertas (as lead)
+      const { data: ofertasDirectas } = await supabase
         .from("ofertas")
-        .select("id, id_producto")
+        .select("id, id_producto, id_propiedad")
         .eq("id_persona_lead", effectivePersonaId)
         .eq("activo", true);
-      if (!ofertas) return 0;
+
+      // Co-owner ofertas (via compradores → cuentas_cobranza → ofertas)
+      const { data: compradorCuentas } = await supabase
+        .from("compradores")
+        .select("id_cuenta_cobranza")
+        .eq("id_persona", effectivePersonaId)
+        .eq("activo", true);
+
+      let ofertasCoprop: any[] = [];
+      if (compradorCuentas && compradorCuentas.length > 0) {
+        const cuentaIds = [...new Set(compradorCuentas.map((c) => c.id_cuenta_cobranza))];
+        const { data: cuentasData } = await supabase
+          .from("cuentas_cobranza")
+          .select("id_oferta")
+          .in("id", cuentaIds)
+          .eq("activo", true);
+
+        if (cuentasData && cuentasData.length > 0) {
+          const ofertaIdsFromCoprop = [...new Set(cuentasData.map((c) => c.id_oferta))];
+          const { data: copropOfertas } = await supabase
+            .from("ofertas")
+            .select("id, id_producto, id_propiedad")
+            .in("id", ofertaIdsFromCoprop)
+            .eq("activo", true);
+          ofertasCoprop = copropOfertas || [];
+        }
+      }
+
+      // Merge and deduplicate
+      const ofertasMap = new Map<number, any>();
+      (ofertasDirectas || []).forEach((o: any) => ofertasMap.set(o.id, o));
+      ofertasCoprop.forEach((o: any) => ofertasMap.set(o.id, o));
+      const allOfertas = Array.from(ofertasMap.values());
+
       // Only count non-product ofertas (real properties)
-      return ofertas.filter((o: any) => !o.id_producto).length;
+      return allOfertas.filter((o: any) => !o.id_producto).length;
     },
     enabled: !!effectivePersonaId,
   });
