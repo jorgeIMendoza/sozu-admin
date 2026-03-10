@@ -34,6 +34,12 @@ export const AdminLayout = () => {
     return <PortalInmobiliariaLayout />;
   }
 
+  // Use PortalClienteLayout for portal cliente routes
+  if (location.pathname.startsWith("/admin/portal-cliente")) {
+    const { PortalClienteLayout } = require("./portal-cliente/PortalClienteLayout");
+    return <PortalClienteLayout />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {!isSimplifiedRole && (
