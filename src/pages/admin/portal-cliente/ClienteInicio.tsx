@@ -39,8 +39,24 @@ const ClienteInicio = () => {
 
   const { data: actividad, isLoading: actividadLoading } = useClienteActividad(effectivePersonaId);
 
-  const totals = getPortfolioTotals(mockPortfolio);
-  const progress = totals.totalInvested > 0 ? (totals.totalPaid / totals.totalInvested) * 100 : 0;
+  // Count real active properties (non-product ofertas)
+  const { data: propiedadesActivasCount } = useQuery({
+    queryKey: ["portal-cliente-propiedades-count", effectivePersonaId],
+    queryFn: async () => {
+      if (!effectivePersonaId) return 0;
+      const { data: ofertas } = await supabase
+        .from("ofertas")
+        .select("id, id_producto")
+        .eq("id_persona_lead", effectivePersonaId)
+        .eq("activo", true);
+      if (!ofertas) return 0;
+      // Only count non-product ofertas (real properties)
+      return ofertas.filter((o: any) => !o.id_producto).length;
+    },
+    enabled: !!effectivePersonaId,
+  });
+
+  const numPropiedades = propiedadesActivasCount ?? 0;
 
   return (
     <div className="max-w-lg mx-auto lg:max-w-none space-y-0">
