@@ -21,6 +21,8 @@ const getGreeting = (): string => {
 const ClienteInicio = () => {
   const { profile } = useAuth();
   const { impersonatedClienteName, impersonatedClientePersonaId, isImpersonating } = useClienteImpersonation();
+  const navigate = useNavigate();
+  const [generatingEdoCuenta, setGeneratingEdoCuenta] = useState(false);
   
   const effectivePersonaId = isImpersonating ? impersonatedClientePersonaId : profile?.id_persona;
 
@@ -43,6 +45,7 @@ const ClienteInicio = () => {
     : personaData?.nombre_legal || profile?.nombre || "Cliente";
 
   const { data: actividad, isLoading: actividadLoading } = useClienteActividad(effectivePersonaId);
+  const { data: resumen, isLoading: resumenLoading } = useClienteResumenFinanciero(effectivePersonaId);
 
   // Count real active properties (non-product ofertas)
   const { data: propiedadesActivasCount } = useQuery({
@@ -97,9 +100,30 @@ const ClienteInicio = () => {
   });
   const numPropiedades = propiedadesActivasCount ?? 0;
 
-  // TODO: Replace with real financial data
-  const totals = getPortfolioTotals(mockPortfolio);
-  const progress = totals.totalInvested > 0 ? (totals.totalPaid / totals.totalInvested) * 100 : 0;
+  // Real financial data from hook
+  const totalInvested = resumen?.totalInvested ?? 0;
+  const totalPaid = resumen?.totalPaid ?? 0;
+  const totalPending = resumen?.totalPending ?? 0;
+  const progress = totalInvested > 0 ? (totalPaid / totalInvested) * 100 : 0;
+  const appreciationPercent = resumen?.appreciationPercent ?? 0;
+  const isAppreciation = resumen?.isAppreciation ?? true;
+
+  // Estado de cuenta handler - use first property's cuenta
+  const handleEstadoCuenta = async () => {
+    const firstCuenta = resumen?.properties?.[0]?.cuentaId;
+    if (!firstCuenta) {
+      toast.error("No se encontró cuenta para generar el estado de cuenta");
+      return;
+    }
+    setGeneratingEdoCuenta(true);
+    try {
+      await estadoCuentaEdgeFunctionService.generateEstadoCuenta({ id_cuenta: firstCuenta });
+    } catch {
+      toast.error("Error al generar el estado de cuenta");
+    } finally {
+      setGeneratingEdoCuenta(false);
+    }
+  };
 
   return (
     <div className="max-w-lg mx-auto lg:max-w-none space-y-0">
