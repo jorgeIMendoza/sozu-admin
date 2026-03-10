@@ -1,13 +1,18 @@
-## Plan completado: Homologación de CC-1748 y CCP-1166
+## Plan completado: Portal del Cliente
 
-Datos insertados exitosamente para que ambas cuentas canceladas sigan el flujo estándar de cancelación.
+Nuevo módulo "Portal del Cliente" implementado con 3 submenús (Inicio, Propiedades, Perfil) siguiendo el diseño del Portal Inmobiliaria.
 
-### Resumen de cambios en BD
+### Cambios realizados
 
-| Operación | CC-1748 | CCP-1166 |
-|-----------|---------|----------|
-| Acuerdo concepto 3 desactivado | ✅ (id 25792) | ✅ (id 21523) |
-| Acuerdo concepto 7 (Penalización) | ✅ $259,774.47 (id 25796) | N/A |
-| Acuerdo concepto 9 (Devolución) | ✅ $638,699.77 (id 25797) | ✅ $259,774.47 (id 25798) |
-| Pago reembolso (Cheque) | ✅ $638,699.77 (id 20835) | ✅ $259,774.47 (id 20836) |
-| Aplicación pago → acuerdo 9 | ✅ (id 44775) | ✅ (id 44776) |
+| Área | Detalle |
+|------|---------|
+| **BD** | Menu 18 "Portal del Cliente" + 3 submenus + permisos leer para Super Admin |
+| **Layout** | `PortalClienteLayout.tsx` — sidebar desktop + bottom nav mobile, mismo diseño que Portal Inmobiliaria |
+| **Inicio** | Saludo, actividad, accesos rápidos, resumen financiero, pendientes, tarjetas de propiedades (mock) |
+| **Propiedades** | Lista de tarjetas con hero, barra de progreso, datos financieros (mock) |
+| **Perfil** | Hero identidad, info personal, documentación, fiscal, bancos, seguridad (mock) |
+| **Routing** | App.tsx, AdminLayout.tsx, validRoutes.ts, useDynamicMenus.ts actualizados |
+
+### Pendiente (follow-up)
+- Conectar datos reales desde Supabase (cuentas_cobranza, propiedades, pagos)
+- Rol "Cliente" con permisos específicos
