@@ -321,34 +321,79 @@ export function useClienteActividad(personaId: number | null | undefined) {
           }
         });
 
+        // Group maintenance payments by parent cuenta (property) into a single summary
+        const mantoByCuenta = new Map<number, { count: number; totalMonto: number; oldestDate: string; newestDate: string; oldestDias: number; newestDias: number; prop: PropInfo | null }>();
+
         finalManto?.forEach((ap: any) => {
+          if (ap.monto <= 0) return;
           const fechaPago = ap.fecha_pago ? parseISO(ap.fecha_pago) : null;
           if (!fechaPago) return;
 
           const dias = differenceInCalendarDays(fechaPago, today);
-          if (dias > 30) return;
 
           const parentId = mantoParentMap.get(ap.id_cuenta_cobranza);
+          // Use parentId or the cuenta itself as grouping key
+          const groupKey = parentId || ap.id_cuenta_cobranza;
+
           let prop: PropInfo | null = null;
           if (parentId) {
             prop = getPropForCuenta(parentId);
           }
 
+          const existing = mantoByCuenta.get(groupKey);
+          if (existing) {
+            existing.count += 1;
+            existing.totalMonto += ap.monto || 0;
+            if (ap.fecha_pago < existing.oldestDate) {
+              existing.oldestDate = ap.fecha_pago;
+              existing.oldestDias = dias;
+            }
+            if (ap.fecha_pago > existing.newestDate) {
+              existing.newestDate = ap.fecha_pago;
+              existing.newestDias = dias;
+            }
+          } else {
+            mantoByCuenta.set(groupKey, {
+              count: 1,
+              totalMonto: ap.monto || 0,
+              oldestDate: ap.fecha_pago,
+              newestDate: ap.fecha_pago,
+              oldestDias: dias,
+              newestDias: dias,
+              prop: prop || existing?.prop || null,
+            });
+          }
+        });
+
+        mantoByCuenta.forEach((info, groupKey) => {
+          const oldestAbsDias = Math.abs(info.oldestDias);
+          const newestAbsDias = Math.abs(info.newestDias);
+          let mensaje: string;
+
+          if (info.oldestDias < 0) {
+            // All or some are overdue
+            if (info.count === 1) {
+              mensaje = `Vencido hace ${oldestAbsDias} día${oldestAbsDias !== 1 ? "s" : ""}`;
+            } else {
+              mensaje = `Adeudo más antiguo: hace ${oldestAbsDias} días — más reciente: hace ${newestAbsDias} días`;
+            }
+          } else if (info.oldestDias === 0) {
+            mensaje = "Vence hoy";
+          } else {
+            mensaje = `Próximo pago en ${info.oldestDias} día${info.oldestDias !== 1 ? "s" : ""}`;
+          }
+
           items.push({
-            id: `manto-${ap.id}`,
+            id: `manto-${groupKey}`,
             tipo: "mantenimiento",
-            proyecto: prop?.proyecto || "Proyecto",
-            unidad: prop?.numero || "",
-            concepto: "Mantenimiento",
-            monto: ap.monto,
-            fechaPago: ap.fecha_pago,
-            diasRestantes: dias,
-            urgencia: "green",
-            mensaje: dias < 0
-              ? `Vencido hace ${Math.abs(dias)} día${Math.abs(dias) !== 1 ? "s" : ""}`
-              : dias === 0
-              ? "Vence hoy"
-              : `Fecha de pago: ${fechaPago.toLocaleDateString("es-MX")}`,
+            proyecto: info.prop?.proyecto || "Proyecto",
+            unidad: info.prop?.numero || "",
+            concepto: info.count === 1 ? "Mantenimiento" : `${info.count} pagos de mantenimiento`,
+            monto: info.totalMonto,
+            fechaPago: info.oldestDate,
+            diasRestantes: info.oldestDias,
+            urgencia: info.oldestDias < 0 ? "red" : info.oldestDias <= 10 ? "orange" : "green",
+            mensaje,
           });
         });
       }
