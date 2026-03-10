@@ -109,16 +109,23 @@ const ClienteInicio = () => {
   const appreciationPercent = resumen?.appreciationPercent ?? 0;
   const isAppreciation = resumen?.isAppreciation ?? true;
 
-  // Estado de cuenta handler - use first property's cuenta
-  const handleEstadoCuenta = async () => {
-    const firstCuenta = resumen?.properties?.[0]?.cuentaId;
-    if (!firstCuenta) {
+  // Estado de cuenta handler
+  const handleEstadoCuenta = async (cuentaId?: number) => {
+    const properties = resumen?.properties || [];
+    if (properties.length === 0) {
       toast.error("No se encontró cuenta para generar el estado de cuenta");
       return;
     }
+    // If multiple properties and no specific cuenta selected, show picker
+    if (properties.length > 1 && !cuentaId) {
+      setShowEdoCuentaPicker(true);
+      return;
+    }
+    const targetCuenta = cuentaId || properties[0].cuentaId;
+    setShowEdoCuentaPicker(false);
     setGeneratingEdoCuenta(true);
     try {
-      await estadoCuentaEdgeFunctionService.generateEstadoCuenta({ id_cuenta: firstCuenta });
+      await estadoCuentaEdgeFunctionService.generateEstadoCuenta({ id_cuenta: targetCuenta });
     } catch {
       toast.error("Error al generar el estado de cuenta");
     } finally {
