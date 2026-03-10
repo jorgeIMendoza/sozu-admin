@@ -299,6 +299,7 @@ const App = () => (
                   <Route path="agent/inventario/proyecto/:id" element={<AgentProyectoDetalle />} />
                   {/* Portal Cliente Routes */}
                   <Route path="portal-cliente/inicio" element={<ClienteInicio />} />
+                  <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
                   <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                 </Route>
