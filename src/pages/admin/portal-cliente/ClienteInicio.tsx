@@ -12,6 +12,29 @@ const getGreeting = (): string => {
 };
 
 const ClienteInicio = () => {
+  const { profile } = useAuth();
+  const { impersonatedClienteName, impersonatedClientePersonaId, isImpersonating } = useClienteImpersonation();
+  
+  const effectivePersonaId = isImpersonating ? impersonatedClientePersonaId : profile?.id_persona;
+
+  const { data: personaData } = useQuery({
+    queryKey: ["portal-cliente-persona-greeting", effectivePersonaId],
+    queryFn: async () => {
+      if (!effectivePersonaId) return null;
+      const { data } = await supabase
+        .from("personas")
+        .select("nombre_legal")
+        .eq("id", effectivePersonaId)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!effectivePersonaId,
+  });
+
+  const displayName = isImpersonating
+    ? impersonatedClienteName || "Cliente"
+    : personaData?.nombre_legal || profile?.nombre || "Cliente";
+
   const totals = getPortfolioTotals(mockPortfolio);
   const progress = totals.totalInvested > 0 ? (totals.totalPaid / totals.totalInvested) * 100 : 0;
 
