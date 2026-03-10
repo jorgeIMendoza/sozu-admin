@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AdminSidebar } from "./AdminSidebar";
 import { PortalInmobiliariaLayout } from "./portal-inmobiliaria/PortalInmobiliariaLayout";
+import { PortalClienteLayout } from "./portal-cliente/PortalClienteLayout";
 import { AdminHeader } from "./AdminHeader";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
