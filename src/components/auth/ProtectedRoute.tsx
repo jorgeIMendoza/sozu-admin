@@ -15,6 +15,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, isLoading, mustChangePassword, profile } = useAuth();
   const location = useLocation();
 
+  // Allow Cliente role to access portal-cliente routes
+  const isPortalClienteRoute = location.pathname.startsWith('/admin/portal-cliente');
+
   const handleGoToLogin = () => {
     supabase.auth.signOut().finally(() => {
       window.location.href = '/auth/login';
