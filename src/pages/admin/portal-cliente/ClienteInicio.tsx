@@ -1,6 +1,9 @@
 import { Receipt, Clock, TrendingUp, ChevronRight, AlertTriangle, CheckCircle2, CreditCard } from "lucide-react";
 import { mockPortfolio, getPortfolioTotals, fmtMXN as fmt, type ClienteInvestment } from "@/lib/clienteMockData";
-
+import { useAuth } from "@/contexts/AuthContext";
+import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 const getGreeting = (): string => {
   const hour = new Date().getHours();
   if (hour < 12) return "Buenos días";
