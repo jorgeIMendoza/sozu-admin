@@ -264,6 +264,8 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
           direccion: projInfo?.direccion || "",
           fechaEntrega: projInfo?.fechaEntrega || null,
           valorEstimado: currentValue,
+          estatusPropiedad: prop?.id_estatus_disponibilidad || 0,
+          proximoMantenimiento: nextMaintenanceMap.get(cuenta.id) || null,
         });
       });
 
