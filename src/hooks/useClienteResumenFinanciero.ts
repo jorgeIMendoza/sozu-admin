@@ -24,6 +24,10 @@ export interface PropertyFinancialSummary {
   precioM2Compra: number;
   precioM2Actual: number;
   appreciationPercent: number;
+  imageUrl: string;
+  direccion: string;
+  fechaEntrega: string | null;
+  valorEstimado: number;
 }
 
 export function useClienteResumenFinanciero(personaId: number | null | undefined) {
@@ -109,13 +113,14 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
 
       // Get edificios_modelos → edificios → proyectos for precio_m2_actual
       const emIds = [...new Set((propiedades || []).map((p) => p.id_edificio_modelo).filter(Boolean))];
-      let buildingMap = new Map<number, { edificio: string; proyecto: string; proyectoId: number }>();
-      let projectPriceMap = new Map<number, number>(); // proyectoId → precio_m2_actual
+      let buildingMap = new Map<number, { edificio: string; proyecto: string; proyectoId: number; modeloId: number }>();
+      let projectPriceMap = new Map<number, number>();
+      let projectInfoMap = new Map<number, { direccion: string; fechaEntrega: string | null; imageUrl: string }>();
 
       if (emIds.length > 0) {
         const { data: emData } = await supabase
           .from("edificios_modelos")
-          .select("id, id_edificio, edificios:edificios_modelos_id_edificio_fkey!inner(nombre, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual))")
+          .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(nombre, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual, direccion, fecha_entrega, url_imagen_portada))")
           .in("id", emIds);
 
         emData?.forEach((em: any) => {
@@ -125,11 +130,48 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
             edificio: ed?.nombre || "",
             proyecto: proj?.nombre || "Proyecto",
             proyectoId: proj?.id || 0,
+            modeloId: em.id_modelo || 0,
           });
-          if (proj?.id && proj?.precio_m2_actual) {
-            projectPriceMap.set(proj.id, proj.precio_m2_actual);
+          if (proj?.id) {
+            if (proj.precio_m2_actual) projectPriceMap.set(proj.id, proj.precio_m2_actual);
+            if (!projectInfoMap.has(proj.id)) {
+              projectInfoMap.set(proj.id, {
+                direccion: proj.direccion || "",
+                fechaEntrega: proj.fecha_entrega || null,
+                imageUrl: proj.url_imagen_portada || "",
+              });
+            }
           }
         });
+
+        // Fetch model images (ver_como_imagen_de_propiedad = true)
+        const modeloIds = [...new Set(Array.from(buildingMap.values()).map(b => b.modeloId).filter(Boolean))];
+        if (modeloIds.length > 0) {
+          const { data: modelImages } = await (supabase as any)
+            .from("multimedias_modelo")
+            .select("id_modelo, url")
+            .in("id_modelo", modeloIds)
+            .eq("ver_como_imagen_de_propiedad", true)
+            .eq("activo", true)
+            .limit(1);
+
+          const modelImageMap = new Map<number, string>();
+          (modelImages || []).forEach((img: any) => {
+            if (!modelImageMap.has(img.id_modelo)) modelImageMap.set(img.id_modelo, img.url);
+          });
+
+          // Override project image with model image if available
+          buildingMap.forEach((val, emId) => {
+            const modelImg = modelImageMap.get(val.modeloId);
+            if (modelImg) {
+              const projInfo = projectInfoMap.get(val.proyectoId);
+              if (projInfo) {
+                // Store per-modelo image keyed by emId for later use
+                (buildingMap.get(emId) as any).modelImageUrl = modelImg;
+              }
+            }
+          });
+        }
       }
 
       // 5. Build per-property summaries
@@ -157,6 +199,9 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
         totalCurrentValue += currentValue;
         totalOriginalValue += precioFinal;
 
+        const projInfo = building ? projectInfoMap.get(building.proyectoId) : null;
+        const modelImg = (building as any)?.modelImageUrl;
+
         properties.push({
           cuentaId: cuenta.id,
           ofertaId: cuenta.id_oferta || 0,
@@ -171,6 +216,10 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
           precioM2Compra,
           precioM2Actual,
           appreciationPercent: appPercent,
+          imageUrl: modelImg || projInfo?.imageUrl || "",
+          direccion: projInfo?.direccion || "",
+          fechaEntrega: projInfo?.fechaEntrega || null,
+          valorEstimado: currentValue,
         });
       });
 

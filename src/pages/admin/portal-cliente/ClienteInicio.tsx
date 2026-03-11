@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Receipt, Clock, TrendingUp, TrendingDown, ChevronRight, ChevronDown, AlertTriangle, CheckCircle2, CreditCard, FileText, Home, Loader2 } from "lucide-react";
-import { mockPortfolio, fmtMXN as fmt, type ClienteInvestment } from "@/lib/clienteMockData";
+import { Receipt, Clock, TrendingUp, TrendingDown, ChevronRight, ChevronDown, AlertTriangle, CheckCircle2, CreditCard, FileText, Home, Loader2, Calendar, Star } from "lucide-react";
+import { fmtMXN as fmt } from "@/lib/clienteMockData";
+import { type PropertyFinancialSummary } from "@/hooks/useClienteResumenFinanciero";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { useQuery } from "@tanstack/react-query";
@@ -372,11 +373,21 @@ const ClienteInicio = () => {
       {/* Properties */}
       <section className="px-5 py-4 lg:px-0">
         <h2 className="font-semibold text-sm text-foreground mb-3">Mis propiedades</h2>
-        <div className="space-y-3">
-          {mockPortfolio.map((inv) => (
-            <PropertyCardCompact key={inv.property.id} investment={inv} />
-          ))}
-        </div>
+        {resumenLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : resumen?.properties && resumen.properties.length > 0 ? (
+          <div className="space-y-4">
+            {resumen.properties.map((prop) => (
+              <RealPropertyCard key={prop.cuentaId} property={prop} />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card rounded-2xl border border-border p-5 text-center text-sm text-muted-foreground">
+            No tienes propiedades registradas.
+          </div>
+        )}
       </section>
     </div>
   );
@@ -446,50 +457,67 @@ function ActividadCard({ item }: { item: ActividadItem }) {
   );
 }
 
-/* ── Property Card ── */
-function PropertyCardCompact({ investment }: { investment: ClienteInvestment }) {
-  const { property, financials } = investment;
-  const progress = financials.initialPrice > 0 ? (financials.totalPaid / financials.initialPrice) * 100 : 0;
-  const isDelivered = property.deliveryDate === "Entregada";
+/* ── Real Property Card (matching reference design) ── */
+function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) {
+  const isDelivered = property.fechaEntrega
+    ? new Date(property.fechaEntrega) <= new Date()
+    : false;
+  const fechaEntregaLabel = property.fechaEntrega
+    ? isDelivered
+      ? "Entregada"
+      : new Date(property.fechaEntrega).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+    : null;
 
   return (
-    <div className="w-full text-left rounded-[20px] overflow-hidden bg-card shadow-[0_2px_16px_-4px_hsl(var(--foreground)/0.08)]">
-      <div className={`relative w-full aspect-[16/9] bg-gradient-to-br ${property.imageGradient}`}>
+    <div className="w-full rounded-2xl overflow-hidden bg-card border border-border shadow-[0_2px_16px_-4px_hsl(var(--foreground)/0.08)]">
+      {/* Image header */}
+      <div className="relative w-full aspect-[16/9] bg-muted overflow-hidden">
+        {property.imageUrl ? (
+          <img
+            src={property.imageUrl}
+            alt={property.proyecto}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-muted to-muted-foreground/20 flex items-center justify-center">
+            <Home className="w-10 h-10 text-muted-foreground/40" />
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-foreground/70 via-foreground/20 to-transparent" />
-        <div className="absolute top-3 right-3">
-          <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm ${isDelivered ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-500"}`}>
-            {isDelivered ? "Entregada" : `Entrega: ${property.deliveryDate}`}
-          </span>
-        </div>
+        {/* Status badge */}
+        {fechaEntregaLabel && (
+          <div className="absolute top-3 right-3">
+            <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm ${isDelivered ? "bg-[hsl(var(--inmob-green))]/20 text-[hsl(var(--inmob-green))]" : "bg-amber-500/15 text-amber-500"}`}>
+              {isDelivered ? "Entregada" : `Entrega: ${fechaEntregaLabel}`}
+            </span>
+          </div>
+        )}
+        {/* Project name overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-4">
-          <h3 className="font-bold text-base text-white leading-tight">{property.projectName}</h3>
-          <p className="text-white/70 text-xs mt-0.5">Unidad {property.unitNumber} · {property.location}</p>
+          <h3 className="font-bold text-base text-white leading-tight">{property.proyecto}</h3>
+          <p className="text-white/70 text-xs mt-0.5">
+            Unidad {property.unidad} · {property.direccion || property.edificio}
+          </p>
         </div>
       </div>
+      {/* Info section */}
       <div className="p-4 space-y-3">
         <div className="flex items-baseline justify-between">
           <div>
-            <p className="text-[11px] text-muted-foreground">Valor del activo</p>
-            <p className="font-bold text-lg text-foreground tabular-nums">{fmt(financials.initialPrice)}</p>
+            <p className="text-[11px] text-muted-foreground">Plusvalía actual</p>
+            <p className={`font-bold text-base tabular-nums ${property.appreciationPercent >= 0 ? "text-[hsl(var(--inmob-green))]" : "text-destructive"}`}>
+              {property.appreciationPercent >= 0 ? "+" : ""}{property.appreciationPercent.toFixed(1)}%
+            </p>
           </div>
-          {financials.estimatedAppreciation > 0 && (
-            <div className="flex items-center gap-1 text-[hsl(var(--inmob-green))]">
-              <TrendingUp className="w-3 h-3" />
-              <span className="text-xs font-semibold tabular-nums">+{financials.estimatedAppreciation}%</span>
-            </div>
-          )}
-        </div>
-        <div>
-          <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
-            <div className="h-full rounded-full bg-[hsl(var(--inmob-green))]" style={{ width: `${progress}%` }} />
-          </div>
-          <div className="flex justify-between mt-2 text-[11px]">
-            <span className="text-muted-foreground">Pagado <span className="font-semibold text-foreground tabular-nums">{fmt(financials.totalPaid)}</span></span>
-            <span className="text-muted-foreground">Pendiente <span className="font-semibold text-foreground tabular-nums">{fmt(financials.pendingBalance)}</span></span>
+          <div className="text-right">
+            <p className="text-[11px] text-muted-foreground">Valor estimado</p>
+            <p className="font-bold text-base text-foreground tabular-nums">{fmt(property.valorEstimado)}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 pt-1">
-          <span className="text-xs font-medium text-[hsl(var(--inmob-green))] flex items-center gap-1">
+
+        {/* Extra info */}
+        <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1 font-medium text-[hsl(var(--inmob-green))]">
             Ver detalle
             <ChevronRight className="w-3.5 h-3.5" />
           </span>
