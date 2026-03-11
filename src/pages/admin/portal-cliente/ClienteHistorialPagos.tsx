@@ -404,7 +404,7 @@ function AcuerdosPropertySection({ property }: { property: PropertyFinancialSumm
       if (pagoIds.length > 0) {
         const { data: pagosData } = await supabase
           .from("pagos")
-          .select("id, fecha_pago, metodos_pago!fk_pagos_metodo(nombre)")
+          .select("id, fecha_pago, clave_rastreo, metodos_pago!fk_pagos_metodo(nombre)")
           .in("id", pagoIds);
         (pagosData || []).forEach((p: any) => pagosMap.set(p.id, p));
       }
