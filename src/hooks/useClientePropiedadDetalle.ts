@@ -23,6 +23,21 @@ export interface DocumentoPropiedad {
   url: string;
 }
 
+export interface ParcialidadDetalle {
+  id: number;
+  fechaPago: string;
+  monto: number;
+  pagado: boolean;
+  orden: number;
+  concepto: string;
+}
+
+export interface PagoReciente {
+  id: number;
+  fechaPago: string;
+  monto: number;
+}
+
 export interface PropiedadDetalle {
   cuentaId: number;
   ofertaId: number;
