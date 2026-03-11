@@ -160,6 +160,9 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       let mantenimientoHistorial: MantenimientoHistorial[] = [];
       let proximoMantenimiento: string | null = null;
       let mantenimientosAtrasados = 0;
+      const mantenimientoCuenta = (childCuentas || []).find(c => c.clabe_stp) || (childCuentas || [])[0] || null;
+      const mantenimientoCuentaId = mantenimientoCuenta?.id || null;
+      const mantenimientoClabeStp = mantenimientoCuenta?.clabe_stp || null;
 
       if (childIds.length > 0) {
         const { data: mantoAcuerdos } = await supabase
