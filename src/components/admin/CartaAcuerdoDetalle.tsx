@@ -148,7 +148,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
       toast({ title: "Completa nombre, cargo y correo", variant: "destructive" });
       return;
     }
-    setFirmantes([...firmantes, { name: newName.trim(), email: newEmail.trim(), cargo: newCargo.trim() }]);
+    setFirmantes([...firmantes, { name: newName.trim(), email: newEmail.trim(), cargo: newCargo.trim(), enviar_mifiel: true }]);
     setNewName("");
     setNewEmail("");
     setNewCargo("");
