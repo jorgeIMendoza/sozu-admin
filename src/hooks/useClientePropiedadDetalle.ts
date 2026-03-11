@@ -54,6 +54,8 @@ export interface PropiedadDetalle {
   mantenimientoCuentaId: number | null;
   mantenimientoClabeStp: string | null;
   beneficiarioNombre: string | null;
+  propiedadClabeStp: string | null;
+  propiedadBeneficiarioNombre: string | null;
 }
 
 export function useClientePropiedadDetalle(cuentaId: number | null | undefined) {
@@ -65,7 +67,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       // 1. Get cuenta cobranza
       const { data: cuenta } = await supabase
         .from("cuentas_cobranza")
-        .select("id, id_oferta, id_propiedad, precio_final, fecha_creacion")
+        .select("id, id_oferta, id_propiedad, precio_final, fecha_creacion, clabe_stp")
         .eq("id", cuentaId)
         .eq("activo", true)
         .maybeSingle();
@@ -216,6 +218,21 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         beneficiarioNombre = (erData as any)?.personas?.nombre_legal || null;
       }
 
+      // 6c. Property beneficiario from the entity that owns the parent STP account
+      let propiedadBeneficiarioNombre: string | null = null;
+      const propiedadClabeStp = cuenta.clabe_stp || null;
+      if (propiedadClabeStp) {
+        const propCuentaMadrePrefix = propiedadClabeStp.substring(0, 14);
+        const { data: propErData } = await supabase
+          .from("entidades_relacionadas")
+          .select("personas:entidades_relacionadas_id_persona_fkey(nombre_legal)")
+          .eq("cuenta_madre_stp", propCuentaMadrePrefix)
+          .eq("activo", true)
+          .limit(1)
+          .maybeSingle();
+        propiedadBeneficiarioNombre = (propErData as any)?.personas?.nombre_legal || null;
+      }
+
       // 7. Product details
       const productosAdicionales: ProductoAdicional[] = [];
       if (productOfertas && productOfertas.length > 0) {
@@ -310,6 +327,8 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         mantenimientoCuentaId,
         mantenimientoClabeStp,
         beneficiarioNombre,
+        propiedadClabeStp,
+        propiedadBeneficiarioNombre,
       };
     },
     enabled: !!cuentaId,
