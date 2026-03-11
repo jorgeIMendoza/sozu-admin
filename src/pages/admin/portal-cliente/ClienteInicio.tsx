@@ -459,7 +459,7 @@ function ActividadCard({ item }: { item: ActividadItem }) {
 
 /* ── Real Property Card (matching reference design) ── */
 function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) {
-  // Badge based on property STATUS, not project date
+  const navigate = useNavigate();
   // 7 = Escrituración, 9 = Pagada completamente, 5 = Vendido
   const statusBadge = (() => {
     switch (property.estatusPropiedad) {
@@ -484,7 +484,10 @@ function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) 
     : null;
 
   return (
-    <div className="w-full rounded-2xl overflow-hidden bg-card border border-border shadow-[0_2px_16px_-4px_hsl(var(--foreground)/0.08)]">
+    <div
+      onClick={() => navigate(`/admin/portal-cliente/propiedad/${property.cuentaId}`)}
+      className="w-full rounded-2xl overflow-hidden bg-card border border-border shadow-[0_2px_16px_-4px_hsl(var(--foreground)/0.08)] cursor-pointer active:scale-[0.98] transition-transform"
+    >
       {/* Image header */}
       <div className="relative w-full aspect-[16/9] bg-muted overflow-hidden">
         {property.imageUrl ? (
