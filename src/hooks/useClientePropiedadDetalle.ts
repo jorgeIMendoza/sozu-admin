@@ -71,6 +71,8 @@ export interface PropiedadDetalle {
   beneficiarioNombre: string | null;
   propiedadClabeStp: string | null;
   propiedadBeneficiarioNombre: string | null;
+  parcialidades: ParcialidadDetalle[];
+  ultimosPagos: PagoReciente[];
 }
 
 export function useClientePropiedadDetalle(cuentaId: number | null | undefined) {
