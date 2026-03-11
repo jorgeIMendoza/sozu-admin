@@ -110,8 +110,50 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
 
       const { data: propiedades } = await supabase
         .from("propiedades")
-        .select("id, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, numero_propiedad")
+        .select("id, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, numero_propiedad, id_estatus_disponibilidad")
         .in("id", propiedadIds);
+
+      // Fetch child maintenance cuentas for next maintenance date
+      const { data: childCuentas } = await supabase
+        .from("cuentas_cobranza")
+        .select("id, id_cuenta_cobranza_padre")
+        .in("id_cuenta_cobranza_padre", mainCuentaIds)
+        .eq("activo", true);
+
+      const maintenanceCuentaMap = new Map<number, number[]>();
+      (childCuentas || []).forEach((c) => {
+        if (c.id_cuenta_cobranza_padre) {
+          const arr = maintenanceCuentaMap.get(c.id_cuenta_cobranza_padre) || [];
+          arr.push(c.id);
+          maintenanceCuentaMap.set(c.id_cuenta_cobranza_padre, arr);
+        }
+      });
+
+      // Get next unpaid maintenance acuerdo for each child cuenta
+      const allChildIds = (childCuentas || []).map(c => c.id);
+      let nextMaintenanceMap = new Map<number, string>(); // mainCuentaId → next date
+      if (allChildIds.length > 0) {
+        const { data: mantoAcuerdos } = await supabase
+          .from("acuerdos_pago")
+          .select("id_cuenta_cobranza, fecha_pago")
+          .in("id_cuenta_cobranza", allChildIds)
+          .eq("activo", true)
+          .eq("pago_completado", false)
+          .order("fecha_pago", { ascending: true });
+
+        // Map child cuenta → parent cuenta, find earliest
+        const childToParent = new Map<number, number>();
+        (childCuentas || []).forEach(c => {
+          if (c.id_cuenta_cobranza_padre) childToParent.set(c.id, c.id_cuenta_cobranza_padre);
+        });
+
+        (mantoAcuerdos || []).forEach((a) => {
+          const parentId = childToParent.get(a.id_cuenta_cobranza);
+          if (parentId && a.fecha_pago && !nextMaintenanceMap.has(parentId)) {
+            nextMaintenanceMap.set(parentId, a.fecha_pago);
+          }
+        });
+      }
 
       // Get edificios_modelos → edificios → proyectos for precio_m2_actual
       const emIds = [...new Set((propiedades || []).map((p) => p.id_edificio_modelo).filter(Boolean))];
