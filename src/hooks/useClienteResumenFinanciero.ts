@@ -199,6 +199,9 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
         totalCurrentValue += currentValue;
         totalOriginalValue += precioFinal;
 
+        const projInfo = building ? projectInfoMap.get(building.proyectoId) : null;
+        const modelImg = (building as any)?.modelImageUrl;
+
         properties.push({
           cuentaId: cuenta.id,
           ofertaId: cuenta.id_oferta || 0,
@@ -213,6 +216,10 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
           precioM2Compra,
           precioM2Actual,
           appreciationPercent: appPercent,
+          imageUrl: modelImg || projInfo?.imageUrl || "",
+          direccion: projInfo?.direccion || "",
+          fechaEntrega: projInfo?.fechaEntrega || null,
+          valorEstimado: currentValue,
         });
       });
 
