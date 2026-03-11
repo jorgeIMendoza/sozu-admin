@@ -77,7 +77,7 @@ const ClienteMantenimientoPago = () => {
         {/* Beneficiario */}
         <DataRow
           label="BENEFICIARIO"
-          value="SOZU Desarrollos S.A. de C.V."
+          value={prop.beneficiarioNombre || "SOZU Desarrollos S.A. de C.V."}
         />
 
         {/* Monto sugerido */}
