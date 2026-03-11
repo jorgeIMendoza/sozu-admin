@@ -50,6 +50,8 @@ export interface PropiedadDetalle {
   productosAdicionales: ProductoAdicional[];
   documentos: DocumentoPropiedad[];
   fechaCompra: string | null;
+  mantenimientoCuentaId: number | null;
+  mantenimientoClabeStp: string | null;
 }
 
 export function useClientePropiedadDetalle(cuentaId: number | null | undefined) {
