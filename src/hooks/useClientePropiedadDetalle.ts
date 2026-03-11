@@ -99,7 +99,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
           .eq("activo", true),
         supabase
           .from("cuentas_cobranza")
-          .select("id, id_oferta")
+          .select("id, id_oferta, clabe_stp")
           .eq("id_cuenta_cobranza_padre", cuentaId)
           .eq("activo", true),
         // Product ofertas linked to same persona
