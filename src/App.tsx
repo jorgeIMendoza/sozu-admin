@@ -303,6 +303,7 @@ const App = () => (
                   <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                  <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                 </Route>
                 
