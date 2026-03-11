@@ -274,6 +274,8 @@ Deno.serve(async (req) => {
     let m2Totales = 0;
     let proyectoData: any = null;
     let categoriaProducto = ''; // Para mostrar si es bodega, estacionamiento, etc.
+    let tieneMetraje = false; // Whether the product category uses metraje
+    let numeroDepartamento = ''; // Property number when the product belongs to a property
 
     // Check id_producto FIRST - if it exists, this is a product account
     if (oferta.id_producto) {
@@ -284,11 +286,13 @@ Deno.serve(async (req) => {
         .select(`
           id,
           nombre,
+          metraje,
           id_proyecto,
           id_categoria,
           categorias_producto!fk_prodserv_categoria (
             id,
-            nombre
+            nombre,
+            tiene_metraje
           ),
           proyectos!productos_servicios_id_proyecto_fkey (
             id,
@@ -306,16 +310,40 @@ Deno.serve(async (req) => {
         proyectoData = producto.proyectos;
         proyectoNombre = proyectoData?.nombre || '';
         // Get category name for displaying in the receipt
-        categoriaProducto = (producto as any).categorias_producto?.nombre || '';
+        const catData = (producto as any).categorias_producto;
+        categoriaProducto = catData?.nombre || '';
+        tieneMetraje = catData?.tiene_metraje === true;
+        
+        // If the category has metraje, use the product's metraje
+        if (tieneMetraje) {
+          m2Totales = Number(producto.metraje) || 0;
+        }
+        
         console.log('Producto found:', { 
           nombre: producto.nombre, 
           proyecto: proyectoNombre,
           categoria: categoriaProducto,
+          tieneMetraje,
+          metraje: producto.metraje,
           url_logo: proyectoData?.url_logo,
           nombre_firmante: proyectoData?.nombre_firmante_recibos
         });
       } else {
         console.error('Error fetching producto:', productoError);
+      }
+
+      // Fetch the property number (departamento) if the offer has a property
+      if (oferta.id_propiedad) {
+        const { data: propForProduct, error: propForProductError } = await supabase
+          .from('propiedades')
+          .select('numero_propiedad')
+          .eq('id', oferta.id_propiedad)
+          .single();
+        
+        if (!propForProductError && propForProduct) {
+          numeroDepartamento = propForProduct.numero_propiedad || '';
+          console.log('Property number for product:', numeroDepartamento);
+        }
       }
     } else if (oferta.id_propiedad) {
       // Only fetch property if there's no product (regular property account)
@@ -537,7 +565,8 @@ Deno.serve(async (req) => {
 
     let conceptoText = '';
     if (categoriaProducto) {
-      conceptoText = `${recibimosTexto} la cantidad de ${montoFormateado} (${montoEnLetras}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de un(a) ${categoriaProducto.toLowerCase()} del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}, cuyas características serán:`;
+      const deptoText = numeroDepartamento ? ` del departamento ${numeroDepartamento}` : '';
+      conceptoText = `${recibimosTexto} la cantidad de ${montoFormateado} (${montoEnLetras}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de un(a) ${categoriaProducto.toLowerCase()} del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}${deptoText}, cuyas características serán:`;
     } else {
       conceptoText = `${recibimosTexto} la cantidad de ${montoFormateado} (${montoEnLetras}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}, al efecto de adquirir la siguiente unidad condominal, cuyas características serán:`;
     }
@@ -584,41 +613,47 @@ Deno.serve(async (req) => {
     });
     yPosition -= 22;
 
-    // Item 2
-    page.drawText('2.', {
-      x: margin + 5,
-      y: yPosition,
-      size: 11,
-      font: helveticaBold,
-      color: accentColor,
-    });
-    page.drawText('Metros estimados:', {
-      x: margin + 25,
-      y: yPosition,
-      size: 11,
-      font: helveticaBold,
-      color: black,
-    });
-    page.drawText(`${m2Formateado} m²`, {
-      x: margin + 145,
-      y: yPosition,
-      size: 11,
-      font: helvetica,
-      color: black,
-    });
-    yPosition -= 16;
-    // M2 in words on new line
-    page.drawText(`(${m2EnLetras} metros cuadrados)`, {
-      x: margin + 25,
-      y: yPosition,
-      size: 10,
-      font: helvetica,
-      color: mediumGray,
-    });
-    yPosition -= 22;
+    // Item 2 - Metros estimados (only for properties or products with tiene_metraje=true)
+    const showMetraje = !categoriaProducto || tieneMetraje;
+    let currentItemNumber = 2;
+    
+    if (showMetraje) {
+      page.drawText(`${currentItemNumber}.`, {
+        x: margin + 5,
+        y: yPosition,
+        size: 11,
+        font: helveticaBold,
+        color: accentColor,
+      });
+      page.drawText('Metros estimados:', {
+        x: margin + 25,
+        y: yPosition,
+        size: 11,
+        font: helveticaBold,
+        color: black,
+      });
+      page.drawText(`${m2Formateado} m²`, {
+        x: margin + 145,
+        y: yPosition,
+        size: 11,
+        font: helvetica,
+        color: black,
+      });
+      yPosition -= 16;
+      // M2 in words on new line
+      page.drawText(`(${m2EnLetras} metros cuadrados)`, {
+        x: margin + 25,
+        y: yPosition,
+        size: 10,
+        font: helvetica,
+        color: mediumGray,
+      });
+      yPosition -= 22;
+      currentItemNumber++;
+    }
 
-    // Item 3 - Full text with client name
-    page.drawText('3.', {
+    // Item - Monto total (dynamic number based on whether metros was shown)
+    page.drawText(`${currentItemNumber}.`, {
       x: margin + 5,
       y: yPosition,
       size: 11,
