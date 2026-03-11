@@ -565,7 +565,8 @@ Deno.serve(async (req) => {
 
     let conceptoText = '';
     if (categoriaProducto) {
-      conceptoText = `${recibimosTexto} la cantidad de ${montoFormateado} (${montoEnLetras}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de un(a) ${categoriaProducto.toLowerCase()} del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}, cuyas características serán:`;
+      const deptoText = numeroDepartamento ? ` del departamento ${numeroDepartamento}` : '';
+      conceptoText = `${recibimosTexto} la cantidad de ${montoFormateado} (${montoEnLetras}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de un(a) ${categoriaProducto.toLowerCase()} del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}${deptoText}, cuyas características serán:`;
     } else {
       conceptoText = `${recibimosTexto} la cantidad de ${montoFormateado} (${montoEnLetras}), el día ${fechaFormateada}, por concepto de depósito en garantía de cumplimiento de conformidad que tiene como objetivo la gestión para la adquisición de una unidad condominal del desarrollo inmobiliario ${proyectoNombre.toUpperCase()}, al efecto de adquirir la siguiente unidad condominal, cuyas características serán:`;
     }
