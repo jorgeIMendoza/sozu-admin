@@ -30,6 +30,7 @@ export interface PropertyFinancialSummary {
   valorEstimado: number;
   estatusPropiedad: number;
   proximoMantenimiento: string | null;
+  mantenimientosAtrasados: number;
 }
 
 export function useClienteResumenFinanciero(personaId: number | null | undefined) {
@@ -132,6 +133,7 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
       // Get next unpaid maintenance acuerdo for each child cuenta
       const allChildIds = (childCuentas || []).map(c => c.id);
       let nextMaintenanceMap = new Map<number, string>(); // mainCuentaId → next date
+      let overdueMaintenanceMap = new Map<number, number>(); // mainCuentaId → overdue count
       if (allChildIds.length > 0) {
         const { data: mantoAcuerdos } = await supabase
           .from("acuerdos_pago")
@@ -147,10 +149,19 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
           if (c.id_cuenta_cobranza_padre) childToParent.set(c.id, c.id_cuenta_cobranza_padre);
         });
 
+        const today = new Date().toISOString().slice(0, 10);
+
         (mantoAcuerdos || []).forEach((a) => {
           const parentId = childToParent.get(a.id_cuenta_cobranza);
-          if (parentId && a.fecha_pago && !nextMaintenanceMap.has(parentId)) {
-            nextMaintenanceMap.set(parentId, a.fecha_pago);
+          if (parentId && a.fecha_pago) {
+            // Track earliest date
+            if (!nextMaintenanceMap.has(parentId)) {
+              nextMaintenanceMap.set(parentId, a.fecha_pago);
+            }
+            // Count overdue
+            if (a.fecha_pago < today) {
+              overdueMaintenanceMap.set(parentId, (overdueMaintenanceMap.get(parentId) || 0) + 1);
+            }
           }
         });
       }
@@ -266,6 +277,7 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
           valorEstimado: currentValue,
           estatusPropiedad: prop?.id_estatus_disponibilidad || 0,
           proximoMantenimiento: nextMaintenanceMap.get(cuenta.id) || null,
+          mantenimientosAtrasados: overdueMaintenanceMap.get(cuenta.id) || 0,
         });
       });
 

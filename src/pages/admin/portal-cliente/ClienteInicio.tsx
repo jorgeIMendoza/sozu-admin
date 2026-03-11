@@ -459,13 +459,28 @@ function ActividadCard({ item }: { item: ActividadItem }) {
 
 /* ── Real Property Card (matching reference design) ── */
 function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) {
-  const isDelivered = property.fechaEntrega
-    ? new Date(property.fechaEntrega) <= new Date()
-    : false;
+  // Badge based on property STATUS, not project date
+  // 7 = Escrituración, 9 = Pagada completamente, 5 = Vendido
+  const statusBadge = (() => {
+    switch (property.estatusPropiedad) {
+      case 7: return { label: "Escrituración", color: "bg-blue-500/15 text-blue-600" };
+      case 9: return { label: "Pagada", color: "bg-[hsl(var(--inmob-green))]/20 text-[hsl(var(--inmob-green))]" };
+      case 5: return { label: "Vendido", color: "bg-amber-500/15 text-amber-600" };
+      default: return null;
+    }
+  })();
+
+  // Delivery badge from project date (informational only)
   const fechaEntregaLabel = property.fechaEntrega
-    ? isDelivered
+    ? new Date(property.fechaEntrega) <= new Date()
       ? "Entregada"
-      : new Date(property.fechaEntrega).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+      : `Entrega: ${new Date(property.fechaEntrega).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}`
+    : null;
+
+  // Maintenance: overdue vs upcoming
+  const maintenanceOverdue = property.mantenimientosAtrasados > 0;
+  const maintenanceDate = property.proximoMantenimiento
+    ? new Date(property.proximoMantenimiento + "T00:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
     : null;
 
   return (
@@ -485,13 +500,18 @@ function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) 
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-foreground/70 via-foreground/20 to-transparent" />
         {/* Status badge */}
-        {fechaEntregaLabel && (
-          <div className="absolute top-3 right-3">
-            <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm ${isDelivered ? "bg-[hsl(var(--inmob-green))]/20 text-[hsl(var(--inmob-green))]" : "bg-amber-500/15 text-amber-500"}`}>
-              {isDelivered ? "Entregada" : `Entrega: ${fechaEntregaLabel}`}
+        <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
+          {statusBadge && (
+            <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm ${statusBadge.color}`}>
+              {statusBadge.label}
             </span>
-          </div>
-        )}
+          )}
+          {fechaEntregaLabel && (
+            <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm ${fechaEntregaLabel === "Entregada" ? "bg-[hsl(var(--inmob-green))]/20 text-[hsl(var(--inmob-green))]" : "bg-white/20 text-white"}`}>
+              {fechaEntregaLabel}
+            </span>
+          )}
+        </div>
         {/* Project name overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-4">
           <h3 className="font-bold text-base text-white leading-tight">{property.proyecto}</h3>
@@ -516,14 +536,20 @@ function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) 
         </div>
 
         {/* Contextual quick messages */}
-        {property.proximoMantenimiento && (
+        {maintenanceOverdue && maintenanceDate && (
+          <div className="flex items-center gap-2 text-xs text-destructive">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span className="font-semibold">
+              {property.mantenimientosAtrasados} cuota{property.mantenimientosAtrasados > 1 ? "s" : ""} de mantenimiento atrasada{property.mantenimientosAtrasados > 1 ? "s" : ""}
+            </span>
+          </div>
+        )}
+        {!maintenanceOverdue && maintenanceDate && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Calendar className="w-3.5 h-3.5 text-amber-500" />
             <span>
               Próx. mantenimiento:{" "}
-              <span className="font-semibold text-amber-600">
-                {new Date(property.proximoMantenimiento + "T00:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
-              </span>
+              <span className="font-semibold text-amber-600">{maintenanceDate}</span>
             </span>
           </div>
         )}
