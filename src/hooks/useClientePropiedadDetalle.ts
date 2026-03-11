@@ -91,7 +91,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       ] = await Promise.all([
         supabase
           .from("propiedades")
-          .select("id, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, numero_propiedad, id_estatus_disponibilidad, numero_piso")
+          .select("id, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, numero_propiedad, id_estatus_disponibilidad, numero_piso, id_entidad_relacionada_dueno")
           .eq("id", propiedadId)
           .maybeSingle(),
         supabase
