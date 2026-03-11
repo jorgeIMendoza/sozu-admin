@@ -107,6 +107,8 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         { data: pagos },
         { data: childCuentas },
         { data: productOfertas },
+        { data: acuerdosProp },
+        { data: recentPagos },
       ] = await Promise.all([
         supabase
           .from("propiedades")
@@ -130,6 +132,21 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
           .eq("id_propiedad", propiedadId)
           .eq("activo", true)
           .not("id_producto", "is", null),
+        // Acuerdos de pago (parcialidades) for property cuenta
+        supabase
+          .from("acuerdos_pago")
+          .select("id, fecha_pago, monto, pago_completado, orden, conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre)")
+          .eq("id_cuenta_cobranza", cuentaId)
+          .eq("activo", true)
+          .order("orden", { ascending: true }),
+        // Last 5 payments for property
+        supabase
+          .from("pagos")
+          .select("id, fecha_pago, monto")
+          .eq("id_cuenta_cobranza", cuentaId)
+          .eq("activo", true)
+          .order("fecha_pago", { ascending: false })
+          .limit(5),
       ]);
 
       if (!propiedad) return null;
