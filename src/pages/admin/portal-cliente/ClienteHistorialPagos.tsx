@@ -250,7 +250,7 @@ function PagoCard({ pago }: { pago: PagoRow }) {
   };
 
   return (
-    <TooltipProvider delayDuration={0}>
+    <div className="bg-card rounded-2xl border border-border overflow-hidden">
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
         <button
           onClick={() => setExpanded(!expanded)}
