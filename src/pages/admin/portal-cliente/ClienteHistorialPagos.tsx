@@ -430,6 +430,7 @@ function AcuerdosPropertySection({ property }: { property: PropertyFinancialSumm
               es_multa: ap.es_multa,
               fecha_pago: pago?.fecha_pago || "",
               metodo: (pago?.metodos_pago as any)?.nombre || "—",
+              clave_rastreo: pago?.clave_rastreo || null,
             };
           }),
         };
