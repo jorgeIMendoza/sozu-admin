@@ -24,6 +24,10 @@ export interface PropertyFinancialSummary {
   precioM2Compra: number;
   precioM2Actual: number;
   appreciationPercent: number;
+  imageUrl: string;
+  direccion: string;
+  fechaEntrega: string | null;
+  valorEstimado: number;
 }
 
 export function useClienteResumenFinanciero(personaId: number | null | undefined) {
