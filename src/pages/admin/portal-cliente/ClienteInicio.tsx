@@ -536,14 +536,20 @@ function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) 
         </div>
 
         {/* Contextual quick messages */}
-        {property.proximoMantenimiento && (
+        {maintenanceOverdue && maintenanceDate && (
+          <div className="flex items-center gap-2 text-xs text-destructive">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span className="font-semibold">
+              {property.mantenimientosAtrasados} cuota{property.mantenimientosAtrasados > 1 ? "s" : ""} de mantenimiento atrasada{property.mantenimientosAtrasados > 1 ? "s" : ""}
+            </span>
+          </div>
+        )}
+        {!maintenanceOverdue && maintenanceDate && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Calendar className="w-3.5 h-3.5 text-amber-500" />
             <span>
               Próx. mantenimiento:{" "}
-              <span className="font-semibold text-amber-600">
-                {new Date(property.proximoMantenimiento + "T00:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
-              </span>
+              <span className="font-semibold text-amber-600">{maintenanceDate}</span>
             </span>
           </div>
         )}
