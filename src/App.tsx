@@ -135,6 +135,7 @@ const ClienteInicio = lazyRetry(() => import("./pages/admin/portal-cliente/Clien
 const ClientePropiedades = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedades"));
 const ClientePerfil = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePerfil"));
 const ClienteHistorialPagos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteHistorialPagos"));
+const ClientePropiedadDetalle = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedadDetalle"));
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
