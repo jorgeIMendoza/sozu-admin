@@ -113,7 +113,7 @@ const ClienteMantenimientoPago = () => {
           <div>
             <p className="text-xs font-semibold text-foreground">Conexión segura</p>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Esta CLABE está vinculada exclusivamente a tu propiedad y RFC.
+              Esta CLABE está vinculada exclusivamente a tu propiedad.
             </p>
           </div>
         </div>
