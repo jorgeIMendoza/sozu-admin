@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, CreditCard, FileText, ChevronDown, ChevronUp, Loader2, Receipt, Eye, ExternalLink, CheckCircle2, Clock, CircleDot } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { useQuery } from "@tanstack/react-query";
@@ -57,6 +57,7 @@ interface AcuerdoRow {
 
 const ClienteHistorialPagos = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { profile } = useAuth();
   const { impersonatedClientePersonaId, isImpersonating } = useClienteImpersonation();
   const effectivePersonaId = isImpersonating ? impersonatedClientePersonaId : profile?.id_persona;
@@ -67,6 +68,15 @@ const ClienteHistorialPagos = () => {
 
   const properties = resumen?.properties || [];
   const activePropertyIdx = selectedProperty ?? (properties.length > 0 ? 0 : null);
+
+  // Auto-select property from URL query param
+  const cuentaIdParam = searchParams.get("cuentaId");
+  useEffect(() => {
+    if (cuentaIdParam && properties.length > 0) {
+      const idx = properties.findIndex(p => p.cuentaId === Number(cuentaIdParam));
+      if (idx !== -1) setSelectedProperty(idx);
+    }
+  }, [cuentaIdParam, properties.length]);
   const activeProp = activePropertyIdx !== null ? properties[activePropertyIdx] : null;
 
   return (
