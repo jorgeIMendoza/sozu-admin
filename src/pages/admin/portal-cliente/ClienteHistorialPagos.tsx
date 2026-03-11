@@ -51,6 +51,7 @@ interface AcuerdoRow {
     es_multa: boolean;
     fecha_pago: string;
     metodo: string;
+    clave_rastreo: string | null;
   }[];
 }
 
