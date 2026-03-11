@@ -569,10 +569,11 @@ function AcuerdoCard({ acuerdo }: { acuerdo: AcuerdoRow }) {
           </p>
           {acuerdo.aplicaciones.map((app) => (
             <div key={app.id} className="flex items-center justify-between py-1.5">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
                 <span className="text-xs text-foreground">{app.fecha_pago ? fmtDate(app.fecha_pago) : "—"}</span>
                 <span className="text-[10px] text-muted-foreground">{app.metodo}</span>
+                {app.clave_rastreo && <span className="text-[10px] font-mono text-muted-foreground">{app.clave_rastreo}</span>}
                 {app.es_multa && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive">Multa</span>}
               </div>
               <span className="text-xs font-semibold text-foreground tabular-nums">{fmtMXN(app.monto)}</span>
