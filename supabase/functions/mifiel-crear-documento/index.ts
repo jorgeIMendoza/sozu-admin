@@ -535,9 +535,9 @@ serve(async (req) => {
       fechaActual,
     });
 
-    // 4. Build signatories: configured firmantes + agent
+    // 4. Build signatories: only firmantes with enviar_mifiel !== false + agent
     const signatories: { name: string; email: string }[] = [
-      ...firmantesConfig.map(f => ({ name: f.name, email: f.email })),
+      ...firmantesConfig.filter(f => (f as any).enviar_mifiel !== false).map(f => ({ name: f.name, email: f.email })),
       { name: agente_nombre, email: agente_email },
     ];
 
