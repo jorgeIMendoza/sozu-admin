@@ -274,6 +274,8 @@ Deno.serve(async (req) => {
     let m2Totales = 0;
     let proyectoData: any = null;
     let categoriaProducto = ''; // Para mostrar si es bodega, estacionamiento, etc.
+    let tieneMetraje = false; // Whether the product category uses metraje
+    let numeroDepartamento = ''; // Property number when the product belongs to a property
 
     // Check id_producto FIRST - if it exists, this is a product account
     if (oferta.id_producto) {
@@ -284,11 +286,13 @@ Deno.serve(async (req) => {
         .select(`
           id,
           nombre,
+          metraje,
           id_proyecto,
           id_categoria,
           categorias_producto!fk_prodserv_categoria (
             id,
-            nombre
+            nombre,
+            tiene_metraje
           ),
           proyectos!productos_servicios_id_proyecto_fkey (
             id,
@@ -306,16 +310,40 @@ Deno.serve(async (req) => {
         proyectoData = producto.proyectos;
         proyectoNombre = proyectoData?.nombre || '';
         // Get category name for displaying in the receipt
-        categoriaProducto = (producto as any).categorias_producto?.nombre || '';
+        const catData = (producto as any).categorias_producto;
+        categoriaProducto = catData?.nombre || '';
+        tieneMetraje = catData?.tiene_metraje === true;
+        
+        // If the category has metraje, use the product's metraje
+        if (tieneMetraje) {
+          m2Totales = Number(producto.metraje) || 0;
+        }
+        
         console.log('Producto found:', { 
           nombre: producto.nombre, 
           proyecto: proyectoNombre,
           categoria: categoriaProducto,
+          tieneMetraje,
+          metraje: producto.metraje,
           url_logo: proyectoData?.url_logo,
           nombre_firmante: proyectoData?.nombre_firmante_recibos
         });
       } else {
         console.error('Error fetching producto:', productoError);
+      }
+
+      // Fetch the property number (departamento) if the offer has a property
+      if (oferta.id_propiedad) {
+        const { data: propForProduct, error: propForProductError } = await supabase
+          .from('propiedades')
+          .select('numero_propiedad')
+          .eq('id', oferta.id_propiedad)
+          .single();
+        
+        if (!propForProductError && propForProduct) {
+          numeroDepartamento = propForProduct.numero_propiedad || '';
+          console.log('Property number for product:', numeroDepartamento);
+        }
       }
     } else if (oferta.id_propiedad) {
       // Only fetch property if there's no product (regular property account)
