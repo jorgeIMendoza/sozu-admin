@@ -375,21 +375,14 @@ const ClientePropiedadDetalle = () => {
             )}
           </button>
           <button
-            onClick={() => setShowHistorialPagos(!showHistorialPagos)}
+            onClick={() => navigate(`/admin/portal-cliente/pagos?cuentaId=${prop.cuentaId}`)}
             className="flex items-center gap-3 w-full p-4 text-left hover:bg-muted/30 transition-colors"
           >
             <Clock className="w-5 h-5 text-muted-foreground" />
             <span className="flex-1 text-sm font-medium text-foreground">Historial de pagos</span>
-            {showHistorialPagos ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
-
-        {/* Inline Historial de Pagos */}
-        {showHistorialPagos && activePropSummary && (
-          <div className="mt-3">
-            <InlinePagosSection property={activePropSummary} />
-          </div>
-        )}
       </div>
 
       {/* ─── Documentos ─── */}
