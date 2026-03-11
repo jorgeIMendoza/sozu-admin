@@ -65,7 +65,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       // 1. Get cuenta cobranza
       const { data: cuenta } = await supabase
         .from("cuentas_cobranza")
-        .select("id, id_oferta, id_propiedad, precio_final, fecha_creacion")
+        .select("id, id_oferta, id_propiedad, precio_final, fecha_creacion, clabe_stp")
         .eq("id", cuentaId)
         .eq("activo", true)
         .maybeSingle();
