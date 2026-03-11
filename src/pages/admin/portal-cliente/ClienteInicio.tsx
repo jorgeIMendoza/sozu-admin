@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Receipt, Clock, TrendingUp, TrendingDown, ChevronRight, ChevronDown, AlertTriangle, CheckCircle2, CreditCard, FileText, Home, Loader2 } from "lucide-react";
-import { mockPortfolio, fmtMXN as fmt, type ClienteInvestment } from "@/lib/clienteMockData";
+import { Receipt, Clock, TrendingUp, TrendingDown, ChevronRight, ChevronDown, AlertTriangle, CheckCircle2, CreditCard, FileText, Home, Loader2, Calendar, Star } from "lucide-react";
+import { fmtMXN as fmt } from "@/lib/clienteMockData";
+import { type PropertyFinancialSummary } from "@/hooks/useClienteResumenFinanciero";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { useQuery } from "@tanstack/react-query";
