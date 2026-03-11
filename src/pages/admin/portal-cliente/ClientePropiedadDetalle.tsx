@@ -410,15 +410,15 @@ const ClientePropiedadDetalle = () => {
       {/* ─── Mantenimiento ─── */}
       {(prop.cuotaMensualMantenimiento > 0 || prop.mantenimientoHistorial.length > 0) && (
         <div className="mx-5 mt-6">
-          <h3 className="font-semibold text-sm text-foreground mb-3">Mantenimiento</h3>
-          <div className="space-y-2">
+          <h3 className="font-bold text-sm text-foreground mb-3">Mantenimiento</h3>
+          <div className="bg-card rounded-2xl border border-border p-4 space-y-3">
             {prop.cuotaMensualMantenimiento > 0 && (
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <CreditCard className="w-4 h-4" />
                   <span>Cuota mensual</span>
                 </div>
-                <span className="font-semibold text-foreground tabular-nums">{fmt(prop.cuotaMensualMantenimiento)}</span>
+                <span className="font-bold text-foreground tabular-nums">{fmt(prop.cuotaMensualMantenimiento)}</span>
               </div>
             )}
             {nextMaintenanceFormatted && (
@@ -427,32 +427,44 @@ const ClientePropiedadDetalle = () => {
                   <Calendar className="w-4 h-4" />
                   <span>Próximo vencimiento</span>
                 </div>
-                <span className={`font-semibold tabular-nums ${maintenanceOverdue ? "text-destructive" : "text-amber-600"}`}>
+                <span className={`font-bold tabular-nums ${maintenanceOverdue ? "text-destructive" : "text-amber-600"}`}>
                   {nextMaintenanceFormatted}
                 </span>
               </div>
             )}
-          </div>
 
-          {paidMaintenance.length > 0 && (
-            <div className="mt-4">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2">Historial</p>
-              <div className="space-y-1.5">
-                {paidMaintenance.map(m => (
-                  <div key={m.id} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {new Date(m.fechaPago + "T00:00:00").toLocaleDateString("es-MX", { month: "long", year: "numeric" })}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium tabular-nums text-foreground">{fmt(m.monto)}</span>
-                      <span className="text-[10px] text-muted-foreground uppercase">Pagado</span>
-                      <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+            {paidMaintenance.length > 0 && (
+              <>
+                <div className="border-t border-border pt-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2">Historial</p>
+                </div>
+                <div className="space-y-2">
+                  {paidMaintenance.map(m => (
+                    <div key={m.id} className="flex items-center justify-between text-sm">
+                      <span className="text-foreground capitalize">
+                        {new Date(m.fechaPago + "T00:00:00").toLocaleDateString("es-MX", { month: "long", year: "numeric" })}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold tabular-nums text-foreground">{fmt(m.monto)}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Pagado</span>
+                        <FileText className="w-3.5 h-3.5 text-muted-foreground cursor-pointer hover:text-foreground transition-colors" />
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Pagar mantenimiento button */}
+            {prop.mantenimientoClabeStp && (
+              <button
+                onClick={() => navigate(`/admin/portal-cliente/mantenimiento-pago/${prop.cuentaId}`)}
+                className="w-full py-3 rounded-xl bg-[hsl(var(--inmob-green))] text-white font-semibold text-sm active:scale-[0.98] transition-transform mt-1"
+              >
+                Pagar mantenimiento
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -50,6 +50,8 @@ export interface PropiedadDetalle {
   productosAdicionales: ProductoAdicional[];
   documentos: DocumentoPropiedad[];
   fechaCompra: string | null;
+  mantenimientoCuentaId: number | null;
+  mantenimientoClabeStp: string | null;
 }
 
 export function useClientePropiedadDetalle(cuentaId: number | null | undefined) {
@@ -97,7 +99,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
           .eq("activo", true),
         supabase
           .from("cuentas_cobranza")
-          .select("id, id_oferta")
+          .select("id, id_oferta, clabe_stp")
           .eq("id_cuenta_cobranza_padre", cuentaId)
           .eq("activo", true),
         // Product ofertas linked to same persona
@@ -158,6 +160,9 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       let mantenimientoHistorial: MantenimientoHistorial[] = [];
       let proximoMantenimiento: string | null = null;
       let mantenimientosAtrasados = 0;
+      const mantenimientoCuenta = (childCuentas || []).find(c => c.clabe_stp) || (childCuentas || [])[0] || null;
+      const mantenimientoCuentaId = mantenimientoCuenta?.id || null;
+      const mantenimientoClabeStp = mantenimientoCuenta?.clabe_stp || null;
 
       if (childIds.length > 0) {
         const { data: mantoAcuerdos } = await supabase
@@ -276,6 +281,8 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         productosAdicionales,
         documentos,
         fechaCompra: oferta?.fecha_creacion || cuenta.fecha_creacion || null,
+        mantenimientoCuentaId,
+        mantenimientoClabeStp,
       };
     },
     enabled: !!cuentaId,
