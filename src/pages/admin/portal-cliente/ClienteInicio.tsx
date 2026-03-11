@@ -459,13 +459,28 @@ function ActividadCard({ item }: { item: ActividadItem }) {
 
 /* ── Real Property Card (matching reference design) ── */
 function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) {
-  const isDelivered = property.fechaEntrega
-    ? new Date(property.fechaEntrega) <= new Date()
-    : false;
+  // Badge based on property STATUS, not project date
+  // 7 = Escrituración, 9 = Pagada completamente, 5 = Vendido
+  const statusBadge = (() => {
+    switch (property.estatusPropiedad) {
+      case 7: return { label: "Escrituración", color: "bg-blue-500/15 text-blue-600" };
+      case 9: return { label: "Pagada", color: "bg-[hsl(var(--inmob-green))]/20 text-[hsl(var(--inmob-green))]" };
+      case 5: return { label: "Vendido", color: "bg-amber-500/15 text-amber-600" };
+      default: return null;
+    }
+  })();
+
+  // Delivery badge from project date (informational only)
   const fechaEntregaLabel = property.fechaEntrega
-    ? isDelivered
+    ? new Date(property.fechaEntrega) <= new Date()
       ? "Entregada"
-      : new Date(property.fechaEntrega).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+      : `Entrega: ${new Date(property.fechaEntrega).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}`
+    : null;
+
+  // Maintenance: overdue vs upcoming
+  const maintenanceOverdue = property.mantenimientosAtrasados > 0;
+  const maintenanceDate = property.proximoMantenimiento
+    ? new Date(property.proximoMantenimiento + "T00:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
     : null;
 
   return (
