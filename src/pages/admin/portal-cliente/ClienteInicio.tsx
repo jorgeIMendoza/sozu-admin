@@ -515,7 +515,32 @@ function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) 
           </div>
         </div>
 
-        {/* Extra info */}
+        {/* Contextual quick messages */}
+        {property.proximoMantenimiento && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Calendar className="w-3.5 h-3.5 text-amber-500" />
+            <span>
+              Próx. mantenimiento:{" "}
+              <span className="font-semibold text-amber-600">
+                {new Date(property.proximoMantenimiento + "T00:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
+              </span>
+            </span>
+          </div>
+        )}
+        {property.estatusPropiedad === 7 && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <FileText className="w-3.5 h-3.5 text-[hsl(var(--inmob-green))]" />
+            <span className="text-[hsl(var(--inmob-green))] font-semibold">En proceso de escrituración</span>
+          </div>
+        )}
+        {property.estatusPropiedad === 9 && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Star className="w-3.5 h-3.5 text-amber-500" />
+            <span className="text-amber-600 font-semibold">✨ Lista para reventa</span>
+          </div>
+        )}
+
+        {/* Ver detalle */}
         <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1 font-medium text-[hsl(var(--inmob-green))]">
             Ver detalle
