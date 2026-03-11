@@ -488,9 +488,33 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                       )}
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => removeFirmante(i)} className="shrink-0 mt-1">
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  <div className="flex flex-col items-end gap-2 shrink-0 mt-1">
+                    <Button variant="ghost" size="icon" onClick={() => removeFirmante(i)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-1.5">
+                            <Label htmlFor={`mifiel-toggle-${i}`} className="text-[10px] text-muted-foreground cursor-pointer">Mifiel</Label>
+                            <Switch
+                              id={`mifiel-toggle-${i}`}
+                              checked={f.enviar_mifiel !== false}
+                              onCheckedChange={(checked) => {
+                                const updated = [...firmantes];
+                                updated[i] = { ...updated[i], enviar_mifiel: checked };
+                                setFirmantes(updated);
+                              }}
+                              className="scale-75"
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          Si se activa, este firmante recibirá invitación de Mifiel para firmar digitalmente. Si no, solo aparecerá en el documento.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                 </div>
               ))}
               <div className="space-y-2 pt-2 border-t">
