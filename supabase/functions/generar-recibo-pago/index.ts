@@ -652,8 +652,8 @@ Deno.serve(async (req) => {
       currentItemNumber++;
     }
 
-    // Item 3 - Full text with client name
-    page.drawText('3.', {
+    // Item - Monto total (dynamic number based on whether metros was shown)
+    page.drawText(`${currentItemNumber}.`, {
       x: margin + 5,
       y: yPosition,
       size: 11,
