@@ -162,18 +162,27 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       let mantenimientoHistorial: MantenimientoHistorial[] = [];
       let proximoMantenimiento: string | null = null;
       let mantenimientosAtrasados = 0;
+      let mantenimientoTotalPagado = 0;
       const mantenimientoCuenta = (childCuentas || []).find(c => c.clabe_stp) || (childCuentas || [])[0] || null;
       const mantenimientoCuentaId = mantenimientoCuenta?.id || null;
       const mantenimientoClabeStp = mantenimientoCuenta?.clabe_stp || null;
 
       if (childIds.length > 0) {
-        const { data: mantoAcuerdos } = await supabase
-          .from("acuerdos_pago")
-          .select("id, id_cuenta_cobranza, fecha_pago, monto, pago_completado")
-          .in("id_cuenta_cobranza", childIds)
-          .eq("activo", true)
-          .order("fecha_pago", { ascending: true });
+        const [{ data: mantoAcuerdos }, { data: mantoPagos }] = await Promise.all([
+          supabase
+            .from("acuerdos_pago")
+            .select("id, id_cuenta_cobranza, fecha_pago, monto, pago_completado")
+            .in("id_cuenta_cobranza", childIds)
+            .eq("activo", true)
+            .order("fecha_pago", { ascending: true }),
+          supabase
+            .from("pagos")
+            .select("monto")
+            .in("id_cuenta_cobranza", childIds)
+            .eq("activo", true),
+        ]);
 
+        mantenimientoTotalPagado = (mantoPagos || []).reduce((s, p) => s + p.monto, 0);
         const today = new Date().toISOString().slice(0, 10);
 
         (mantoAcuerdos || []).forEach(a => {
@@ -191,6 +200,17 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
             if (a.fecha_pago < today) mantenimientosAtrasados++;
           }
         });
+      }
+
+      // 6b. Beneficiario from property owner entity
+      let beneficiarioNombre: string | null = null;
+      if (propiedad.id_entidad_relacionada_dueno) {
+        const { data: erData } = await supabase
+          .from("entidades_relacionadas")
+          .select("personas:entidades_relacionadas_id_persona_fkey(nombre_legal)")
+          .eq("id", propiedad.id_entidad_relacionada_dueno)
+          .maybeSingle();
+        beneficiarioNombre = (erData as any)?.personas?.nombre_legal || null;
       }
 
       // 7. Product details
