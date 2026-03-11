@@ -52,6 +52,7 @@ interface Firmante {
   email: string;
   cargo: string;
   firma_imagen?: string;
+  enviar_mifiel?: boolean;
 }
 
 interface CartaAcuerdoDetalleProps {
