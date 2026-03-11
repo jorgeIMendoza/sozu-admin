@@ -133,6 +133,6 @@ export function getPortfolioTotals(portfolio: ClienteInvestment[]) {
   return { totalInvested, totalPaid, totalPending, totalCurrentValue, appreciationPercent, count: portfolio.length };
 }
 
-export function fmtMXN(value: number): string {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
+export function fmtMXN(value: number, decimals = 2): string {
+  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(value);
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Receipt, Clock, TrendingUp, TrendingDown, ChevronRight, AlertTriangle, CheckCircle2, CreditCard, FileText, Home, Loader2 } from "lucide-react";
+import { Receipt, Clock, TrendingUp, TrendingDown, ChevronRight, ChevronDown, AlertTriangle, CheckCircle2, CreditCard, FileText, Home, Loader2 } from "lucide-react";
 import { mockPortfolio, fmtMXN as fmt, type ClienteInvestment } from "@/lib/clienteMockData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
