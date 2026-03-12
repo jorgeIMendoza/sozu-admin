@@ -1837,9 +1837,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       return;
     }
 
-    if (numValue < 5) {
-      toast.error("El porcentaje mínimo es 5%");
-      setPorcentajeComision(5);
+    if (numValue < 4) {
+      toast.error("El porcentaje mínimo es 4%");
+      setPorcentajeComision(4);
       return;
     }
 
@@ -4889,7 +4889,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                       <Input 
                         id="porcentajeComision"
                         type="number"
-                        min="5"
+                        min="4"
                         max="100"
                         step="0.0001"
                         value={porcentajeComision}
@@ -4912,7 +4912,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                           ? 'Editable por Super Admin (factura aún no generada)'
                           : isEnganchePagado 
                             ? 'No editable - El enganche está completamente pagado' 
-                            : 'Mínimo 5%, máximo 100% (hasta 4 decimales)'}
+                            : 'Mínimo 4%, máximo 100% (hasta 4 decimales)'}
                       </p>
                     </div>
 
