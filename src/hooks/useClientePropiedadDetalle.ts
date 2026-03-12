@@ -49,6 +49,8 @@ export interface PropiedadDetalle {
   modelo: string;
   planoArquitectonico: string | null;
   unidad: string;
+  numeroPiso: number | null;
+  idEdificio: number | null;
   precioFinal: number;
   totalPaid: number;
   pending: number;
@@ -77,6 +79,9 @@ export interface PropiedadDetalle {
   propiedadBeneficiarioNombre: string | null;
   parcialidades: ParcialidadDetalle[];
   ultimosPagos: PagoReciente[];
+  planoUbicacionUrl: string | null;
+  planoUbicacionRegiones: any[];
+  numeroDepa: string;
 }
 
 export function useClientePropiedadDetalle(cuentaId: number | null | undefined) {
@@ -178,6 +183,32 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       const planoArquitectonico = (emData as any)?.modelos?.plano_arquitectonico || null;
       const proyectoId = proj?.id || 0;
       const precioM2Actual = proj?.precio_m2_actual || 0;
+      const idEdificio = emData?.id_edificio || null;
+      const numeroPiso = propiedad.numero_piso ? Number(propiedad.numero_piso) : null;
+
+      // Fetch floor plan for this level
+      let planoUbicacionUrl: string | null = null;
+      let planoUbicacionRegiones: any[] = [];
+      if (idEdificio && numeroPiso) {
+        const { data: planData } = await supabase
+          .from("edificios_niveles_planos" as any)
+          .select("imagen_url, regiones")
+          .eq("id_edificio", idEdificio)
+          .eq("nivel", numeroPiso)
+          .eq("activo", true)
+          .maybeSingle();
+        if (planData) {
+          planoUbicacionUrl = (planData as any).imagen_url || null;
+          planoUbicacionRegiones = (planData as any).regiones || [];
+        }
+      }
+
+      // Extract unit number from numero_propiedad based on numero_piso
+      const numPisoStr = numeroPiso?.toString() || "";
+      const numPropStr = propiedad.numero_propiedad || "";
+      const numeroDepa = numPisoStr.length > 0 && numPropStr.length > numPisoStr.length
+        ? numPropStr.substring(numPisoStr.length)
+        : numPropStr;
 
       // Model image
       let imageUrl = proj?.url_imagen_portada || "";
@@ -408,6 +439,11 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         propiedadBeneficiarioNombre,
         parcialidades,
         ultimosPagos,
+        numeroPiso,
+        idEdificio,
+        planoUbicacionUrl,
+        planoUbicacionRegiones,
+        numeroDepa,
       };
     },
     enabled: !!cuentaId,

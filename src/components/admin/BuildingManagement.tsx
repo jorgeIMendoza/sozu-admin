@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Building2, Eye, Edit, Trash2 } from "lucide-react";
+import { Building2, Eye, Edit, Trash2, Layers } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewBuildingDialog } from "./NewBuildingDialog";
 import { EditBuildingDialog } from "./EditBuildingDialog";
+import { ConfigureLevelsDialog } from "./ConfigureLevelsDialog";
 import { useToast } from "@/hooks/use-toast";
 
 interface BuildingManagementProps {
@@ -18,6 +19,7 @@ interface BuildingManagementProps {
 
 export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [configureLevelsBuilding, setConfigureLevelsBuilding] = useState<any>(null);
   const { toast } = useToast();
 
   const { data: buildings, isLoading, refetch } = useQuery({
@@ -249,6 +251,17 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
                       projectId={projectId}
                       onBuildingUpdated={handleBuildingAdded} 
                     />
+                    {Number(building.numero_pisos) > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfigureLevelsBuilding(building)}
+                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      >
+                        <Layers className="h-4 w-4 mr-1" />
+                        Niveles
+                      </Button>
+                    )}
                     <DeleteBuildingDialog building={building} />
                   </div>
 
@@ -276,6 +289,14 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
             <p className="text-sm text-muted-foreground mt-1">Agrega edificios para comenzar</p>
           </CardContent>
         </Card>
+      )}
+
+      {configureLevelsBuilding && (
+        <ConfigureLevelsDialog
+          open={!!configureLevelsBuilding}
+          onOpenChange={(open) => { if (!open) setConfigureLevelsBuilding(null); }}
+          building={configureLevelsBuilding}
+        />
       )}
     </div>
   );

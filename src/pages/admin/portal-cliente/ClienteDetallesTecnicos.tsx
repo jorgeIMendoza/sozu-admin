@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, MapPin, Loader2 } from "lucide-react";
 import { useClientePropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
+import { useRef, useEffect, useState } from "react";
 
 const TechCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="bg-card rounded-2xl border border-border overflow-hidden">
@@ -12,6 +13,92 @@ const TechCard = ({ title, children }: { title: string; children: React.ReactNod
     </div>
   </div>
 );
+
+const FloorPlanCanvas = ({
+  imageUrl,
+  regiones,
+  highlightUnit,
+}: {
+  imageUrl: string;
+  regiones: any[];
+  highlightUnit: string;
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      imgRef.current = img;
+      setImageLoaded(true);
+    };
+    img.src = imageUrl;
+  }, [imageUrl]);
+
+  useEffect(() => {
+    if (!imageLoaded || !canvasRef.current || !imgRef.current || !containerRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const img = imgRef.current;
+    const containerWidth = containerRef.current.clientWidth;
+    const scale = containerWidth / img.width;
+    const canvasHeight = img.height * scale;
+
+    canvas.width = containerWidth;
+    canvas.height = canvasHeight;
+
+    // Draw image
+    ctx.drawImage(img, 0, 0, containerWidth, canvasHeight);
+
+    // Draw highlighted unit
+    if (regiones && regiones.length > 0 && highlightUnit) {
+      // Normalize highlight unit: remove leading zeros
+      const normalizedHighlight = highlightUnit.replace(/^0+/, "");
+
+      regiones.forEach((region: any) => {
+        const unitNum = region.unit_number?.toString().replace(/^0+/, "");
+        const isHighlighted = unitNum === normalizedHighlight;
+
+        if (region.polygon && region.polygon.length >= 3) {
+          ctx.beginPath();
+          const firstPoint = region.polygon[0];
+          ctx.moveTo(
+            (firstPoint[0] / 100) * containerWidth,
+            (firstPoint[1] / 100) * canvasHeight
+          );
+
+          for (let i = 1; i < region.polygon.length; i++) {
+            ctx.lineTo(
+              (region.polygon[i][0] / 100) * containerWidth,
+              (region.polygon[i][1] / 100) * canvasHeight
+            );
+          }
+          ctx.closePath();
+
+          if (isHighlighted) {
+            ctx.fillStyle = "rgba(34, 197, 94, 0.35)";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(34, 197, 94, 0.9)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        }
+      });
+    }
+  }, [imageLoaded, regiones, highlightUnit]);
+
+  return (
+    <div ref={containerRef} className="w-full">
+      <canvas ref={canvasRef} className="w-full rounded-lg" />
+    </div>
+  );
+};
 
 const ClienteDetallesTecnicos = () => {
   const { cuentaId } = useParams<{ cuentaId: string }>();
@@ -64,7 +151,7 @@ const ClienteDetallesTecnicos = () => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-[11px] text-muted-foreground">Nivel</p>
-              <p className="text-sm font-semibold text-foreground">Nivel {prop.unidad?.charAt(0) || "—"}</p>
+              <p className="text-sm font-semibold text-foreground">Nivel {prop.numeroPiso || prop.unidad?.charAt(0) || "—"}</p>
             </div>
             <div>
               <p className="text-[11px] text-muted-foreground">Modelo</p>
@@ -79,57 +166,26 @@ const ClienteDetallesTecnicos = () => {
 
         {/* 2. Plano de ubicación */}
         <TechCard title="Plano de ubicación">
-          <div className="flex items-center justify-center min-h-[200px]">
-            <div className="grid grid-cols-4 gap-1 text-[9px] text-muted-foreground">
-              <div className="col-start-3 col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">12</span>
-                <br />72.74 m²
+          <div className="flex flex-col items-center justify-center min-h-[200px]">
+            {prop.planoUbicacionUrl ? (
+              <>
+                <FloorPlanCanvas
+                  imageUrl={prop.planoUbicacionUrl}
+                  regiones={prop.planoUbicacionRegiones}
+                  highlightUnit={prop.numeroDepa}
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Depto. <span className="font-semibold text-foreground">{prop.numeroDepa}</span> — Nivel {prop.numeroPiso}
+                </p>
+              </>
+            ) : (
+              <div className="border-2 border-dashed border-border rounded-xl p-8 w-full flex flex-col items-center justify-center gap-3">
+                <MapPin className="w-10 h-10 text-muted-foreground/40" />
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide text-center">
+                  Plano de ubicación no disponible
+                </p>
               </div>
-              <div className="col-start-4 col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">11</span>
-                <br />77.54 m²
-              </div>
-              <div className="col-start-3 col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">13</span>
-                <br />72.74 m²
-              </div>
-              <div className="col-start-4 col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">10</span>
-                <br />77.12 m²
-              </div>
-              <div className="col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">3</span>
-                <br />82.95 m²
-              </div>
-              <div className="col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">2</span>
-                <br />82.01 m²
-              </div>
-              <div className="col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">1</span>
-                <br />107.81 m²
-              </div>
-              <div className="col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">9</span>
-                <br />77.13 m²
-              </div>
-              <div className="col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">4</span>
-                <br />70.64 m²
-              </div>
-              <div className="col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">5</span>
-                <br />73.96 m²
-              </div>
-              <div className="col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">6</span>
-                <br />73.38 m²
-              </div>
-              <div className="col-span-1 border border-border rounded p-2 text-center bg-card">
-                <span className="font-bold text-foreground text-xs">7</span>
-                <br />40.51 m²
-              </div>
-            </div>
+            )}
           </div>
         </TechCard>
 
