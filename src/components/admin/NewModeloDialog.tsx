@@ -37,6 +37,7 @@ interface NewModeloDialogProps {
 export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogProps) => {
   const [open, setOpen] = useState(false);
   const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
+  const [planoUrl, setPlanoUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
