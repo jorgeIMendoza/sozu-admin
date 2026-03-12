@@ -71,6 +71,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [meshSession, setMeshSession] = useState<MeshEditorSession | null>(null);
   const [meshEditorOpen, setMeshEditorOpen] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const numPisos = typeof building.numero_pisos === "string"
