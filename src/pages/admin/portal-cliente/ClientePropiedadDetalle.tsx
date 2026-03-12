@@ -576,7 +576,7 @@ const ClientePropiedadDetalle = () => {
                   <div key={i} className="flex items-center justify-between py-2.5">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                        <User className="w-4 h-4 text-muted-foreground" />
+                        <Users className="w-4 h-4 text-muted-foreground" />
                       </div>
                       <span className="text-sm font-medium text-foreground">{cop.nombre}</span>
                     </div>
