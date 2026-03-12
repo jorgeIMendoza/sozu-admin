@@ -164,7 +164,40 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
     setMeshSession(null);
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRecalculateMesh = async () => {
+    if (!meshSession?.image.url) return;
+    setRecalculating(true);
+    try {
+      const resp = await fetch(meshSession.image.url);
+      const blob = await resp.blob();
+      const base64 = await fileToBase64(new File([blob], "recalc.png", { type: "image/png" }));
+
+      const { data: result, error } = await supabase.functions.invoke("validate-floor-plan", {
+        body: { imageBase64: base64 },
+      });
+      if (error) throw error;
+
+      const newRegions = result?.units || [];
+      const updatedImage = { ...meshSession.image, regiones: newRegions };
+      setMeshSession((prev) => prev ? { ...prev, image: updatedImage } : prev);
+      setMeshEditorOpen(false);
+      setTimeout(() => {
+        setMeshSession((prev) => prev ? { ...prev, image: updatedImage } : prev);
+        setMeshEditorOpen(true);
+      }, 50);
+
+      toast({
+        title: "Mallas recalculadas",
+        description: `Se detectaron ${newRegions.length} regiones. Ajusta si es necesario.`,
+      });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Error al recalcular.", variant: "destructive" });
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
+
     const file = e.target.files?.[0];
     if (!file) return;
 
