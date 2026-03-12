@@ -374,6 +374,8 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
           if (!nextOpen) handleMeshEditorClose();
         }}
         onSave={handleMeshSave}
+        onRecalculate={handleRecalculateMesh}
+        recalculating={recalculating}
       />
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
