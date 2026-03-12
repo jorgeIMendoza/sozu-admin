@@ -1138,7 +1138,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     },
     onSuccess: () => {
       toast.success("Valor de la UMA actualizado exitosamente");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error) => {
       console.error("Error updating valor_uma:", error);
