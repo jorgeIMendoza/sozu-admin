@@ -1119,7 +1119,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     },
     onSuccess: () => {
       toast.success("Fecha de compra actualizada exitosamente");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error) => {
       console.error("Error updating fecha_compra:", error);
@@ -1138,7 +1138,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     },
     onSuccess: () => {
       toast.success("Valor de la UMA actualizado exitosamente");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error) => {
       console.error("Error updating valor_uma:", error);
@@ -1530,7 +1530,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       
       // Invalidar queries para refrescar datos
       queryClient.invalidateQueries({ queryKey: ['acuerdos_pago', cuenta.id] });
-      queryClient.invalidateQueries({ queryKey: ['cuenta_detalle', cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ['cuenta_detalle_modal', cuenta.id] });
       queryClient.invalidateQueries({ queryKey: ['selected_payment_scheme'] });
     },
     onError: (error: Error) => {
@@ -1696,10 +1696,31 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         .eq('id', cuenta.id);
       
       if (error) throw error;
+      return { porcentaje, ivaIncluido };
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast.success("Información de comisión actualizada");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
+      
+      // Log de actividad
+      const cambios: Record<string, unknown> = {};
+      const anteriores: Record<string, unknown> = {};
+      if (variables.porcentaje !== (cuentaDetalle?.porcentaje_comision_venta || 0)) {
+        anteriores.porcentaje_comision_venta = cuentaDetalle?.porcentaje_comision_venta || 0;
+        cambios.porcentaje_comision_venta = variables.porcentaje;
+      }
+      if (variables.ivaIncluido !== ((cuentaDetalle as any)?.iva_incluido || false)) {
+        anteriores.iva_incluido = (cuentaDetalle as any)?.iva_incluido || false;
+        cambios.iva_incluido = variables.ivaIncluido;
+      }
+      if (Object.keys(cambios).length > 0) {
+        registrarActualizacion(
+          'cuentas_cobranza',
+          { id_cuenta: cuenta.id, ...anteriores },
+          { id_cuenta: cuenta.id, ...cambios },
+          'actualizar_comision_cuenta_cobranza'
+        );
+      }
     },
     onError: (error) => {
       console.error("Error updating comisión:", error);
@@ -1913,7 +1934,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       setIvaIncluido(false);
       
       // Invalidar queries para refrescar datos
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
       
       toast.success(`Comisión en efectivo aplicada. Descuento: ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(montoComision)}`);
@@ -2068,7 +2089,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       // Invalidate and refetch the acuerdos_pago query
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
       // Also invalidate the main cuenta query to refresh all data
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error, variables) => {
       console.error("Error updating amount:", error);
@@ -2156,7 +2177,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     onSuccess: () => {
       toast.success("Notario actualizado exitosamente");
       // Refetch the cuenta data to update the UI
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error) => {
       console.error("Error updating notario:", error);
@@ -2183,7 +2204,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     },
     onSuccess: () => {
       toast.success("Datos de escritura actualizados");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error) => {
       console.error("Error updating escritura fields:", error);
@@ -2224,7 +2245,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     },
     onSuccess: () => {
       toast.success("Precio final actualizado exitosamente");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
       setShowPrecioFinalConfirmDialog(false);
       setPendingPrecioFinalChange(null);
