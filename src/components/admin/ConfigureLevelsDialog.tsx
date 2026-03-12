@@ -343,7 +343,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
       />
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="sm:max-w-[900px] max-h-[90vh] p-0 gap-0 overflow-hidden"
+          className="sm:max-w-[980px] max-h-[90vh] p-0 gap-0 overflow-hidden"
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -362,7 +362,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
             </DialogHeader>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-[1fr,280px] gap-0 min-h-[500px]">
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr),320px] gap-0 min-h-[500px]">
             {/* Left: Building visualization */}
             <div className="p-5 flex flex-col">
               <div className="flex items-center justify-between mb-3">
