@@ -1,0 +1,1 @@
+UPDATE modelos SET plano_arquitectonico = 'https://tzmhgfjmddkfyffkkmto.supabase.co/storage/v1/object/public/modelos/planos-arquitectonicos/plano_1773342910725.webp' WHERE id = 2 AND plano_arquitectonico IS NULL;
