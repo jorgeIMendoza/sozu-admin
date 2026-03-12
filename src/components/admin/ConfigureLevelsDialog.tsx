@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Upload, Loader2, Check, X, GripVertical, Image as ImageIcon, Building2, ZoomIn } from "lucide-react";
+import { Upload, Loader2, Check, X, GripVertical, Image as ImageIcon, Building2, ZoomIn, PencilRuler } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FloorMeshEditorDialog } from "@/components/admin/FloorMeshEditorDialog";
 
 interface ConfigureLevelsDialogProps {
   open: boolean;
@@ -27,12 +28,18 @@ interface UploadedImage {
   regiones: any[];
 }
 
+interface MeshEditorSession {
+  mode: "new" | "existing";
+  image: UploadedImage;
+  storagePath?: string;
+}
+
 // Image preview dialog
 const ImagePreviewDialog = ({ url, open, onClose }: { url: string | null; open: boolean; onClose: () => void }) => {
   if (!url) return null;
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[90vw] max-h-[90vh] p-2 bg-black/95 border-none">
+      <DialogContent className="sm:max-w-[90vw] max-h-[90vh] p-2 bg-foreground/95 border-none">
         <img src={url} alt="Vista previa" className="w-full h-full max-h-[85vh] object-contain rounded" />
       </DialogContent>
     </Dialog>
@@ -50,6 +57,8 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
   const [saving, setSaving] = useState(false);
   const [hoveredFloor, setHoveredFloor] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [meshSession, setMeshSession] = useState<MeshEditorSession | null>(null);
+  const [meshEditorOpen, setMeshEditorOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const numPisos = typeof building.numero_pisos === "string"
@@ -100,6 +109,47 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
     });
     setUploadedImages(imgs);
   }, [open, existingPlanos, numPisos]);
+
+  const handleMeshEditorClose = () => {
+    if (meshSession?.mode === "new" && meshSession.storagePath) {
+      void supabase.storage.from("modelos").remove([meshSession.storagePath]);
+    }
+
+    setMeshEditorOpen(false);
+    setMeshSession(null);
+  };
+
+  const handleMeshSave = (regiones: any[]) => {
+    if (!meshSession) return;
+
+    if (meshSession.mode === "new") {
+      const imageToAdd: UploadedImage = {
+        ...meshSession.image,
+        regiones,
+      };
+      setUploadedImages((prev) => [...prev, imageToAdd]);
+      toast({
+        title: "Malla guardada",
+        description: `Plano cargado con ${regiones.length} departamentos enmallados.`,
+      });
+    } else {
+      setUploadedImages((prev) =>
+        prev.map((img) => (img.id === meshSession.image.id ? { ...img, regiones } : img))
+      );
+      setFloors((prev) =>
+        prev.map((floor) =>
+          floor.imagen_url === meshSession.image.url ? { ...floor, regiones } : floor
+        )
+      );
+      toast({
+        title: "Malla actualizada",
+        description: "Los cambios se aplicarán a todos los niveles que usan esta imagen.",
+      });
+    }
+
+    setMeshEditorOpen(false);
+    setMeshSession(null);
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -156,11 +206,12 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
         regiones: validationResult?.units || [],
       };
 
-      setUploadedImages((prev) => [...prev, newImage]);
+      setMeshSession({ mode: "new", image: newImage, storagePath: filePath });
+      setMeshEditorOpen(true);
 
       toast({
-        title: "Plano validado y cargado",
-        description: `Se detectaron ${validationResult?.units?.length || 0} departamentos.`,
+        title: "Plano cargado",
+        description: `Revisa y ajusta la malla (${validationResult?.units?.length || 0} regiones) antes de asignarlo.`,
       });
     } catch (error: any) {
       console.error("Error uploading floor plan:", error);
@@ -208,6 +259,11 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
     setFloors((prev) =>
       prev.map((f) => (f.imagen_url === img.url ? { ...f, imagen_url: null, regiones: [] } : f))
     );
+  };
+
+  const handleEditMesh = (img: UploadedImage) => {
+    setMeshSession({ mode: "existing", image: img });
+    setMeshEditorOpen(true);
   };
 
   const handleSave = async () => {
@@ -263,6 +319,16 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
   return (
     <>
       <ImagePreviewDialog url={previewUrl} open={!!previewUrl} onClose={() => setPreviewUrl(null)} />
+      <FloorMeshEditorDialog
+        open={meshEditorOpen}
+        imageUrl={meshSession?.image.url || null}
+        initialRegions={(meshSession?.image.regiones || []) as any[]}
+        title={meshSession?.mode === "new" ? "Confirma y edita la malla detectada" : "Editar malla del plano"}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) handleMeshEditorClose();
+        }}
+        onSave={handleMeshSave}
+      />
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className="sm:max-w-[900px] max-h-[90vh] p-0 gap-0 overflow-hidden"
@@ -358,13 +424,13 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                                 <img
                                   src={floor.imagen_url!}
                                   alt={`N${floor.nivel}`}
-                                  className="w-10 h-8 object-contain rounded border border-primary/20 bg-white shadow-sm transition-transform group-hover/thumb:scale-105"
+                                  className="w-10 h-8 object-contain rounded border border-primary/20 bg-background shadow-sm transition-transform group-hover/thumb:scale-105"
                                 />
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 bg-black/30 rounded transition-opacity">
-                                  <ZoomIn className="h-3 w-3 text-white" />
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 bg-foreground/30 rounded transition-opacity">
+                                  <ZoomIn className="h-3 w-3 text-background" />
                                 </div>
-                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-sm border border-white">
-                                  <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
+                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center shadow-sm border border-background">
+                                  <Check className="h-2.5 w-2.5 text-primary-foreground" strokeWidth={3} />
                                 </div>
                               </div>
                               <span className="text-[10px] text-primary/80 font-medium">Plano asignado</span>
@@ -376,11 +442,11 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                                 {[...Array(Math.min(5, Math.max(3, Math.floor(240 / 60))))].map((_, i) => (
                                   <div key={i} className="flex flex-col gap-0.5">
                                     <div
-                                      className="rounded-[2px] bg-gradient-to-b from-sky-200/20 to-sky-300/10 border border-muted-foreground/10"
+                                      className="rounded-[2px] bg-gradient-to-b from-primary/20 to-primary/5 border border-border"
                                       style={{ width: "12px", height: `${floorHeight * 0.35}px` }}
                                     />
                                     <div
-                                      className="rounded-[2px] bg-gradient-to-b from-sky-200/15 to-sky-300/8 border border-muted-foreground/8"
+                                      className="rounded-[2px] bg-gradient-to-b from-accent/20 to-accent/10 border border-border"
                                       style={{ width: "12px", height: `${floorHeight * 0.2}px` }}
                                     />
                                   </div>
@@ -422,7 +488,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
             <div className="border-l border-border bg-muted/10 p-4 flex flex-col">
               <h4 className="text-sm font-semibold text-foreground mb-1">Planos de piso</h4>
               <p className="text-[10px] text-muted-foreground mb-3">
-                Sube imágenes PNG. Arrastra y suelta sobre los niveles del edificio.
+                Sube PNG, confirma/edita la malla y luego arrastra la imagen al nivel.
               </p>
 
               <div className="mb-3">
@@ -477,10 +543,10 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                           <img
                             src={img.url}
                             alt={img.fileName}
-                            className="w-14 h-10 object-contain rounded border border-border bg-white"
+                            className="w-14 h-10 object-contain rounded border border-border bg-background"
                           />
-                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 bg-black/30 rounded transition-opacity">
-                            <ZoomIn className="h-3.5 w-3.5 text-white" />
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 bg-foreground/30 rounded transition-opacity">
+                            <ZoomIn className="h-3.5 w-3.5 text-background" />
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -489,6 +555,16 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                             {img.regiones?.length || 0} deptos detectados
                           </p>
                         </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditMesh(img);
+                          }}
+                          className="p-1 hover:bg-muted rounded flex-shrink-0"
+                          title="Editar malla"
+                        >
+                          <PencilRuler className="h-3 w-3 text-muted-foreground" />
+                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }}
                           className="p-1 hover:bg-destructive/10 rounded flex-shrink-0"

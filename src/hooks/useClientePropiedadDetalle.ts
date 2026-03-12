@@ -204,11 +204,17 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       }
 
       // Extract unit number from numero_propiedad based on numero_piso
-      const numPisoStr = numeroPiso?.toString() || "";
-      const numPropStr = propiedad.numero_propiedad || "";
-      const numeroDepa = numPisoStr.length > 0 && numPropStr.length > numPisoStr.length
-        ? numPropStr.substring(numPisoStr.length)
-        : numPropStr;
+      const rawPropertyNumber = (propiedad.numero_propiedad || "").toString().trim();
+      const propertyDigits = rawPropertyNumber.replace(/\D/g, "");
+      const floorDigits = (numeroPiso?.toString() || "").replace(/\D/g, "");
+
+      const extractedDeptoDigits =
+        floorDigits && propertyDigits.startsWith(floorDigits) && propertyDigits.length > floorDigits.length
+          ? propertyDigits.slice(floorDigits.length)
+          : propertyDigits;
+
+      const numeroDepaRaw = extractedDeptoDigits || rawPropertyNumber;
+      const numeroDepa = numeroDepaRaw.length === 1 ? numeroDepaRaw.padStart(2, "0") : numeroDepaRaw;
 
       // Model image
       let imageUrl = proj?.url_imagen_portada || "";
