@@ -251,6 +251,17 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
                       projectId={projectId}
                       onBuildingUpdated={handleBuildingAdded} 
                     />
+                    {Number(building.numero_pisos) > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfigureLevelsBuilding(building)}
+                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      >
+                        <Layers className="h-4 w-4 mr-1" />
+                        Niveles
+                      </Button>
+                    )}
                     <DeleteBuildingDialog building={building} />
                   </div>
 
