@@ -13,6 +13,7 @@ import { Home } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ModelCharacteristicsSection } from "./ModelCharacteristicsSection";
+import { PlanoArquitectonicoUpload } from "./PlanoArquitectonicoUpload";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -36,6 +37,7 @@ interface NewModeloDialogProps {
 export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogProps) => {
   const [open, setOpen] = useState(false);
   const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
+  const [planoUrl, setPlanoUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -70,6 +72,7 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
         numero_recamaras: values.numero_recamaras ? parseInt(values.numero_recamaras) : null,
         numero_completo_banos: values.numero_completo_banos ? parseInt(values.numero_completo_banos) : null,
         numero_medio_bano: values.numero_medio_bano ? parseInt(values.numero_medio_bano) : null,
+        plano_arquitectonico: planoUrl,
       };
 
       const { data: newModelo, error } = await supabase
@@ -100,6 +103,7 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
       });
 
       form.reset();
+      setPlanoUrl(null);
       setOpen(false);
       onModeloAdded();
     } catch (error) {
@@ -228,6 +232,11 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
                 )}
               />
             </div>
+
+            <PlanoArquitectonicoUpload
+              currentUrl={planoUrl}
+              onUrlChange={setPlanoUrl}
+            />
 
             <ModelCharacteristicsSection
               selectedCharacteristicIds={selectedCharacteristicIds}

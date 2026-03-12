@@ -136,12 +136,20 @@ const ClienteDetallesTecnicos = () => {
         {/* 3. Plano arquitectónico */}
         <TechCard title="Plano arquitectónico">
           <div className="flex flex-col items-center justify-center min-h-[200px]">
-            <div className="border-2 border-dashed border-border rounded-xl p-8 w-full flex flex-col items-center justify-center gap-3">
-              <MapPin className="w-10 h-10 text-muted-foreground/40" />
-              <p className="text-xs font-semibold text-foreground uppercase tracking-wide text-center">
-                Plano arquitectónico del modelo
-              </p>
-            </div>
+            {prop.planoArquitectonico ? (
+              <img
+                src={prop.planoArquitectonico}
+                alt="Plano arquitectónico del modelo"
+                className="w-full object-contain rounded-lg"
+              />
+            ) : (
+              <div className="border-2 border-dashed border-border rounded-xl p-8 w-full flex flex-col items-center justify-center gap-3">
+                <MapPin className="w-10 h-10 text-muted-foreground/40" />
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide text-center">
+                  Plano arquitectónico del modelo
+                </p>
+              </div>
+            )}
           </div>
         </TechCard>
       </div>

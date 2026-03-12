@@ -29,6 +29,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Edit } from "lucide-react";
 import { Combobox } from "@/components/ui/combobox";
 import { ModelCharacteristicsSection } from "./ModelCharacteristicsSection";
+import { PlanoArquitectonicoUpload } from "./PlanoArquitectonicoUpload";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -52,6 +53,7 @@ interface Modelo {
   numero_completo_banos?: number;
   numero_medio_bano?: number;
   id_proyecto?: number | null;
+  plano_arquitectonico?: string | null;
 }
 
 interface EditModeloDialogProps {
@@ -63,6 +65,7 @@ interface EditModeloDialogProps {
 export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditModeloDialogProps) => {
   const [open, setOpen] = useState(false);
   const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
+  const [planoUrl, setPlanoUrl] = useState<string | null>(modelo.plano_arquitectonico || null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -92,6 +95,7 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
         numero_completo_banos: values.numero_completo_banos || null,
         numero_medio_bano: values.numero_medio_bano || null,
         id_proyecto: parseInt(values.id_proyecto),
+        plano_arquitectonico: planoUrl,
       };
 
       const { error: modeloError } = await supabase
@@ -275,6 +279,11 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
                 )}
               />
             </div>
+
+            <PlanoArquitectonicoUpload
+              currentUrl={planoUrl}
+              onUrlChange={setPlanoUrl}
+            />
 
             <ModelCharacteristicsSection
               modelId={modelo.id}

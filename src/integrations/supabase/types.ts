@@ -4295,6 +4295,7 @@ export type Database = {
           numero_completo_banos: number | null
           numero_medio_bano: number | null
           numero_recamaras: number | null
+          plano_arquitectonico: string | null
         }
         Insert: {
           activo?: boolean | null
@@ -4307,6 +4308,7 @@ export type Database = {
           numero_completo_banos?: number | null
           numero_medio_bano?: number | null
           numero_recamaras?: number | null
+          plano_arquitectonico?: string | null
         }
         Update: {
           activo?: boolean | null
@@ -4319,6 +4321,7 @@ export type Database = {
           numero_completo_banos?: number | null
           numero_medio_bano?: number | null
           numero_recamaras?: number | null
+          plano_arquitectonico?: string | null
         }
         Relationships: [
           {
