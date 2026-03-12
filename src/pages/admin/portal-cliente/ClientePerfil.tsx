@@ -159,7 +159,7 @@ const ClientePerfil = () => {
     persona?.direccion_fiscal_calle,
     persona?.direccion_fiscal_num_ext ? `#${persona.direccion_fiscal_num_ext}` : null,
     persona?.direccion_fiscal_colonia,
-    estadoFiscal,
+    persona?.direccion_fiscal_codigo_postal,
   ].filter(Boolean);
   const fiscalAddress = fiscalParts.length > 0 ? fiscalParts.join(", ") : "—";
 
