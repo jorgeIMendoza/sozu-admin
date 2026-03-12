@@ -17,6 +17,7 @@ export interface ActividadItem {
   urgencia: ActividadUrgencia;
   mensaje: string;
   mensualidadesAtraso?: number;
+  cuentaId?: number;
 }
 
 function calcularUrgencia(diasRestantes: number): ActividadUrgencia {
@@ -309,6 +310,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
               urgencia: "red",
               mensaje: `${info.count} pago${info.count !== 1 ? "s" : ""} vencido${info.count !== 1 ? "s" : ""} — requiere atención inmediata`,
               mensualidadesAtraso: info.count,
+              cuentaId,
             });
           });
 
@@ -333,6 +335,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
               mensaje: dias === 0
                 ? "Vence hoy"
                 : `Faltan ${dias} día${dias !== 1 ? "s" : ""} para tu pago`,
+              cuentaId: ap.id_cuenta_cobranza,
             });
           });
         }
@@ -449,6 +452,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
             diasRestantes: info.oldestDias,
             urgencia: info.oldestDias < 0 ? "red" : info.oldestDias <= 10 ? "orange" : "green",
             mensaje,
+            cuentaId: groupKey,
           });
         });
       }
