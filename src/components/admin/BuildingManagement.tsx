@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Building2, Eye, Edit, Trash2 } from "lucide-react";
+import { Building2, Eye, Edit, Trash2, Layers } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewBuildingDialog } from "./NewBuildingDialog";
 import { EditBuildingDialog } from "./EditBuildingDialog";
+import { ConfigureLevelsDialog } from "./ConfigureLevelsDialog";
 import { useToast } from "@/hooks/use-toast";
 
 interface BuildingManagementProps {
