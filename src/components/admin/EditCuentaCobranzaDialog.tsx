@@ -1119,7 +1119,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     },
     onSuccess: () => {
       toast.success("Fecha de compra actualizada exitosamente");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error) => {
       console.error("Error updating fecha_compra:", error);
