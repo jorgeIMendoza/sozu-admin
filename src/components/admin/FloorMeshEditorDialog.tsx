@@ -73,9 +73,11 @@ export const FloorMeshEditorDialog = ({
   recalculating,
 }: FloorMeshEditorDialogProps) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
   const [regions, setRegions] = useState<MeshRegion[]>([]);
   const [selectedRegionIndex, setSelectedRegionIndex] = useState<number>(0);
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [imageAspect, setImageAspect] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -83,9 +85,17 @@ export const FloorMeshEditorDialog = ({
     setRegions(normalized);
     setSelectedRegionIndex(0);
     setDragState(null);
+    setImageAspect(null);
   }, [open, initialRegions]);
 
   const selectedRegion = useMemo(() => regions[selectedRegionIndex] || null, [regions, selectedRegionIndex]);
+
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    if (img.naturalWidth && img.naturalHeight) {
+      setImageAspect(img.naturalWidth / img.naturalHeight);
+    }
+  };
 
   const updatePointPosition = (event: React.PointerEvent<SVGSVGElement>) => {
     if (!dragState || !svgRef.current) return;
@@ -148,15 +158,23 @@ export const FloorMeshEditorDialog = ({
               Ajusta cada vértice arrastrando los puntos. La malla guardada se usará para iluminar el depto exacto en Detalle Técnico.
             </p>
 
-            <div className="relative rounded-lg border border-border bg-muted/10 overflow-hidden">
+            <div className="rounded-lg border border-border bg-muted/10 overflow-hidden">
               {imageUrl ? (
-                <>
-                  <img src={imageUrl} alt="Plano para enmallado" className="w-full h-auto block select-none" draggable={false} />
+                <div className="relative w-full" style={imageAspect ? { aspectRatio: `${imageAspect}` } : undefined}>
+                  <img
+                    ref={imgRef}
+                    src={imageUrl}
+                    alt="Plano para enmallado"
+                    className="absolute inset-0 w-full h-full object-fill select-none"
+                    draggable={false}
+                    onLoad={handleImageLoad}
+                  />
                   <svg
                     ref={svgRef}
                     viewBox="0 0 100 100"
                     preserveAspectRatio="none"
                     className="absolute inset-0 w-full h-full"
+                    style={{ zIndex: 1 }}
                     onPointerMove={updatePointPosition}
                     onPointerUp={() => setDragState(null)}
                     onPointerLeave={() => setDragState(null)}
@@ -197,7 +215,7 @@ export const FloorMeshEditorDialog = ({
                       );
                     })}
                   </svg>
-                </>
+                </div>
               ) : (
                 <div className="h-[360px] flex items-center justify-center text-sm text-muted-foreground">
                   Sin imagen para enmallar.
