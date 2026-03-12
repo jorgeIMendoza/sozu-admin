@@ -17,6 +17,7 @@ export interface ActividadItem {
   urgencia: ActividadUrgencia;
   mensaje: string;
   mensualidadesAtraso?: number;
+  cuentaId?: number;
 }
 
 function calcularUrgencia(diasRestantes: number): ActividadUrgencia {
