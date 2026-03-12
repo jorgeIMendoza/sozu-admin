@@ -290,6 +290,14 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
           </CardContent>
         </Card>
       )}
+
+      {configureLevelsBuilding && (
+        <ConfigureLevelsDialog
+          open={!!configureLevelsBuilding}
+          onOpenChange={(open) => { if (!open) setConfigureLevelsBuilding(null); }}
+          building={configureLevelsBuilding}
+        />
+      )}
     </div>
   );
 };
