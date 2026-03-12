@@ -46,6 +46,7 @@ export interface PropiedadDetalle {
   propiedadId: number;
   proyecto: string;
   edificio: string;
+  modelo: string;
   unidad: string;
   precioFinal: number;
   totalPaid: number;
@@ -166,12 +167,13 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       // 5. Building/project info
       const { data: emData } = await supabase
         .from("edificios_modelos")
-        .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(nombre, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual, direccion, fecha_entrega, url_imagen_portada))")
+        .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(nombre, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual, direccion, fecha_entrega, url_imagen_portada)), modelos:edificios_modelos_id_modelo_fkey(nombre)")
         .eq("id", propiedad.id_edificio_modelo)
         .maybeSingle();
 
       const ed = (emData as any)?.edificios;
       const proj = ed?.proyectos;
+      const modeloNombre = (emData as any)?.modelos?.nombre || "";
       const proyectoId = proj?.id || 0;
       const precioM2Actual = proj?.precio_m2_actual || 0;
 
@@ -373,6 +375,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         propiedadId,
         proyecto: proj?.nombre || "Proyecto",
         edificio: ed?.nombre || "",
+        modelo: modeloNombre,
         unidad: propiedad.numero_propiedad || "",
         precioFinal,
         totalPaid,
