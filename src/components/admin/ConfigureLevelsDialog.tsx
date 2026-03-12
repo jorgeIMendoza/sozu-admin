@@ -206,11 +206,12 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
         regiones: validationResult?.units || [],
       };
 
-      setUploadedImages((prev) => [...prev, newImage]);
+      setMeshSession({ mode: "new", image: newImage, storagePath: filePath });
+      setMeshEditorOpen(true);
 
       toast({
-        title: "Plano validado y cargado",
-        description: `Se detectaron ${validationResult?.units?.length || 0} departamentos.`,
+        title: "Plano cargado",
+        description: `Revisa y ajusta la malla (${validationResult?.units?.length || 0} regiones) antes de asignarlo.`,
       });
     } catch (error: any) {
       console.error("Error uploading floor plan:", error);
