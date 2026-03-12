@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FloorMeshEditorDialog } from "@/components/admin/FloorMeshEditorDialog";
+import { cn } from "@/lib/utils";
 
 interface ConfigureLevelsDialogProps {
   open: boolean;
