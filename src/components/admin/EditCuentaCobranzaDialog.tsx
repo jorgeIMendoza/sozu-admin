@@ -4955,7 +4955,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
                             htmlFor="iva-incluido"
                             className="text-sm font-medium cursor-pointer select-none"
                           >
-                            IVA Incluido (16%)
+                            IVA (16%)
                           </Label>
                         </div>
                         <p className="text-xs text-muted-foreground">
