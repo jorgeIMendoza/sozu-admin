@@ -81,7 +81,6 @@ export const FloorMeshEditorDialog = ({
   recalculating,
 }: FloorMeshEditorDialogProps) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
   const [regions, setRegions] = useState<MeshRegion[]>([]);
   const [selectedRegionIndex, setSelectedRegionIndex] = useState<number>(0);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -96,14 +95,19 @@ export const FloorMeshEditorDialog = ({
     setImageAspect(null);
   }, [open, initialRegions]);
 
-  const selectedRegion = useMemo(() => regions[selectedRegionIndex] || null, [regions, selectedRegionIndex]);
+  useEffect(() => {
+    if (!open || !imageUrl) return;
 
-  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const img = e.currentTarget;
-    if (img.naturalWidth && img.naturalHeight) {
-      setImageAspect(img.naturalWidth / img.naturalHeight);
-    }
-  };
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth && img.naturalHeight) {
+        setImageAspect(img.naturalWidth / img.naturalHeight);
+      }
+    };
+    img.src = imageUrl;
+  }, [open, imageUrl]);
+
+  const selectedRegion = useMemo(() => regions[selectedRegionIndex] || null, [regions, selectedRegionIndex]);
 
   const updatePointPosition = (event: React.PointerEvent<SVGSVGElement>) => {
     if (!dragState || !svgRef.current) return;
