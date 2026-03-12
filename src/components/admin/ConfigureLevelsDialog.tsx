@@ -192,6 +192,17 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
     );
   };
 
+  const handleDeleteImage = (imgId: string) => {
+    const img = uploadedImages.find((i) => i.id === imgId);
+    if (!img) return;
+    // Remove from uploaded list
+    setUploadedImages((prev) => prev.filter((i) => i.id !== imgId));
+    // Remove from any floors that use this image
+    setFloors((prev) =>
+      prev.map((f) => (f.imagen_url === img.url ? { ...f, imagen_url: null, regiones: [] } : f))
+    );
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -408,20 +419,41 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                     key={img.id}
                     draggable
                     onDragStart={() => handleDragStart(img)}
-                    className="flex items-center gap-2 p-2 border border-border rounded-lg bg-card cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-sm transition-all"
+                    className="border border-border rounded-lg bg-card hover:border-primary/40 hover:shadow-sm transition-all overflow-hidden"
                   >
-                    <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50 flex-shrink-0" />
-                    <img
-                      src={img.url}
-                      alt={img.fileName}
-                      className="w-14 h-10 object-contain rounded border border-border bg-white"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-medium truncate">{img.fileName}</p>
-                      <p className="text-[9px] text-muted-foreground">
-                        {img.regiones?.length || 0} deptos
-                      </p>
+                    <div className="flex items-center gap-2 p-2 cursor-grab active:cursor-grabbing">
+                      <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50 flex-shrink-0" />
+                      <img
+                        src={img.url}
+                        alt={img.fileName}
+                        className="w-14 h-10 object-contain rounded border border-border bg-white"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-medium truncate">{img.fileName}</p>
+                        <p className="text-[9px] text-muted-foreground">
+                          {img.regiones?.length || 0} deptos detectados
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }}
+                        className="p-1 hover:bg-destructive/10 rounded flex-shrink-0"
+                        title="Eliminar imagen"
+                      >
+                        <X className="h-3 w-3 text-destructive" />
+                      </button>
                     </div>
+                    {img.regiones && img.regiones.length > 0 && (
+                      <div className="px-2 pb-2 flex flex-wrap gap-1">
+                        {img.regiones.map((r: any, idx: number) => (
+                          <span
+                            key={idx}
+                            className="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium"
+                          >
+                            {r.unit_number || `U${idx + 1}`}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 {uploadedImages.length === 0 && !uploading && (

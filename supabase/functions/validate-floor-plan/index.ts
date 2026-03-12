@@ -120,6 +120,16 @@ IMPORTANT: Return your analysis using the provided tool.`
       }
       const errorText = await response.text();
       console.error("AI gateway error:", response.status, errorText);
+      // For 400 errors (e.g. image not processable), return as invalid instead of throwing
+      if (response.status === 400) {
+        return new Response(JSON.stringify({
+          is_valid: false,
+          rejection_reason: "La imagen no pudo ser procesada. Asegúrate de que sea una imagen válida de un plano de ubicación.",
+          units: [],
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
