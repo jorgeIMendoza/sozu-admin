@@ -73,9 +73,11 @@ export const FloorMeshEditorDialog = ({
   recalculating,
 }: FloorMeshEditorDialogProps) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
   const [regions, setRegions] = useState<MeshRegion[]>([]);
   const [selectedRegionIndex, setSelectedRegionIndex] = useState<number>(0);
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [imageAspect, setImageAspect] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
