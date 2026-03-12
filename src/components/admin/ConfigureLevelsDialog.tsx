@@ -28,6 +28,12 @@ interface UploadedImage {
   regiones: any[];
 }
 
+interface MeshEditorSession {
+  mode: "new" | "existing";
+  image: UploadedImage;
+  storagePath?: string;
+}
+
 // Image preview dialog
 const ImagePreviewDialog = ({ url, open, onClose }: { url: string | null; open: boolean; onClose: () => void }) => {
   if (!url) return null;
