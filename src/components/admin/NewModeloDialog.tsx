@@ -13,6 +13,7 @@ import { Home } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ModelCharacteristicsSection } from "./ModelCharacteristicsSection";
+import { PlanoArquitectonicoUpload } from "./PlanoArquitectonicoUpload";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
