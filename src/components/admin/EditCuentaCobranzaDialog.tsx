@@ -1837,9 +1837,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       return;
     }
 
-    if (numValue < 5) {
-      toast.error("El porcentaje mínimo es 5%");
-      setPorcentajeComision(5);
+    if (numValue < 4) {
+      toast.error("El porcentaje mínimo es 4%");
+      setPorcentajeComision(4);
       return;
     }
 
