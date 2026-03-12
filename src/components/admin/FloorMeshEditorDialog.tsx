@@ -271,6 +271,18 @@ export const FloorMeshEditorDialog = ({
                   <Crosshair className="h-3.5 w-3.5 mr-1.5" />
                   Rectangularizar seleccionado
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={handleToggleSelectedConfirmation}
+                  disabled={!selectedRegion}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  {resolveMeshConfirmed(selectedRegion || {})
+                    ? "Marcar como pendiente"
+                    : "Confirmar malla seleccionada"}
+                </Button>
                 {onRecalculate && (
                   <Button
                     variant="outline"
@@ -290,6 +302,7 @@ export const FloorMeshEditorDialog = ({
               <div className="space-y-2 pr-1">
                 {regions.map((region, index) => {
                   const isSelected = index === selectedRegionIndex;
+                  const isConfirmed = resolveMeshConfirmed(region);
                   return (
                     <button
                       type="button"
@@ -299,7 +312,16 @@ export const FloorMeshEditorDialog = ({
                         isSelected ? "border-primary bg-primary/5" : "border-border bg-background"
                       }`}
                     >
-                      <p className="text-[10px] text-muted-foreground mb-1">Unidad</p>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] text-muted-foreground">Unidad</p>
+                        <span
+                          className={isConfirmed
+                            ? "text-[10px] px-1.5 py-0.5 rounded border bg-[hsl(var(--inmob-green)/0.15)] text-[hsl(var(--inmob-green))] border-[hsl(var(--inmob-green)/0.3)]"
+                            : "text-[10px] px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground"}
+                        >
+                          {isConfirmed ? "Confirmada" : "Pendiente"}
+                        </span>
+                      </div>
                       <Input
                         value={region.unit_number}
                         onChange={(event) => updateRegionUnit(index, event.target.value)}
