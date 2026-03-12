@@ -233,6 +233,11 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
               />
             </div>
 
+            <PlanoArquitectonicoUpload
+              currentUrl={planoUrl}
+              onUrlChange={setPlanoUrl}
+            />
+
             <ModelCharacteristicsSection
               selectedCharacteristicIds={selectedCharacteristicIds}
               onCharacteristicsChange={setSelectedCharacteristicIds}
