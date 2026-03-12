@@ -377,7 +377,7 @@ const ClientePropiedadDetalle = () => {
         const today = new Date().toISOString().slice(0, 10);
         const overdueParcialidades = prop.parcialidades.filter(p => !p.pagado && p.fechaPago && p.fechaPago < today);
         const pendingParcialidades = prop.parcialidades.filter(p => !p.pagado);
-        const totalOverdueAmount = overdueParcialidades.reduce((s, p) => s + p.monto, 0);
+        const totalOverdueAmount = overdueParcialidades.reduce((s, p) => s + p.saldoPendiente, 0);
         const oldestOverdueParc = overdueParcialidades.length > 0 ? overdueParcialidades[0] : null;
         const newestOverdueParc = overdueParcialidades.length > 0 ? overdueParcialidades[overdueParcialidades.length - 1] : null;
         const isPropertyAlCorriente = pendingParcialidades.length === 0;
@@ -441,7 +441,7 @@ const ClientePropiedadDetalle = () => {
                             <span>{p.concepto} #{p.orden}</span>
                             <span className="text-[10px] capitalize">{p.fechaPago ? new Date(p.fechaPago + "T00:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }) : "—"}</span>
                           </div>
-                          <span className="font-semibold tabular-nums text-foreground shrink-0">{fmt(p.monto)}</span>
+                          <span className="font-semibold tabular-nums text-foreground shrink-0">{fmt(p.saldoPendiente)}</span>
                         </div>
                       ))}
                     </div>
