@@ -65,6 +65,7 @@ interface EditModeloDialogProps {
 export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditModeloDialogProps) => {
   const [open, setOpen] = useState(false);
   const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
+  const [planoUrl, setPlanoUrl] = useState<string | null>(modelo.plano_arquitectonico || null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
