@@ -39,7 +39,7 @@ const ImagePreviewDialog = ({ url, open, onClose }: { url: string | null; open: 
   if (!url) return null;
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[90vw] max-h-[90vh] p-2 bg-black/95 border-none">
+      <DialogContent className="sm:max-w-[90vw] max-h-[90vh] p-2 bg-foreground/95 border-none">
         <img src={url} alt="Vista previa" className="w-full h-full max-h-[85vh] object-contain rounded" />
       </DialogContent>
     </Dialog>
