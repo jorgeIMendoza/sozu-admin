@@ -1783,6 +1783,12 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
   const totalPorcentajeComisionistas = comisionistas?.reduce((sum, c) => sum + (c.porcentaje_comision || 0), 0) || 0;
 
   // Calculate if enganche is fully paid
+  // Check if factura comisión Sozu has been generated (not draft)
+  const hasFacturaComisionSozu = !!(cuentaDetalle as any)?.url_factura_comision && (cuentaDetalle as any)?.es_draft_factura_comision === false;
+
+  // Super Admin can edit porcentaje even after enganche paid, as long as factura hasn't been generated
+  const canSuperAdminEditComision = isSuperAdmin && !hasFacturaComisionSozu;
+
   const isEnganchePagado = acuerdosPago ? (() => {
     const apartado = acuerdosPago.find((a: any) => a.concepto_nombre?.toLowerCase() === 'apartado');
     const enganche = acuerdosPago.find((a: any) => a.concepto_nombre?.toLowerCase() === 'enganche');
