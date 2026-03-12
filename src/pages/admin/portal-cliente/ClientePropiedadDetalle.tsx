@@ -54,6 +54,7 @@ const ClientePropiedadDetalle = () => {
   const [expandedProductId, setExpandedProductId] = useState<number | null>(null);
   const [showPendingMaintenance, setShowPendingMaintenance] = useState(false);
   const [showPendingParcialidades, setShowPendingParcialidades] = useState(false);
+  const [showCopropietarios, setShowCopropietarios] = useState(false);
 
   // Get resumen for breakdown across all properties
   const { profile } = useAuth();
@@ -61,7 +62,24 @@ const ClientePropiedadDetalle = () => {
   const effectivePersonaId = isImpersonating ? impersonatedClientePersonaId : profile?.id_persona;
   const { data: resumen } = useClienteResumenFinanciero(effectivePersonaId);
 
-
+  // Fetch copropietarios
+  const cuentaIdNum = cuentaId ? Number(cuentaId) : null;
+  const { data: copropietarios = [] } = useQuery({
+    queryKey: ["cliente-copropietarios", cuentaIdNum],
+    queryFn: async () => {
+      if (!cuentaIdNum) return [];
+      const { data } = await supabase
+        .from("compradores")
+        .select("id_persona, porcentaje_copropiedad, personas:compradores_id_persona_fkey!inner(nombre_legal)")
+        .eq("id_cuenta_cobranza", cuentaIdNum)
+        .eq("activo", true);
+      return (data || []).map((c: any) => ({
+        nombre: c.personas?.nombre_legal || "—",
+        porcentaje: c.porcentaje_copropiedad,
+      }));
+    },
+    enabled: !!cuentaIdNum,
+  });
   const handleDownloadEdoCuenta = async () => {
     if (!prop) return;
     setGeneratingEdoCuenta(true);
