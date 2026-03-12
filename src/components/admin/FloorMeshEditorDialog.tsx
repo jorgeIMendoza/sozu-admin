@@ -184,15 +184,10 @@ export const FloorMeshEditorDialog = ({
 
             <div className="rounded-lg border border-border bg-muted/10 overflow-hidden">
               {imageUrl ? (
-                <div className="relative w-full" style={imageAspect ? { aspectRatio: `${imageAspect}` } : undefined}>
-                  <img
-                    ref={imgRef}
-                    src={imageUrl}
-                    alt="Plano para enmallado"
-                    className="absolute inset-0 w-full h-full object-fill select-none"
-                    draggable={false}
-                    onLoad={handleImageLoad}
-                  />
+                <div
+                  className="relative w-full"
+                  style={{ aspectRatio: imageAspect ? `${imageAspect}` : "16 / 9" }}
+                >
                   <svg
                     ref={svgRef}
                     viewBox="0 0 100 100"
@@ -203,6 +198,16 @@ export const FloorMeshEditorDialog = ({
                     onPointerUp={() => setDragState(null)}
                     onPointerLeave={() => setDragState(null)}
                   >
+                    <image
+                      href={imageUrl}
+                      x="0"
+                      y="0"
+                      width="100"
+                      height="100"
+                      preserveAspectRatio="none"
+                      style={{ pointerEvents: "none" }}
+                    />
+
                     {regions.map((region, regionIndex) => {
                       const isSelected = regionIndex === selectedRegionIndex;
                       return (
