@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FloorMeshEditorDialog } from "@/components/admin/FloorMeshEditorDialog";
+import { cn } from "@/lib/utils";
 
 interface ConfigureLevelsDialogProps {
   open: boolean;
@@ -33,6 +34,17 @@ interface MeshEditorSession {
   image: UploadedImage;
   storagePath?: string;
 }
+
+const getRegionUnitLabel = (region: any, index: number) => {
+  const raw = (region?.unit_number ?? "").toString().trim();
+  return raw.length > 0 ? raw : `U${index + 1}`;
+};
+
+const hasRegionMeshAssigned = (region: any) => {
+  const unitLabel = (region?.unit_number ?? "").toString().trim();
+  const polygon = Array.isArray(region?.polygon) ? region.polygon : [];
+  return unitLabel.length > 0 && polygon.length >= 3;
+};
 
 // Image preview dialog
 const ImagePreviewDialog = ({ url, open, onClose }: { url: string | null; open: boolean; onClose: () => void }) => {
@@ -331,7 +343,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
       />
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="sm:max-w-[900px] max-h-[90vh] p-0 gap-0 overflow-hidden"
+          className="sm:max-w-[980px] max-h-[90vh] p-0 gap-0 overflow-hidden"
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -350,7 +362,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
             </DialogHeader>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-[1fr,280px] gap-0 min-h-[500px]">
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr),320px] gap-0 min-h-[500px]">
             {/* Left: Building visualization */}
             <div className="p-5 flex flex-col">
               <div className="flex items-center justify-between mb-3">
@@ -526,15 +538,15 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
               </div>
 
               <ScrollArea className="flex-1">
-                <div className="space-y-2 pr-1">
+                <div className="space-y-2 pr-3">
                   {uploadedImages.map((img) => (
                     <div
                       key={img.id}
                       draggable
                       onDragStart={() => handleDragStart(img)}
-                      className="border border-border rounded-lg bg-card hover:border-primary/40 hover:shadow-sm transition-all overflow-hidden"
+                      className="mr-1 border border-border rounded-lg bg-card hover:border-primary/40 hover:shadow-sm transition-all overflow-hidden"
                     >
-                      <div className="flex items-center gap-2 p-2 cursor-grab active:cursor-grabbing">
+                      <div className="flex items-center gap-2 p-2.5 cursor-grab active:cursor-grabbing">
                         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50 flex-shrink-0" />
                         <div
                           className="relative flex-shrink-0 cursor-pointer group/img"
@@ -555,34 +567,44 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                             {img.regiones?.length || 0} deptos detectados
                           </p>
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditMesh(img);
-                          }}
-                          className="p-1 hover:bg-muted rounded flex-shrink-0"
-                          title="Editar malla"
-                        >
-                          <PencilRuler className="h-3 w-3 text-muted-foreground" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }}
-                          className="p-1 hover:bg-destructive/10 rounded flex-shrink-0"
-                          title="Eliminar imagen"
-                        >
-                          <X className="h-3 w-3 text-destructive" />
-                        </button>
+                        <div className="flex items-center gap-1 flex-shrink-0 pl-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditMesh(img);
+                            }}
+                            className="p-1 hover:bg-muted rounded"
+                            title="Editar malla"
+                          >
+                            <PencilRuler className="h-3 w-3 text-muted-foreground" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }}
+                            className="p-1 hover:bg-destructive/10 rounded"
+                            title="Eliminar imagen"
+                          >
+                            <X className="h-3 w-3 text-destructive" />
+                          </button>
+                        </div>
                       </div>
                       {img.regiones && img.regiones.length > 0 && (
                         <div className="px-2 pb-2 flex flex-wrap gap-1">
-                          {img.regiones.map((r: any, idx: number) => (
-                            <span
-                              key={idx}
-                              className="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium"
-                            >
-                              {r.unit_number || `U${idx + 1}`}
-                            </span>
-                          ))}
+                          {img.regiones.map((r: any, idx: number) => {
+                            const hasMesh = hasRegionMeshAssigned(r);
+                            return (
+                              <span
+                                key={idx}
+                                className={cn(
+                                  "text-[8px] px-1.5 py-0.5 rounded-full font-medium border",
+                                  hasMesh
+                                    ? "bg-[hsl(var(--inmob-green))]/15 text-[hsl(var(--inmob-green))] border-[hsl(var(--inmob-green))]/30"
+                                    : "bg-muted text-muted-foreground border-border"
+                                )}
+                              >
+                                {getRegionUnitLabel(r, idx)}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
