@@ -184,7 +184,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       const proyectoId = proj?.id || 0;
       const precioM2Actual = proj?.precio_m2_actual || 0;
       const idEdificio = emData?.id_edificio || null;
-      const numeroPiso = propiedad.numero_piso || null;
+      const numeroPiso = propiedad.numero_piso ? Number(propiedad.numero_piso) : null;
 
       // Fetch floor plan for this level
       let planoUbicacionUrl: string | null = null;
