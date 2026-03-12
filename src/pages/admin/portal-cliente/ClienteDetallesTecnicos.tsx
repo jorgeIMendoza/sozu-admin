@@ -131,9 +131,6 @@ const ClienteDetallesTecnicos = () => {
               </div>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground text-center mt-2">
-            <span className="font-semibold text-foreground">D{prop.unidad}</span> PLANO DE REFERENCIA
-          </p>
         </TechCard>
 
         {/* 3. Plano arquitectónico */}
