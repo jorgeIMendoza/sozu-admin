@@ -1696,10 +1696,31 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
         .eq('id', cuenta.id);
       
       if (error) throw error;
+      return { porcentaje, ivaIncluido };
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast.success("Información de comisión actualizada");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
+      
+      // Log de actividad
+      const cambios: Record<string, unknown> = {};
+      const anteriores: Record<string, unknown> = {};
+      if (variables.porcentaje !== (cuentaDetalle?.porcentaje_comision_venta || 0)) {
+        anteriores.porcentaje_comision_venta = cuentaDetalle?.porcentaje_comision_venta || 0;
+        cambios.porcentaje_comision_venta = variables.porcentaje;
+      }
+      if (variables.ivaIncluido !== ((cuentaDetalle as any)?.iva_incluido || false)) {
+        anteriores.iva_incluido = (cuentaDetalle as any)?.iva_incluido || false;
+        cambios.iva_incluido = variables.ivaIncluido;
+      }
+      if (Object.keys(cambios).length > 0) {
+        registrarActualizacion(
+          'cuentas_cobranza',
+          { id_cuenta: cuenta.id, ...anteriores },
+          { id_cuenta: cuenta.id, ...cambios },
+          'actualizar_comision_cuenta_cobranza'
+        );
+      }
     },
     onError: (error) => {
       console.error("Error updating comisión:", error);
