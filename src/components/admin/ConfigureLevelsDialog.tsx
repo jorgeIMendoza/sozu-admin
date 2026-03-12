@@ -192,6 +192,17 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
     );
   };
 
+  const handleDeleteImage = (imgId: string) => {
+    const img = uploadedImages.find((i) => i.id === imgId);
+    if (!img) return;
+    // Remove from uploaded list
+    setUploadedImages((prev) => prev.filter((i) => i.id !== imgId));
+    // Remove from any floors that use this image
+    setFloors((prev) =>
+      prev.map((f) => (f.imagen_url === img.url ? { ...f, imagen_url: null, regiones: [] } : f))
+    );
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
