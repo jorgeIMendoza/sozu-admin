@@ -488,7 +488,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
             <div className="border-l border-border bg-muted/10 p-4 flex flex-col">
               <h4 className="text-sm font-semibold text-foreground mb-1">Planos de piso</h4>
               <p className="text-[10px] text-muted-foreground mb-3">
-                Sube imágenes PNG. Arrastra y suelta sobre los niveles del edificio.
+                Sube PNG, confirma/edita la malla y luego arrastra la imagen al nivel.
               </p>
 
               <div className="mb-3">
