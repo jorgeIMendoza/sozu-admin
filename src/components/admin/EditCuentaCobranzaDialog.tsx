@@ -2204,7 +2204,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     },
     onSuccess: () => {
       toast.success("Datos de escritura actualizados");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error) => {
       console.error("Error updating escritura fields:", error);
