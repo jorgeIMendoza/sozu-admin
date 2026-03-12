@@ -280,6 +280,11 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
               />
             </div>
 
+            <PlanoArquitectonicoUpload
+              currentUrl={planoUrl}
+              onUrlChange={setPlanoUrl}
+            />
+
             <ModelCharacteristicsSection
               modelId={modelo.id}
               onCharacteristicsChange={setSelectedCharacteristicIds}
