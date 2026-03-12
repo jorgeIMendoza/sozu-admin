@@ -3,13 +3,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Crosshair, PencilRuler, RefreshCw } from "lucide-react";
+import { CheckCircle2, Crosshair, PencilRuler, RefreshCw } from "lucide-react";
 
 export type MeshPoint = [number, number];
 
 export interface MeshRegion {
   unit_number: string;
   polygon: MeshPoint[];
+  mesh_confirmed?: boolean;
 }
 
 interface FloorMeshEditorDialogProps {
@@ -30,6 +31,12 @@ interface DragState {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+const resolveMeshConfirmed = (region: Partial<MeshRegion> & { confirmed?: boolean }) => {
+  if (typeof region.mesh_confirmed === "boolean") return region.mesh_confirmed;
+  if (typeof region.confirmed === "boolean") return region.confirmed;
+  return true;
+};
+
 const normalizeRegions = (regions: MeshRegion[]): MeshRegion[] => {
   return regions
     .map((region) => ({
@@ -40,6 +47,7 @@ const normalizeRegions = (regions: MeshRegion[]): MeshRegion[] => {
           clamp(Number(point?.[1] ?? 0), 0, 100),
         ] as MeshPoint)
         .filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1])),
+      mesh_confirmed: resolveMeshConfirmed(region),
     }))
     .filter((region) => region.unit_number.length > 0 && region.polygon.length >= 3);
 };
