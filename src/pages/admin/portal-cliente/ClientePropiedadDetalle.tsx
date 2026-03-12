@@ -555,6 +555,55 @@ const ClientePropiedadDetalle = () => {
         </div>
       )}
 
+      {/* ─── Copropietarios ─── */}
+      {copropietarios.length > 1 && (
+        <div className="mx-5 mt-6">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-3">Copropietarios</p>
+          <div className="bg-card rounded-2xl border border-border overflow-hidden">
+            <button
+              onClick={() => setShowCopropietarios(!showCopropietarios)}
+              className="flex items-center gap-3 w-full p-4 text-left hover:bg-muted/30 transition-colors"
+            >
+              <Users className="w-5 h-5 text-muted-foreground" />
+              <span className="flex-1 text-sm font-medium text-foreground">
+                {copropietarios.length} copropietario{copropietarios.length > 1 ? "s" : ""}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showCopropietarios ? "rotate-180" : ""}`} />
+            </button>
+            {showCopropietarios && (
+              <div className="border-t border-border px-4 pb-4 space-y-2">
+                {copropietarios.map((cop, i) => (
+                  <div key={i} className="flex items-center justify-between py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                        <User className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                      <span className="text-sm font-medium text-foreground">{cop.nombre}</span>
+                    </div>
+                    <span className="text-xs font-semibold text-muted-foreground tabular-nums">{cop.porcentaje}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Detalles técnicos (Propiedad) ─── */}
+      <div className="mx-5 mt-6">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-3">Propiedad</p>
+        <div className="bg-card rounded-2xl border border-border divide-y divide-border">
+          <button
+            onClick={() => navigate(`/admin/portal-cliente/propiedad/${prop.cuentaId}/detalles-tecnicos`)}
+            className="flex items-center gap-3 w-full p-4 text-left hover:bg-muted/30 transition-colors"
+          >
+            <ClipboardList className="w-5 h-5 text-muted-foreground" />
+            <span className="flex-1 text-sm font-medium text-foreground">Detalles técnicos</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+      </div>
+
       {/* ─── Mantenimiento ─── */}
       {(prop.cuotaMensualMantenimiento > 0 || prop.mantenimientoHistorial.length > 0) && (
         <div className="mx-5 mt-6">
