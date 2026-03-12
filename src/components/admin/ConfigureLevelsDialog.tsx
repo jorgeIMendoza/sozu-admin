@@ -71,6 +71,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [meshSession, setMeshSession] = useState<MeshEditorSession | null>(null);
   const [meshEditorOpen, setMeshEditorOpen] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const numPisos = typeof building.numero_pisos === "string"
@@ -161,6 +162,39 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
 
     setMeshEditorOpen(false);
     setMeshSession(null);
+  };
+
+  const handleRecalculateMesh = async () => {
+    if (!meshSession?.image.url) return;
+    setRecalculating(true);
+    try {
+      const resp = await fetch(meshSession.image.url);
+      const blob = await resp.blob();
+      const base64 = await fileToBase64(new File([blob], "recalc.png", { type: "image/png" }));
+
+      const { data: result, error } = await supabase.functions.invoke("validate-floor-plan", {
+        body: { imageBase64: base64 },
+      });
+      if (error) throw error;
+
+      const newRegions = result?.units || [];
+      const updatedImage = { ...meshSession.image, regiones: newRegions };
+      setMeshSession((prev) => prev ? { ...prev, image: updatedImage } : prev);
+      setMeshEditorOpen(false);
+      setTimeout(() => {
+        setMeshSession((prev) => prev ? { ...prev, image: updatedImage } : prev);
+        setMeshEditorOpen(true);
+      }, 50);
+
+      toast({
+        title: "Mallas recalculadas",
+        description: `Se detectaron ${newRegions.length} regiones. Ajusta si es necesario.`,
+      });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Error al recalcular.", variant: "destructive" });
+    } finally {
+      setRecalculating(false);
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -340,6 +374,8 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
           if (!nextOpen) handleMeshEditorClose();
         }}
         onSave={handleMeshSave}
+        onRecalculate={handleRecalculateMesh}
+        recalculating={recalculating}
       />
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
