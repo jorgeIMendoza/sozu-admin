@@ -113,7 +113,7 @@ export const EditBuildingDialog = ({ building, projectId, onBuildingUpdated }: E
 
       const { data: currentRelations, error: currentRelationsError } = await supabase
         .from("edificios_modelos")
-        .select("id_modelo, activo")
+        .select("id, id_modelo, activo")
         .eq("id_edificio", building.id);
 
       if (currentRelationsError) throw currentRelationsError;
@@ -128,16 +128,43 @@ export const EditBuildingDialog = ({ building, projectId, onBuildingUpdated }: E
         const relation = currentRelationsByModelo.get(modeloId);
         return !!relation && !relation.activo;
       });
-      const modelosToDeactivate = (currentRelations || [])
-        .filter((relation) => relation.activo && !selectedSet.has(relation.id_modelo))
+
+      const modelosToDeactivateRelations = (currentRelations || []).filter(
+        (relation) => relation.activo && !selectedSet.has(relation.id_modelo)
+      );
+      const relationIdsToDeactivate = modelosToDeactivateRelations.map((relation) => relation.id);
+
+      let relationIdsBlockedByProperties = new Set<number>();
+      if (relationIdsToDeactivate.length > 0) {
+        const { data: relatedProperties, error: relatedPropertiesError } = await supabase
+          .from("propiedades")
+          .select("id_edificio_modelo")
+          .eq("activo", true)
+          .in("id_edificio_modelo", relationIdsToDeactivate);
+
+        if (relatedPropertiesError) throw relatedPropertiesError;
+
+        relationIdsBlockedByProperties = new Set(
+          (relatedProperties || [])
+            .map((property) => property.id_edificio_modelo)
+            .filter((id): id is number => Number.isInteger(id))
+        );
+      }
+
+      const relationIdsToDeactivateSafely = relationIdsToDeactivate.filter(
+        (relationId) => !relationIdsBlockedByProperties.has(relationId)
+      );
+
+      const modelosBlockedByProperties = modelosToDeactivateRelations
+        .filter((relation) => relationIdsBlockedByProperties.has(relation.id))
         .map((relation) => relation.id_modelo);
 
-      if (modelosToDeactivate.length > 0) {
+      if (relationIdsToDeactivateSafely.length > 0) {
         const { error: deactivateError } = await supabase
           .from("edificios_modelos")
           .update({ activo: false })
           .eq("id_edificio", building.id)
-          .in("id_modelo", modelosToDeactivate);
+          .in("id", relationIdsToDeactivateSafely);
 
         if (deactivateError) throw deactivateError;
       }
