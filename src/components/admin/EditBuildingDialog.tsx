@@ -88,11 +88,11 @@ export const EditBuildingDialog = ({ building, projectId, onBuildingUpdated }: E
       event.preventDefault();
       event.stopPropagation();
     }
-    
+
     try {
       const updateData: any = {
-        nombre: values.nombre,
-        numero_pisos: values.numero_pisos || null,
+        nombre: values.nombre.trim(),
+        numero_pisos: values.numero_pisos?.trim() || null,
         fecha_lanzamiento: values.fecha_lanzamiento || null,
       };
 
@@ -103,20 +103,60 @@ export const EditBuildingDialog = ({ building, projectId, onBuildingUpdated }: E
 
       if (error) throw error;
 
-      // Update model relationships
-      // First, delete existing relationships
-      const { error: deleteError } = await supabase
+      const selectedModelIds = Array.from(
+        new Set(
+          (values.modelos || [])
+            .map((modeloId) => Number(modeloId))
+            .filter((modeloId) => Number.isInteger(modeloId))
+        )
+      );
+
+      const { data: currentRelations, error: currentRelationsError } = await supabase
         .from("edificios_modelos")
-        .delete()
+        .select("id_modelo, activo")
         .eq("id_edificio", building.id);
 
-      if (deleteError) throw deleteError;
+      if (currentRelationsError) throw currentRelationsError;
 
-      // Then, insert new relationships if any selected
-      if (values.modelos && values.modelos.length > 0) {
-        const modelRelations = values.modelos.map(modeloId => ({
+      const currentRelationsByModelo = new Map(
+        (currentRelations || []).map((relation) => [relation.id_modelo, relation])
+      );
+      const selectedSet = new Set(selectedModelIds);
+
+      const modelosToInsert = selectedModelIds.filter((modeloId) => !currentRelationsByModelo.has(modeloId));
+      const modelosToActivate = selectedModelIds.filter((modeloId) => {
+        const relation = currentRelationsByModelo.get(modeloId);
+        return !!relation && !relation.activo;
+      });
+      const modelosToDeactivate = (currentRelations || [])
+        .filter((relation) => relation.activo && !selectedSet.has(relation.id_modelo))
+        .map((relation) => relation.id_modelo);
+
+      if (modelosToDeactivate.length > 0) {
+        const { error: deactivateError } = await supabase
+          .from("edificios_modelos")
+          .update({ activo: false })
+          .eq("id_edificio", building.id)
+          .in("id_modelo", modelosToDeactivate);
+
+        if (deactivateError) throw deactivateError;
+      }
+
+      if (modelosToActivate.length > 0) {
+        const { error: activateError } = await supabase
+          .from("edificios_modelos")
+          .update({ activo: true })
+          .eq("id_edificio", building.id)
+          .in("id_modelo", modelosToActivate);
+
+        if (activateError) throw activateError;
+      }
+
+      if (modelosToInsert.length > 0) {
+        const modelRelations = modelosToInsert.map((modeloId) => ({
           id_edificio: building.id,
-          id_modelo: parseInt(modeloId),
+          id_modelo: modeloId,
+          activo: true,
         }));
 
         const { error: modelError } = await supabase
