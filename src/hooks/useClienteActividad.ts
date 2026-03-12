@@ -335,6 +335,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
               mensaje: dias === 0
                 ? "Vence hoy"
                 : `Faltan ${dias} día${dias !== 1 ? "s" : ""} para tu pago`,
+              cuentaId: ap.id_cuenta_cobranza,
             });
           });
         }
