@@ -139,7 +139,6 @@ export const EditBuildingDialog = ({ building, projectId, onBuildingUpdated }: E
         const { data: relatedProperties, error: relatedPropertiesError } = await supabase
           .from("propiedades")
           .select("id_edificio_modelo")
-          .eq("activo", true)
           .in("id_edificio_modelo", relationIdsToDeactivate);
 
         if (relatedPropertiesError) throw relatedPropertiesError;
