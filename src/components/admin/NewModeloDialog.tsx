@@ -103,6 +103,7 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
       });
 
       form.reset();
+      setPlanoUrl(null);
       setOpen(false);
       onModeloAdded();
     } catch (error) {
