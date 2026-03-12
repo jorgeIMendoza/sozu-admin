@@ -147,6 +147,18 @@ export const FloorMeshEditorDialog = ({
     );
   };
 
+  const handleToggleSelectedConfirmation = () => {
+    if (!selectedRegion) return;
+
+    setRegions((prev) =>
+      prev.map((region, index) =>
+        index === selectedRegionIndex
+          ? { ...region, mesh_confirmed: !resolveMeshConfirmed(region) }
+          : region
+      )
+    );
+  };
+
   const handleSave = () => {
     const normalized = normalizeRegions(regions);
     onSave(normalized);
