@@ -43,7 +43,15 @@ const getRegionUnitLabel = (region: any, index: number) => {
 const hasRegionMeshAssigned = (region: any) => {
   const unitLabel = (region?.unit_number ?? "").toString().trim();
   const polygon = Array.isArray(region?.polygon) ? region.polygon : [];
-  return unitLabel.length > 0 && polygon.length >= 3;
+  const hasValidPolygon = polygon.length >= 3;
+  const explicitConfirmation =
+    typeof region?.mesh_confirmed === "boolean"
+      ? region.mesh_confirmed
+      : typeof region?.confirmed === "boolean"
+        ? region.confirmed
+        : null;
+
+  return unitLabel.length > 0 && hasValidPolygon && (explicitConfirmation ?? true);
 };
 
 // Image preview dialog
@@ -633,7 +641,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                                 className={cn(
                                   "text-[8px] px-1.5 py-0.5 rounded-full font-medium border",
                                   hasMesh
-                                    ? "bg-[hsl(var(--inmob-green))]/15 text-[hsl(var(--inmob-green))] border-[hsl(var(--inmob-green))]/30"
+                                    ? "bg-[hsl(var(--inmob-green)/0.15)] text-[hsl(var(--inmob-green))] border-[hsl(var(--inmob-green)/0.35)]"
                                     : "bg-muted text-muted-foreground border-border"
                                 )}
                               >
