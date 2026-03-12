@@ -95,6 +95,7 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
         numero_completo_banos: values.numero_completo_banos || null,
         numero_medio_bano: values.numero_medio_bano || null,
         id_proyecto: parseInt(values.id_proyecto),
+        plano_arquitectonico: planoUrl,
       };
 
       const { error: modeloError } = await supabase
