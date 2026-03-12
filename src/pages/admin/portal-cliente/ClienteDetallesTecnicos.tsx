@@ -18,10 +18,12 @@ const FloorPlanCanvas = ({
   imageUrl,
   regiones,
   highlightUnit,
+  fullPropertyNumber,
 }: {
   imageUrl: string;
   regiones: any[];
   highlightUnit: string;
+  fullPropertyNumber?: string;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -53,63 +55,58 @@ const FloorPlanCanvas = ({
     canvas.width = containerWidth;
     canvas.height = canvasHeight;
 
-    // Draw image
     ctx.drawImage(img, 0, 0, containerWidth, canvasHeight);
 
-    // Draw highlighted unit
     if (regiones && regiones.length > 0 && highlightUnit) {
-      // Normalize highlight unit: remove leading zeros
-      const normalizedHighlight = highlightUnit.replace(/^0+/, "");
+      // Build multiple candidate strings to match against region unit_number
+      const candidates = new Set<string>();
+      const raw = highlightUnit.trim();
+      candidates.add(raw);
+      candidates.add(raw.replace(/^0+/, ""));
+      if (fullPropertyNumber) {
+        const fp = fullPropertyNumber.trim();
+        candidates.add(fp);
+        candidates.add(fp.replace(/^0+/, ""));
+        // Try last 1, 2, 3 chars as unit number
+        for (let len = 1; len <= Math.min(3, fp.length); len++) {
+          const suffix = fp.slice(-len);
+          candidates.add(suffix);
+          candidates.add(suffix.replace(/^0+/, ""));
+        }
+      }
 
       regiones.forEach((region: any) => {
-        const unitNum = region.unit_number?.toString().replace(/^0+/, "");
-        const isHighlighted = unitNum === normalizedHighlight;
+        const unitRaw = region.unit_number?.toString().trim() || "";
+        const unitNorm = unitRaw.replace(/^0+/, "");
+        const isHighlighted = candidates.has(unitRaw) || candidates.has(unitNorm);
 
-        if (region.polygon && region.polygon.length >= 3) {
+        if (isHighlighted && region.polygon && region.polygon.length >= 3) {
+          const points = region.polygon.map((p: number[]) => [
+            (p[0] / 100) * containerWidth,
+            (p[1] / 100) * canvasHeight,
+          ]);
+          const cx = points.reduce((s: number, p: number[]) => s + p[0], 0) / points.length;
+          const cy = points.reduce((s: number, p: number[]) => s + p[1], 0) / points.length;
+          const scaleFactor = 1.12;
+
           ctx.beginPath();
-          const firstPoint = region.polygon[0];
-          ctx.moveTo(
-            (firstPoint[0] / 100) * containerWidth,
-            (firstPoint[1] / 100) * canvasHeight
-          );
-
-          for (let i = 1; i < region.polygon.length; i++) {
-            ctx.lineTo(
-              (region.polygon[i][0] / 100) * containerWidth,
-              (region.polygon[i][1] / 100) * canvasHeight
-            );
+          const ep0 = [cx + (points[0][0] - cx) * scaleFactor, cy + (points[0][1] - cy) * scaleFactor];
+          ctx.moveTo(ep0[0], ep0[1]);
+          for (let k = 1; k < points.length; k++) {
+            const ep = [cx + (points[k][0] - cx) * scaleFactor, cy + (points[k][1] - cy) * scaleFactor];
+            ctx.lineTo(ep[0], ep[1]);
           }
           ctx.closePath();
 
-          if (isHighlighted) {
-            // Expand polygon slightly around centroid for better visibility
-            const points = region.polygon.map((p: number[]) => [
-              (p[0] / 100) * containerWidth,
-              (p[1] / 100) * canvasHeight,
-            ]);
-            const cx = points.reduce((s: number, p: number[]) => s + p[0], 0) / points.length;
-            const cy = points.reduce((s: number, p: number[]) => s + p[1], 0) / points.length;
-            const scaleFactor = 1.08;
-
-            ctx.beginPath();
-            const ep0 = [cx + (points[0][0] - cx) * scaleFactor, cy + (points[0][1] - cy) * scaleFactor];
-            ctx.moveTo(ep0[0], ep0[1]);
-            for (let k = 1; k < points.length; k++) {
-              const ep = [cx + (points[k][0] - cx) * scaleFactor, cy + (points[k][1] - cy) * scaleFactor];
-              ctx.lineTo(ep[0], ep[1]);
-            }
-            ctx.closePath();
-
-            ctx.fillStyle = "rgba(34, 197, 94, 0.35)";
-            ctx.fill();
-            ctx.strokeStyle = "rgba(34, 197, 94, 0.9)";
-            ctx.lineWidth = 2.5;
-            ctx.stroke();
-          }
+          ctx.fillStyle = "rgba(34, 197, 94, 0.35)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(34, 197, 94, 0.9)";
+          ctx.lineWidth = 3;
+          ctx.stroke();
         }
       });
     }
-  }, [imageLoaded, regiones, highlightUnit]);
+  }, [imageLoaded, regiones, highlightUnit, fullPropertyNumber]);
 
   return (
     <div ref={containerRef} className="w-full">
@@ -191,6 +188,7 @@ const ClienteDetallesTecnicos = () => {
                   imageUrl={prop.planoUbicacionUrl}
                   regiones={prop.planoUbicacionRegiones}
                   highlightUnit={prop.numeroDepa}
+                  fullPropertyNumber={prop.unidad}
                 />
                 <p className="text-xs text-muted-foreground mt-2">
                   Nivel {prop.numeroPiso} — Depto. <span className="font-semibold text-foreground">{prop.numeroDepa}</span>
