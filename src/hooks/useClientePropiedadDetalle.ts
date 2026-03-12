@@ -49,6 +49,8 @@ export interface PropiedadDetalle {
   modelo: string;
   planoArquitectonico: string | null;
   unidad: string;
+  numeroPiso: number | null;
+  idEdificio: number | null;
   precioFinal: number;
   totalPaid: number;
   pending: number;
@@ -77,6 +79,9 @@ export interface PropiedadDetalle {
   propiedadBeneficiarioNombre: string | null;
   parcialidades: ParcialidadDetalle[];
   ultimosPagos: PagoReciente[];
+  planoUbicacionUrl: string | null;
+  planoUbicacionRegiones: any[];
+  numeroDepa: string;
 }
 
 export function useClientePropiedadDetalle(cuentaId: number | null | undefined) {
