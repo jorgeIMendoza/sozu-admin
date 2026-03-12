@@ -110,6 +110,47 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
     setUploadedImages(imgs);
   }, [open, existingPlanos, numPisos]);
 
+  const handleMeshEditorClose = () => {
+    if (meshSession?.mode === "new" && meshSession.storagePath) {
+      void supabase.storage.from("modelos").remove([meshSession.storagePath]);
+    }
+
+    setMeshEditorOpen(false);
+    setMeshSession(null);
+  };
+
+  const handleMeshSave = (regiones: any[]) => {
+    if (!meshSession) return;
+
+    if (meshSession.mode === "new") {
+      const imageToAdd: UploadedImage = {
+        ...meshSession.image,
+        regiones,
+      };
+      setUploadedImages((prev) => [...prev, imageToAdd]);
+      toast({
+        title: "Malla guardada",
+        description: `Plano cargado con ${regiones.length} departamentos enmallados.`,
+      });
+    } else {
+      setUploadedImages((prev) =>
+        prev.map((img) => (img.id === meshSession.image.id ? { ...img, regiones } : img))
+      );
+      setFloors((prev) =>
+        prev.map((floor) =>
+          floor.imagen_url === meshSession.image.url ? { ...floor, regiones } : floor
+        )
+      );
+      toast({
+        title: "Malla actualizada",
+        description: "Los cambios se aplicarán a todos los niveles que usan esta imagen.",
+      });
+    }
+
+    setMeshEditorOpen(false);
+    setMeshSession(null);
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
