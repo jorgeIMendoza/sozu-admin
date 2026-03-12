@@ -14,6 +14,24 @@ const TechCard = ({ title, children }: { title: string; children: React.ReactNod
   </div>
 );
 
+const resolveDeptoFromUnidad = (unidad: string, numeroPiso: number | null, fallback: string) => {
+  const unidadRaw = (unidad || "").toString().trim();
+  const unidadDigits = unidadRaw.replace(/\D/g, "");
+  const pisoDigits = (numeroPiso?.toString() || "").replace(/\D/g, "");
+
+  if (unidadDigits.length > 0) {
+    if (pisoDigits.length > 0 && unidadDigits.startsWith(pisoDigits) && unidadDigits.length > pisoDigits.length) {
+      const extracted = unidadDigits.slice(pisoDigits.length);
+      return extracted.length === 1 ? extracted.padStart(2, "0") : extracted;
+    }
+
+    const fallbackSuffix = unidadDigits.slice(-2) || unidadDigits;
+    return fallbackSuffix.length === 1 ? fallbackSuffix.padStart(2, "0") : fallbackSuffix;
+  }
+
+  return (fallback || "").toString().trim();
+};
+
 const FloorPlanCanvas = ({
   imageUrl,
   regiones,
