@@ -2245,7 +2245,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     },
     onSuccess: () => {
       toast.success("Precio final actualizado exitosamente");
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
       setShowPrecioFinalConfirmDialog(false);
       setPendingPrecioFinalChange(null);
