@@ -1934,7 +1934,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       setIvaIncluido(false);
       
       // Invalidar queries para refrescar datos
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
       
       toast.success(`Comisión en efectivo aplicada. Descuento: ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(montoComision)}`);
