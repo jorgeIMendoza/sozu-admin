@@ -310,6 +310,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
               urgencia: "red",
               mensaje: `${info.count} pago${info.count !== 1 ? "s" : ""} vencido${info.count !== 1 ? "s" : ""} — requiere atención inmediata`,
               mensualidadesAtraso: info.count,
+              cuentaId,
             });
           });
 
