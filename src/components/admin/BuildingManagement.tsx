@@ -19,6 +19,7 @@ interface BuildingManagementProps {
 
 export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [configureLevelsBuilding, setConfigureLevelsBuilding] = useState<any>(null);
   const { toast } = useToast();
 
   const { data: buildings, isLoading, refetch } = useQuery({
