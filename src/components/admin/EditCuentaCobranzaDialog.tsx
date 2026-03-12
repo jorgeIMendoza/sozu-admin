@@ -2089,7 +2089,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       // Invalidate and refetch the acuerdos_pago query
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
       // Also invalidate the main cuenta query to refresh all data
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuenta.id] });
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error, variables) => {
       console.error("Error updating amount:", error);
