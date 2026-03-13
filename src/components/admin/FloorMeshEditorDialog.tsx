@@ -119,22 +119,52 @@ export const FloorMeshEditorDialog = ({
 
   const selectedRegion = useMemo(() => regions[selectedRegionIndex] || null, [regions, selectedRegionIndex]);
 
-  const updatePointPosition = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!dragState || !svgRef.current) return;
+  const getPointerCoordinates = (clientX: number, clientY: number): MeshPoint | null => {
+    if (!svgRef.current) return null;
 
     const rect = svgRef.current.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
+    if (!rect.width || !rect.height) return null;
 
-    const x = clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
-    const y = clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100);
+    return [
+      clamp(((clientX - rect.left) / rect.width) * 100, 0, 100),
+      clamp(((clientY - rect.top) / rect.height) * 100, 0, 100),
+    ];
+  };
+
+  const updatePointPosition = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (!dragState) return;
+
+    const pointer = getPointerCoordinates(event.clientX, event.clientY);
+    if (!pointer) return;
+
+    if (dragState.mode === "point") {
+      setRegions((prev) =>
+        prev.map((region, regionIndex) => {
+          if (regionIndex !== dragState.regionIndex) return region;
+
+          const polygon = region.polygon.map((point, pointIndex) =>
+            pointIndex === dragState.pointIndex ? (pointer as MeshPoint) : point
+          );
+
+          return { ...region, polygon };
+        })
+      );
+      return;
+    }
+
+    const [currentX, currentY] = pointer;
+    const [originX, originY] = dragState.originPointer;
+    const deltaX = currentX - originX;
+    const deltaY = currentY - originY;
 
     setRegions((prev) =>
       prev.map((region, regionIndex) => {
         if (regionIndex !== dragState.regionIndex) return region;
 
-        const polygon = region.polygon.map((point, pointIndex) =>
-          pointIndex === dragState.pointIndex ? ([x, y] as MeshPoint) : point
-        );
+        const polygon = dragState.originPolygon.map(([x, y]) => [
+          clamp(x + deltaX, 0, 100),
+          clamp(y + deltaY, 0, 100),
+        ] as MeshPoint);
 
         return { ...region, polygon };
       })
