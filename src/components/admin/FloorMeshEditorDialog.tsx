@@ -24,10 +24,20 @@ interface FloorMeshEditorDialogProps {
   recalculating?: boolean;
 }
 
-interface DragState {
+interface PointDragState {
+  mode: "point";
   regionIndex: number;
   pointIndex: number;
 }
+
+interface RegionDragState {
+  mode: "region";
+  regionIndex: number;
+  originPointer: MeshPoint;
+  originPolygon: MeshPoint[];
+}
+
+type DragState = PointDragState | RegionDragState;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
