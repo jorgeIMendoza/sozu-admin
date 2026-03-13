@@ -258,7 +258,21 @@ export const FloorMeshEditorDialog = ({
                             stroke={isSelected ? "hsl(var(--primary))" : "hsl(var(--border))"}
                             strokeWidth={isSelected ? 0.8 : 0.55}
                             onClick={() => setSelectedRegionIndex(regionIndex)}
-                            className="cursor-pointer transition-opacity"
+                            onPointerDown={(event) => {
+                              const pointer = getPointerCoordinates(event.clientX, event.clientY);
+                              if (!pointer) return;
+
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setSelectedRegionIndex(regionIndex);
+                              setDragState({
+                                mode: "region",
+                                regionIndex,
+                                originPointer: pointer,
+                                originPolygon: region.polygon.map((point) => [point[0], point[1]] as MeshPoint),
+                              });
+                            }}
+                            className={isSelected ? "cursor-move transition-opacity" : "cursor-pointer transition-opacity"}
                           />
 
                           {isSelected &&
@@ -276,7 +290,7 @@ export const FloorMeshEditorDialog = ({
                                   event.preventDefault();
                                   event.stopPropagation();
                                   setSelectedRegionIndex(regionIndex);
-                                  setDragState({ regionIndex, pointIndex });
+                                  setDragState({ mode: "point", regionIndex, pointIndex });
                                 }}
                               />
                             ))}
