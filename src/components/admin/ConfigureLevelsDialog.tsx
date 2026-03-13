@@ -435,31 +435,59 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
             </DialogHeader>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr),320px] gap-0 min-h-[500px]">
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr),320px] gap-0 min-h-[500px] max-h-[calc(90vh-120px)]">
             {/* Left: Building visualization */}
-            <div className="p-5 flex flex-col">
-              <div className="flex items-center justify-between mb-3">
+            <div className="p-5 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between mb-3 flex-shrink-0">
                 <h4 className="text-sm font-semibold text-foreground">Vista del edificio</h4>
                 <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                   {assignedCount}/{numPisos} niveles asignados
                 </span>
               </div>
 
-              <ScrollArea className="flex-1">
-                <div className="flex flex-col items-center pb-4">
-                  {/* Roof */}
-                  <div className="relative w-[300px] mb-0">
-                    {/* Antenna */}
-                    <div className="absolute left-1/2 -translate-x-1/2 -top-6 w-[2px] h-6 bg-muted-foreground/30" />
-                    <div className="absolute left-1/2 -translate-x-1/2 -top-7 w-3 h-3 rounded-full bg-muted-foreground/20 border border-muted-foreground/30" />
-                    {/* Main roof */}
-                    <div className="h-4 bg-gradient-to-b from-muted-foreground/40 to-muted-foreground/20 rounded-t-xl border-x border-t border-muted-foreground/25 relative overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-muted-foreground/10 to-transparent" />
+              <ScrollArea className="flex-1 min-h-0">
+                <div className="flex flex-col items-center pb-6 pt-12">
+                  {/* === SKY with clouds === */}
+                  <div className="relative w-[380px] h-8 mb-0">
+                    {/* Cloud 1 */}
+                    <div className="absolute left-4 top-0 flex gap-0">
+                      <div className="w-5 h-3 rounded-full bg-muted-foreground/8" />
+                      <div className="w-8 h-4 rounded-full bg-muted-foreground/10 -ml-2 -mt-1" />
+                      <div className="w-5 h-3 rounded-full bg-muted-foreground/8 -ml-2" />
                     </div>
-                    {/* Roof ledge */}
-                    <div className="h-1.5 bg-muted-foreground/15 border-x border-muted-foreground/20 -mx-1 rounded-sm" style={{ width: "calc(100% + 8px)", marginLeft: "-4px" }} />
+                    {/* Cloud 2 */}
+                    <div className="absolute right-8 top-2 flex gap-0">
+                      <div className="w-4 h-2.5 rounded-full bg-muted-foreground/6" />
+                      <div className="w-6 h-3 rounded-full bg-muted-foreground/8 -ml-1.5 -mt-0.5" />
+                      <div className="w-4 h-2.5 rounded-full bg-muted-foreground/6 -ml-1.5" />
+                    </div>
                   </div>
 
+                  {/* === ROOF with penthouse style === */}
+                  <div className="relative w-[300px] mb-0">
+                    {/* Antenna / spire */}
+                    <div className="absolute left-1/2 -translate-x-1/2 -top-10 flex flex-col items-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-destructive/60 animate-pulse" />
+                      <div className="w-[1.5px] h-4 bg-muted-foreground/40" />
+                      <div className="w-3 h-[1px] bg-muted-foreground/30 -mt-1" />
+                      <div className="w-[1.5px] h-5 bg-muted-foreground/30" />
+                    </div>
+                    {/* Penthouse box */}
+                    <div className="absolute left-1/2 -translate-x-1/2 -top-3 w-16 h-3 bg-gradient-to-b from-muted-foreground/25 to-muted-foreground/15 rounded-t-md border-x border-t border-muted-foreground/20" />
+                    {/* Main roof */}
+                    <div className="h-5 bg-gradient-to-b from-muted-foreground/35 to-muted-foreground/18 rounded-t-xl border-x border-t border-muted-foreground/25 relative overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-background/10 to-transparent" />
+                      {/* Roof accent line */}
+                      <div className="absolute bottom-0 left-4 right-4 h-[1px] bg-muted-foreground/15" />
+                    </div>
+                    {/* Roof ledge / cornice */}
+                    <div
+                      className="h-2 bg-gradient-to-b from-muted-foreground/20 to-muted-foreground/10 border-x border-muted-foreground/20 rounded-sm"
+                      style={{ width: "calc(100% + 10px)", marginLeft: "-5px" }}
+                    />
+                  </div>
+
+                  {/* === FLOORS === */}
                   {floors.slice().reverse().map((floor, idx) => {
                     const isLast = idx === floors.length - 1;
                     const hasImage = !!floor.imagen_url;
@@ -474,27 +502,23 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                         }}
                         onDragLeave={() => setHoveredFloor(null)}
                         onDrop={(e) => handleDrop(e, floor.nivel)}
-                        className={`
-                          w-[300px] flex items-stretch group relative transition-all duration-200
-                          border-x border-b
-                          ${hasImage
+                        className={cn(
+                          "w-[300px] flex items-stretch group relative transition-all duration-200 border-x border-b",
+                          hasImage
                             ? "bg-gradient-to-r from-primary/8 via-primary/4 to-primary/8 border-primary/25"
-                            : "bg-card border-muted-foreground/15"
-                          }
-                          ${hoveredFloor === floor.nivel ? "ring-2 ring-primary ring-inset bg-primary/15 scale-[1.02] z-10 shadow-lg" : ""}
-                          ${isLast ? "rounded-b-lg" : ""}
-                        `}
+                            : "bg-card border-muted-foreground/15",
+                          hoveredFloor === floor.nivel && "ring-2 ring-primary ring-inset bg-primary/15 scale-[1.02] z-10 shadow-lg",
+                          isLast && "rounded-b-lg"
+                        )}
                         style={{ height: `${floorHeight}px` }}
                       >
                         {/* Level badge */}
-                        <div className={`
-                          w-12 flex items-center justify-center text-[11px] font-bold tracking-wide
-                          border-r
-                          ${hasImage
+                        <div className={cn(
+                          "w-12 flex items-center justify-center text-[11px] font-bold tracking-wide border-r",
+                          hasImage
                             ? "bg-primary/15 text-primary border-primary/20"
                             : "bg-muted/50 text-muted-foreground/50 border-muted-foreground/10"
-                          }
-                        `}>
+                        )}>
                           N{floor.nivel}
                         </div>
 
@@ -522,17 +546,13 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                             </>
                           ) : (
                             <>
-                              {/* Window pattern */}
-                              <div className="flex gap-3 mx-auto">
-                                {[...Array(Math.min(5, Math.max(3, Math.floor(240 / 60))))].map((_, i) => (
-                                  <div key={i} className="flex flex-col gap-0.5">
+                              {/* Window pattern - glass effect */}
+                              <div className="flex gap-2.5 mx-auto">
+                                {[...Array(Math.min(5, Math.max(3, Math.floor(240 / 55))))].map((_, i) => (
+                                  <div key={i} className="flex flex-col gap-[2px]">
                                     <div
-                                      className="rounded-[2px] bg-gradient-to-b from-primary/20 to-primary/5 border border-border"
-                                      style={{ width: "12px", height: `${floorHeight * 0.35}px` }}
-                                    />
-                                    <div
-                                      className="rounded-[2px] bg-gradient-to-b from-accent/20 to-accent/10 border border-border"
-                                      style={{ width: "12px", height: `${floorHeight * 0.2}px` }}
+                                      className="rounded-[1px] bg-gradient-to-br from-primary/15 via-primary/8 to-accent/10 border border-muted-foreground/10 shadow-inner"
+                                      style={{ width: "14px", height: `${floorHeight * 0.55}px` }}
                                     />
                                   </div>
                                 ))}
@@ -559,12 +579,123 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                     );
                   })}
 
-                  {/* Foundation */}
-                  <div className="w-[312px] h-2 bg-gradient-to-b from-muted-foreground/30 to-muted-foreground/20 rounded-b-md border-x border-b border-muted-foreground/20" />
-                  <div className="w-[324px] h-3 bg-gradient-to-b from-muted-foreground/15 to-muted-foreground/5 rounded-b-lg" />
-                  {/* Ground line */}
-                  <div className="w-[360px] h-[1px] bg-muted-foreground/15 mt-1" />
-                  <div className="w-[340px] h-[1px] bg-muted-foreground/8 mt-px" />
+                  {/* === LOBBY / ENTRANCE === */}
+                  <div className="relative w-[300px]">
+                    {/* Foundation top */}
+                    <div className="h-2 bg-gradient-to-b from-muted-foreground/25 to-muted-foreground/15 border-x border-muted-foreground/20" />
+                    {/* Entrance area */}
+                    <div className="h-10 bg-gradient-to-b from-muted/60 to-muted/30 border-x border-b border-muted-foreground/20 flex items-end justify-center gap-6 px-4 rounded-b-lg relative overflow-hidden">
+                      {/* Glass door left */}
+                      <div className="w-8 h-7 bg-gradient-to-b from-primary/15 to-primary/5 border border-muted-foreground/15 rounded-t-md mb-0" />
+                      {/* Main door (revolving) */}
+                      <div className="relative">
+                        <div className="w-10 h-8 bg-gradient-to-b from-primary/20 to-primary/8 border border-muted-foreground/20 rounded-t-lg mb-0" />
+                        {/* Door handle */}
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-2 rounded-full bg-muted-foreground/30" />
+                      </div>
+                      {/* Glass door right */}
+                      <div className="w-8 h-7 bg-gradient-to-b from-primary/15 to-primary/5 border border-muted-foreground/15 rounded-t-md mb-0" />
+                    </div>
+                  </div>
+
+                  {/* === FOUNDATION / BASE === */}
+                  <div className="w-[316px] h-2.5 bg-gradient-to-b from-muted-foreground/25 to-muted-foreground/12 rounded-b-md border-x border-b border-muted-foreground/15" />
+                  <div className="w-[330px] h-1.5 bg-gradient-to-b from-muted-foreground/10 to-transparent rounded-b-lg" />
+
+                  {/* === GROUND SCENE === */}
+                  <div className="relative w-[420px] mt-1">
+                    {/* Sidewalk */}
+                    <div className="h-3 bg-gradient-to-b from-muted-foreground/12 to-muted-foreground/6 rounded-sm mx-8" />
+                    {/* Road */}
+                    <div className="h-5 bg-muted-foreground/8 mx-4 relative overflow-hidden rounded-sm">
+                      {/* Road dashes */}
+                      <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 flex justify-center gap-4">
+                        {[...Array(8)].map((_, i) => (
+                          <div key={i} className="w-4 h-[1.5px] bg-muted-foreground/20 rounded-full" />
+                        ))}
+                      </div>
+                    </div>
+                    {/* Bottom sidewalk */}
+                    <div className="h-2 bg-gradient-to-b from-muted-foreground/8 to-transparent mx-8 rounded-b-sm" />
+
+                    {/* === DECORATIVE ELEMENTS === */}
+                    {/* Tree left */}
+                    <div className="absolute -left-2 bottom-6 flex flex-col items-center">
+                      <div className="w-8 h-8 rounded-full bg-success/25 border border-success/15 relative">
+                        <div className="absolute inset-1 rounded-full bg-success/15" />
+                      </div>
+                      <div className="w-1.5 h-4 bg-muted-foreground/25 rounded-b-sm -mt-1" />
+                    </div>
+
+                    {/* Tree right */}
+                    <div className="absolute -right-1 bottom-6 flex flex-col items-center">
+                      <div className="w-7 h-7 rounded-full bg-success/20 border border-success/12 relative">
+                        <div className="absolute inset-1 rounded-full bg-success/12" />
+                      </div>
+                      <div className="w-1.5 h-3.5 bg-muted-foreground/20 rounded-b-sm -mt-1" />
+                    </div>
+
+                    {/* Small bush left */}
+                    <div className="absolute left-12 bottom-8 flex gap-0.5">
+                      <div className="w-3 h-2.5 rounded-full bg-success/20" />
+                      <div className="w-4 h-3 rounded-full bg-success/25 -ml-1" />
+                      <div className="w-3 h-2.5 rounded-full bg-success/18 -ml-1" />
+                    </div>
+
+                    {/* Flowers left */}
+                    <div className="absolute left-16 bottom-11 flex gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-destructive/40" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-warning/50" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-destructive/30" />
+                    </div>
+
+                    {/* Flowers right */}
+                    <div className="absolute right-14 bottom-11 flex gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-warning/40" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-destructive/35" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary/30" />
+                    </div>
+
+                    {/* Small bush right */}
+                    <div className="absolute right-10 bottom-8 flex gap-0.5">
+                      <div className="w-3 h-2 rounded-full bg-success/18" />
+                      <div className="w-3.5 h-2.5 rounded-full bg-success/22 -ml-1" />
+                    </div>
+
+                    {/* Car 1 */}
+                    <div className="absolute left-[30%] bottom-1.5">
+                      <div className="relative">
+                        <div className="w-10 h-2.5 bg-primary/25 rounded-sm border border-primary/15" />
+                        <div className="absolute -top-1.5 left-1.5 w-6 h-2 bg-primary/20 rounded-t-md border-x border-t border-primary/12" />
+                        {/* Wheels */}
+                        <div className="absolute -bottom-1 left-0.5 w-2 h-2 rounded-full bg-muted-foreground/30 border border-muted-foreground/20" />
+                        <div className="absolute -bottom-1 right-0.5 w-2 h-2 rounded-full bg-muted-foreground/30 border border-muted-foreground/20" />
+                      </div>
+                    </div>
+
+                    {/* Car 2 */}
+                    <div className="absolute right-[25%] bottom-1.5">
+                      <div className="relative">
+                        <div className="w-9 h-2.5 bg-destructive/20 rounded-sm border border-destructive/12" />
+                        <div className="absolute -top-1.5 left-2 w-5 h-2 bg-destructive/15 rounded-t-md border-x border-t border-destructive/10" />
+                        <div className="absolute -bottom-1 left-0.5 w-2 h-2 rounded-full bg-muted-foreground/30 border border-muted-foreground/20" />
+                        <div className="absolute -bottom-1 right-0.5 w-2 h-2 rounded-full bg-muted-foreground/30 border border-muted-foreground/20" />
+                      </div>
+                    </div>
+
+                    {/* Lamp post left */}
+                    <div className="absolute left-[22%] bottom-5 flex flex-col items-center">
+                      <div className="w-3 h-1.5 rounded-full bg-warning/30 shadow-[0_0_4px_1px] shadow-warning/15" />
+                      <div className="w-[1px] h-5 bg-muted-foreground/25" />
+                    </div>
+
+                    {/* Lamp post right */}
+                    <div className="absolute right-[20%] bottom-5 flex flex-col items-center">
+                      <div className="w-3 h-1.5 rounded-full bg-warning/30 shadow-[0_0_4px_1px] shadow-warning/15" />
+                      <div className="w-[1px] h-5 bg-muted-foreground/25" />
+                    </div>
+                  </div>
                 </div>
               </ScrollArea>
             </div>
