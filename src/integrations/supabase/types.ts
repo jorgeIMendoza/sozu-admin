@@ -4423,6 +4423,53 @@ export type Database = {
           },
         ]
       }
+      modelos_planos_arquitectonicos: {
+        Row: {
+          activo: boolean
+          created_at: string
+          departamentos: Json
+          id: number
+          id_edificio_modelo: number
+          imagen_url: string
+          nivel: number
+          nombre_original: string
+          storage_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          activo?: boolean
+          created_at?: string
+          departamentos?: Json
+          id?: number
+          id_edificio_modelo: number
+          imagen_url: string
+          nivel: number
+          nombre_original: string
+          storage_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activo?: boolean
+          created_at?: string
+          departamentos?: Json
+          id?: number
+          id_edificio_modelo?: number
+          imagen_url?: string
+          nivel?: number
+          nombre_original?: string
+          storage_path?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "modelos_planos_arquitectonicos_id_edificio_modelo_fkey"
+            columns: ["id_edificio_modelo"]
+            isOneToOne: false
+            referencedRelation: "edificios_modelos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       multas: {
         Row: {
           activo: boolean
