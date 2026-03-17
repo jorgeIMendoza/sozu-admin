@@ -814,7 +814,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
 
             {/* Right: Tabbed panel */}
             <div className="border-l border-border bg-muted/10 flex flex-col">
-              <Tabs value={rightTab} onValueChange={setRightTab} className="flex flex-col flex-1 min-h-0">
+              <Tabs value={rightTab} onValueChange={setRightTab} className="flex flex-col min-h-0 h-full overflow-hidden">
                 <div className="px-3 pt-3 flex-shrink-0">
                   <TabsList className="w-full h-8">
                     <TabsTrigger value="ubicacion" className="text-[10px] flex-1">
