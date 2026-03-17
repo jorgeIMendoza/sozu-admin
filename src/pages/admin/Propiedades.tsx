@@ -4384,6 +4384,15 @@ const Propiedades = () => {
                       case 'configuracion':
                         return <TableCell key={column.key} className="text-sm">{formatConfiguracion(property.configuracion_modelo)}</TableCell>;
                       
+                      case 'planos':
+                        return (
+                          <TableCell key={column.key} className="text-center">
+                            <Badge variant="outline" className="text-xs">
+                              —
+                            </Badge>
+                          </TableCell>
+                        );
+                      
                       case 'tipo_transaccion':
                         return (
                           <TableCell key={column.key}>
