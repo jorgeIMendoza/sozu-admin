@@ -205,7 +205,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         }
       }
 
-      // Extract unit number from numero_propiedad based on numero_piso
+      // Extract unit number early for architectural plan lookup
       const rawPropertyNumber = (propiedad.numero_propiedad || "").toString().trim();
       const propertyDigits = rawPropertyNumber.replace(/\D/g, "");
       const floorDigits = (numeroPiso?.toString() || "").replace(/\D/g, "");
@@ -217,6 +217,29 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
 
       const numeroDepaRaw = extractedDeptoDigits || rawPropertyNumber;
       const numeroDepa = numeroDepaRaw.length === 1 ? numeroDepaRaw.padStart(2, "0") : numeroDepaRaw;
+
+      // Fetch plano arquitectónico from modelos_planos_arquitectonicos by nivel + depto
+      let planoArqUrl: string | null = planoArquitectonico; // fallback to generic model plan
+      const emId = emData?.id;
+      if (emId && numeroPiso && numeroDepa) {
+        const { data: planosArq } = await supabase
+          .from("modelos_planos_arquitectonicos" as any)
+          .select("imagen_url, departamentos")
+          .eq("id_edificio_modelo", emId)
+          .eq("nivel", numeroPiso)
+          .eq("activo", true);
+        if (planosArq && planosArq.length > 0) {
+          // Find a plan that has this depto assigned
+          const normalizeForMatch = (v: string) => v.replace(/^0+/, "") || "0";
+          const depaMatch = (planosArq as any[]).find((p: any) => {
+            const depts: string[] = Array.isArray(p.departamentos) ? p.departamentos : [];
+            return depts.some(d => d === numeroDepa || normalizeForMatch(d) === normalizeForMatch(numeroDepa));
+          });
+          if (depaMatch) {
+            planoArqUrl = (depaMatch as any).imagen_url || planoArqUrl;
+          }
+        }
+      }
 
       // Model image
       let imageUrl = proj?.url_imagen_portada || "";
