@@ -231,7 +231,7 @@ interface Property {
 
 type ColumnKey = 
   | 'proyecto' | 'propietario' | 'edificio' | 'modelo' | 'numero_departamento'
-  | 'piso' | 'vista' | 'area' | 'configuracion' | 'tipo_transaccion' | 'precio' | 'precio_m2'
+  | 'piso' | 'vista' | 'area' | 'configuracion' | 'planos' | 'tipo_transaccion' | 'precio' | 'precio_m2'
   | 'estacionamientos' | 'bodegas' | 'ofertas_comerciales' | 'ofertas_productos'
   | 'esquemas_pago' | 'disponibilidad' | 'cuenta_cobranza' | 'cuenta_clabe' | 'precio_final'
   | 'pagado' | 'restante' | 'estado_pagos' | 'factura' | 'acciones';
