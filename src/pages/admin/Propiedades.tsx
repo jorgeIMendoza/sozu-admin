@@ -1683,6 +1683,8 @@ const Propiedades = () => {
         id: property.id,
         numero_propiedad: property.numero_propiedad,
         numero_piso: property.numero_piso,
+        id_edificio: property.edificios_modelos?.id_edificio || null,
+        id_edificio_modelo: property.id_edificio_modelo || null,
         m2_reales: Number(property.m2_interiores || 0) + Number(property.m2_exteriores || 0),
         m2_interiores: Number(property.m2_interiores || 0),
         m2_exteriores: Number(property.m2_exteriores || 0),
