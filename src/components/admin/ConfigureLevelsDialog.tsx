@@ -2,11 +2,13 @@ import { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Upload, Loader2, Check, X, GripVertical, Image as ImageIcon, Building2, ZoomIn, PencilRuler } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Upload, Loader2, Check, X, GripVertical, Image as ImageIcon, Building2, ZoomIn, PencilRuler, FileImage } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FloorMeshEditorDialog } from "@/components/admin/FloorMeshEditorDialog";
+import { PlanoArquitectonicoUpload } from "./PlanoArquitectonicoUpload";
 import { cn } from "@/lib/utils";
 
 interface ConfigureLevelsDialogProps {
