@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { AvanceObraSection } from "@/components/admin/portal-cliente/AvanceObraSection";
 
 
 /* ── Investment process steps mapped to estatus_disponibilidad ── */
