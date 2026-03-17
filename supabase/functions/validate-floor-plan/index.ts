@@ -36,6 +36,7 @@ serve(async (req) => {
 Your task:
 1. Determine if the image is a valid floor plan showing apartment/unit layouts with numbered units.
 2. If valid, extract the unit numbers and their approximate polygon regions as percentage coordinates (0-100) relative to the image dimensions.
+3. IMPORTANT: Unit numbers must use zero-padded 2-digit format for numeric values (e.g., "01", "02", "03" instead of "1", "2", "3"). Alphanumeric unit numbers like "PH" should remain as-is.
 
 IMPORTANT: Return your analysis using the provided tool.`
           },
