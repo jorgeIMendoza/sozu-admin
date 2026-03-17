@@ -590,6 +590,14 @@ const ClientePropiedadDetalle = () => {
         </div>
       )}
 
+      {/* ─── Avance de obra (only when project is NOT finalized) ─── */}
+      {prop.idEstatusProyecto && prop.idEstatusProyecto < 13 && (
+        <AvanceObraSection
+          proyectoId={prop.proyectoId}
+          idEstatusProyecto={prop.idEstatusProyecto}
+        />
+      )}
+
       {/* ─── Detalles técnicos (Propiedad) ─── */}
       <div className="mx-5 mt-6">
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-3">Propiedad</p>
