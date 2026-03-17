@@ -81,7 +81,7 @@ IMPORTANT: Return your analysis using the provided tool.`
                       properties: {
                         unit_number: {
                           type: "string",
-                          description: "The unit/apartment number shown in the plan"
+                          description: "The unit/apartment number shown in the plan. Use zero-padded 2-digit format for numeric values (e.g., '01', '02'). Alphanumeric like 'PH' stays as-is."
                         },
                         polygon: {
                           type: "array",
