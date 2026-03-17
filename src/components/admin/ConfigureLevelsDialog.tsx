@@ -814,7 +814,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
 
             {/* Right: Tabbed panel */}
             <div className="border-l border-border bg-muted/10 flex flex-col">
-              <Tabs value={rightTab} onValueChange={setRightTab} className="flex flex-col flex-1 min-h-0">
+              <Tabs value={rightTab} onValueChange={setRightTab} className="flex flex-col min-h-0 h-full overflow-hidden">
                 <div className="px-3 pt-3 flex-shrink-0">
                   <TabsList className="w-full h-8">
                     <TabsTrigger value="ubicacion" className="text-[10px] flex-1">
@@ -828,7 +828,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                   </TabsList>
                 </div>
 
-                <TabsContent value="ubicacion" className="flex-1 flex flex-col min-h-0 px-4 pb-4 mt-2">
+                <TabsContent value="ubicacion" className="flex-1 flex flex-col min-h-0 px-4 pb-4 mt-2 overflow-hidden">
                   <p className="text-[10px] text-muted-foreground mb-3 flex-shrink-0">
                     Sube PNG, confirma/edita la malla y luego arrastra la imagen al nivel.
                   </p>
@@ -949,7 +949,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                   </ScrollArea>
                 </TabsContent>
 
-                <TabsContent value="arquitectonico" className="overflow-y-auto px-4 pb-4 mt-2" style={{ maxHeight: "calc(90vh - 200px)" }}>
+                <TabsContent value="arquitectonico" className="flex-1 overflow-y-auto px-4 pb-4 mt-2">
                   <p className="text-[10px] text-muted-foreground mb-3">
                     Configura planos arquitectónicos por modelo para los niveles con plano de ubicación.
                   </p>
