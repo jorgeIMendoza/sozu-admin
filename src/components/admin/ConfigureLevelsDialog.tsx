@@ -92,6 +92,30 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
   const [recalculating, setRecalculating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasHydratedForCurrentOpenRef = useRef(false);
+  const [rightTab, setRightTab] = useState<string>("ubicacion");
+
+  // Query models associated with this building for architectural plans tab
+  const { data: buildingModelos } = useQuery({
+    queryKey: ["building-modelos-for-levels", building.id],
+    queryFn: async () => {
+      const { data: emData, error: emError } = await supabase
+        .from("edificios_modelos")
+        .select("id_modelo")
+        .eq("id_edificio", building.id)
+        .eq("activo", true);
+      if (emError) throw emError;
+      if (!emData || emData.length === 0) return [];
+      const modeloIds = emData.map((em: any) => em.id_modelo);
+      const { data: modelos, error: modError } = await supabase
+        .from("modelos")
+        .select("id, nombre")
+        .in("id", modeloIds)
+        .eq("activo", true);
+      if (modError) throw modError;
+      return modelos || [];
+    },
+    enabled: open,
+  });
 
   const numPisos = typeof building.numero_pisos === "string"
     ? parseInt(building.numero_pisos, 10)
