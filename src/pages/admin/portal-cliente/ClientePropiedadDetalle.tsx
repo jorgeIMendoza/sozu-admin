@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { AvanceObraSection } from "@/components/admin/portal-cliente/AvanceObraSection";
 
 
 /* ── Investment process steps mapped to estatus_disponibilidad ── */
@@ -587,6 +588,14 @@ const ClientePropiedadDetalle = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* ─── Avance de obra (only when project is NOT finalized) ─── */}
+      {prop.idEstatusProyecto && prop.idEstatusProyecto < 13 && (
+        <AvanceObraSection
+          proyectoId={prop.proyectoId}
+          idEstatusProyecto={prop.idEstatusProyecto}
+        />
       )}
 
       {/* ─── Detalles técnicos (Propiedad) ─── */}

@@ -44,6 +44,7 @@ export interface PropiedadDetalle {
   cuentaId: number;
   ofertaId: number;
   propiedadId: number;
+  proyectoId: number;
   proyecto: string;
   edificio: string;
   modelo: string;
@@ -64,6 +65,7 @@ export interface PropiedadDetalle {
   valorEstimado: number;
   estatusPropiedad: number;
   estatusNombre: string;
+  idEstatusProyecto: number | null;
   proximoMantenimiento: string | null;
   mantenimientosAtrasados: number;
   cuotaMensualMantenimiento: number;
@@ -173,7 +175,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       // 5. Building/project info
       const { data: emData } = await supabase
         .from("edificios_modelos")
-        .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(nombre, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual, direccion, fecha_entrega, url_imagen_portada)), modelos:edificios_modelos_id_modelo_fkey(nombre, plano_arquitectonico)")
+        .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(nombre, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual, direccion, fecha_entrega, url_imagen_portada, id_estatus_proyecto)), modelos:edificios_modelos_id_modelo_fkey(nombre, plano_arquitectonico)")
         .eq("id", propiedad.id_edificio_modelo)
         .maybeSingle();
 
@@ -412,6 +414,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         cuentaId: cuenta.id,
         ofertaId: cuenta.id_oferta || 0,
         propiedadId,
+        proyectoId,
         proyecto: proj?.nombre || "Proyecto",
         edificio: ed?.nombre || "",
         modelo: modeloNombre,
@@ -430,6 +433,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         valorEstimado: currentValue,
         estatusPropiedad: propiedad.id_estatus_disponibilidad,
         estatusNombre: estatusData?.nombre || "",
+        idEstatusProyecto: proj?.id_estatus_proyecto || null,
         proximoMantenimiento,
         mantenimientosAtrasados,
         cuotaMensualMantenimiento: cuotaMensual,
