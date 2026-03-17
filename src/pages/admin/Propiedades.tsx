@@ -330,6 +330,7 @@ const Propiedades = () => {
   const [inputValue, setInputValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("activos");
+  const [planosProperty, setPlanosProperty] = useState<Property | null>(null);
   
   // Project access control
   const { 
