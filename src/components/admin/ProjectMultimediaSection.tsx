@@ -263,7 +263,7 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
       <Tabs defaultValue="multimedia" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
-          <TabsTrigger value="youtube">Videos YouTube</TabsTrigger>
+          <TabsTrigger value="youtube">Videos YouTube (avances de obra)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="multimedia" className="space-y-4">
