@@ -628,11 +628,15 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {estatusProyecto?.map((estatus) => (
-                                  <SelectItem key={estatus.id} value={estatus.id.toString()}>
-                                    {estatus.nombre}
-                                  </SelectItem>
-                                ))}
+                                {estatusProyecto?.map((estatus) => {
+                                  const totalEstatus = estatusProyecto.length || 13;
+                                  const porcentaje = Math.round((estatus.id / totalEstatus) * 100);
+                                  return (
+                                    <SelectItem key={estatus.id} value={estatus.id.toString()}>
+                                      {estatus.nombre} ({porcentaje}%)
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
                             <FormMessage />
