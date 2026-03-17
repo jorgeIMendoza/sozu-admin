@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, AlertCircle, Banknote, Lock, Users } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, AlertCircle, Banknote, Lock, Users, MapPin } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ import { OwnerHistoryDialog } from "@/components/admin/OwnerHistoryDialog";
 import { ReventaDialog } from "@/components/admin/ReventaDialog";
 import { RefreshCw } from "lucide-react";
 import { CambiarEstatusAprobacionDialog } from "@/components/admin/CambiarEstatusAprobacionDialog";
+import { PlanosPropertyModal } from "@/components/admin/PlanosPropertyModal";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -172,6 +173,8 @@ interface Property {
   id: number;
   numero_propiedad: string;
   numero_piso: string | null;
+  id_edificio: number | null;
+  id_edificio_modelo: number | null;
   m2_reales: number;
   m2_interiores: number;
   m2_exteriores: number;
@@ -328,6 +331,7 @@ const Propiedades = () => {
   const [inputValue, setInputValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("activos");
+  const [planosProperty, setPlanosProperty] = useState<Property | null>(null);
   
   // Project access control
   const { 
@@ -1164,7 +1168,7 @@ const Propiedades = () => {
       supabase.from('bodegas').select('id_propiedad').in('id_propiedad', propertyIds).eq('activo', true).limit(10000),
       // Edificios, modelos, proyectos - CRITICAL: specify ALL FKs explicitly to avoid PGRST201 errors
       supabase.from('edificios_modelos')
-        .select('id, id_modelo, modelos!edificios_modelos_id_modelo_fkey(nombre, numero_recamaras, numero_completo_banos, numero_medio_bano), edificios!edificios_modelos_id_edificio_fkey(nombre, id_proyecto, proyectos!edificios_id_proyecto_fkey(id, nombre))')
+        .select('id, id_edificio, id_modelo, modelos!edificios_modelos_id_modelo_fkey(nombre, numero_recamaras, numero_completo_banos, numero_medio_bano), edificios!edificios_modelos_id_edificio_fkey(nombre, id_proyecto, proyectos!edificios_id_proyecto_fkey(id, nombre))')
         .in('id', [...new Set(data.map(p => p.id_edificio_modelo).filter(Boolean))])
         .limit(10000),
       // Owner entities - CRITICAL: specify FK explicitly to avoid PGRST201 errors
@@ -1681,6 +1685,8 @@ const Propiedades = () => {
         id: property.id,
         numero_propiedad: property.numero_propiedad,
         numero_piso: property.numero_piso,
+        id_edificio: property.edificios_modelos?.id_edificio || null,
+        id_edificio_modelo: property.id_edificio_modelo || null,
         m2_reales: Number(property.m2_interiores || 0) + Number(property.m2_exteriores || 0),
         m2_interiores: Number(property.m2_interiores || 0),
         m2_exteriores: Number(property.m2_exteriores || 0),
@@ -4387,9 +4393,15 @@ const Propiedades = () => {
                       case 'planos':
                         return (
                           <TableCell key={column.key} className="text-center">
-                            <Badge variant="outline" className="text-xs">
-                              —
-                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={(e) => { e.stopPropagation(); setPlanosProperty(property); }}
+                            >
+                              <MapPin className="h-3.5 w-3.5 mr-1" />
+                              Ver
+                            </Button>
                           </TableCell>
                         );
                       
@@ -6747,6 +6759,19 @@ const Propiedades = () => {
         }}
       />
       </div>
+
+      {planosProperty && (
+        <PlanosPropertyModal
+          open={!!planosProperty}
+          onOpenChange={(open) => { if (!open) setPlanosProperty(null); }}
+          idEdificio={planosProperty.id_edificio}
+          idEdificioModelo={planosProperty.id_edificio_modelo}
+          numeroPropiedad={planosProperty.numero_propiedad}
+          numeroPiso={planosProperty.numero_piso ? Number(planosProperty.numero_piso) : null}
+          edificio={planosProperty.edificio}
+          modelo={planosProperty.modelo}
+        />
+      )}
     </TooltipProvider>
   );
 };
