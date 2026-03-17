@@ -828,7 +828,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                   </TabsList>
                 </div>
 
-                <TabsContent value="ubicacion" className="flex-1 flex flex-col min-h-0 px-4 pb-4 mt-2">
+                <TabsContent value="ubicacion" className="flex-1 flex flex-col min-h-0 px-4 pb-4 mt-2 overflow-hidden">
                   <p className="text-[10px] text-muted-foreground mb-3 flex-shrink-0">
                     Sube PNG, confirma/edita la malla y luego arrastra la imagen al nivel.
                   </p>
