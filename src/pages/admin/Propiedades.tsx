@@ -253,6 +253,7 @@ const COLUMNS_CONFIG: ColumnConfig[] = [
   { key: 'vista', label: 'Vista', required: false, defaultVisible: false },
   { key: 'area', label: 'Área', required: false, defaultVisible: true },
   { key: 'configuracion', label: 'Configuración', required: false, defaultVisible: true },
+  { key: 'planos', label: 'Planos', required: false, defaultVisible: true },
   { key: 'tipo_transaccion', label: 'Tipo de Transacción', required: false, defaultVisible: true },
   { key: 'precio', label: 'Precio', required: false, defaultVisible: true },
   { key: 'precio_m2', label: 'Precio por M2', required: false, defaultVisible: false },
