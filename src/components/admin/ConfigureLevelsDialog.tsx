@@ -949,7 +949,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
                   </ScrollArea>
                 </TabsContent>
 
-                <TabsContent value="arquitectonico" className="overflow-y-auto px-4 pb-4 mt-2" style={{ maxHeight: "calc(90vh - 200px)" }}>
+                <TabsContent value="arquitectonico" className="flex-1 overflow-y-auto px-4 pb-4 mt-2">
                   <p className="text-[10px] text-muted-foreground mb-3">
                     Configura planos arquitectónicos por modelo para los niveles con plano de ubicación.
                   </p>
