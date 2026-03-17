@@ -475,20 +475,19 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
                                       ? "bg-primary/10 border-primary/30 text-primary cursor-pointer"
                                       : "bg-muted/30 border-border text-muted-foreground hover:bg-muted/50 cursor-pointer";
 
-                                return (
+                                const tooltipText = assignedToOther
+                                  ? "Asignado a otro plano"
+                                  : !hasMesh
+                                    ? "Malla no configurada"
+                                    : null;
+
+                                const labelEl = (
                                   <label
                                     key={dept}
                                     className={cn(
                                       "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border transition-colors",
                                       labelClass
                                     )}
-                                    title={
-                                      assignedToOther
-                                        ? "Asignado a otro plano"
-                                        : !hasMesh
-                                          ? "Sin malla confirmada"
-                                          : undefined
-                                    }
                                   >
                                     <Checkbox
                                       checked={isAssigned || assignedToOther}
@@ -503,6 +502,23 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
                                     {dept}
                                   </label>
                                 );
+
+                                if (tooltipText) {
+                                  return (
+                                    <TooltipProvider key={dept} delayDuration={200}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          {labelEl}
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="text-xs">
+                                          {tooltipText}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  );
+                                }
+
+                                return labelEl;
                               })}
                             </div>
                           </div>
