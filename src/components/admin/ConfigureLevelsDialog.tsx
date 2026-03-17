@@ -345,6 +345,11 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
       )
     );
     setDraggedImage(null);
+
+    toast({
+      title: "Plano asignado",
+      description: `El plano \"${draggedImage.fileName}\" fue asignado al nivel ${nivel}. Ahora sí puedes guardar.`,
+    });
   };
 
   const handleRemoveFloorPlan = (nivel: number) => {
