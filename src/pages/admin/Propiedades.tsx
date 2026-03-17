@@ -231,7 +231,7 @@ interface Property {
 
 type ColumnKey = 
   | 'proyecto' | 'propietario' | 'edificio' | 'modelo' | 'numero_departamento'
-  | 'piso' | 'vista' | 'area' | 'configuracion' | 'tipo_transaccion' | 'precio' | 'precio_m2'
+  | 'piso' | 'vista' | 'area' | 'configuracion' | 'planos' | 'tipo_transaccion' | 'precio' | 'precio_m2'
   | 'estacionamientos' | 'bodegas' | 'ofertas_comerciales' | 'ofertas_productos'
   | 'esquemas_pago' | 'disponibilidad' | 'cuenta_cobranza' | 'cuenta_clabe' | 'precio_final'
   | 'pagado' | 'restante' | 'estado_pagos' | 'factura' | 'acciones';
@@ -253,6 +253,7 @@ const COLUMNS_CONFIG: ColumnConfig[] = [
   { key: 'vista', label: 'Vista', required: false, defaultVisible: false },
   { key: 'area', label: 'Área', required: false, defaultVisible: true },
   { key: 'configuracion', label: 'Configuración', required: false, defaultVisible: true },
+  { key: 'planos', label: 'Planos', required: false, defaultVisible: true },
   { key: 'tipo_transaccion', label: 'Tipo de Transacción', required: false, defaultVisible: true },
   { key: 'precio', label: 'Precio', required: false, defaultVisible: true },
   { key: 'precio_m2', label: 'Precio por M2', required: false, defaultVisible: false },
@@ -4382,6 +4383,15 @@ const Propiedades = () => {
                       
                       case 'configuracion':
                         return <TableCell key={column.key} className="text-sm">{formatConfiguracion(property.configuracion_modelo)}</TableCell>;
+                      
+                      case 'planos':
+                        return (
+                          <TableCell key={column.key} className="text-center">
+                            <Badge variant="outline" className="text-xs">
+                              —
+                            </Badge>
+                          </TableCell>
+                        );
                       
                       case 'tipo_transaccion':
                         return (
