@@ -163,7 +163,7 @@ export const PlanosPropertyModal = ({
         .eq("nivel", numeroPiso)
         .eq("activo", true)
         .maybeSingle();
-      return data as { imagen_url: string; regiones: any[] } | null;
+      return data as unknown as { imagen_url: string; regiones: any[] } | null;
     },
     enabled: open && !!idEdificio && !!numeroPiso,
   });
