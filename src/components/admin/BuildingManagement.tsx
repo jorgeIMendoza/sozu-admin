@@ -156,6 +156,8 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
       enabled: !!buildingId,
     });
 
+    const [planoModeloId, setPlanoModeloId] = useState<number | null>(null);
+
     return (
       <Dialog>
         <DialogTrigger asChild>
@@ -187,6 +189,16 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
                               {model.descripcion}
                             </p>
                           )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 h-7 text-xs"
+                            onClick={() => setPlanoModeloId(model.id)}
+                          >
+                            <FileImage className="h-3.5 w-3.5 mr-1" />
+                            Planos Arquitectónicos
+                          </Button>
                         </CardContent>
                       </Card>
                     ))}
@@ -197,6 +209,23 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
               <p className="text-muted-foreground">No hay modelos asignados a este edificio</p>
             )}
           </div>
+
+          {/* Nested dialog for architectural plans */}
+          <Dialog open={!!planoModeloId} onOpenChange={(open) => { if (!open) setPlanoModeloId(null); }}>
+            <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Planos Arquitectónicos</DialogTitle>
+              </DialogHeader>
+              {planoModeloId && (
+                <PlanoArquitectonicoUpload
+                  currentUrl={null}
+                  onUrlChange={() => {}}
+                  modeloId={planoModeloId}
+                  proyectoId={undefined}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </DialogContent>
       </Dialog>
     );
