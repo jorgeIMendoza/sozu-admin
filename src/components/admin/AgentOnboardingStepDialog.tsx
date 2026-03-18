@@ -214,6 +214,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
 
 function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onTrackDocView }: { personaId: number; filterDocTypes?: number[]; onTrackFieldChange?: () => void; onTrackDocView?: (docName: string) => void }) {
   const queryClient = useQueryClient();
+  const { hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
 
   const activeDocTypes = filterDocTypes || REQUIRED_DOC_TYPES;
   
