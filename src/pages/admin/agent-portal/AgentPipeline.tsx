@@ -69,6 +69,9 @@ const AgentPipeline = () => {
   const { impersonatedAgentEmail, isImpersonating } = useAgentImpersonation();
   const navigate = useNavigate();
   const agentEmail = isImpersonating ? impersonatedAgentEmail : (user?.email || profile?.email);
+  const personaId = profile?.id_persona;
+  const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
+  const { hasTrainingComplete, isLoading: onboardingLoading } = useAgentOnboardingStatus(personaId);
   const [activeStage, setActiveStage] = useState<string>('all');
   const [selectedOferta, setSelectedOferta] = useState<any>(null);
   const { permissions } = useAgentPortalPermissions();
