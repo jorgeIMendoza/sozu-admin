@@ -1395,6 +1395,7 @@ interface StepFormProps {
 
 function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange }: { personaId: number; onSaved: () => void; onTrackSave?: () => void; onTrackFieldChange?: () => void }) {
   const queryClient = useQueryClient();
+  const { hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
   const [saving, setSaving] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedSlot, setSelectedSlot] = useState('');
