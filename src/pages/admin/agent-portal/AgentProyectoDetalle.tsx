@@ -633,13 +633,23 @@ const AgentProyectoDetalle = () => {
         <section className="bg-[hsl(var(--agent-primary))]/10 rounded-2xl p-5 text-center">
           <p className="text-sm font-semibold text-foreground mb-3">¿Tu cliente está interesado en este proyecto?</p>
           {inventarioPerms.canGenerateOffer && (
+            isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
+              <Button
+                disabled
+                className="w-full rounded-xl h-12 text-sm font-semibold"
+              >
+                <Lock className="h-4 w-4 mr-2" />
+                Completa tu capacitación para generar ofertas
+              </Button>
+            ) : (
             <Button
               onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_generar_oferta', elementLabel: 'Generar oferta comercial', metadata: { proyecto_id: projectId } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}`); }}
               className="w-full bg-[hsl(var(--agent-primary))] hover:bg-[hsl(var(--agent-primary))]/90 text-white rounded-xl h-12 text-sm font-semibold"
-          >
-            <Share2 className="h-4 w-4 mr-2" />
-            Generar oferta comercial
-          </Button>
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Generar oferta comercial
+            </Button>
+            )
           )}
           <p className="text-xs text-muted-foreground mt-3">
             Las ofertas permiten dar seguimiento formal al interés del cliente.
