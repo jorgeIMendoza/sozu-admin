@@ -1,18 +1,23 @@
-## Plan completado: Portal del Cliente
+## Plan completado: Reestructurar onboarding del Portal de Agente
 
-Nuevo módulo "Portal del Cliente" implementado con 3 submenús (Inicio, Propiedades, Perfil) siguiendo el diseño del Portal Inmobiliaria.
+### Reglas de negocio implementadas
+
+| Nivel | Requisito | Qué desbloquea |
+|-------|-----------|-----------------|
+| 0 | Ninguno | Ver inventario |
+| 1 | Capacitación completada | Generar oferta **sin** sección STP |
+| 2 | Capacitación + Info básica completa (identidad) | Generar oferta **con** sección STP |
+| 3 | Identidad + Fiscal + Cuenta bancaria | Ver comisiones |
+| Firma | Info básica + documentos obligatorios completos | Habilitar firma carta cumplimiento |
 
 ### Cambios realizados
 
-| Área | Detalle |
-|------|---------|
-| **BD** | Menu 18 "Portal del Cliente" + 3 submenus + permisos leer para Super Admin |
-| **Layout** | `PortalClienteLayout.tsx` — sidebar desktop + bottom nav mobile, mismo diseño que Portal Inmobiliaria |
-| **Inicio** | Saludo, actividad, accesos rápidos, resumen financiero, pendientes, tarjetas de propiedades (mock) |
-| **Propiedades** | Lista de tarjetas con hero, barra de progreso, datos financieros (mock) |
-| **Perfil** | Hero identidad, info personal, documentación, fiscal, bancos, seguridad (mock) |
-| **Routing** | App.tsx, AdminLayout.tsx, validRoutes.ts, useDynamicMenus.ts actualizados |
-
-### Pendiente (follow-up)
-- Conectar datos reales desde Supabase (cuentas_cobranza, propiedades, pagos)
-- Rol "Cliente" con permisos específicos
+| Archivo | Detalle |
+|---------|---------|
+| `useAgentOnboardingStatus.ts` | Nuevos campos: `hasTrainingComplete`, `hasBasicIdentityComplete`, `canAccessComisiones`, `missingForComisiones` |
+| `AgentUnidadesProyecto.tsx` | Botón oferta bloqueado sin capacitación; `hideBankingInPdf` basado en identidad |
+| `AgentProyectoDetalle.tsx` | CTA "Generar oferta" bloqueado sin capacitación |
+| `AgentPipeline.tsx` | "Nueva oferta" bloqueado sin capacitación |
+| `AgentComisiones.tsx` | Usa `canAccessComisiones` (Identidad + Fiscal + Banco) |
+| `AgentOnboardingStepDialog.tsx` | Firma carta bloqueada si identidad incompleta |
+| `AgentInicio.tsx` | Mensajes diferenciados según nivel de progreso |
