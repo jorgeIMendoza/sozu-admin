@@ -145,7 +145,7 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
       { id: 'training', label: 'Capacitación', isComplete: true, hasPartialData: false },
     ];
     const inmoCompleted = inmoSteps.filter(s => s.isComplete).length;
-    return { steps: inmoSteps, completedCount: inmoCompleted, totalSteps: 4, percentage: Math.round((inmoCompleted / 4) * 100), isLoading: false };
+    return { steps: inmoSteps, completedCount: inmoCompleted, totalSteps: 4, percentage: Math.round((inmoCompleted / 4) * 100), isLoading: false, hasTrainingComplete: true, hasBasicIdentityComplete: identityComplete, canAccessComisiones: true, missingForComisiones: [] };
   }
 
   // Evaluate steps
