@@ -51,6 +51,10 @@ const AgentProyectoDetalle = () => {
   const projectId = parseInt(id || "0");
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { profile } = useAuth();
+  const personaId = profile?.id_persona;
+  const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
+  const { hasTrainingComplete, isLoading: onboardingLoading } = useAgentOnboardingStatus(personaId);
   const { permissions } = useAgentPortalPermissions();
   const inventarioPerms = permissions['/admin/agent/inventario'];
   const { registrarVista, registrarExportacion } = useActivityLogger();
