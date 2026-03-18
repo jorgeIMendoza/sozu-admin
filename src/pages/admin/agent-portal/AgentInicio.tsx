@@ -24,7 +24,7 @@ const AgentInicio = () => {
   const personaId = profile?.id_persona;
   const agentEmail = user?.email || profile?.email;
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
-  const { percentage, isLoading: onboardingLoading } = useAgentOnboardingStatus(personaId);
+  const { percentage, isLoading: onboardingLoading, hasTrainingComplete, hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
   const { permissions } = useAgentPortalPermissions();
   const inicioPerms = permissions['/admin/agent/inicio'];
   const [addProspectoOpen, setAddProspectoOpen] = useState(false);
