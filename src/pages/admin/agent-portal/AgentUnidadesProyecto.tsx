@@ -36,8 +36,7 @@ const AgentUnidadesProyecto = () => {
   const { profile } = useAuth();
   const personaId = profile?.id_persona;
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
-  const { percentage, isLoading: isLoadingOnboarding } = useAgentOnboardingStatus(personaId);
-  const isVerified = percentage === 100;
+  const { percentage, isLoading: isLoadingOnboarding, hasTrainingComplete, hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
   const nombreCompleto = profile?.nombre || "Agente";
   const initials = nombreCompleto.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("");
 
