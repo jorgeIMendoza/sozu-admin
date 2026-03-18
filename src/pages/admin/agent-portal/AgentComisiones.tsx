@@ -241,9 +241,10 @@ const AgentComisiones = () => {
           </div>
 
           <div className="space-y-2.5">
-            <CheckItem label="Información fiscal" done={fiscalComplete} />
-            <CheckItem label="Cuenta bancaria" done={bankComplete} />
-            <CheckItem label="Documentos (INE, Constancia, Contrato)" done={docsComplete} />
+            {missingForComisiones.map(item => (
+              <CheckItem key={item} label={item} done={false} />
+            ))}
+            {missingForComisiones.length === 0 && <CheckItem label="Perfil completo" done={true} />}
           </div>
 
           <button
