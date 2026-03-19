@@ -191,17 +191,21 @@ Deno.serve(async (req) => {
     let usuarioId: number;
 
     if (existingUsuario) {
-      // Update existing usuario - do NOT change rol_id (login selector will handle it)
+      // Update existing usuario - switch to Agente Inmobiliario role (3)
+      // so the user is visible in admin panels. Login selector will allow switching back.
+      const updatePayload: Record<string, any> = {
+        id_persona: personaId,
+        auth_user_id: authUserId,
+        debe_cambiar_password: true,
+        email_confirmado: false,
+        telefono: telefono.trim(),
+        clave_pais_telefono: clave_pais_telefono || 'MX',
+        rol_id: 3, // Agente Inmobiliario — ensures visibility in admin
+      };
+
       const { error: updateError } = await supabase
         .from('usuarios')
-        .update({
-          id_persona: personaId,
-          auth_user_id: authUserId,
-          debe_cambiar_password: true,
-          email_confirmado: false,
-          telefono: telefono.trim(),
-          clave_pais_telefono: clave_pais_telefono || 'MX',
-        })
+        .update(updatePayload)
         .eq('id', existingUsuario.id);
 
       if (updateError) {
