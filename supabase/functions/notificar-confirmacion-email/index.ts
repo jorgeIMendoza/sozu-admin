@@ -45,6 +45,13 @@ Deno.serve(async (req) => {
       .ilike('email', email.toLowerCase())
       .maybeSingle();
 
+    // Fallback: get phone from personas table if not in usuarios
+    let telefono = usuarioData?.telefono;
+    if (!telefono) {
+      const { data: personaData } = await supabase.from('personas').select('telefono').ilike('email', email.toLowerCase()).maybeSingle();
+      telefono = personaData?.telefono;
+    }
+
     const displayName = nombre || usuarioData?.nombre || 'Usuario';
     const rolId = usuarioData?.rol_id;
 
