@@ -113,6 +113,13 @@ Deno.serve(async (req) => {
           .ilike('email', email.toLowerCase())
           .maybeSingle();
 
+        // Fallback: get phone from personas table if not in usuarios
+        let telefonoAdmin = usuarioData?.telefono;
+        if (!telefonoAdmin) {
+          const { data: personaData } = await supabase.from('personas').select('telefono').ilike('email', email.toLowerCase()).maybeSingle();
+          telefonoAdmin = personaData?.telefono;
+        }
+
         const { data: superAdmins } = await supabase
           .from('usuarios')
           .select('email')
@@ -140,7 +147,7 @@ Deno.serve(async (req) => {
                 nombre: 'Administrador',
                 actividad: 'Agente confirmó su correo electrónico',
                 asunto: 'Agente confirmado - ' + decodeURIComponent(nombre),
-                detalles: `<tr><td class='label'>Nombre:</td><td class='value'>${decodeURIComponent(nombre)}</td></tr><tr><td class='label'>Email:</td><td class='value'>${email.toLowerCase()}</td></tr><tr><td class='label'>Teléfono:</td><td class='value'>${usuarioData?.telefono || 'N/A'}</td></tr><tr><td class='label'>Estado:</td><td class='value'>✅ Email confirmado - Credenciales enviadas</td></tr>`,
+                detalles: `<tr><td class='label'>Nombre:</td><td class='value'>${decodeURIComponent(nombre)}</td></tr><tr><td class='label'>Email:</td><td class='value'>${email.toLowerCase()}</td></tr><tr><td class='label'>Teléfono:</td><td class='value'>${telefonoAdmin || 'N/A'}</td></tr><tr><td class='label'>Estado:</td><td class='value'>✅ Email confirmado - Credenciales enviadas</td></tr>`,
               },
             },
             MessageStream: 'outbound',
