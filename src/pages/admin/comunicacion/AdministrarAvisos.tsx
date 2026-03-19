@@ -232,6 +232,7 @@ export default function AdministrarAvisos() {
     setEditingAviso(null);
     setNombre(""); setAsunto(""); setMensajeHtml(""); setTipoEnvio("manual");
     setCronExpression(""); setCronError(""); setActivo(true); setSelectedRoles([]); setDestinatarios([]);
+    setDialogOpen(true);
   };
 
   const openEdit = async (aviso: Aviso) => {
