@@ -1,23 +1,20 @@
-## Plan completado: Reestructurar onboarding del Portal de Agente
-
-### Reglas de negocio implementadas
-
-| Nivel | Requisito | Qué desbloquea |
-|-------|-----------|-----------------|
-| 0 | Ninguno | Ver inventario |
-| 1 | Capacitación completada | Generar oferta **sin** sección STP |
-| 2 | Capacitación + Info básica completa (identidad) | Generar oferta **con** sección STP |
-| 3 | Identidad + Fiscal + Cuenta bancaria | Ver comisiones |
-| Firma | Info básica + documentos obligatorios completos | Habilitar firma carta cumplimiento |
+## Plan completado: Registro multi-rol, selector de rol en login, normalización de emails y fix de teléfono
 
 ### Cambios realizados
 
 | Archivo | Detalle |
 |---------|---------|
-| `useAgentOnboardingStatus.ts` | Nuevos campos: `hasTrainingComplete`, `hasBasicIdentityComplete`, `canAccessComisiones`, `missingForComisiones` |
-| `AgentUnidadesProyecto.tsx` | Botón oferta bloqueado sin capacitación; `hideBankingInPdf` basado en identidad |
-| `AgentProyectoDetalle.tsx` | CTA "Generar oferta" bloqueado sin capacitación |
-| `AgentPipeline.tsx` | "Nueva oferta" bloqueado sin capacitación |
-| `AgentComisiones.tsx` | Usa `canAccessComisiones` (Identidad + Fiscal + Banco) |
-| `AgentOnboardingStepDialog.tsx` | Firma carta bloqueada si identidad incompleta |
-| `AgentInicio.tsx` | Mensajes diferenciados según nivel de progreso |
+| `supabase/functions/registro-publico/index.ts` | Reutiliza persona/auth/usuario existentes en lugar de rechazar; solo rechaza si ya tiene entidad tipo 19 activa |
+| `src/pages/auth/Login.tsx` | Selector de portal post-login cuando el usuario tiene múltiples entidades (Agente + Cliente); actualiza `rol_id` al seleccionar |
+| `src/components/admin/PersonForm.tsx` | Email normalizado a minúsculas con `.toLowerCase()` |
+| `supabase/functions/create-client-user/index.ts` | Email normalizado a minúsculas |
+| `supabase/functions/create-user/index.ts` | Email normalizado a minúsculas |
+| `supabase/functions/post-confirmacion-registro/index.ts` | Fallback de teléfono desde tabla `personas` |
+| `supabase/functions/notificar-confirmacion-email/index.ts` | Fallback de teléfono desde tabla `personas` |
+
+### Flujo multi-rol
+
+1. `registro-publico` ya no rechaza emails existentes — reutiliza persona/auth y crea nueva entidad tipo 19
+2. Al hacer login, si el usuario tiene entidades tipo 2 (Comprador) Y tipo 19 (Agente), se muestra un selector de portal
+3. Al elegir portal, se actualiza `rol_id` en `usuarios` y se redirige al portal correspondiente
+4. Si solo tiene un portal, redirige directamente (comportamiento anterior)
