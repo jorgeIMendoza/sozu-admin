@@ -113,6 +113,13 @@ Deno.serve(async (req) => {
           .ilike('email', email.toLowerCase())
           .maybeSingle();
 
+        // Fallback: get phone from personas table if not in usuarios
+        let telefonoAdmin = usuarioData?.telefono;
+        if (!telefonoAdmin) {
+          const { data: personaData } = await supabase.from('personas').select('telefono').ilike('email', email.toLowerCase()).maybeSingle();
+          telefonoAdmin = personaData?.telefono;
+        }
+
         const { data: superAdmins } = await supabase
           .from('usuarios')
           .select('email')
