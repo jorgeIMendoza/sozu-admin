@@ -46,6 +46,8 @@ function estatusBadge(estatus: string) {
   switch (estatus) {
     case "Pagada":
       return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Pagada</Badge>;
+    case "Pendiente de pago":
+      return <Badge className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100">Pendiente de pago</Badge>;
     case "Programada a pago":
       return <Badge variant="outline">Programada a pago</Badge>;
     case "Pendiente factura":
@@ -311,13 +313,13 @@ export default function InmobComisiones() {
 
       {/* KPI Cards */}
       <div className={`grid gap-4 ${isSozu ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:grid-cols-5'}`}>
-        <KPICard icon={DollarSign} iconColor="text-emerald-600 bg-emerald-100" label="Total generada" value={fmt(kpis.totalGenerada)} />
-        <KPICard icon={CheckCircle2} iconColor="text-emerald-600 bg-emerald-100" label="Pagada" value={fmt(kpis.pagadas)} />
-        <KPICard icon={Clock} iconColor="text-amber-600 bg-amber-100" label="Pendiente" value={fmt(kpis.pendientes)} />
+        <KPICard icon={DollarSign} iconColor="text-emerald-600 bg-emerald-100" label="Total generada" value={fmt2(kpis.totalGenerada)} />
+        <KPICard icon={CheckCircle2} iconColor="text-emerald-600 bg-emerald-100" label="Pagada" value={fmt2(kpis.pagadas)} />
+        <KPICard icon={Clock} iconColor="text-amber-600 bg-amber-100" label="Pendiente" value={fmt2(kpis.pendientes)} />
         {!isSozu && (
-          <KPICard icon={Eye} iconColor="text-blue-600 bg-blue-100" label="En revisión" value={fmt(kpis.enRevision)} />
+          <KPICard icon={Eye} iconColor="text-blue-600 bg-blue-100" label="En revisión" value={fmt2(kpis.enRevision)} />
         )}
-        <KPICard icon={CalendarCheck} iconColor="text-violet-600 bg-violet-100" label="Programada" value={fmt(kpis.programadas)} />
+        <KPICard icon={CalendarCheck} iconColor="text-violet-600 bg-violet-100" label="Programada" value={fmt2(kpis.programadas)} />
       </div>
 
       {/* Search + Filters */}
@@ -733,15 +735,14 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
     .eq("id_tipo_documento", 46)
     .eq("activo", true);
 
-  // Match facturas by email OR by cuenta_cobranza alone (uploads from MisVentas don't always set numero)
+  // Match any tipo 46 factura for this cuenta (uploaded from portal or admin)
   const facturaSet = new Set(
     (facturasData || [])
-      .filter((f: any) => f.numero === inmobEmail || !f.numero)
       .map((f: any) => f.id_cuenta_cobranza)
   );
   const facturaUrlMap = new Map<number, string>();
   (facturasData || [])
-    .filter((f: any) => (f.numero === inmobEmail || !f.numero) && (f.url_documento || f.url))
+    .filter((f: any) => f.url_documento || f.url)
     .forEach((f: any) => {
       facturaUrlMap.set(f.id_cuenta_cobranza, f.url_documento || f.url);
     });
@@ -786,15 +787,17 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
       estatus = "Pagada";
       pagadasMonto += comision;
     } else if (com.aprobada && facturaSet.has(cuentaId)) {
-      estatus = "Programada a pago";
+      estatus = "Pendiente de pago";
       programadasMonto += comision;
     } else if (com.aprobada) {
       estatus = "Pendiente factura";
+      enRevision += comision;
     } else if (estatusPropId === VENDIDO_ID) {
       estatus = "En revisión";
       enRevision += comision;
     } else {
       estatus = "En revisión";
+      enRevision += comision;
     }
 
     rows.push({
