@@ -728,7 +728,7 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
   // Get facturas
   const { data: facturasData } = await (supabase as any)
     .from("documentos")
-    .select("id_cuenta_cobranza, numero, url_documento")
+    .select("id_cuenta_cobranza, numero, url_documento, url")
     .in("id_cuenta_cobranza", cuentaIds)
     .eq("id_tipo_documento", 46)
     .eq("activo", true);
