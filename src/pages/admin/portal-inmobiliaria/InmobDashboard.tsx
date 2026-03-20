@@ -571,20 +571,23 @@ export default function InmobDashboard() {
     queryFn: async () => {
       if (!agentPersonaIds.length) return new Map<number, number>();
 
-      const ranges = dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }];
+      const isAllMonths = selectedMonths.length === 0;
+      const ranges = isAllMonths ? [null] : (dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }]);
       const uniqueProspectsByAgent = new Map<number, Set<number>>();
 
       for (const range of ranges) {
         for (let i = 0; i < agentPersonaIds.length; i += 200) {
           const batch = agentPersonaIds.slice(i, i + 200);
-          const { data } = await supabase
+          let q = supabase
             .from("entidades_relacionadas")
             .select("id_persona, id_persona_duena_lead")
             .in("id_persona_duena_lead", batch)
             .eq("id_tipo_entidad", 7)
-            .eq("activo", true)
-            .gte("fecha_creacion", range.start)
-            .lte("fecha_creacion", range.end) as any;
+            .eq("activo", true);
+          if (range) {
+            q = q.gte("fecha_creacion", range.start).lte("fecha_creacion", range.end);
+          }
+          const { data } = await q as any;
 
           (data || []).forEach((row: any) => {
             const ownerPersonaId = Number(row.id_persona_duena_lead);
