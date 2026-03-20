@@ -46,6 +46,8 @@ function estatusBadge(estatus: string) {
   switch (estatus) {
     case "Pagada":
       return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Pagada</Badge>;
+    case "Pendiente de pago":
+      return <Badge className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100">Pendiente de pago</Badge>;
     case "Programada a pago":
       return <Badge variant="outline">Programada a pago</Badge>;
     case "Pendiente factura":
