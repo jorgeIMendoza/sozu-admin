@@ -1085,7 +1085,8 @@ export default function InmobDashboard() {
     queryKey: ["inmob-dash-area", isSozu ? sozuPropertyIds.length : agentEmails.join(","), isSozu, inmobAgentEmails.size],
     queryFn: async () => {
       let allCuentaIds: number[] = [];
-      const cuentaInfoMap = new Map<number, { precio_final: number; porcentaje_comision_venta: number; id_propiedad: number; fecha_creacion?: string }>();
+      const cuentaInfoMap = new Map<number, { precio_final: number; porcentaje_comision_venta: number; id_propiedad: number; fecha_creacion?: string; fecha_generacion?: string }>();
+      const ofertaIdToCuentaId = new Map<number, number>();
 
       if (isSozu) {
         if (!sozuPropertyIds.length) return null;
