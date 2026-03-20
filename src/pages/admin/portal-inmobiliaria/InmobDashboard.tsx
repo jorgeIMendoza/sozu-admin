@@ -982,7 +982,11 @@ export default function InmobDashboard() {
       });
       const comision = Array.from(userCuentaIds).reduce((s, cuentaId) => s + (comisionByCuentaId.get(cuentaId) || 0), 0);
 
-      const ingreso = Array.from(userCuentaIds).reduce((s, cuentaId) => s + (comisionByCuentaId.get(cuentaId) || 0), 0);
+      // Ingreso = sum of precio_final from cuentas (not commissions)
+      const ingreso = userCierres.reduce((s: number, o: any) => {
+        const cuenta = cuentasMap.get(o.id);
+        return s + (Number(cuenta?.precio_final) || 0);
+      }, 0);
       const conv = userOfertas.length > 0 ? ((userCierres.length / userOfertas.length) * 100) : 0;
 
       // Prospectos: from per-agent map (date-filtered)
