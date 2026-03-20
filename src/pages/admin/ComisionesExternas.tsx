@@ -847,7 +847,10 @@ export default function ComisionesExternas() {
                                     </Badge>
                                   </TableCell>
                                   <TableCell>{com.porcentaje_comision?.toFixed(4)}%</TableCell>
-                                  <TableCell>{formatMonto(com.montoComision)}</TableCell>
+                                  <TableCell>
+                                    {formatMonto(com.montoComision)}
+                                    <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0 bg-blue-50 text-blue-600 border-blue-200">+ IVA</Badge>
+                                  </TableCell>
                                   <TableCell>
                                     {com.pagada ? (
                                       <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Pagada</Badge>
