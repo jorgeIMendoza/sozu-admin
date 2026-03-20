@@ -686,6 +686,11 @@ export default function DetalleCuentaMantenimiento() {
   const tieneSaldoPendiente = saldoPendienteReal > 0.01;
   const estaAlCorriente = !tieneSaldoPendiente && !tieneExcedenteNeto;
 
+  // Detectar discrepancia entre pagos reales y aplicaciones (para mostrar botón recalcular)
+  const totalAplicacionesGlobal = aplicacionesPorPago?.reduce((sum, app) => sum + (app.monto || 0), 0) || 0;
+  const discrepanciaPagosVsAplicaciones = totalPagado - totalAplicacionesGlobal;
+  const hayDiscrepanciaAplicaciones = pagosData && pagosData.length > 0 && aplicacionesPorPago !== undefined && Math.abs(discrepanciaPagosVsAplicaciones) > 0.01;
+
   // Find last payment and check if it's STP
   const pagosAplicados = acuerdosPago?.flatMap(acuerdo => 
     (acuerdo.aplicaciones || [])
@@ -796,7 +801,7 @@ export default function DetalleCuentaMantenimiento() {
               )}
             </Tooltip>
           </TooltipProvider>
-          {excedente > 0.01 && acuerdosPago?.some(a => !a.pago_completado) && (
+          {(hayDiscrepanciaAplicaciones || (excedente > 0.01 && acuerdosPago?.some(a => !a.pago_completado))) && (
             <Button 
               onClick={async () => {
                 setRecalculando(true);
