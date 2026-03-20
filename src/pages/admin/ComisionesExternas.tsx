@@ -889,9 +889,9 @@ export default function ComisionesExternas() {
                                         <Button
                                           variant="outline"
                                           size="sm"
-                                          onClick={(e) => {
+                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            aprobarMutation.mutate({ email: com.email_usuario, idCuenta: cuenta.id, montoComision: com.montoComision, nombreComisionista: com.nombre });
+                                            aprobarMutation.mutate({ email: com.email_usuario, idCuenta: cuenta.id, montoComision: com.montoComision, nombreComisionista: com.nombre, proyectoNombre: cuenta.proyecto_nombre, numeroDepartamento: cuenta.numero_departamento });
                                           }}
                                           disabled={aprobarMutation.isPending || cuenta.id_estatus_disponibilidad !== 5}
                                           title={cuenta.id_estatus_disponibilidad !== 5 ? 'Solo se puede aprobar cuando la propiedad está en estatus Vendido' : ''}
