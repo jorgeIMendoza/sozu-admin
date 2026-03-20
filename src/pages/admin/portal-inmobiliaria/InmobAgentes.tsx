@@ -442,7 +442,7 @@ export default function InmobAgentes() {
   };
 
   // Classify and deduplicate ventas (cierre stage) per agent
-  const { ofertasByAgent, ingresoByAgent } = useMemo(() => {
+  const { ofertasByAgent, ingresoByAgent, comisionByAgent } = useMemo(() => {
     const ofMap = new Map<string, { total: number; vendidas: number }>();
     // Classify all offers
     const classified = allOfertas.map((o: any) => ({ ...o, stage: classifyOffer(o) }));
@@ -476,13 +476,33 @@ export default function InmobAgentes() {
       ofMap.set(emailKey, cur);
     });
 
-    // Ingreso = commission per agent from comisionistas
+    // Ingreso = sum of precio_final from cuentas for cierre offers
     const ingMap = new Map<string, number>();
-    comisionistasByEmail.forEach((monto, email) => {
-      ingMap.set(email, monto);
+    // Comisión = commission per agent from comisionistas
+    const comMap = new Map<string, number>();
+
+    // Build ingreso from cierre offers (deduped)
+    seenByAgent.forEach((_, emailKey) => {
+      const agentCierres = cierreOffers.filter((o: any) => (o.email_creador || "").toLowerCase() === emailKey);
+      const seenKeys = new Set<string>();
+      let totalIngreso = 0;
+      agentCierres.forEach((o: any) => {
+        const k = o.id_producto
+          ? `prod-${o.id_producto}-${o.id_propiedad || "none"}`
+          : `prop-${o.id_propiedad}`;
+        if (seenKeys.has(k)) return;
+        seenKeys.add(k);
+        const cuenta = cuentasMap.get(o.id);
+        totalIngreso += Number(cuenta?.precio_final) || 0;
+      });
+      ingMap.set(emailKey, totalIngreso);
     });
 
-    return { ofertasByAgent: ofMap, ingresoByAgent: ingMap };
+    comisionistasByEmail.forEach((monto, email) => {
+      comMap.set(email, monto);
+    });
+
+    return { ofertasByAgent: ofMap, ingresoByAgent: ingMap, comisionByAgent: comMap };
   }, [allOfertas, propMap, cuentasMap, comisionistasByEmail]);
 
   const ingresoLoading = false; // ingreso is now computed inline
