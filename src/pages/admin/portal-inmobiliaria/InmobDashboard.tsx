@@ -1037,22 +1037,41 @@ export default function InmobDashboard() {
 
   const chartDataKey = { unidades: "ventas", ingreso: "ingreso", comision: "comision" }[chartMode] as string;
 
-  // ───── Area chart: always 6 months, independent of filter ─────
-  const sixMonthWindow = useMemo(() => {
+  // ───── Area chart: selected months or rolling 6 months ─────
+  const areaWindow = useMemo(() => {
     const LABELS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+    if (selectedMonths.length > 0) {
+      return [...new Set(selectedMonths)]
+        .sort((a, b) => {
+          const [aYear, aMonth] = a.split("-").map(Number);
+          const [bYear, bMonth] = b.split("-").map(Number);
+          return new Date(aYear, aMonth, 1).getTime() - new Date(bYear, bMonth, 1).getTime();
+        })
+        .map((key) => {
+          const [year, month] = key.split("-").map(Number);
+          const { startDate, endDate } = getMonthRange(year, month);
+          return {
+            start: startDate,
+            end: endDate,
+            label: `${LABELS[month]}${year !== currentYear ? ` ${year}` : ""}`,
+          };
+        });
+    }
+
     return Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+      const d = new Date(currentYear, currentMonth - 5 + i, 1);
       const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
       return {
         start: d,
         end,
-        label: `${LABELS[d.getMonth()]}${d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : ""}`,
+        label: `${LABELS[d.getMonth()]}${d.getFullYear() !== currentYear ? ` ${d.getFullYear()}` : ""}`,
       };
     });
-  }, []);
+  }, [selectedMonths, currentYear, currentMonth]);
 
   const { data: areaChartRaw } = useQuery({
-    queryKey: ["inmob-dash-area-6m", isSozu ? sozuPropertyIds.length : agentEmails.join(","), isSozu, inmobAgentEmails.size],
+    queryKey: ["inmob-dash-area", isSozu ? sozuPropertyIds.length : agentEmails.join(","), isSozu, inmobAgentEmails.size],
     queryFn: async () => {
       let allCuentaIds: number[] = [];
       const cuentaInfoMap = new Map<number, { precio_final: number; porcentaje_comision_venta: number; id_propiedad: number; fecha_creacion?: string }>();
@@ -1068,7 +1087,15 @@ export default function InmobDashboard() {
         for (let i = 0; i < ofIds.length; i += 200) {
           const batch = ofIds.slice(i, i + 200);
           const { data } = await (supabase as any).from("cuentas_cobranza").select("id, precio_final, porcentaje_comision_venta, id_propiedad, fecha_creacion").in("id_oferta", batch).eq("activo", true);
-          (data || []).forEach((c: any) => { allCuentaIds.push(c.id); cuentaInfoMap.set(c.id, { precio_final: Number(c.precio_final) || 0, porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0, id_propiedad: c.id_propiedad, fecha_creacion: c.fecha_creacion }); });
+          (data || []).forEach((c: any) => {
+            allCuentaIds.push(c.id);
+            cuentaInfoMap.set(c.id, {
+              precio_final: Number(c.precio_final) || 0,
+              porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0,
+              id_propiedad: c.id_propiedad,
+              fecha_creacion: c.fecha_creacion,
+            });
+          });
         }
       } else {
         if (!agentEmails.length) return null;
@@ -1077,15 +1104,28 @@ export default function InmobDashboard() {
         for (let i = 0; i < ofIds.length; i += 200) {
           const batch = ofIds.slice(i, i + 200);
           const { data } = await (supabase as any).from("cuentas_cobranza").select("id, precio_final, porcentaje_comision_venta, id_propiedad, fecha_creacion").in("id_oferta", batch).eq("activo", true);
-          (data || []).forEach((c: any) => { allCuentaIds.push(c.id); cuentaInfoMap.set(c.id, { precio_final: Number(c.precio_final) || 0, porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0, id_propiedad: c.id_propiedad, fecha_creacion: c.fecha_creacion }); });
+          (data || []).forEach((c: any) => {
+            allCuentaIds.push(c.id);
+            cuentaInfoMap.set(c.id, {
+              precio_final: Number(c.precio_final) || 0,
+              porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0,
+              id_propiedad: c.id_propiedad,
+              fecha_creacion: c.fecha_creacion,
+            });
+          });
         }
       }
+
       if (!allCuentaIds.length) return null;
 
       const comisionistas: any[] = [];
       for (let i = 0; i < allCuentaIds.length; i += 200) {
         const batch = allCuentaIds.slice(i, i + 200);
-        const { data } = await (supabase as any).from("comisionistas").select("id_cuenta_cobranza, email_usuario, porcentaje_comision, pagada, fecha_actualizacion").in("id_cuenta_cobranza", batch).eq("activo", true);
+        const { data } = await (supabase as any)
+          .from("comisionistas")
+          .select("id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_actualizacion")
+          .in("id_cuenta_cobranza", batch)
+          .eq("activo", true);
         if (data) comisionistas.push(...data);
       }
 
@@ -1096,9 +1136,11 @@ export default function InmobDashboard() {
         if (data) acuerdos.push(...data);
       }
       const engancheMap = new Map<number, string>();
-      acuerdos.forEach((a: any) => { if (!engancheMap.has(a.id_cuenta_cobranza)) engancheMap.set(a.id_cuenta_cobranza, a.fecha_pago); });
+      acuerdos.forEach((a: any) => {
+        if (!engancheMap.has(a.id_cuenta_cobranza)) engancheMap.set(a.id_cuenta_cobranza, a.fecha_pago);
+      });
 
-      const propIds = [...new Set([...cuentaInfoMap.values()].map(c => c.id_propiedad).filter(Boolean))];
+      const propIds = [...new Set([...cuentaInfoMap.values()].map((c) => c.id_propiedad).filter(Boolean))];
       const propStatusMap = new Map<number, number>();
       for (let i = 0; i < propIds.length; i += 200) {
         const batch = propIds.slice(i, i + 200);
@@ -1113,64 +1155,97 @@ export default function InmobDashboard() {
   });
 
   const areaData = useMemo(() => {
-    if (!areaChartRaw) return sixMonthWindow.map(m => ({ mes: m.label, real: 0, porCobrar: 0, estimado: 0 }));
+    if (!areaChartRaw) return areaWindow.map((m) => ({ mes: m.label, real: 0, porCobrar: 0, estimado: 0 }));
     const { comisionistas, engancheMap, cuentaInfoMap, propStatusMap } = areaChartRaw;
+    const selectedProjectId = selectedProject === "all" ? null : Number(selectedProject);
 
-    return sixMonthWindow.map(({ label, start, end }) => {
-      // Cobrado: comisionistas pagadas, fecha_actualizacion in this month
+    const isRelevantCuenta = (cuentaId: number) => {
+      const cuenta = cuentaInfoMap.get(cuentaId);
+      if (!cuenta) return false;
+      if (selectedProjectId === null) return true;
+      return propToProject.get(cuenta.id_propiedad) === selectedProjectId;
+    };
+
+    const isRelevantComisionista = (c: any) => {
+      if (!isRelevantCuenta(Number(c.id_cuenta_cobranza))) return false;
+      return isSozu || inmobUserEmailSet.has((c.email_usuario || "").trim().toLowerCase());
+    };
+
+    const pctByCuentaId = new Map<number, number>();
+    if (!isSozu) {
+      comisionistas.forEach((c: any) => {
+        if (!isRelevantComisionista(c)) return;
+        const cuentaId = Number(c.id_cuenta_cobranza);
+        pctByCuentaId.set(cuentaId, (pctByCuentaId.get(cuentaId) || 0) + (Number(c.porcentaje_comision) || 0));
+      });
+    }
+
+    return areaWindow.map(({ label, start, end }) => {
       const real = comisionistas
-        .filter((c: any) => c.pagada && c.fecha_actualizacion)
-        .filter((c: any) => { const d = new Date(c.fecha_actualizacion); return d >= start && d <= end; })
-        .reduce((s: number, c: any) => {
-          const ci = cuentaInfoMap.get(c.id_cuenta_cobranza);
-          return s + ((ci?.precio_final || 0) * (Number(c.porcentaje_comision) || 0) / 100);
+        .filter((c: any) => c.pagada === true && c.fecha_actualizacion && isRelevantComisionista(c))
+        .filter((c: any) => {
+          const d = new Date(c.fecha_actualizacion);
+          return d >= start && d <= end;
+        })
+        .reduce((sum: number, c: any) => {
+          const cuenta = cuentaInfoMap.get(Number(c.id_cuenta_cobranza));
+          if (!cuenta) return sum;
+          if (isSozu) {
+            return sum + (cuenta.precio_final * cuenta.porcentaje_comision_venta / 100);
+          }
+          return sum + (cuenta.precio_final * (Number(c.porcentaje_comision) || 0) / 100);
         }, 0);
 
-      // Por cobrar: comisionistas no pagadas cuya cuenta tiene enganche en este mes
-      // OR comisionistas no pagadas sin enganche pero con fecha_creacion de la cuenta en este mes
-      const porCobrarMes = comisionistas
-        .filter((c: any) => !c.pagada)
+      const porCobrar = comisionistas
+        .filter((c: any) => c.aprobada === true && c.pagada !== true && isRelevantComisionista(c))
         .filter((c: any) => {
-          const eng = engancheMap.get(c.id_cuenta_cobranza);
+          const eng = engancheMap.get(Number(c.id_cuenta_cobranza));
           if (eng) {
             const d = new Date(eng);
             return d >= start && d <= end;
           }
-          // Fallback: use cuenta creation date from cuentaInfoMap fecha_creacion
-          const ci = cuentaInfoMap.get(c.id_cuenta_cobranza);
-          if (ci && (ci as any).fecha_creacion) {
-            const d = new Date((ci as any).fecha_creacion);
+          const cuenta = cuentaInfoMap.get(Number(c.id_cuenta_cobranza));
+          if (cuenta?.fecha_creacion) {
+            const d = new Date(cuenta.fecha_creacion);
             return d >= start && d <= end;
           }
           return false;
         })
-        .reduce((s: number, c: any) => {
-          const ci = cuentaInfoMap.get(c.id_cuenta_cobranza);
-          return s + ((ci?.precio_final || 0) * (Number(c.porcentaje_comision) || 0) / 100);
+        .reduce((sum: number, c: any) => {
+          const cuenta = cuentaInfoMap.get(Number(c.id_cuenta_cobranza));
+          if (!cuenta) return sum;
+          if (isSozu) {
+            return sum + (cuenta.precio_final * cuenta.porcentaje_comision_venta / 100);
+          }
+          return sum + (cuenta.precio_final * (Number(c.porcentaje_comision) || 0) / 100);
         }, 0);
 
-      // Estimado: cuentas en apartado (prop status 4), enganche in this month
-      // OR cuenta with fecha_creacion in this month if no enganche
-      let estimadoMes = 0;
-      cuentaInfoMap.forEach((ci, cuentaId) => {
-        if (propStatusMap.get(ci.id_propiedad) !== 4) return;
+      let estimado = 0;
+      cuentaInfoMap.forEach((cuenta, cuentaId) => {
+        if (!isRelevantCuenta(cuentaId)) return;
+        if (propStatusMap.get(cuenta.id_propiedad) !== 4) return;
+
         const eng = engancheMap.get(cuentaId);
         let dateInRange = false;
         if (eng) {
           const d = new Date(eng);
           dateInRange = d >= start && d <= end;
-        } else if ((ci as any).fecha_creacion) {
-          const d = new Date((ci as any).fecha_creacion);
+        } else if (cuenta.fecha_creacion) {
+          const d = new Date(cuenta.fecha_creacion);
           dateInRange = d >= start && d <= end;
         }
         if (!dateInRange) return;
-        const pct = ci.porcentaje_comision_venta > 0 ? ci.porcentaje_comision_venta : 5;
-        estimadoMes += ci.precio_final * pct / 100;
+
+        const pct = isSozu
+          ? (cuenta.porcentaje_comision_venta > 0 ? cuenta.porcentaje_comision_venta : 5)
+          : (pctByCuentaId.get(cuentaId) || 0);
+
+        estimado += cuenta.precio_final * pct / 100;
       });
 
-      return { mes: label, real, porCobrar: porCobrarMes, estimado: estimadoMes };
+      return { mes: label, real, porCobrar, estimado };
     });
-  }, [areaChartRaw, sixMonthWindow]);
+  }, [areaChartRaw, areaWindow, selectedProject, propToProject, isSozu, inmobUserEmailSet]);
 
   // Activity timeline — use O-/OP- nomenclature
   const recentActivity = useMemo(() => {
