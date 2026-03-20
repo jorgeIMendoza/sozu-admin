@@ -176,7 +176,7 @@ export default function InmobComisiones() {
   const { personaId } = useInmobiliariaPersonaId();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [selectedMonths, setSelectedMonths] = useState<string[]>([getCurrentMonthKey()]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [estatusFilter, setEstatusFilter] = useState<string>("todos");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -690,7 +690,7 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
   // Get comisionistas for this inmobiliaria
   const { data: comisionistas } = await (supabase as any)
     .from("comisionistas")
-    .select("id_cuenta_cobranza, porcentaje_comision, aprobada, pagada")
+    .select("id_cuenta_cobranza, porcentaje_comision, aprobada, pagada, fecha_actualizacion")
     .in("id_cuenta_cobranza", cuentaIds)
     .eq("email_usuario", inmobEmail)
     .eq("activo", true);
@@ -781,7 +781,7 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
     const proj = edif ? projMap.get(edif.id_proyecto) : null;
 
     let estatus: string;
-    let fechaPago: string | null = null;
+    let fechaPago: string | null = com.pagada ? (com.fecha_actualizacion || null) : null;
 
     if (com.pagada) {
       estatus = "Pagada";

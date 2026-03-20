@@ -168,7 +168,7 @@ export default function InmobDashboard() {
   const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
   const [selectedProject, setSelectedProject] = useState<string>("all");
   const [chartMode, setChartMode] = useState<ChartMode>("unidades");
-  const [selectedMonths, setSelectedMonths] = useState<string[]>([getCurrentMonthKey()]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const monthFilterLabel = useMemo(() => getMonthFilterLabel(selectedMonths), [selectedMonths]);
 
   const agentEmails = useMemo(() => agents.map(a => a.email), [agents]);

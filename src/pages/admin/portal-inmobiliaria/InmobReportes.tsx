@@ -17,7 +17,7 @@ export default function InmobReportes() {
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
   const { data: agents = [] } = useInmobAgents();
-  const [selectedMonths, setSelectedMonths] = useState<string[]>([getCurrentMonthKey()]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
 
   const monthFilterLabel = useMemo(() => getMonthFilterLabel(selectedMonths), [selectedMonths]);
   const dateRanges = useMemo(() => buildDateRangesFromMonths(selectedMonths), [selectedMonths]);
