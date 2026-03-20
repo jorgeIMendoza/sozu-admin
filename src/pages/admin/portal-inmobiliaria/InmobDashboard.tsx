@@ -336,7 +336,8 @@ export default function InmobDashboard() {
   const { data: ofertas = [], isLoading: ofertasLoading } = useQuery({
     queryKey: ["inmob-dash-ofertas", isSozu ? sozuPropertyIds : agentEmails, selectedMonths, isSozu, inmobAgentEmails.size],
     queryFn: async () => {
-      const ranges = dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }];
+      const isAllMonths = selectedMonths.length === 0;
+      const ranges = isAllMonths ? [null] : (dateRanges.length > 0 ? dateRanges : [{ start: monthStart, end: monthEnd }]);
 
       if (isSozu) {
         if (!sozuPropertyIds.length) return [];
@@ -344,13 +345,15 @@ export default function InmobDashboard() {
         for (const range of ranges) {
           for (let i = 0; i < sozuPropertyIds.length; i += 200) {
             const batch = sozuPropertyIds.slice(i, i + 200);
-            const { data, error } = await supabase
+            let q = supabase
               .from("ofertas")
               .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado, id_producto")
               .in("id_propiedad", batch)
-              .eq("activo", true)
-              .gte("fecha_generacion", range.start)
-              .lte("fecha_generacion", range.end) as any;
+              .eq("activo", true);
+            if (range) {
+              q = q.gte("fecha_generacion", range.start).lte("fecha_generacion", range.end);
+            }
+            const { data, error } = await q as any;
             if (error) console.error("[InmobDashboard] ofertas query error:", error);
             if (data) allOfertas.push(...data);
           }
@@ -364,13 +367,15 @@ export default function InmobDashboard() {
       if (!agentEmails.length) return [];
       const allOfertas: any[] = [];
       for (const range of ranges) {
-        const { data, error } = await supabase
+        let q = supabase
           .from("ofertas")
           .select("id, email_creador, fecha_generacion, id_estatus_aprobacion, id_propiedad, id_esquema_pago_seleccionado, id_producto")
           .in("email_creador", agentEmails)
-          .eq("activo", true)
-          .gte("fecha_generacion", range.start)
-          .lte("fecha_generacion", range.end) as any;
+          .eq("activo", true);
+        if (range) {
+          q = q.gte("fecha_generacion", range.start).lte("fecha_generacion", range.end);
+        }
+        const { data, error } = await q as any;
         if (error) console.error("[InmobDashboard] ofertas query error:", error);
         if (data) allOfertas.push(...data);
       }
