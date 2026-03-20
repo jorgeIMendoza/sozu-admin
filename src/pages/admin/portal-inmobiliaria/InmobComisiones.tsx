@@ -730,7 +730,7 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
   // Get facturas
   const { data: facturasData } = await (supabase as any)
     .from("documentos")
-    .select("id_cuenta_cobranza, numero, url_documento, url")
+    .select("id_cuenta_cobranza, numero, url")
     .in("id_cuenta_cobranza", cuentaIds)
     .eq("id_tipo_documento", 46)
     .eq("activo", true);
@@ -742,9 +742,9 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
   );
   const facturaUrlMap = new Map<number, string>();
   (facturasData || [])
-    .filter((f: any) => f.url_documento || f.url)
+    .filter((f: any) => f.url)
     .forEach((f: any) => {
-      facturaUrlMap.set(f.id_cuenta_cobranza, f.url_documento || f.url);
+      facturaUrlMap.set(f.id_cuenta_cobranza, f.url);
     });
 
   // Build maps
