@@ -1025,6 +1025,7 @@ function AgentTable({
                       <TableCell className="text-center">{stats.total}</TableCell>
                       <TableCell className="text-center font-semibold">{stats.vendidas}</TableCell>
                       <TableCell className="text-right font-medium">{fmtCurrency(ingreso)}</TableCell>
+                      <TableCell className="text-right font-medium">{fmtCurrency(comision)}</TableCell>
                       <TableCell className="text-center">
                         <Badge
                           variant={conversion > conversionGlobal * 1.1 ? "default" : conversion < conversionGlobal * 0.8 ? "destructive" : "secondary"}
