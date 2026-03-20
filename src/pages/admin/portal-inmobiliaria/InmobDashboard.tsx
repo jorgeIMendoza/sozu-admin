@@ -1220,12 +1220,18 @@ export default function InmobDashboard() {
       const porCobrar = comisionistas
         .filter((c: any) => c.aprobada === true && c.pagada !== true && isRelevantComisionista(c))
         .filter((c: any) => {
-          const eng = engancheMap.get(Number(c.id_cuenta_cobranza));
+          const cuentaId = Number(c.id_cuenta_cobranza);
+          const cuenta = cuentaInfoMap.get(cuentaId);
+          // Use fecha_generacion (offer date) as primary, then enganche, then fecha_creacion
+          if (cuenta?.fecha_generacion) {
+            const d = new Date(cuenta.fecha_generacion);
+            return d >= start && d <= end;
+          }
+          const eng = engancheMap.get(cuentaId);
           if (eng) {
             const d = new Date(eng);
             return d >= start && d <= end;
           }
-          const cuenta = cuentaInfoMap.get(Number(c.id_cuenta_cobranza));
           if (cuenta?.fecha_creacion) {
             const d = new Date(cuenta.fecha_creacion);
             return d >= start && d <= end;
