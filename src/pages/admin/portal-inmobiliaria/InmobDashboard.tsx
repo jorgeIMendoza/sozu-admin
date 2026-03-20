@@ -1090,22 +1090,27 @@ export default function InmobDashboard() {
 
       if (isSozu) {
         if (!sozuPropertyIds.length) return null;
-        const ofIds: number[] = [];
+        const ofertasRaw: any[] = [];
         for (let i = 0; i < sozuPropertyIds.length; i += 200) {
           const batch = sozuPropertyIds.slice(i, i + 200);
-          const { data } = await supabase.from("ofertas").select("id, email_creador").in("id_propiedad", batch).eq("activo", true) as any;
-          (data || []).filter((o: any) => !inmobAgentEmails.has((o.email_creador || "").toLowerCase())).forEach((o: any) => ofIds.push(o.id));
+          const { data } = await supabase.from("ofertas").select("id, email_creador, fecha_generacion").in("id_propiedad", batch).eq("activo", true) as any;
+          (data || []).filter((o: any) => !inmobAgentEmails.has((o.email_creador || "").toLowerCase())).forEach((o: any) => ofertasRaw.push(o));
         }
+        const ofIdToFechaGen = new Map<number, string>();
+        ofertasRaw.forEach((o: any) => ofIdToFechaGen.set(o.id, o.fecha_generacion));
+        const ofIds = ofertasRaw.map((o: any) => o.id);
         for (let i = 0; i < ofIds.length; i += 200) {
           const batch = ofIds.slice(i, i + 200);
-          const { data } = await (supabase as any).from("cuentas_cobranza").select("id, precio_final, porcentaje_comision_venta, id_propiedad, fecha_creacion").in("id_oferta", batch).eq("activo", true);
+          const { data } = await (supabase as any).from("cuentas_cobranza").select("id, id_oferta, precio_final, porcentaje_comision_venta, id_propiedad, fecha_creacion").in("id_oferta", batch).eq("activo", true);
           (data || []).forEach((c: any) => {
             allCuentaIds.push(c.id);
+            ofertaIdToCuentaId.set(c.id_oferta, c.id);
             cuentaInfoMap.set(c.id, {
               precio_final: Number(c.precio_final) || 0,
               porcentaje_comision_venta: Number(c.porcentaje_comision_venta) || 0,
               id_propiedad: c.id_propiedad,
               fecha_creacion: c.fecha_creacion,
+              fecha_generacion: ofIdToFechaGen.get(c.id_oferta),
             });
           });
         }
