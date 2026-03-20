@@ -1249,7 +1249,7 @@ export default function InmobDashboard() {
 
         const pct = isSozu
           ? (cuenta.porcentaje_comision_venta > 0 ? cuenta.porcentaje_comision_venta : 5)
-          : (pctByCuentaId.get(cuentaId) || 0);
+          : (pctByCuentaId.get(cuentaId) || cuenta.porcentaje_comision_venta || 0);
 
         estimado += cuenta.precio_final * pct / 100;
       });

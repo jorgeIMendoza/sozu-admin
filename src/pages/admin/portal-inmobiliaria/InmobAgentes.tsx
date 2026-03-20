@@ -521,6 +521,37 @@ export default function InmobAgentes() {
     return { ofertasByAgent: ofMap, ingresoByAgent: ingMap, comisionByAgent: comMap };
   }, [allOfertas, propMap, cuentasMap, comisionistasByEmail]);
 
+  // Build commission details per agent for expandable rows
+  const commissionDetailsByAgent = useMemo(() => {
+    const map = new Map<string, Array<{ ofertaId: number; cuentaId: number; precioFinal: number; montoComision: number; isProduct: boolean }>>();
+    const classified = allOfertas.map((o: any) => ({ ...o, stage: classifyOffer(o) }));
+    const cierres = classified.filter((o: any) => o.stage === "cierre" && cuentasMap.has(o.id));
+    const seenByAgent = new Map<string, Set<string>>();
+
+    cierres.forEach((o: any) => {
+      const email = (o.email_creador || "").toLowerCase();
+      const key = o.id_producto
+        ? `prod-${o.id_producto}-${o.id_propiedad || "none"}`
+        : `prop-${o.id_propiedad}`;
+      if (!seenByAgent.has(email)) seenByAgent.set(email, new Set());
+      if (seenByAgent.get(email)!.has(key)) return;
+      seenByAgent.get(email)!.add(key);
+
+      const cuenta = cuentasMap.get(o.id);
+      if (!cuenta) return;
+
+      if (!map.has(email)) map.set(email, []);
+      map.get(email)!.push({
+        ofertaId: o.id,
+        cuentaId: cuenta.id,
+        precioFinal: Number(cuenta.precio_final) || 0,
+        montoComision: comisionByCuenta.get(cuenta.id) || 0,
+        isProduct: !!o.id_producto,
+      });
+    });
+    return map;
+  }, [allOfertas, classifyOffer, cuentasMap, comisionByCuenta]);
+
   const ingresoLoading = false; // ingreso is now computed inline
 
   // Fetch prospectos históricos por agente (únicos por persona prospecto)
