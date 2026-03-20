@@ -376,7 +376,7 @@ export default function InmobComisiones() {
                         <TableCell className="text-right">
                           <span className="font-semibold">{fmt2(r.comision)}</span>
                           <span className={`ml-1.5 inline-flex items-center rounded px-1.5 py-0 text-[10px] leading-4 font-medium border ${r.ivaIncluido ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "text-muted-foreground border-border"}`}>
-                            {r.ivaIncluido ? "IVA incl." : "Sin IVA"}
+                            {r.ivaIncluido ? "IVA incl." : "+ IVA"}
                           </span>
                         </TableCell>
                         <TableCell>{estatusBadge(r.estatus)}</TableCell>
@@ -728,16 +728,23 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
   // Get facturas
   const { data: facturasData } = await (supabase as any)
     .from("documentos")
-    .select("id_cuenta_cobranza, numero, url_documento")
+    .select("id_cuenta_cobranza, numero, url_documento, url")
     .in("id_cuenta_cobranza", cuentaIds)
     .eq("id_tipo_documento", 46)
     .eq("activo", true);
 
-  const facturaSet = new Set((facturasData || []).filter((f: any) => f.numero === inmobEmail).map((f: any) => f.id_cuenta_cobranza));
+  // Match facturas by email OR by cuenta_cobranza alone (uploads from MisVentas don't always set numero)
+  const facturaSet = new Set(
+    (facturasData || [])
+      .filter((f: any) => f.numero === inmobEmail || !f.numero)
+      .map((f: any) => f.id_cuenta_cobranza)
+  );
   const facturaUrlMap = new Map<number, string>();
-  (facturasData || []).filter((f: any) => f.numero === inmobEmail && f.url_documento).forEach((f: any) => {
-    facturaUrlMap.set(f.id_cuenta_cobranza, f.url_documento);
-  });
+  (facturasData || [])
+    .filter((f: any) => (f.numero === inmobEmail || !f.numero) && (f.url_documento || f.url))
+    .forEach((f: any) => {
+      facturaUrlMap.set(f.id_cuenta_cobranza, f.url_documento || f.url);
+    });
 
   // Build maps
   const ofertaMap = new Map<number, any>(ofertas.map((o: any) => [o.id, o]));
