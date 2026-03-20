@@ -962,16 +962,19 @@ export default function InmobAgentes() {
 /* ───── Agent Table ───── */
 function AgentTable({
   agents, isLoading, search, ofertasByAgent, prospectosByAgent, ingresoByAgent, comisionByAgent,
-  getInitials, onEdit, onDeactivate, onReactivate, onResetPassword, onProjectAccess,
+  commissionDetails, getInitials, onEdit, onDeactivate, onReactivate, onResetPassword, onProjectAccess,
   navigate, isActiveTab,
 }: {
   agents: any[]; isLoading: boolean; search: string;
   ofertasByAgent: Map<string, any>; prospectosByAgent: Map<string, number>; ingresoByAgent: Map<string, number>; comisionByAgent: Map<string, number>;
+  commissionDetails: Map<string, Array<{ ofertaId: number; cuentaId: number; precioFinal: number; montoComision: number; isProduct: boolean }>>;
   getInitials: (name: string) => string;
   onEdit: (a: any) => void; onDeactivate?: (a: any) => void; onReactivate?: (a: any) => void;
   onResetPassword: (a: any) => void; onProjectAccess: (a: any) => void;
   navigate: any; isActiveTab: boolean;
 }) {
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+
   // Compute global conversion for color thresholds
   const conversionGlobal = useMemo(() => {
     let totalOfertas = 0;
@@ -995,6 +998,7 @@ function AgentTable({
           <Table>
             <TableHeader>
               <TableRow className="sozu-table-header">
+                <TableHead className="w-[30px]"></TableHead>
                 <TableHead>Agente</TableHead>
                 <TableHead className="text-center">Prospectos</TableHead>
                 <TableHead className="text-center">Ofertas</TableHead>
@@ -1025,7 +1029,7 @@ function AgentTable({
             <TableBody>
               {agents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     {search ? "Sin resultados" : isActiveTab ? "No hay agentes activos" : "No hay agentes desactivados"}
                   </TableCell>
                 </TableRow>
@@ -1037,87 +1041,122 @@ function AgentTable({
                   const ingreso = ingresoByAgent.get(emailKey) || 0;
                   const comision = comisionByAgent.get(emailKey) || 0;
                   const conversion = stats.total > 0 ? ((stats.vendidas / stats.total) * 100) : 0;
+                  const details = commissionDetails.get(emailKey) || [];
+                  const isExpanded = expandedAgent === emailKey;
+                  const hasDetails = details.length > 0;
                   return (
-                    <TableRow key={agent.email}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-9 w-9 shrink-0">
-                            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                              {getInitials(agent.nombre)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="font-medium text-sm truncate">{agent.nombre}</p>
-                              {agent.isInternal && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-amber-500/50 text-amber-700 dark:text-amber-400">
-                                  Usuario interno
-                                </Badge>
-                              )}
-                              {agent.isIndependent && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-green-500/50 text-green-700 dark:text-green-400">
-                                  Agente independiente
-                                </Badge>
-                              )}
-                              {agent.inmobiliariaName && !agent.isInternal && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-purple-500/50 text-purple-700 dark:text-purple-400">
-                                  {agent.inmobiliariaName}
-                                </Badge>
-                              )}
+                    <React.Fragment key={agent.email}>
+                      <TableRow className={cn(hasDetails && "cursor-pointer")} onClick={() => hasDetails && setExpandedAgent(isExpanded ? null : emailKey)}>
+                        <TableCell className="w-[30px] px-2">
+                          {hasDetails && (
+                            isExpanded
+                              ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              : <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9 shrink-0">
+                              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                                {getInitials(agent.nombre)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-medium text-sm truncate">{agent.nombre}</p>
+                                {agent.isInternal && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-amber-500/50 text-amber-700 dark:text-amber-400">
+                                    Usuario interno
+                                  </Badge>
+                                )}
+                                {agent.isIndependent && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-green-500/50 text-green-700 dark:text-green-400">
+                                    Agente independiente
+                                  </Badge>
+                                )}
+                                {agent.inmobiliariaName && !agent.isInternal && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-purple-500/50 text-purple-700 dark:text-purple-400">
+                                    {agent.inmobiliariaName}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground truncate">{agent.email}</p>
+                              <PhoneDisplay telefono={agent.telefono} clavePaisTelefono={agent.clavePaisTelefono} className="text-xs" />
                             </div>
-                            <p className="text-xs text-muted-foreground truncate">{agent.email}</p>
-                            <PhoneDisplay telefono={agent.telefono} clavePaisTelefono={agent.clavePaisTelefono} className="text-xs" />
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">{prospectos}</TableCell>
-                      <TableCell className="text-center">{stats.total}</TableCell>
-                      <TableCell className="text-center font-semibold">{stats.vendidas}</TableCell>
-                      <TableCell className="text-right font-medium">{fmtCurrency(ingreso)}</TableCell>
-                      <TableCell className="text-right font-medium">{fmtCurrency(comision)}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          variant={conversion > conversionGlobal * 1.1 ? "default" : conversion < conversionGlobal * 0.8 ? "destructive" : "secondary"}
-                          className="text-xs"
-                        >
-                          {conversion.toFixed(1)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`${NAV_PREFIX}/agentes/${encodeURIComponent(agent.email)}`)}>
-                              <Eye className="h-4 w-4 mr-2" /> Ver perfil 360°
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onEdit(agent)}>
-                              <Pencil className="h-4 w-4 mr-2" /> Editar información
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onProjectAccess(agent)}>
-                              <FolderOpen className="h-4 w-4 mr-2" /> Acceso a proyectos
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {isActiveTab && onDeactivate && (
-                              <DropdownMenuItem onClick={() => onDeactivate(agent)} className="text-destructive">
-                                <Power className="h-4 w-4 mr-2" /> Desactivar
+                        </TableCell>
+                        <TableCell className="text-center">{prospectos}</TableCell>
+                        <TableCell className="text-center">{stats.total}</TableCell>
+                        <TableCell className="text-center font-semibold">{stats.vendidas}</TableCell>
+                        <TableCell className="text-right font-medium">{fmtCurrency(ingreso)}</TableCell>
+                        <TableCell className="text-right font-medium">{fmtCurrency(comision)}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge
+                            variant={conversion > conversionGlobal * 1.1 ? "default" : conversion < conversionGlobal * 0.8 ? "destructive" : "secondary"}
+                            className="text-xs"
+                          >
+                            {conversion.toFixed(1)}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => navigate(`${NAV_PREFIX}/agentes/${encodeURIComponent(agent.email)}`)}>
+                                <Eye className="h-4 w-4 mr-2" /> Ver perfil 360°
                               </DropdownMenuItem>
-                            )}
-                            {!isActiveTab && onReactivate && (
-                              <DropdownMenuItem onClick={() => onReactivate(agent)} className="text-emerald-600">
-                                <Power className="h-4 w-4 mr-2" /> Reactivar
+                              <DropdownMenuItem onClick={() => onEdit(agent)}>
+                                <Pencil className="h-4 w-4 mr-2" /> Editar información
                               </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => onResetPassword(agent)}>
-                              <KeyRound className="h-4 w-4 mr-2" /> Resetear contraseña
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                              <DropdownMenuItem onClick={() => onProjectAccess(agent)}>
+                                <FolderOpen className="h-4 w-4 mr-2" /> Acceso a proyectos
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {isActiveTab && onDeactivate && (
+                                <DropdownMenuItem onClick={() => onDeactivate(agent)} className="text-destructive">
+                                  <Power className="h-4 w-4 mr-2" /> Desactivar
+                                </DropdownMenuItem>
+                              )}
+                              {!isActiveTab && onReactivate && (
+                                <DropdownMenuItem onClick={() => onReactivate(agent)} className="text-emerald-600">
+                                  <Power className="h-4 w-4 mr-2" /> Reactivar
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => onResetPassword(agent)}>
+                                <KeyRound className="h-4 w-4 mr-2" /> Resetear contraseña
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && details.length > 0 && (
+                        <TableRow className="bg-muted/30 hover:bg-muted/40">
+                          <TableCell colSpan={9} className="py-3 px-6">
+                            <div className="space-y-1.5">
+                              <p className="text-xs font-semibold text-muted-foreground mb-2">Detalle de comisiones</p>
+                              {details.map((d) => (
+                                <div key={d.cuentaId} className="flex items-center justify-between text-sm rounded-lg border border-border bg-card px-4 py-2.5">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[10px] font-mono">
+                                      {d.isProduct ? "CCP" : "CC"}-{d.cuentaId}
+                                    </Badge>
+                                    <span className="text-muted-foreground">{d.isProduct ? "Producto" : "Propiedad"}</span>
+                                  </div>
+                                  <div className="flex items-center gap-6">
+                                    <span className="text-muted-foreground text-xs">Precio: <span className="text-foreground font-medium">{fmtCurrency(d.precioFinal)}</span></span>
+                                    <span className="text-xs">Comisión: <span className="text-primary font-semibold">{fmtCurrency(d.montoComision)}</span></span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}
