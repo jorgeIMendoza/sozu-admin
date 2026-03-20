@@ -444,8 +444,6 @@ export default function InmobAgentes() {
   // Classify and deduplicate ventas (cierre stage) per agent
   const { ofertasByAgent, ingresoByAgent } = useMemo(() => {
     const ofMap = new Map<string, { total: number; vendidas: number }>();
-    const ingMap = new Map<string, number>();
-
     // Classify all offers
     const classified = allOfertas.map((o: any) => ({ ...o, stage: classifyOffer(o) }));
 
