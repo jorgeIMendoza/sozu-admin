@@ -524,7 +524,7 @@ export default function InmobAgentes() {
 
   // Build commission details per agent for expandable rows
   const commissionDetailsByAgent = useMemo(() => {
-    const map = new Map<string, Array<{ ofertaId: number; cuentaId: number; precioFinal: number; montoComision: number; isProduct: boolean }>>();
+    const map = new Map<string, Array<{ ofertaId: number; cuentaId: number; precioFinal: number; montoComision: number; isProduct: boolean; propiedadId?: number; productoId?: number }>>();
     const classified = allOfertas.map((o: any) => ({ ...o, stage: classifyOffer(o) }));
     const cierres = classified.filter((o: any) => o.stage === "cierre" && cuentasMap.has(o.id));
     const seenByAgent = new Map<string, Set<string>>();
@@ -548,10 +548,60 @@ export default function InmobAgentes() {
         precioFinal: Number(cuenta.precio_final) || 0,
         montoComision: comisionByCuenta.get(cuenta.id) || 0,
         isProduct: !!o.id_producto,
+        propiedadId: o.id_propiedad || undefined,
+        productoId: o.id_producto || undefined,
       });
     });
     return map;
   }, [allOfertas, classifyOffer, cuentasMap, comisionByCuenta]);
+
+  // Fetch property/project/product info for commission details
+  const detailPropIds = useMemo(() => {
+    const ids = new Set<number>();
+    commissionDetailsByAgent.forEach((details) => details.forEach((d) => { if (d.propiedadId) ids.add(d.propiedadId); }));
+    return [...ids];
+  }, [commissionDetailsByAgent]);
+
+  const detailProductIds = useMemo(() => {
+    const ids = new Set<number>();
+    commissionDetailsByAgent.forEach((details) => details.forEach((d) => { if (d.productoId) ids.add(d.productoId); }));
+    return [...ids];
+  }, [commissionDetailsByAgent]);
+
+  const { data: propDetailMap = new Map<number, { numero: string; proyecto: string }>() } = useQuery({
+    queryKey: ["inmob-agentes-prop-details", detailPropIds],
+    queryFn: async () => {
+      const m = new Map<number, { numero: string; proyecto: string }>();
+      if (!detailPropIds.length) return m;
+      for (let i = 0; i < detailPropIds.length; i += 200) {
+        const batch = detailPropIds.slice(i, i + 200);
+        const { data } = await supabase
+          .from("propiedades")
+          .select("id, numero_propiedad, edificios_modelos(edificios(proyectos(nombre)))")
+          .in("id", batch) as any;
+        (data || []).forEach((p: any) => {
+          const proyecto = p.edificios_modelos?.edificios?.proyectos?.nombre || "";
+          m.set(p.id, { numero: String(p.numero_propiedad || ""), proyecto });
+        });
+      }
+      return m;
+    },
+    enabled: detailPropIds.length > 0,
+    staleTime: 10 * 60_000,
+  });
+
+  const { data: productDetailMap = new Map<number, string>() } = useQuery({
+    queryKey: ["inmob-agentes-product-details", detailProductIds],
+    queryFn: async () => {
+      const m = new Map<number, string>();
+      if (!detailProductIds.length) return m;
+      const { data } = await supabase.from("productos_servicios").select("id, nombre").in("id", detailProductIds) as any;
+      (data || []).forEach((p: any) => m.set(p.id, p.nombre || "Producto"));
+      return m;
+    },
+    enabled: detailProductIds.length > 0,
+    staleTime: 10 * 60_000,
+  });
 
   const ingresoLoading = false; // ingreso is now computed inline
 
@@ -876,6 +926,8 @@ export default function InmobAgentes() {
             ingresoByAgent={ingresoByAgent}
             comisionByAgent={comisionByAgent}
             commissionDetails={commissionDetailsByAgent}
+            propDetailMap={propDetailMap}
+            productDetailMap={productDetailMap}
             getInitials={getInitials}
             onEdit={openEditDialog}
             onDeactivate={handleDeactivate}
@@ -896,6 +948,8 @@ export default function InmobAgentes() {
             ingresoByAgent={ingresoByAgent}
             comisionByAgent={comisionByAgent}
             commissionDetails={commissionDetailsByAgent}
+            propDetailMap={propDetailMap}
+            productDetailMap={productDetailMap}
             getInitials={getInitials}
             onReactivate={handleReactivate}
             onEdit={openEditDialog}
@@ -963,12 +1017,14 @@ export default function InmobAgentes() {
 /* ───── Agent Table ───── */
 function AgentTable({
   agents, isLoading, search, ofertasByAgent, prospectosByAgent, ingresoByAgent, comisionByAgent,
-  commissionDetails, getInitials, onEdit, onDeactivate, onReactivate, onResetPassword, onProjectAccess,
+  commissionDetails, propDetailMap, productDetailMap, getInitials, onEdit, onDeactivate, onReactivate, onResetPassword, onProjectAccess,
   navigate, isActiveTab,
 }: {
   agents: any[]; isLoading: boolean; search: string;
   ofertasByAgent: Map<string, any>; prospectosByAgent: Map<string, number>; ingresoByAgent: Map<string, number>; comisionByAgent: Map<string, number>;
-  commissionDetails: Map<string, Array<{ ofertaId: number; cuentaId: number; precioFinal: number; montoComision: number; isProduct: boolean }>>;
+  commissionDetails: Map<string, Array<{ ofertaId: number; cuentaId: number; precioFinal: number; montoComision: number; isProduct: boolean; propiedadId?: number; productoId?: number }>>;
+  propDetailMap: Map<number, { numero: string; proyecto: string }>;
+  productDetailMap: Map<number, string>;
   getInitials: (name: string) => string;
   onEdit: (a: any) => void; onDeactivate?: (a: any) => void; onReactivate?: (a: any) => void;
   onResetPassword: (a: any) => void; onProjectAccess: (a: any) => void;
@@ -1139,20 +1195,27 @@ function AgentTable({
                           <TableCell colSpan={9} className="py-3 px-6">
                             <div className="space-y-1.5">
                               <p className="text-xs font-semibold text-muted-foreground mb-2">Detalle de comisiones</p>
-                              {details.map((d) => (
+                              {details.map((d) => {
+                                const propInfo = d.propiedadId ? propDetailMap.get(d.propiedadId) : undefined;
+                                const productName = d.productoId ? productDetailMap.get(d.productoId) : undefined;
+                                const label = d.isProduct
+                                  ? `${productName || "Producto"} — ${propInfo?.proyecto || ""} ${propInfo?.numero || ""}`
+                                  : `${propInfo?.proyecto || ""} ${propInfo?.numero || ""}`;
+                                return (
                                 <div key={d.cuentaId} className="flex items-center justify-between text-sm rounded-lg border border-border bg-card px-4 py-2.5">
                                   <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-[10px] font-mono">
-                                      {d.isProduct ? "CCP" : "CC"}-{d.cuentaId}
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {d.isProduct ? "Producto" : "Propiedad"}
                                     </Badge>
-                                    <span className="text-muted-foreground">{d.isProduct ? "Producto" : "Propiedad"}</span>
+                                    <span className="font-medium">{label.trim() || "—"}</span>
                                   </div>
                                   <div className="flex items-center gap-6">
                                     <span className="text-muted-foreground text-xs">Precio: <span className="text-foreground font-medium">{fmtCurrency(d.precioFinal)}</span></span>
                                     <span className="text-xs">Comisión: <span className="text-primary font-semibold">{fmtCurrency(d.montoComision)}</span></span>
                                   </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </TableCell>
                         </TableRow>
