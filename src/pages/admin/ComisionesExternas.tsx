@@ -417,10 +417,10 @@ export default function ComisionesExternas() {
         tipo: 'agente_externo'
       }, 'aprobar_comision_externa');
 
+      const montoFormateado = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(data.montoComision || 0);
+
       // Enviar correo de notificación al comisionista externo
       try {
-        const montoFormateado = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(data.montoComision || 0);
-        
         // Obtener emails de administradores de proyecto (rol_id = 2)
         const { data: adminsProyecto } = await supabase
           .from('usuarios')
@@ -440,7 +440,7 @@ export default function ComisionesExternas() {
             mensaje: {
               nombre: data.nombreComisionista || data.email,
               actividad: 'Comisión de venta aprobada',
-              detalles: `<tr><td class='label'>Cuenta:</td><td class='value'>${formatCuentaCobranzaId(data.idCuenta)}</td></tr><tr><td class='label'>Monto Comisión:</td><td class='value'>${montoFormateado}</td></tr><tr><td class='label'>Acción requerida:</td><td class='value'>Favor de generar y cargar su factura correspondiente al monto aprobado.</td></tr>`,
+              detalles: `<tr><td class='label'>Cuenta:</td><td class='value'>${formatCuentaCobranzaId(data.idCuenta)}</td></tr><tr><td class='label'>Monto Comisión:</td><td class='value'>${montoFormateado} + IVA</td></tr><tr><td class='label'>Acción requerida:</td><td class='value'>Favor de generar y cargar su factura correspondiente al monto aprobado.</td></tr>`,
             },
             templateId: 36978552,
           },
