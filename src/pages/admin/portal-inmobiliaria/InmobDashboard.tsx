@@ -1252,14 +1252,20 @@ export default function InmobDashboard() {
         if (!isRelevantCuenta(cuentaId)) return;
         if (propStatusMap.get(cuenta.id_propiedad) !== 4) return;
 
-        const eng = engancheMap.get(cuentaId);
         let dateInRange = false;
-        if (eng) {
-          const d = new Date(eng);
+        // Use fecha_generacion (offer date) as primary, then enganche, then fecha_creacion
+        if (cuenta.fecha_generacion) {
+          const d = new Date(cuenta.fecha_generacion);
           dateInRange = d >= start && d <= end;
-        } else if (cuenta.fecha_creacion) {
-          const d = new Date(cuenta.fecha_creacion);
-          dateInRange = d >= start && d <= end;
+        } else {
+          const eng = engancheMap.get(cuentaId);
+          if (eng) {
+            const d = new Date(eng);
+            dateInRange = d >= start && d <= end;
+          } else if (cuenta.fecha_creacion) {
+            const d = new Date(cuenta.fecha_creacion);
+            dateInRange = d >= start && d <= end;
+          }
         }
         if (!dateInRange) return;
 
