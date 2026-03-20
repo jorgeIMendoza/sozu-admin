@@ -391,7 +391,7 @@ export default function ComisionesExternas() {
           comisionistas: comisionistasFiltered,
           tieneComisionistaExterno
         };
-      }).filter(cuenta => cuenta.tieneComisionistaExterno); // Solo mostrar cuentas con externos
+      }).filter(cuenta => cuenta.tieneComisionistaExterno && cuenta.id_estatus_disponibilidad && cuenta.id_estatus_disponibilidad >= 4); // Solo mostrar cuentas con externos y propiedades apartadas/vendidas (excluir Disponible/canceladas)
     }
   });
 
