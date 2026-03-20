@@ -1013,12 +1013,14 @@ export default function InmobAgentes() {
 /* ───── Agent Table ───── */
 function AgentTable({
   agents, isLoading, search, ofertasByAgent, prospectosByAgent, ingresoByAgent, comisionByAgent,
-  commissionDetails, getInitials, onEdit, onDeactivate, onReactivate, onResetPassword, onProjectAccess,
+  commissionDetails, propDetailMap, productDetailMap, getInitials, onEdit, onDeactivate, onReactivate, onResetPassword, onProjectAccess,
   navigate, isActiveTab,
 }: {
   agents: any[]; isLoading: boolean; search: string;
   ofertasByAgent: Map<string, any>; prospectosByAgent: Map<string, number>; ingresoByAgent: Map<string, number>; comisionByAgent: Map<string, number>;
-  commissionDetails: Map<string, Array<{ ofertaId: number; cuentaId: number; precioFinal: number; montoComision: number; isProduct: boolean }>>;
+  commissionDetails: Map<string, Array<{ ofertaId: number; cuentaId: number; precioFinal: number; montoComision: number; isProduct: boolean; propiedadId?: number; productoId?: number }>>;
+  propDetailMap: Map<number, { numero: string; proyecto: string }>;
+  productDetailMap: Map<number, string>;
   getInitials: (name: string) => string;
   onEdit: (a: any) => void; onDeactivate?: (a: any) => void; onReactivate?: (a: any) => void;
   onResetPassword: (a: any) => void; onProjectAccess: (a: any) => void;
