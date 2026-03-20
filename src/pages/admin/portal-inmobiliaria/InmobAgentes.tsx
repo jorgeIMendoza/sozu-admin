@@ -874,6 +874,7 @@ export default function InmobAgentes() {
             prospectosByAgent={prospectosByAgent}
             ingresoByAgent={ingresoByAgent}
             comisionByAgent={comisionByAgent}
+            commissionDetails={commissionDetailsByAgent}
             getInitials={getInitials}
             onEdit={openEditDialog}
             onDeactivate={handleDeactivate}
@@ -893,6 +894,7 @@ export default function InmobAgentes() {
             prospectosByAgent={prospectosByAgent}
             ingresoByAgent={ingresoByAgent}
             comisionByAgent={comisionByAgent}
+            commissionDetails={commissionDetailsByAgent}
             getInitials={getInitials}
             onReactivate={handleReactivate}
             onEdit={openEditDialog}
