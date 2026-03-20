@@ -785,15 +785,17 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
       estatus = "Pagada";
       pagadasMonto += comision;
     } else if (com.aprobada && facturaSet.has(cuentaId)) {
-      estatus = "Programada a pago";
+      estatus = "Pendiente de pago";
       programadasMonto += comision;
     } else if (com.aprobada) {
       estatus = "Pendiente factura";
+      enRevision += comision;
     } else if (estatusPropId === VENDIDO_ID) {
       estatus = "En revisión";
       enRevision += comision;
     } else {
       estatus = "En revisión";
+      enRevision += comision;
     }
 
     rows.push({
