@@ -951,6 +951,7 @@ function AgentTable({
                 <TableHead className="text-center">Ofertas</TableHead>
                 <TableHead className="text-center">Ventas</TableHead>
                 <TableHead className="text-right">Ingreso</TableHead>
+                <TableHead className="text-right">Comisión</TableHead>
                 <TableHead className="text-center">
                   <TooltipProvider>
                     <Tooltip>
