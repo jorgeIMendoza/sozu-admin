@@ -11,10 +11,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Pencil, Trash2, Search, Users, Mail } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Users, Mail, Loader2 } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { AvisoDestinatariosSection } from "@/components/admin/AvisoDestinatariosSection";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
+
+interface PostmarkTemplate {
+  id: number;
+  name: string;
+  active: boolean;
+}
 
 interface Aviso {
   id: number;
