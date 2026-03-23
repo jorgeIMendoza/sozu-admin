@@ -465,7 +465,7 @@ export function AvisoDestinatariosSection({
           <Label>Destinatarios</Label>
           <Badge variant="secondary" className="text-xs">
             <Mail className="h-3 w-3 mr-1" />
-            {selectedCount} de {pool.length} seleccionado{selectedCount !== 1 ? "s" : ""}
+            {selectedCount} de {filteredPool.length} seleccionado{selectedCount !== 1 ? "s" : ""}
           </Badge>
           {pool.length > 0 && (
             <div className="flex gap-1">
