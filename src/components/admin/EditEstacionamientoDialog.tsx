@@ -89,6 +89,9 @@ export const EditEstacionamientoDialog = ({
     });
   };
 
+  const precioFinal = estacionamiento?.precio_final ?? 0;
+  const puedeSerIncluido = precioFinal === 0 || precioFinal === null;
+
   if (!estacionamiento) return null;
 
   return (
