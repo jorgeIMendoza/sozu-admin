@@ -213,6 +213,18 @@ export default function AdministrarAvisos() {
   const [postmarkTemplates, setPostmarkTemplates] = useState<PostmarkTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
+  const fetchAvisos = async () => {
+    setIsLoading(true);
+    const { data } = await supabase.from('avisos').select('*').order('fecha_creacion', { ascending: false });
+    setAvisos(data || []);
+    setIsLoading(false);
+  };
+
+  const fetchRoles = async () => {
+    const { data } = await supabase.from('roles').select('id, nombre').eq('activo', true).order('nombre');
+    setRoles(data || []);
+  };
+
   const fetchPostmarkTemplates = async () => {
     setLoadingTemplates(true);
     try {
