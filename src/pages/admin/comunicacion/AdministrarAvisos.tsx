@@ -11,10 +11,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Pencil, Trash2, Search, Users, Mail } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Users, Mail, Loader2 } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { AvisoDestinatariosSection } from "@/components/admin/AvisoDestinatariosSection";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
+
+interface PostmarkTemplate {
+  id: number;
+  name: string;
+  active: boolean;
+}
 
 interface Aviso {
   id: number;
@@ -204,6 +210,8 @@ export default function AdministrarAvisos() {
   const [destinatarios, setDestinatarios] = useState<Destinatario[]>([]);
   const [postmarkTemplateId, setPostmarkTemplateId] = useState<string>("36978552");
   const [selectedProyectos, setSelectedProyectos] = useState<string[]>([]);
+  const [postmarkTemplates, setPostmarkTemplates] = useState<PostmarkTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
 
   const fetchAvisos = async () => {
     setIsLoading(true);
@@ -217,7 +225,20 @@ export default function AdministrarAvisos() {
     setRoles(data || []);
   };
 
-  useEffect(() => { fetchAvisos(); fetchRoles(); }, []);
+  const fetchPostmarkTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('listar-postmark-templates');
+      if (!error && data?.templates) {
+        setPostmarkTemplates(data.templates);
+      }
+    } catch (e) {
+      console.error('Error fetching Postmark templates:', e);
+    }
+    setLoadingTemplates(false);
+  };
+
+  useEffect(() => { fetchAvisos(); fetchRoles(); fetchPostmarkTemplates(); }, []);
 
   const openCreate = () => {
     setEditingAviso(null);
@@ -424,7 +445,11 @@ export default function AdministrarAvisos() {
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className="font-mono text-xs">
-                    {aviso.postmark_template_id || 36978552}
+                    {(() => {
+                      const tid = aviso.postmark_template_id || 36978552;
+                      const tmpl = postmarkTemplates.find(t => t.id === tid);
+                      return tmpl ? `${tmpl.name}` : tid;
+                    })()}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -474,13 +499,32 @@ export default function AdministrarAvisos() {
                   </Select>
                 </div>
                 <div>
-                  <Label>ID Template Postmark</Label>
-                  <Input
-                    value={postmarkTemplateId}
-                    onChange={e => setPostmarkTemplateId(e.target.value.replace(/\D/g, ''))}
-                    placeholder="36978552"
-                    className="font-mono"
-                  />
+                  <Label>Template Postmark</Label>
+                  {loadingTemplates ? (
+                    <div className="flex items-center gap-2 h-10 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Cargando templates...
+                    </div>
+                  ) : postmarkTemplates.length > 0 ? (
+                    <Select value={postmarkTemplateId} onValueChange={setPostmarkTemplateId}>
+                      <SelectTrigger className="font-mono">
+                        <SelectValue placeholder="Seleccionar template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {postmarkTemplates.filter(t => t.active).map(t => (
+                          <SelectItem key={t.id} value={String(t.id)}>
+                            <span className="font-mono text-xs mr-2">{t.id}</span> {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={postmarkTemplateId}
+                      onChange={e => setPostmarkTemplateId(e.target.value.replace(/\D/g, ''))}
+                      placeholder="36978552"
+                      className="font-mono"
+                    />
+                  )}
                   <p className="text-[10px] text-muted-foreground mt-1">Default: 36978552</p>
                 </div>
               </div>

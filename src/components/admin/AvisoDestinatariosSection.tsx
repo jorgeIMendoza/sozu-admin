@@ -360,6 +360,15 @@ export function AvisoDestinatariosSection({
 
   const getFilteredPool = () => {
     return pool.filter(d => {
+      // When projects are selected, hide clients that don't belong to any selected project
+      if (isClienteSelected && selectedProyectos.length > 0 && d.rolIds.includes(CLIENTE_ROL_ID)) {
+        const clientProjects = clienteProyectoMap.get(d.email) || [];
+        const matchesProject = selectedProyectos.some(p => clientProjects.includes(p));
+        // If user is ONLY a client and doesn't match project, hide completely
+        const hasOtherRoles = d.rolIds.some(r => r !== CLIENTE_ROL_ID);
+        if (!matchesProject && !hasOtherRoles) return false;
+      }
+
       const matchesSearch = d.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
         d.email.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === "all" ||
