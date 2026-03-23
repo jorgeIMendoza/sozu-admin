@@ -495,13 +495,32 @@ export default function AdministrarAvisos() {
                   </Select>
                 </div>
                 <div>
-                  <Label>ID Template Postmark</Label>
-                  <Input
-                    value={postmarkTemplateId}
-                    onChange={e => setPostmarkTemplateId(e.target.value.replace(/\D/g, ''))}
-                    placeholder="36978552"
-                    className="font-mono"
-                  />
+                  <Label>Template Postmark</Label>
+                  {loadingTemplates ? (
+                    <div className="flex items-center gap-2 h-10 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Cargando templates...
+                    </div>
+                  ) : postmarkTemplates.length > 0 ? (
+                    <Select value={postmarkTemplateId} onValueChange={setPostmarkTemplateId}>
+                      <SelectTrigger className="font-mono">
+                        <SelectValue placeholder="Seleccionar template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {postmarkTemplates.filter(t => t.active).map(t => (
+                          <SelectItem key={t.id} value={String(t.id)}>
+                            <span className="font-mono text-xs mr-2">{t.id}</span> {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={postmarkTemplateId}
+                      onChange={e => setPostmarkTemplateId(e.target.value.replace(/\D/g, ''))}
+                      placeholder="36978552"
+                      className="font-mono"
+                    />
+                  )}
                   <p className="text-[10px] text-muted-foreground mt-1">Default: 36978552</p>
                 </div>
               </div>
