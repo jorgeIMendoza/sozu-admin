@@ -65,6 +65,9 @@ export const EditBodegaDialog = ({
     });
   };
 
+  const precioFinal = bodega?.precio_final ?? 0;
+  const puedeSerIncluido = precioFinal === 0 || precioFinal === null;
+
   if (!bodega) return null;
 
   return (
