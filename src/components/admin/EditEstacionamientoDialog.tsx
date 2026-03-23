@@ -20,6 +20,7 @@ interface Estacionamiento {
   numero_propiedad: string;
   id_tipo: number | null;
   es_incluido?: boolean;
+  precio_final?: number | null;
 }
 
 interface EditEstacionamientoDialogProps {
@@ -88,6 +89,9 @@ export const EditEstacionamientoDialog = ({
     });
   };
 
+  const precioFinal = estacionamiento?.precio_final ?? 0;
+  const puedeSerIncluido = precioFinal === 0 || precioFinal === null;
+
   if (!estacionamiento) return null;
 
   return (
@@ -146,13 +150,23 @@ export const EditEstacionamientoDialog = ({
             </Select>
           </div>
 
-          <div className="flex items-center justify-between">
-            <Label htmlFor="es_incluido">Es incluido (con el departamento)</Label>
-            <Switch
-              id="es_incluido"
-              checked={formData.es_incluido}
-              onCheckedChange={(checked) => setFormData({ ...formData, es_incluido: checked })}
-            />
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="es_incluido" className={!puedeSerIncluido ? "text-muted-foreground" : ""}>
+                Es incluido (con el departamento)
+              </Label>
+              <Switch
+                id="es_incluido"
+                checked={formData.es_incluido}
+                onCheckedChange={(checked) => setFormData({ ...formData, es_incluido: checked })}
+                disabled={!puedeSerIncluido}
+              />
+            </div>
+            {!puedeSerIncluido && (
+              <p className="text-xs text-destructive">
+                Solo se puede marcar como incluido cuando el precio final es $0.
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
