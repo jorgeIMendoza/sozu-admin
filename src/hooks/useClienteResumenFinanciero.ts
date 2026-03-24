@@ -111,7 +111,7 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
 
       const { data: propiedades } = await supabase
         .from("propiedades")
-        .select("id, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, numero_propiedad, id_estatus_disponibilidad")
+        .select("id, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, numero_propiedad, id_estatus_disponibilidad, url_imagen_portada")
         .in("id", propiedadIds);
 
       // Fetch child maintenance cuentas for next maintenance date
@@ -175,17 +175,19 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
       if (emIds.length > 0) {
         const { data: emData } = await supabase
           .from("edificios_modelos")
-          .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(nombre, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual, direccion, fecha_entrega, url_imagen_portada))")
+          .select("id, id_edificio, id_modelo, modelos:edificios_modelos_id_modelo_fkey!inner(url_imagen_portada), edificios:edificios_modelos_id_edificio_fkey!inner(nombre, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual, direccion, fecha_entrega, url_imagen_portada))")
           .in("id", emIds);
 
         emData?.forEach((em: any) => {
           const ed = em.edificios;
           const proj = ed?.proyectos;
+          const modelo = em.modelos;
           buildingMap.set(em.id, {
             edificio: ed?.nombre || "",
             proyecto: proj?.nombre || "Proyecto",
             proyectoId: proj?.id || 0,
             modeloId: em.id_modelo || 0,
+            modeloPortadaUrl: modelo?.url_imagen_portada || null,
           });
           if (proj?.id) {
             if (proj.precio_m2_actual) projectPriceMap.set(proj.id, proj.precio_m2_actual);
@@ -256,6 +258,11 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
 
         const projInfo = building ? projectInfoMap.get(building.proyectoId) : null;
         const modelImg = (building as any)?.modelImageUrl;
+        const modeloPortada = (building as any)?.modeloPortadaUrl;
+        const propPortada = prop?.url_imagen_portada;
+
+        // Priority: propiedad portada > modelo portada > modelo multimedia > proyecto portada
+        const resolvedImage = propPortada || modeloPortada || modelImg || projInfo?.imageUrl || "";
 
         properties.push({
           cuentaId: cuenta.id,
@@ -271,7 +278,7 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
           precioM2Compra,
           precioM2Actual,
           appreciationPercent: appPercent,
-          imageUrl: modelImg || projInfo?.imageUrl || "",
+          imageUrl: resolvedImage,
           direccion: projInfo?.direccion || "",
           fechaEntrega: projInfo?.fechaEntrega || null,
           valorEstimado: currentValue,

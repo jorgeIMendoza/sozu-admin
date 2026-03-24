@@ -336,9 +336,9 @@ const AgentProyectoDetalle = () => {
   return (
     <div className="pb-24 bg-[hsl(var(--agent-bg))]">
       {/* Hero image */}
-      <div className="relative h-56 w-full overflow-hidden">
+      <div className="relative h-56 lg:h-80 w-full overflow-hidden">
         {project.url_imagen_portada ? (
-          <img src={project.url_imagen_portada} alt={project.nombre} className="h-full w-full object-cover" />
+          <img src={project.url_imagen_portada} alt={project.nombre} className="h-full w-full object-cover object-center" />
         ) : (
           <div className="h-full w-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
             <Building2 className="h-12 w-12 text-gray-400" />

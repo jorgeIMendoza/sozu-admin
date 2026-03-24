@@ -4343,6 +4343,7 @@ export type Database = {
           numero_medio_bano: number | null
           numero_recamaras: number | null
           plano_arquitectonico: string | null
+          url_imagen_portada: string | null
         }
         Insert: {
           activo?: boolean | null
@@ -4356,6 +4357,7 @@ export type Database = {
           numero_medio_bano?: number | null
           numero_recamaras?: number | null
           plano_arquitectonico?: string | null
+          url_imagen_portada?: string | null
         }
         Update: {
           activo?: boolean | null
@@ -4369,6 +4371,7 @@ export type Database = {
           numero_medio_bano?: number | null
           numero_recamaras?: number | null
           plano_arquitectonico?: string | null
+          url_imagen_portada?: string | null
         }
         Relationships: [
           {
