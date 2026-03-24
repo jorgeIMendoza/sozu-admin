@@ -266,12 +266,13 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
         totalOriginalValue += precioFinal;
 
         const projInfo = building ? projectInfoMap.get(building.proyectoId) : null;
-        const modelImg = (building as any)?.modelImageUrl;
+        const modelMultimedia = (building as any)?.modelImageUrl;
         const modeloPortada = (building as any)?.modeloPortadaUrl;
         const propPortada = prop?.url_imagen_portada;
+        const propMultimedia = propId ? propMultimediaMap.get(propId) : undefined;
 
-        // Priority: propiedad portada > modelo portada > modelo multimedia > proyecto portada
-        const resolvedImage = propPortada || modeloPortada || modelImg || projInfo?.imageUrl || "";
+        // Priority: propiedad portada > modelo portada > multimedia propiedad > multimedia modelo > proyecto portada
+        const resolvedImage = propPortada || modeloPortada || propMultimedia || modelMultimedia || projInfo?.imageUrl || "";
 
         properties.push({
           cuentaId: cuenta.id,
