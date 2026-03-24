@@ -106,24 +106,29 @@ function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calen
   if (slot.type === "empty") {
     const isGroup = (slot.maxInvitados || 0) > 1;
     const agendados = slot.agendados || 0;
+    const hasBookings = isGroup && agendados > 0;
     return (
       <div
         onClick={onClick}
         className={cn(
-          "absolute inset-x-1 inset-y-0.5 rounded-md border border-dashed px-2 py-1 text-[10px] leading-tight cursor-pointer transition-all group",
-          isGroup && agendados > 0
-            ? "border-primary/30 bg-primary/5 hover:bg-primary/10"
-            : "border-muted-foreground/20 bg-muted/5 hover:border-primary/40 hover:bg-primary/5"
+          "absolute inset-x-1 inset-y-0.5 rounded-md border px-2 py-1 text-[10px] leading-tight cursor-pointer transition-all group",
+          hasBookings
+            ? "bg-primary/8 border-primary/25 hover:bg-primary/15 hover:shadow-sm"
+            : "border-dashed border-muted-foreground/20 bg-muted/5 hover:border-primary/40 hover:bg-primary/5"
         )}
       >
         <div className="flex items-center gap-1.5 truncate">
-          <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isGroup && agendados > 0 ? "bg-primary/50" : "bg-muted-foreground/30")} />
-          <span className="truncate font-medium text-muted-foreground">{slot.config?.nombre || "Disponible"}</span>
+          {hasBookings ? (
+            <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+          ) : (
+            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
+          )}
+          <span className={cn("truncate font-medium", hasBookings ? "text-foreground" : "text-muted-foreground")}>{slot.config?.nombre || "Disponible"}</span>
         </div>
-        <div className="text-[9px] truncate opacity-60 mt-0.5">
+        <div className="text-[9px] truncate mt-0.5">
           {isGroup
-            ? `${agendados}/${slot.maxInvitados} agendados`
-            : slot.config?.id_usuario_email}
+            ? <span className={hasBookings ? "text-primary font-medium" : "opacity-60"}>{agendados}/{slot.maxInvitados} agendados</span>
+            : <span className="opacity-60">{slot.config?.id_usuario_email}</span>}
         </div>
       </div>
     );
@@ -693,17 +698,28 @@ export default function TodasLasCitas() {
                       {/* Half-hour guide */}
                       <div className="absolute left-0 right-0 border-b border-dashed border-border/20" style={{ top: slotHeight / 2 }} />
 
-                      {/* Render all items (empty + citas) side by side when multiple */}
+                      {/* Render all items side by side when multiple */}
                       {(() => {
+                        // For group configs, merge the empty slot + its individual citas into one card
+                        // so we don't render them separately
+                        const groupConfigIds = new Set<number>();
+                        emptySlots.forEach(slot => {
+                          if ((slot.maxInvitados || 0) > 1) groupConfigIds.add(slot.configId);
+                        });
+
                         const allItems: { slot: CalendarSlot; top: number; height: number; status: CalendarStatus }[] = [];
-                        
-                        emptySlots.forEach((slot, idx) => {
+
+                        // Add empty slots (group slots already have the count)
+                        emptySlots.forEach((slot) => {
                           const duration = slot.config?.duracion_minutos || 60;
                           const cardHeight = (duration / 60) * slotHeight;
                           allItems.push({ slot, top: 0, height: cardHeight, status: "unknown" });
                         });
 
+                        // Add individual citas but skip those belonging to a group config
+                        // (they're already counted in the group empty slot)
                         slotCitas.forEach(slot => {
+                          if (groupConfigIds.has(slot.configId)) return;
                           const start = slot.hora;
                           const end = parseTime(slot.cita!.hora_fin);
                           const topOffset = (start - hour) * slotHeight;
@@ -717,7 +733,7 @@ export default function TodasLasCitas() {
                         return allItems.map((item, idx) => {
                           const widthPercent = totalItems > 1 ? (100 / totalItems) : 100;
                           const leftPercent = totalItems > 1 ? (idx * widthPercent) : 0;
-                          
+
                           return (
                             <div
                               key={`item-${idx}`}
