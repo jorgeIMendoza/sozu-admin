@@ -1,44 +1,28 @@
 
 
-# Plan: Corregir imagen de portada en portal cliente + Imagen portada en modelos + Hero en portal agente
+## Problema
 
-## Problema 1: Hero de proyecto en portal agente se estira en desktop
-**Archivo**: `src/pages/admin/agent-portal/AgentProyectoDetalle.tsx` (línea 339)
-- Actualmente: `h-56 w-full` — la imagen se estira horizontalmente en pantallas anchas
-- Solución: Cambiar a `h-56 lg:h-80` con `max-w-screen-xl mx-auto` para limitar el ancho en desktop, y mantener `object-cover object-center` para que se vea centrada y recortada correctamente
+Al agendar una cita de capacitación grupal (ej. "Capacitacion de Daiku Keity", sábado 28 marzo 9am), el backend rechaza con "no_disponible" aunque el frontend muestra el slot como disponible.
 
-## Problema 2: Imagen de portada en portal cliente usa imagen random del modelo
-**Archivo**: `src/hooks/useClienteResumenFinanciero.ts` (líneas 260-274)
-- Actualmente la prioridad es: `multimedias_modelo` (ver_como_imagen_de_propiedad) → `proyecto.url_imagen_portada`
-- La propiedad tiene su propio campo `url_imagen_portada` en la tabla `propiedades` pero nunca se consulta
-- **Cambio**: Modificar la query de propiedades para incluir `url_imagen_portada`, y cambiar la prioridad a:
-  1. `propiedad.url_imagen_portada` (si existe)
-  2. `modelo.url_imagen_portada` (nuevo campo, si existe)  
-  3. `multimedias_modelo` con `ver_como_imagen_de_propiedad=true` (fallback actual)
-  4. `proyecto.url_imagen_portada` (último fallback)
+**Causa raíz**: La función `checkAvailability` en el edge function `agendar-capacitacion` consulta Google Calendar buscando eventos personales del dueño del calendario. Si encuentra cualquier evento (incluso los creados por el service account para las sesiones recurrentes), bloquea la reserva. Esto es correcto para citas 1:1 pero incorrecto para capacitaciones grupales donde la disponibilidad se gestiona por configuración de slots + conteo de reservas en BD.
 
-## Problema 3: Agregar `url_imagen_portada` a la tabla `modelos`
-- **Migración SQL**: `ALTER TABLE modelos ADD COLUMN url_imagen_portada text;`
-- **Archivo**: `src/components/admin/EditModeloDialog.tsx`
-  - Agregar campo de URL de imagen de portada al formulario (input de texto + preview de imagen)
-  - Incluir `url_imagen_portada` en el objeto de update al guardar
+## Plan
 
-## Cambios por archivo
+### 1. Modificar `checkAvailability` en el edge function
 
-### 1. Migración SQL
-```sql
-ALTER TABLE modelos ADD COLUMN url_imagen_portada text;
-```
+**Archivo**: `supabase/functions/agendar-capacitacion/index.ts`
 
-### 2. `src/components/admin/EditModeloDialog.tsx`
-- Agregar campo `url_imagen_portada` al schema y formulario
-- Agregar input con preview de imagen, similar al de proyectos
+- Agregar parámetro `maxInvitados` a la función `checkAvailability`
+- Cuando `maxInvitados > 1` (sesión grupal): después de validar el slot en BD, retornar `true` sin hacer la verificación de Google Calendar
+- Para citas 1:1 (`maxInvitados <= 1`): mantener el comportamiento actual con verificación de GCal
 
-### 3. `src/hooks/useClienteResumenFinanciero.ts`
-- En la query de propiedades (~línea 91), incluir `url_imagen_portada`
-- En la query de edificios_modelos (~línea 178), agregar join a modelos para obtener `url_imagen_portada` del modelo
-- Cambiar prioridad de imagen (línea 274): `prop.url_imagen_portada || modelo.url_imagen_portada || modelImg || projInfo.imageUrl`
+### 2. Actualizar la llamada a `checkAvailability`
 
-### 4. `src/pages/admin/agent-portal/AgentProyectoDetalle.tsx`
-- Cambiar el hero de `h-56` a `h-56 lg:h-80` y agregar `object-center` para mejor visualización en desktop
+En el handler principal (~línea 1533), pasar `scheduleMaxInvitados` como nuevo argumento para que la función sepa si debe omitir la verificación de GCal.
+
+### 3. Desplegar el edge function actualizado
+
+---
+
+**Resultado esperado**: Las capacitaciones grupales se podrán agendar correctamente basándose solo en la configuración de horarios y el conteo de reservas existentes, sin ser bloqueadas por eventos en Google Calendar.
 
