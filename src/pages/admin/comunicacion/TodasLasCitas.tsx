@@ -74,6 +74,8 @@ interface CalendarSlot {
   cita?: Cita;
   hora: number;
   configId: number;
+  agendados?: number;
+  maxInvitados?: number;
 }
 
 type CalendarStatus = "verified" | "missing" | "pending" | "unknown";
