@@ -1,0 +1,1 @@
+ALTER TABLE modelos ADD COLUMN IF NOT EXISTS url_imagen_portada text;

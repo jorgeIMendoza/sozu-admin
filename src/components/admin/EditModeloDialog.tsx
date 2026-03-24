@@ -54,6 +54,7 @@ interface Modelo {
   numero_medio_bano?: number;
   id_proyecto?: number | null;
   plano_arquitectonico?: string | null;
+  url_imagen_portada?: string | null;
 }
 
 interface EditModeloDialogProps {
@@ -66,6 +67,7 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
   const [open, setOpen] = useState(false);
   const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
   const [planoUrl, setPlanoUrl] = useState<string | null>(modelo.plano_arquitectonico || null);
+  const [imagenPortadaUrl, setImagenPortadaUrl] = useState<string>(modelo.url_imagen_portada || "");
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -96,6 +98,7 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
         numero_medio_bano: values.numero_medio_bano || null,
         id_proyecto: parseInt(values.id_proyecto),
         plano_arquitectonico: planoUrl,
+        url_imagen_portada: imagenPortadaUrl || null,
       };
 
       const { error: modeloError } = await supabase
@@ -257,6 +260,22 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
                   </FormItem>
                 )}
               />
+            </div>
+
+            <div className="space-y-2">
+              <FormLabel>Imagen de Portada del Modelo</FormLabel>
+              <Input
+                placeholder="URL de la imagen de portada"
+                value={imagenPortadaUrl}
+                onChange={(e) => setImagenPortadaUrl(e.target.value)}
+              />
+              {imagenPortadaUrl && (
+                <img
+                  src={imagenPortadaUrl}
+                  alt="Portada del modelo"
+                  className="w-full h-32 object-cover rounded-md border"
+                />
+              )}
             </div>
 
             <PlanoArquitectonicoUpload
