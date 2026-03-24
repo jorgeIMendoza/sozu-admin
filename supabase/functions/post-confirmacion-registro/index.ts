@@ -80,11 +80,23 @@ Deno.serve(async (req) => {
     const portalConfig = getPortalConfig(rolId);
     const nombreUsuario = usuarioRecord?.nombre?.trim() || decodedNombre;
 
-    // Find the auth user by email
-    const { data: authUsers } = await supabase.auth.admin.listUsers();
-    let authUser = authUsers?.users?.find(
-      u => u.email?.toLowerCase() === normalizedEmail
-    );
+    let authUser = null;
+
+    if (usuarioRecord?.auth_user_id) {
+      const { data: authUserById, error: authUserByIdError } = await supabase.auth.admin.getUserById(usuarioRecord.auth_user_id);
+      if (authUserByIdError) {
+        console.error('Error fetching auth user by id:', authUserByIdError);
+      } else {
+        authUser = authUserById.user;
+      }
+    }
+
+    if (!authUser) {
+      const { data: authUsers } = await supabase.auth.admin.listUsers();
+      authUser = authUsers?.users?.find(
+        u => u.email?.toLowerCase() === normalizedEmail
+      ) ?? null;
+    }
 
     // If no auth user exists (e.g. client flow), create one with temporary password
     if (!authUser) {
