@@ -42,6 +42,25 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
     form?.getValues("url_imagen_portada") || ''
   );
 
+  // Load cover image from DB when used without form (EditPropertyDialog)
+  useQuery({
+    queryKey: ['propertyCoverImage', propertyId],
+    queryFn: async () => {
+      if (!propertyId) return null;
+      const { data, error } = await supabase
+        .from('propiedades')
+        .select('url_imagen_portada')
+        .eq('id', propertyId)
+        .single();
+      if (error) throw error;
+      if (data?.url_imagen_portada) {
+        setCoverImageUrl(data.url_imagen_portada);
+      }
+      return data;
+    },
+    enabled: !!propertyId && !form,
+  });
+
   // Fetch existing YouTube videos (only active ones)
   const { data: youtubeVideos = [] } = useQuery({
     queryKey: ['propertyYoutubeVideos', propertyId],
