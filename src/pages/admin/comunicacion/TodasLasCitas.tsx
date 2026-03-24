@@ -19,9 +19,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const STATUS_MAP: Record<number, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; color: string }> = {
-  1: { label: "Agendada", variant: "outline", color: "text-blue-600" },
-  2: { label: "Pendiente", variant: "secondary", color: "text-amber-600" },
-  3: { label: "Confirmada", variant: "default", color: "text-emerald-600" },
+  1: { label: "Agendada", variant: "outline", color: "text-primary" },
+  2: { label: "Pendiente", variant: "secondary", color: "text-warning" },
+  3: { label: "Confirmada", variant: "default", color: "text-success" },
 };
 
 interface ConfigCita {
@@ -158,14 +158,14 @@ function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calen
         {isCancelledCalendar ? (
           <AlertTriangle className="h-3 w-3 flex-shrink-0 text-destructive" />
         ) : calendarStatus === "verified" ? (
-          <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-500" />
+          <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-success" />
         ) : calendarStatus === "pending" ? (
           <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin text-muted-foreground" />
         ) : (
           <div className={cn("w-2 h-2 rounded-full flex-shrink-0",
-            cita.id_estatus_cita === 1 ? "bg-blue-500" :
-            cita.id_estatus_cita === 2 ? "bg-amber-500" :
-            cita.id_estatus_cita === 3 ? "bg-emerald-500" : "bg-muted-foreground"
+            cita.id_estatus_cita === 1 ? "bg-primary" :
+            cita.id_estatus_cita === 2 ? "bg-warning" :
+            cita.id_estatus_cita === 3 ? "bg-success" : "bg-muted-foreground"
           )} />
         )}
         <span className="truncate">{slot.config?.nombre || "Cita"}</span>
@@ -400,12 +400,12 @@ export default function TodasLasCitas() {
 
       const personaIds = Array.from(new Set(rawCitas.flatMap((r) => [r.id_persona_prospecto, r.id_agente]).filter((id): id is number => !!id)));
 
-      let personasMap = new Map<number, { nombre: string | null; apellido_paterno: string | null; email: string | null }>();
+      let personasMap = new Map<number, { nombre_legal: string | null; email: string | null }>();
 
       if (personaIds.length > 0) {
         const { data: personas, error: personasError } = await supabase
           .from("personas")
-          .select("id, nombre, apellido_paterno, email")
+          .select("id, nombre_legal, email")
           .in("id", personaIds);
 
         if (personasError) {
@@ -422,7 +422,7 @@ export default function TodasLasCitas() {
         return {
           ...r,
           nombre_prospecto: prospecto
-            ? [prospecto.nombre, prospecto.apellido_paterno].filter(Boolean).join(" ") || prospecto.email || null
+            ? prospecto.nombre_legal || prospecto.email || null
             : null,
           email_agente: agente?.email || null,
         };
@@ -679,15 +679,15 @@ export default function TodasLasCitas() {
           Disponible
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+          <span className="w-2.5 h-2.5 rounded-full bg-primary" />
           Agendada
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+          <span className="w-2.5 h-2.5 rounded-full bg-warning" />
           Pendiente
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+          <span className="w-2.5 h-2.5 rounded-full bg-success" />
           Confirmada
         </span>
         <span className="flex items-center gap-1.5">
@@ -695,7 +695,7 @@ export default function TodasLasCitas() {
           No en Calendar
         </span>
         <span className="flex items-center gap-1.5">
-          <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+          <CheckCircle2 className="h-3 w-3 text-success" />
           Verificada
         </span>
       </div>
