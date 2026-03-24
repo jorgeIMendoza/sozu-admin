@@ -30,6 +30,7 @@ export default function ChangePassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isCompletingPasswordFlow, setIsCompletingPasswordFlow] = useState(false);
   
   const { updatePassword, profile, signOut, session, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -41,10 +42,10 @@ export default function ChangePassword() {
   }, [authLoading, session, navigate]);
 
   useEffect(() => {
-    if (!authLoading && session && profile && !profile.debe_cambiar_password) {
-      navigate('/admin', { replace: true });
+    if (!authLoading && session && profile && !profile.debe_cambiar_password && !isCompletingPasswordFlow) {
+      navigate(profile.rol_nombre === 'Cliente' ? '/admin/portal-cliente/inicio' : '/admin', { replace: true });
     }
-  }, [authLoading, session, profile, navigate]);
+  }, [authLoading, session, profile, navigate, isCompletingPasswordFlow]);
 
   const handleSignOut = () => {
     supabase.auth.signOut().finally(() => {
@@ -98,6 +99,7 @@ export default function ChangePassword() {
         return;
       }
 
+      setIsCompletingPasswordFlow(true);
       const { error } = await updatePassword(newPassword);
       
       if (error) {
@@ -111,6 +113,7 @@ export default function ChangePassword() {
           error.message
         );
         setError(error.message);
+        setIsCompletingPasswordFlow(false);
         setIsLoading(false);
         return;
       }
@@ -128,6 +131,7 @@ export default function ChangePassword() {
       window.location.href = '/auth/login?reason=password-updated';
       return;
     } catch (err) {
+      setIsCompletingPasswordFlow(false);
       setError('Error al cambiar la contraseña. Intenta de nuevo.');
       setIsLoading(false);
     }
