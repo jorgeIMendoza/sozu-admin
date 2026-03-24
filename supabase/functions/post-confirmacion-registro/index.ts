@@ -241,8 +241,8 @@ Deno.serve(async (req) => {
             TemplateModel: {
               mensaje: {
                 nombre: 'Administrador',
-                actividad: 'Agente confirmó su correo electrónico',
-                asunto: 'Agente confirmado - ' + nombreUsuario,
+                actividad: `${getRolLabel(rolId)} confirmó su correo electrónico`,
+                asunto: `${getRolLabel(rolId)} confirmado - ` + nombreUsuario,
                 detalles: `<tr><td class='label'>Nombre:</td><td class='value'>${nombreUsuario}</td></tr><tr><td class='label'>Email:</td><td class='value'>${normalizedEmail}</td></tr><tr><td class='label'>Teléfono:</td><td class='value'>${telefonoAdmin || 'N/A'}</td></tr><tr><td class='label'>Estado:</td><td class='value'>✅ Email confirmado - Credenciales enviadas</td></tr>`,
               },
             },
