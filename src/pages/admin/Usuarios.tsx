@@ -1630,7 +1630,7 @@ export default function Usuarios() {
                     Vinculado a: {matchedPersona.nombre_legal}
                   </p>
                   <p className="text-xs text-green-600 dark:text-green-400">
-                    Tipo(s): {matchedPersona.tipos.join(', ')} · ID: {matchedPersona.id}
+                    Tipo(s): {matchedPersona.tipos.join(', ')}
                   </p>
                   <Button
                     type="button"
