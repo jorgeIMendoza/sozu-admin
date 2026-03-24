@@ -280,8 +280,8 @@ Deno.serve(async (req) => {
     try {
       await supabase.from('logs_actividad').insert({
         tipo_accion: 'confirmacion_email',
-        tipo_entidad: 'agente',
-        descripcion: `Agente confirmó su correo: ${normalizedEmail}`,
+        tipo_entidad: rolId === CLIENTE_ROLE_ID ? 'cliente' : 'agente',
+        descripcion: `${getRolLabel(rolId)} confirmó su correo: ${normalizedEmail}`,
       });
     } catch (logErr) {
       console.error('Error logging:', logErr);
