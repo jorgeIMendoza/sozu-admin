@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Key, Loader2, RotateCcw, RefreshCcw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Key, Loader2, RotateCcw, RefreshCcw, ChevronLeft, ChevronRight, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -21,6 +21,7 @@ type UsuarioCliente = {
   activo: boolean;
   auth_user_id: string | null;
   debe_cambiar_password: boolean;
+  email_confirmado: boolean;
   roles?: { nombre: string } | null;
   personas?: { nombre_legal: string } | null;
 };
@@ -61,6 +62,7 @@ export default function UsuariosClientes() {
           activo,
           auth_user_id,
           debe_cambiar_password,
+          email_confirmado,
           roles (nombre),
           personas (nombre_legal)
         `)
@@ -118,6 +120,26 @@ export default function UsuariosClientes() {
     },
   });
 
+  // Resend confirmation email mutation
+  const resendConfirmationMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const response = await supabase.functions.invoke('reenviar-confirmacion-email', {
+        body: { email },
+      });
+
+      if (response.error) throw new Error(response.error.message);
+      if (response.data && !response.data.success) throw new Error(response.data.message || 'Error al reenviar');
+
+      return response.data;
+    },
+    onSuccess: (_data, email) => {
+      toast({ title: "Correo Enviado", description: `Se reenvió el correo de confirmación a ${email}` });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: `Error al reenviar confirmación: ${error.message}`, variant: "destructive" });
+    },
+  });
+
   // Sync users that don't have auth_user_id (create auth users)
   const syncUsersMutation = useMutation({
     mutationFn: async () => {
@@ -142,7 +164,7 @@ export default function UsuariosClientes() {
       queryClient.invalidateQueries({ queryKey: ['usuarios-clientes'] });
       toast({ 
         title: "Sincronización completada", 
-        description: `Se sincronizaron ${count} usuarios.` 
+        description: `Se enviaron correos de confirmación a ${count} usuarios.` 
       });
     },
     onError: (error) => {
@@ -197,6 +219,7 @@ export default function UsuariosClientes() {
           <TableRow className="bg-muted/50">
             <TableHead className="font-semibold text-foreground">Cliente</TableHead>
             <TableHead className="font-semibold text-foreground">Email</TableHead>
+            <TableHead className="font-semibold text-foreground">Email Confirmado</TableHead>
             <TableHead className="font-semibold text-foreground">Estado Auth</TableHead>
             <TableHead className="font-semibold text-foreground">Contraseña</TableHead>
             {canUpdate && (
@@ -207,7 +230,7 @@ export default function UsuariosClientes() {
         <TableBody>
           {users.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={canUpdate ? 5 : 4} className="text-center py-8 text-muted-foreground">
+              <TableCell colSpan={canUpdate ? 6 : 5} className="text-center py-8 text-muted-foreground">
                 No se encontraron usuarios clientes
               </TableCell>
             </TableRow>
@@ -227,6 +250,18 @@ export default function UsuariosClientes() {
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">{usuario.email}</TableCell>
+                <TableCell>
+                  {usuario.email_confirmado ? (
+                    <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
+                      Confirmado
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                      <Mail className="h-3 w-3 mr-1" />
+                      Pendiente
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell>
                   {usuario.auth_user_id ? (
                     <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
@@ -251,6 +286,22 @@ export default function UsuariosClientes() {
                 {canUpdate && (
                   <TableCell className="text-right">
                     <div className="flex gap-2 justify-end">
+                      {!usuario.email_confirmado && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => resendConfirmationMutation.mutate(usuario.email)}
+                          disabled={resendConfirmationMutation.isPending}
+                          className="hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-600"
+                        >
+                          {resendConfirmationMutation.isPending ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <Mail className="h-3 w-3 mr-1" />
+                          )}
+                          Reenviar Confirmación
+                        </Button>
+                      )}
                       {usuario.auth_user_id && !usuario.debe_cambiar_password && (
                         <Button
                           variant="outline"
