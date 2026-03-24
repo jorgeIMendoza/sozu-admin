@@ -688,31 +688,48 @@ export default function TodasLasCitas() {
                       {/* Half-hour guide */}
                       <div className="absolute left-0 right-0 border-b border-dashed border-border/20" style={{ top: slotHeight / 2 }} />
 
-                      {/* Empty slots */}
-                      {emptySlots.map((slot, idx) => {
-                        const duration = slot.config?.duracion_minutos || 60;
-                        const cardHeight = (duration / 60) * slotHeight;
-                        return (
-                          <div key={`empty-${idx}`} className="absolute inset-x-0" style={{ top: 0, height: cardHeight, zIndex: 5 }}>
-                            <SlotCard slot={slot} calendarStatus="unknown" onClick={() => setSelectedSlot(slot)} />
-                          </div>
-                        );
-                      })}
+                      {/* Render all items (empty + citas) side by side when multiple */}
+                      {(() => {
+                        const allItems: { slot: CalendarSlot; top: number; height: number; status: CalendarStatus }[] = [];
+                        
+                        emptySlots.forEach((slot, idx) => {
+                          const duration = slot.config?.duracion_minutos || 60;
+                          const cardHeight = (duration / 60) * slotHeight;
+                          allItems.push({ slot, top: 0, height: cardHeight, status: "unknown" });
+                        });
 
-                      {/* Citas */}
-                      {slotCitas.map(slot => {
-                        const start = slot.hora;
-                        const end = parseTime(slot.cita!.hora_fin);
-                        const topOffset = (start - hour) * slotHeight;
-                        const cardHeight = (end - start) * slotHeight;
-                        const status = calendarStatuses.get(slot.cita!.id) || (slot.cita!.estatus === "cancelada_calendar" ? "missing" : "unknown");
+                        slotCitas.forEach(slot => {
+                          const start = slot.hora;
+                          const end = parseTime(slot.cita!.hora_fin);
+                          const topOffset = (start - hour) * slotHeight;
+                          const cardHeight = (end - start) * slotHeight;
+                          const status = calendarStatuses.get(slot.cita!.id) || (slot.cita!.estatus === "cancelada_calendar" ? "missing" : "unknown");
+                          allItems.push({ slot, top: topOffset, height: cardHeight, status });
+                        });
 
-                        return (
-                          <div key={slot.cita!.id} className="absolute inset-x-0" style={{ top: topOffset, height: cardHeight, zIndex: 10 }}>
-                            <SlotCard slot={slot} calendarStatus={status} onClick={() => setSelectedSlot(slot)} />
-                          </div>
-                        );
-                      })}
+                        const totalItems = allItems.length;
+
+                        return allItems.map((item, idx) => {
+                          const widthPercent = totalItems > 1 ? (100 / totalItems) : 100;
+                          const leftPercent = totalItems > 1 ? (idx * widthPercent) : 0;
+                          
+                          return (
+                            <div
+                              key={`item-${idx}`}
+                              className="absolute"
+                              style={{
+                                top: item.top,
+                                height: item.height,
+                                left: `calc(${leftPercent}% + ${idx > 0 ? 1 : 0}px)`,
+                                width: `calc(${widthPercent}% - ${totalItems > 1 ? 1 : 0}px)`,
+                                zIndex: item.slot.type === "cita" ? 10 : 5,
+                              }}
+                            >
+                              <SlotCard slot={item.slot} calendarStatus={item.status} onClick={() => setSelectedSlot(item.slot)} />
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   );
                 })}
