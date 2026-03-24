@@ -1,29 +1,44 @@
 
 
-# Plan: Agregar toggle "Es incluido" en edición de bodegas + Corregir valor de escrituración
+# Plan: Corregir imagen de portada en portal cliente + Imagen portada en modelos + Hero en portal agente
 
-## Contexto
-Todas las bodegas de Bottura tienen `es_incluido = true`, pero algunas (como la bodega 49) tienen su propia cuenta de cobranza con precio real. Se necesita poder editar este campo y que el cálculo de escrituración lo considere correctamente.
+## Problema 1: Hero de proyecto en portal agente se estira en desktop
+**Archivo**: `src/pages/admin/agent-portal/AgentProyectoDetalle.tsx` (línea 339)
+- Actualmente: `h-56 w-full` — la imagen se estira horizontalmente en pantallas anchas
+- Solución: Cambiar a `h-56 lg:h-80` con `max-w-screen-xl mx-auto` para limitar el ancho en desktop, y mantener `object-cover object-center` para que se vea centrada y recortada correctamente
 
-## Cambios
+## Problema 2: Imagen de portada en portal cliente usa imagen random del modelo
+**Archivo**: `src/hooks/useClienteResumenFinanciero.ts` (líneas 260-274)
+- Actualmente la prioridad es: `multimedias_modelo` (ver_como_imagen_de_propiedad) → `proyecto.url_imagen_portada`
+- La propiedad tiene su propio campo `url_imagen_portada` en la tabla `propiedades` pero nunca se consulta
+- **Cambio**: Modificar la query de propiedades para incluir `url_imagen_portada`, y cambiar la prioridad a:
+  1. `propiedad.url_imagen_portada` (si existe)
+  2. `modelo.url_imagen_portada` (nuevo campo, si existe)  
+  3. `multimedias_modelo` con `ver_como_imagen_de_propiedad=true` (fallback actual)
+  4. `proyecto.url_imagen_portada` (último fallback)
 
-### 1. Agregar campo "Es incluido" al diálogo de edición de bodegas
-**Archivo**: `src/components/admin/EditBodegaDialog.tsx`
-- Agregar un Switch/Checkbox con label "Es incluido" al formulario
-- Incluir `es_incluido` en el `formData` del estado
-- Enviar el valor al guardar junto con los demás campos
+## Problema 3: Agregar `url_imagen_portada` a la tabla `modelos`
+- **Migración SQL**: `ALTER TABLE modelos ADD COLUMN url_imagen_portada text;`
+- **Archivo**: `src/components/admin/EditModeloDialog.tsx`
+  - Agregar campo de URL de imagen de portada al formulario (input de texto + preview de imagen)
+  - Incluir `url_imagen_portada` en el objeto de update al guardar
 
-### 2. Actualizar la función `onSave` para incluir `es_incluido`
-**Archivo**: Componente padre que usa `EditBodegaDialog` (donde se define el `onSave`)
-- Asegurar que el update a Supabase incluya el campo `es_incluido`
+## Cambios por archivo
 
-### 3. Corregir cálculo de Valor de Escrituración
-**Archivo**: `src/pages/admin/DetalleCuentaCobranza.tsx`
-- Modificar la consulta para obtener todas las bodegas/estacionamientos de la propiedad sin filtrar por `es_incluido`
-- Para cada bodega/estacionamiento, verificar si tiene una cuenta de cobranza separada con `precio_final > 0`
-- Sumar al total de escrituración solo aquellas que tengan cuenta separada con precio real, independientemente del flag `es_incluido`
+### 1. Migración SQL
+```sql
+ALTER TABLE modelos ADD COLUMN url_imagen_portada text;
+```
 
-## Resultado esperado
-- El admin puede cambiar el toggle "Es incluido" desde la edición de bodega
-- El valor de escrituración suma correctamente el precio de bodegas que tienen cuenta de cobranza separada
+### 2. `src/components/admin/EditModeloDialog.tsx`
+- Agregar campo `url_imagen_portada` al schema y formulario
+- Agregar input con preview de imagen, similar al de proyectos
+
+### 3. `src/hooks/useClienteResumenFinanciero.ts`
+- En la query de propiedades (~línea 91), incluir `url_imagen_portada`
+- En la query de edificios_modelos (~línea 178), agregar join a modelos para obtener `url_imagen_portada` del modelo
+- Cambiar prioridad de imagen (línea 274): `prop.url_imagen_portada || modelo.url_imagen_portada || modelImg || projInfo.imageUrl`
+
+### 4. `src/pages/admin/agent-portal/AgentProyectoDetalle.tsx`
+- Cambiar el hero de `h-56` a `h-56 lg:h-80` y agregar `object-center` para mejor visualización en desktop
 
