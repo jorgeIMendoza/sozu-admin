@@ -65,6 +65,7 @@ interface CitaRaw {
 
 interface Cita extends CitaRaw {
   nombre_prospecto: string | null;
+  email_prospecto: string | null;
   email_agente: string | null;
 }
 
