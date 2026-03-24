@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ModelCharacteristicsSection } from "./ModelCharacteristicsSection";
 import { PlanoArquitectonicoUpload } from "./PlanoArquitectonicoUpload";
+import { ImageUploadField } from "./ImageUploadField";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -38,6 +39,7 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
   const [open, setOpen] = useState(false);
   const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
   const [planoUrl, setPlanoUrl] = useState<string | null>(null);
+  const [imagenPortadaUrl, setImagenPortadaUrl] = useState<string>("");
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -73,6 +75,7 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
         numero_completo_banos: values.numero_completo_banos ? parseInt(values.numero_completo_banos) : null,
         numero_medio_bano: values.numero_medio_bano ? parseInt(values.numero_medio_bano) : null,
         plano_arquitectonico: planoUrl,
+        url_imagen_portada: imagenPortadaUrl || null,
       };
 
       const { data: newModelo, error } = await supabase
@@ -104,6 +107,7 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
 
       form.reset();
       setPlanoUrl(null);
+      setImagenPortadaUrl("");
       setOpen(false);
       onModeloAdded();
     } catch (error) {
@@ -232,6 +236,12 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
                 )}
               />
             </div>
+
+            <ImageUploadField
+              label="Imagen de Portada del Modelo"
+              value={imagenPortadaUrl}
+              onChange={(url) => setImagenPortadaUrl(url)}
+            />
 
             <PlanoArquitectonicoUpload
               currentUrl={planoUrl}
