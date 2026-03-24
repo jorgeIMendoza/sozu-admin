@@ -17,6 +17,11 @@ function safeDecode(value: string | null | undefined, fallback = 'Agente') {
   }
 }
 
+function getRolLabel(rolId: number | null | undefined): string {
+  if (rolId === CLIENTE_ROLE_ID) return 'Cliente';
+  return 'Agente Inmobiliario';
+}
+
 function getPortalConfig(rolId: number | null | undefined) {
   const host = rolId === CLIENTE_ROLE_ID ? 'https://clientes.sozu.com' : 'https://inmobiliarias.sozu.com';
   return {
@@ -176,8 +181,8 @@ Deno.serve(async (req) => {
             TemplateModel: {
               mensaje: {
                 nombre: nombreUsuario,
-                actividad: 'Registro exitoso como Agente Inmobiliario',
-                asunto: 'Bienvenido a Sozu - Tu cuenta ha sido activada',
+                actividad: `Registro exitoso como ${getRolLabel(rolId)}`,
+                asunto: `Bienvenido a Sozu - Tu cuenta ha sido activada`,
                 detalles: `
                   <tr><td class='label'>Email de acceso:</td><td class='value'>${normalizedEmail}</td></tr>
                   <tr><td class='label'>Contraseña temporal:</td><td class='value'>Temporal123!</td></tr>
