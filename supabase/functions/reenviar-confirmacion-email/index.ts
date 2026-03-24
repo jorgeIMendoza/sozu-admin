@@ -67,10 +67,17 @@ Deno.serve(async (req) => {
       throw new Error('Error al generar enlace de confirmación');
     }
 
-    let confirmationUrl = linkData?.properties?.action_link;
+    let confirmationUrl: string | null = null;
 
-    // Rebuild the URL to ensure redirect goes to thank-you page
-    if (confirmationUrl) {
+    if (linkData?.properties?.hashed_token) {
+      const nextUrl = new URL(thankYouUrl);
+      nextUrl.searchParams.set('token_hash', linkData.properties.hashed_token);
+      nextUrl.searchParams.set('type', 'magiclink');
+      confirmationUrl = nextUrl.toString();
+    } else if (linkData?.properties?.action_link) {
+      confirmationUrl = linkData.properties.action_link;
+
+      // Rebuild the URL to ensure redirect goes to thank-you page
       try {
         const actionUrl = new URL(confirmationUrl);
         const token = actionUrl.searchParams.get('token');

@@ -1,12 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
+import type { EmailOtpType } from '@supabase/supabase-js';
 import { CheckCircle, Mail } from 'lucide-react';
 import sozuLogo from '@/assets/sozu-logo-black.png';
 import { supabase } from '@/integrations/supabase/client';
 
+const getPortalHost = (portal: string | null) => {
+  return portal === 'clientes' ? 'https://clientes.sozu.com' : 'https://inmobiliarias.sozu.com';
+};
+
 const getPortalUrl = (portal: string | null, destination: string | null) => {
-  const host = portal === 'clientes' ? 'https://clientes.sozu.com' : 'https://inmobiliarias.sozu.com';
+  const host = getPortalHost(portal);
   const path = destination === 'login' ? '/auth/login' : '/auth/change-password';
   return `${host}${path}`;
+};
+
+const getOtpType = (type: string | null): EmailOtpType => {
+  switch (type) {
+    case 'signup':
+    case 'invite':
+    case 'magiclink':
+    case 'recovery':
+    case 'email_change':
+    case 'email':
+      return type;
+    default:
+      return 'magiclink';
+  }
 };
 
 export default function ConfirmacionEmail() {
@@ -23,38 +42,71 @@ export default function ConfirmacionEmail() {
     const nombre = params.get('nombre') || '';
     const portal = params.get('portal');
     const destination = params.get('destination');
+    const tokenHash = params.get('token_hash');
+    const otpType = params.get('type');
     const currentHost = window.location.hostname;
+    const requestedHost = new URL(getPortalHost(portal)).hostname;
 
     setCtaUrl(getPortalUrl(portal, destination));
     setCtaLabel(destination === 'login' ? 'Ir a Iniciar Sesión' : 'Ir a Cambiar Contraseña');
 
-    if (email) {
-      supabase.functions.invoke('post-confirmacion-registro', {
-        body: { email, nombre },
-      }).then(({ data, error }) => {
-        if (error) {
-          console.error('Post-confirm error:', error);
-          return;
-        }
-
-        const expectedHost = data?.portalHost ? new URL(data.portalHost).hostname : null;
-        if (expectedHost && expectedHost !== currentHost) {
-          const nextUrl = new URL(window.location.href);
-          nextUrl.protocol = 'https:';
-          nextUrl.host = expectedHost;
-          window.location.replace(nextUrl.toString());
-          return;
-        }
-
-        if (data?.ctaUrl) {
-          setCtaUrl(data.ctaUrl);
-        }
-
-        if (data?.ctaLabel) {
-          setCtaLabel(data.ctaLabel);
-        }
-      }).catch(err => console.error('Post-confirm error:', err));
+    if (portal && requestedHost !== currentHost) {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.protocol = 'https:';
+      nextUrl.host = requestedHost;
+      window.location.replace(nextUrl.toString());
+      return;
     }
+
+    const processConfirmation = async () => {
+      if (tokenHash) {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: getOtpType(otpType),
+        });
+
+        if (verifyError) {
+          console.error('Email confirmation verify error:', verifyError);
+          return;
+        }
+      }
+
+      if (!email) return;
+
+      const { data, error } = await supabase.functions.invoke('post-confirmacion-registro', {
+        body: { email, nombre },
+      });
+
+      if (error) {
+        console.error('Post-confirm error:', error);
+        return;
+      }
+
+      const resolvedCtaUrl = data?.ctaUrl || getPortalUrl(portal, destination);
+      const resolvedExpectedHost = data?.portalHost ? new URL(data.portalHost).hostname : null;
+
+      if (resolvedExpectedHost && resolvedExpectedHost !== currentHost) {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.protocol = 'https:';
+        nextUrl.host = resolvedExpectedHost;
+        window.location.replace(nextUrl.toString());
+        return;
+      }
+
+      if (data?.ctaUrl) {
+        setCtaUrl(data.ctaUrl);
+      }
+
+      if (data?.ctaLabel) {
+        setCtaLabel(data.ctaLabel);
+      }
+
+      if (tokenHash) {
+        window.location.replace(resolvedCtaUrl);
+      }
+    };
+
+    processConfirmation().catch(err => console.error('Post-confirm error:', err));
   }, []);
 
   return (
