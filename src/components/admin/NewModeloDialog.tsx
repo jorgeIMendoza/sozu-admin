@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ModelCharacteristicsSection } from "./ModelCharacteristicsSection";
 import { PlanoArquitectonicoUpload } from "./PlanoArquitectonicoUpload";
+import { ImageUploadField } from "./ImageUploadField";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -38,6 +39,7 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
   const [open, setOpen] = useState(false);
   const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
   const [planoUrl, setPlanoUrl] = useState<string | null>(null);
+  const [imagenPortadaUrl, setImagenPortadaUrl] = useState<string>("");
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
