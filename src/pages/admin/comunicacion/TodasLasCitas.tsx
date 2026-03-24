@@ -693,17 +693,28 @@ export default function TodasLasCitas() {
                       {/* Half-hour guide */}
                       <div className="absolute left-0 right-0 border-b border-dashed border-border/20" style={{ top: slotHeight / 2 }} />
 
-                      {/* Render all items (empty + citas) side by side when multiple */}
+                      {/* Render all items side by side when multiple */}
                       {(() => {
+                        // For group configs, merge the empty slot + its individual citas into one card
+                        // so we don't render them separately
+                        const groupConfigIds = new Set<number>();
+                        emptySlots.forEach(slot => {
+                          if ((slot.maxInvitados || 0) > 1) groupConfigIds.add(slot.configId);
+                        });
+
                         const allItems: { slot: CalendarSlot; top: number; height: number; status: CalendarStatus }[] = [];
-                        
-                        emptySlots.forEach((slot, idx) => {
+
+                        // Add empty slots (group slots already have the count)
+                        emptySlots.forEach((slot) => {
                           const duration = slot.config?.duracion_minutos || 60;
                           const cardHeight = (duration / 60) * slotHeight;
                           allItems.push({ slot, top: 0, height: cardHeight, status: "unknown" });
                         });
 
+                        // Add individual citas but skip those belonging to a group config
+                        // (they're already counted in the group empty slot)
                         slotCitas.forEach(slot => {
+                          if (groupConfigIds.has(slot.configId)) return;
                           const start = slot.hora;
                           const end = parseTime(slot.cita!.hora_fin);
                           const topOffset = (start - hour) * slotHeight;
@@ -717,7 +728,7 @@ export default function TodasLasCitas() {
                         return allItems.map((item, idx) => {
                           const widthPercent = totalItems > 1 ? (100 / totalItems) : 100;
                           const leftPercent = totalItems > 1 ? (idx * widthPercent) : 0;
-                          
+
                           return (
                             <div
                               key={`item-${idx}`}
