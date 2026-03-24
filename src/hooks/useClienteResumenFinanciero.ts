@@ -168,7 +168,7 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
 
       // Get edificios_modelos → edificios → proyectos for precio_m2_actual
       const emIds = [...new Set((propiedades || []).map((p) => p.id_edificio_modelo).filter(Boolean))];
-      let buildingMap = new Map<number, { edificio: string; proyecto: string; proyectoId: number; modeloId: number }>();
+      let buildingMap = new Map<number, { edificio: string; proyecto: string; proyectoId: number; modeloId: number; modeloPortadaUrl?: string | null }>();
       let projectPriceMap = new Map<number, number>();
       let projectInfoMap = new Map<number, { direccion: string; fechaEntrega: string | null; imageUrl: string }>();
 
