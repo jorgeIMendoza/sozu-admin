@@ -17,6 +17,11 @@ function safeDecode(value: string | null | undefined, fallback = 'Agente') {
   }
 }
 
+function getRolLabel(rolId: number | null | undefined): string {
+  if (rolId === CLIENTE_ROLE_ID) return 'Cliente';
+  return 'Agente Inmobiliario';
+}
+
 function getPortalConfig(rolId: number | null | undefined) {
   const host = rolId === CLIENTE_ROLE_ID ? 'https://clientes.sozu.com' : 'https://inmobiliarias.sozu.com';
   return {
@@ -176,8 +181,8 @@ Deno.serve(async (req) => {
             TemplateModel: {
               mensaje: {
                 nombre: nombreUsuario,
-                actividad: 'Registro exitoso como Agente Inmobiliario',
-                asunto: 'Bienvenido a Sozu - Tu cuenta ha sido activada',
+                actividad: `Registro exitoso como ${getRolLabel(rolId)}`,
+                asunto: `Bienvenido a Sozu - Tu cuenta ha sido activada`,
                 detalles: `
                   <tr><td class='label'>Email de acceso:</td><td class='value'>${normalizedEmail}</td></tr>
                   <tr><td class='label'>Contraseña temporal:</td><td class='value'>Temporal123!</td></tr>
@@ -236,8 +241,8 @@ Deno.serve(async (req) => {
             TemplateModel: {
               mensaje: {
                 nombre: 'Administrador',
-                actividad: 'Agente confirmó su correo electrónico',
-                asunto: 'Agente confirmado - ' + nombreUsuario,
+                actividad: `${getRolLabel(rolId)} confirmó su correo electrónico`,
+                asunto: `${getRolLabel(rolId)} confirmado - ` + nombreUsuario,
                 detalles: `<tr><td class='label'>Nombre:</td><td class='value'>${nombreUsuario}</td></tr><tr><td class='label'>Email:</td><td class='value'>${normalizedEmail}</td></tr><tr><td class='label'>Teléfono:</td><td class='value'>${telefonoAdmin || 'N/A'}</td></tr><tr><td class='label'>Estado:</td><td class='value'>✅ Email confirmado - Credenciales enviadas</td></tr>`,
               },
             },
@@ -275,8 +280,8 @@ Deno.serve(async (req) => {
     try {
       await supabase.from('logs_actividad').insert({
         tipo_accion: 'confirmacion_email',
-        tipo_entidad: 'agente',
-        descripcion: `Agente confirmó su correo: ${normalizedEmail}`,
+        tipo_entidad: rolId === CLIENTE_ROLE_ID ? 'cliente' : 'agente',
+        descripcion: `${getRolLabel(rolId)} confirmó su correo: ${normalizedEmail}`,
       });
     } catch (logErr) {
       console.error('Error logging:', logErr);
