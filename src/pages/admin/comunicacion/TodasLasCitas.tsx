@@ -462,11 +462,23 @@ export default function TodasLasCitas() {
 
         const key = `${dayKey}_${h.hora}`;
         const existingCitas = citasIndex.get(key) || [];
-        const hasCitaForConfig = existingCitas.some(c => c.id_configuracion_cita === h.id_configuracion_cita);
-        if (!hasCitaForConfig) {
-          const slot: CalendarSlot = { type: "empty", config, hora: h.hora, configId: h.id_configuracion_cita || 0 };
-          if (!map.has(key)) map.set(key, []);
-          map.get(key)!.push(slot);
+        const citasForConfig = existingCitas.filter(c => c.id_configuracion_cita === h.id_configuracion_cita);
+        const maxInv = config?.max_invitados || 1;
+        
+        // For group sessions: show slot with count until full
+        // For 1:1 sessions: hide slot if any booking exists
+        if (maxInv > 1) {
+          if (citasForConfig.length < maxInv) {
+            const slot: CalendarSlot = { type: "empty", config, hora: h.hora, configId: h.id_configuracion_cita || 0, agendados: citasForConfig.length, maxInvitados: maxInv };
+            if (!map.has(key)) map.set(key, []);
+            map.get(key)!.push(slot);
+          }
+        } else {
+          if (citasForConfig.length === 0) {
+            const slot: CalendarSlot = { type: "empty", config, hora: h.hora, configId: h.id_configuracion_cita || 0 };
+            if (!map.has(key)) map.set(key, []);
+            map.get(key)!.push(slot);
+          }
         }
       });
     });
