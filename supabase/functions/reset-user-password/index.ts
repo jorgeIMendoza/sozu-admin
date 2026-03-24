@@ -40,6 +40,31 @@ function getConfirmationPortalUrl(email: string, nombre: string | null, rolId: n
   return `${host}/auth/confirmacion-email?email=${encodeURIComponent(email)}&nombre=${encodeURIComponent(nombre || '')}&portal=${rolId === 23 ? 'clientes' : 'inmobiliarias'}&destination=change-password`;
 }
 
+function buildConfirmationUrl(linkData: any, thankYouUrl: string, supabaseUrl: string) {
+  if (linkData?.properties?.hashed_token) {
+    const nextUrl = new URL(thankYouUrl);
+    nextUrl.searchParams.set('token_hash', linkData.properties.hashed_token);
+    nextUrl.searchParams.set('type', 'magiclink');
+    return nextUrl.toString();
+  }
+
+  let confirmationUrl = linkData?.properties?.action_link;
+  if (confirmationUrl) {
+    try {
+      const actionUrl = new URL(confirmationUrl);
+      const token = actionUrl.searchParams.get('token');
+      const type = actionUrl.searchParams.get('type');
+      if (token) {
+        confirmationUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=${type || 'magiclink'}&redirect_to=${encodeURIComponent(thankYouUrl)}`;
+      }
+    } catch (e) {
+      console.error('Error rebuilding confirmation URL:', e);
+    }
+  }
+
+  return confirmationUrl;
+}
+
 async function sendConfirmationEmail(supabaseAdmin: any, email: string, nombre: string | null, rolId: number | null | undefined) {
   const POSTMARK_TOKEN = Deno.env.get('POSTMARK_SERVER_TOKEN');
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
@@ -57,19 +82,7 @@ async function sendConfirmationEmail(supabaseAdmin: any, email: string, nombre: 
     return { error: 'Error al generar enlace de confirmación' };
   }
 
-  let confirmationUrl = linkData?.properties?.action_link;
-  if (confirmationUrl) {
-    try {
-      const actionUrl = new URL(confirmationUrl);
-      const token = actionUrl.searchParams.get('token');
-      const type = actionUrl.searchParams.get('type');
-      if (token) {
-        confirmationUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=${type || 'magiclink'}&redirect_to=${encodeURIComponent(thankYouUrl)}`;
-      }
-    } catch (e) {
-      console.error('Error rebuilding confirmation URL:', e);
-    }
-  }
+  const confirmationUrl = buildConfirmationUrl(linkData, thankYouUrl, supabaseUrl);
 
   if (!confirmationUrl || !POSTMARK_TOKEN) {
     return { error: 'No se pudo generar el enlace o falta configuración de correo' };

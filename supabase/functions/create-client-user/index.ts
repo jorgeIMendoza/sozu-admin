@@ -65,9 +65,21 @@ serve(async (req) => {
       // so fall through to the auth user creation below
     }
 
-    let confirmationUrl = linkData?.properties?.action_link;
+    let confirmationUrl: string | null = null;
 
-    if (confirmationUrl) {
+    if (linkData?.properties?.hashed_token) {
+      const confirmationParams = new URLSearchParams({
+        email,
+        nombre: nombre || '',
+        portal: 'clientes',
+        destination: 'change-password',
+        token_hash: linkData.properties.hashed_token,
+        type: 'magiclink',
+      });
+      confirmationUrl = `https://clientes.sozu.com/auth/confirmacion-email?${confirmationParams.toString()}`;
+    } else if (linkData?.properties?.action_link) {
+      confirmationUrl = linkData.properties.action_link;
+
       try {
         const actionUrl = new URL(confirmationUrl);
         const token = actionUrl.searchParams.get('token');

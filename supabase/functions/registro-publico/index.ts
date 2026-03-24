@@ -299,8 +299,15 @@ Deno.serve(async (req) => {
       console.error('Error generating confirmation link:', linkError);
     }
 
-    let confirmationUrl = linkData?.properties?.action_link;
-    if (confirmationUrl) {
+    let confirmationUrl: string | null = null;
+    if (linkData?.properties?.hashed_token) {
+      const nextUrl = new URL(thankYouUrl);
+      nextUrl.searchParams.set('token_hash', linkData.properties.hashed_token);
+      nextUrl.searchParams.set('type', 'signup');
+      confirmationUrl = nextUrl.toString();
+    } else if (linkData?.properties?.action_link) {
+      confirmationUrl = linkData.properties.action_link;
+
       try {
         const actionUrl = new URL(confirmationUrl);
         const token = actionUrl.searchParams.get('token');
