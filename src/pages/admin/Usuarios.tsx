@@ -991,7 +991,7 @@ export default function Usuarios() {
       setNewUserForm(prev => ({
         ...prev,
         id_persona: matchedPersona.id.toString(),
-        nombre: prev.nombre || matchedPersona.nombre_legal,
+        nombre: matchedPersona.nombre_legal,
       }));
       setIsPersonaLinked(true);
     }
