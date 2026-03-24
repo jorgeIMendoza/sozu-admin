@@ -256,6 +256,12 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
       setCoverImageUrl(data.publicUrl);
       if (form) {
         form.setValue("url_imagen_portada", data.publicUrl);
+      } else if (propertyId) {
+        // Save directly to DB when used without form (EditPropertyDialog)
+        await supabase
+          .from('propiedades')
+          .update({ url_imagen_portada: data.publicUrl })
+          .eq('id', propertyId);
       }
       toast({ title: "Imagen subida exitosamente" });
     } catch (error) {
