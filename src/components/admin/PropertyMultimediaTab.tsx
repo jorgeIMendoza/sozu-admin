@@ -421,6 +421,14 @@ export const PropertyMultimediaTab = ({ form, propertyId }: PropertyMultimediaTa
                 id="cover-image"
                 value={coverImageUrl}
                 onChange={(e) => setCoverImageUrl(e.target.value)}
+                onBlur={async () => {
+                  if (propertyId) {
+                    await supabase
+                      .from('propiedades')
+                      .update({ url_imagen_portada: coverImageUrl || null })
+                      .eq('id', propertyId);
+                  }
+                }}
                 placeholder="https://ejemplo.com/imagen-portada.jpg"
               />
             </div>
