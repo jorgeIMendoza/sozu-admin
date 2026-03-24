@@ -35,6 +35,89 @@ async function findUserByEmail(supabaseAdmin: any, email: string) {
   return { data, error };
 }
 
+async function sendConfirmationEmail(supabaseAdmin: any, email: string, nombre: string | null) {
+  const POSTMARK_TOKEN = Deno.env.get('POSTMARK_SERVER_TOKEN');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+
+  const thankYouUrl = `https://inmobiliarias.sozu.com/auth/confirmacion-email?email=${encodeURIComponent(email)}&nombre=${encodeURIComponent(nombre || '')}`;
+
+  const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: { redirectTo: thankYouUrl },
+  });
+
+  if (linkError) {
+    console.error('Error generating confirmation link:', linkError);
+    return { error: 'Error al generar enlace de confirmación' };
+  }
+
+  let confirmationUrl = linkData?.properties?.action_link;
+  if (confirmationUrl) {
+    try {
+      const actionUrl = new URL(confirmationUrl);
+      const token = actionUrl.searchParams.get('token');
+      const type = actionUrl.searchParams.get('type');
+      if (token) {
+        confirmationUrl = `${supabaseUrl}/auth/v1/verify?token=${token}&type=${type || 'magiclink'}&redirect_to=${encodeURIComponent(thankYouUrl)}`;
+      }
+    } catch (e) {
+      console.error('Error rebuilding confirmation URL:', e);
+    }
+  }
+
+  if (!confirmationUrl || !POSTMARK_TOKEN) {
+    return { error: 'No se pudo generar el enlace o falta configuración de correo' };
+  }
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 0;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#2a9d8f,#264653);padding:30px;text-align:center;">
+          <h1 style="color:#ffffff;margin:0;font-size:24px;">Confirma tu correo electrónico</h1>
+        </td></tr>
+        <tr><td style="padding:30px 40px;">
+          <p style="font-size:16px;color:#333;">Hola <strong>${nombre || 'Usuario'}</strong>,</p>
+          <p style="font-size:15px;color:#555;line-height:1.6;">Tu contraseña ha sido reseteada. Para recibir tu nueva contraseña temporal, primero confirma tu dirección de email haciendo clic en el siguiente botón:</p>
+          <div style="text-align:center;margin:30px 0;">
+            <a href="${confirmationUrl}" style="display:inline-block;background:linear-gradient(135deg,#2a9d8f,#264653);color:#ffffff;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">Confirmar mi Email</a>
+          </div>
+          <p style="font-size:12px;color:#999;text-align:center;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br/><a href="${confirmationUrl}" style="color:#2a9d8f;word-break:break-all;">${confirmationUrl}</a></p>
+        </td></tr>
+        <tr><td style="background:#f9f9f9;padding:20px;text-align:center;">
+          <p style="font-size:12px;color:#aaa;margin:0;">© Sozu — Este correo fue enviado automáticamente.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const confirmRes = await fetch('https://api.postmarkapp.com/email', {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'X-Postmark-Server-Token': POSTMARK_TOKEN,
+    },
+    body: JSON.stringify({
+      From: 'Notificaciones Sozu <notificaciones@sozu.com>',
+      To: email,
+      Subject: 'Confirma tu correo electrónico - Sozu',
+      HtmlBody: htmlBody,
+      MessageStream: 'outbound',
+    }),
+  });
+
+  console.log('Confirmation email sent:', confirmRes.status);
+  return { success: true };
+}
+
 async function resetPassword(supabaseAdmin: any, email: string, authUserId: string | null, nombre: string | null) {
   let finalAuthUserId = authUserId;
 
@@ -76,17 +159,28 @@ async function resetPassword(supabaseAdmin: any, email: string, authUserId: stri
     }
   }
 
-  // Mark password as temporary
+  // Mark password as temporary AND email as unconfirmed
   const { error: updateUsuarioError } = await supabaseAdmin
     .from('usuarios')
-    .update({ debe_cambiar_password: true, fecha_actualizacion: new Date().toISOString() })
+    .update({ 
+      debe_cambiar_password: true, 
+      email_confirmado: false,
+      fecha_actualizacion: new Date().toISOString() 
+    })
     .eq('email', email);
 
   if (updateUsuarioError) {
     console.error('Error updating usuarios table:', updateUsuarioError);
   }
 
-  console.log(`Password reset successfully for: ${email}`);
+  // Send confirmation email
+  const confirmResult = await sendConfirmationEmail(supabaseAdmin, email, nombre);
+  if (confirmResult.error) {
+    console.error('Error sending confirmation email:', confirmResult.error);
+    // Don't fail the whole operation, password was already reset
+  }
+
+  console.log(`Password reset successfully for: ${email}. Confirmation email sent.`);
   return { success: true };
 }
 
@@ -125,7 +219,7 @@ async function handleApiKeyMode(req: Request, apiKey: string) {
 
   return jsonResponse({
     success: true,
-    message: `Contraseña reseteada exitosamente. Nueva contraseña temporal: ${TEMP_PASSWORD}`,
+    message: `Contraseña reseteada. Se envió un correo de confirmación a ${email}. Una vez confirmado, recibirá sus credenciales temporales.`,
   }, 200);
 }
 
@@ -213,7 +307,7 @@ async function handleJwtMode(req: Request, authHeader: string) {
 
   return jsonResponse({
     success: true,
-    message: `Contraseña reseteada exitosamente. Nueva contraseña temporal: ${TEMP_PASSWORD}`,
+    message: `Contraseña reseteada. Se envió un correo de confirmación a ${email}. Una vez confirmado, recibirá sus credenciales temporales.`,
   }, 200);
 }
 
