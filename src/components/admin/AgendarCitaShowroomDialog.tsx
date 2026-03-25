@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -341,6 +341,13 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
     setSelectedHour("");
     setSelectedConfigId(null);
   };
+
+  // Auto-select project when prospect has only one
+  useEffect(() => {
+    if (selectedProspecto && selectedProspectoData && selectedProspectoData.proyectos.length === 1 && !selectedProyectoId) {
+      handleSelectProject(selectedProspectoData.proyectos[0].id);
+    }
+  }, [selectedProspecto, selectedProspectoData]);
 
   const handleSelectProject = (projId: number) => {
     setSelectedProyectoId(projId);
