@@ -46,17 +46,6 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   const [editProyectos, setEditProyectos] = useState<ProspectoRelacion[]>([]);
   const hasAppliedPreselect = useRef(false);
 
-  // Auto-select prospect when preSelectedPersonaId is provided
-  useEffect(() => {
-    if (open && preSelectedPersonaId && misProspectos.length > 0 && !hasAppliedPreselect.current) {
-      hasAppliedPreselect.current = true;
-      handleSelectProspecto(preSelectedPersonaId.toString());
-    }
-    if (!open) {
-      hasAppliedPreselect.current = false;
-    }
-  }, [open, preSelectedPersonaId, misProspectos]);
-
   // Fetch agent's existing prospects (grouped by persona)
   const { data: misProspectos = [] } = useQuery({
     queryKey: ["mis-prospectos-floating", profile?.id_persona],
@@ -159,6 +148,17 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   };
 
   const isEditMode = selectedProspectoId !== null;
+
+  // Auto-select prospect when preSelectedPersonaId is provided
+  useEffect(() => {
+    if (open && preSelectedPersonaId && misProspectos.length > 0 && !hasAppliedPreselect.current) {
+      hasAppliedPreselect.current = true;
+      handleSelectProspecto(preSelectedPersonaId.toString());
+    }
+    if (!open) {
+      hasAppliedPreselect.current = false;
+    }
+  }, [open, preSelectedPersonaId, misProspectos]);
 
   // Fetch developments the agent has access to (with available inventory)
   const { data: proyectos = [] } = useQuery({
