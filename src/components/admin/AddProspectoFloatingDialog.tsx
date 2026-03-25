@@ -225,16 +225,35 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   // Add project to existing prospect
   const addProjectToProspectMutation = useMutation({
     mutationFn: async ({ personaId, proyectoId: projId }: { personaId: number; proyectoId: number }) => {
-      const { error } = await supabase
+      // Check if an inactive relation already exists
+      const { data: existing } = await supabase
         .from("entidades_relacionadas")
-        .insert([{
-          id_persona: personaId,
-          id_tipo_entidad: 7,
-          id_proyecto: projId,
-          id_persona_duena_lead: profile?.id_persona || null,
-          activo: true,
-        }]);
-      if (error) throw error;
+        .select("id")
+        .eq("id_persona", personaId)
+        .eq("id_tipo_entidad", 7)
+        .eq("id_proyecto", projId)
+        .eq("activo", false)
+        .maybeSingle();
+
+      if (existing) {
+        // Reactivate existing relation
+        const { error } = await supabase
+          .from("entidades_relacionadas")
+          .update({ activo: true })
+          .eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("entidades_relacionadas")
+          .insert([{
+            id_persona: personaId,
+            id_tipo_entidad: 7,
+            id_proyecto: projId,
+            id_persona_duena_lead: profile?.id_persona || null,
+            activo: true,
+          }]);
+        if (error) throw error;
+      }
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-floating"] });
