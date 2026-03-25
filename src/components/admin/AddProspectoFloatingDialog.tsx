@@ -358,6 +358,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
       queryClient.invalidateQueries({ queryKey: ["prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-floating"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-prospectos"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-prospectos"] });
       toast.success(isEditMode ? "Prospecto actualizado exitosamente" : "Prospecto creado exitosamente");
       handleClose();
     },
