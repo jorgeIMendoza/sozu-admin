@@ -59,6 +59,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           id_proyecto,
           personas!entidades_relacionadas_id_persona_fkey (
             id, nombre_legal, email, telefono, clave_pais_telefono, tipo_persona, rfc, curp
+          ),
+          proyectos!entidades_relacionadas_id_proyecto_fkey (
+            id, nombre
           )
         `)
         .eq("id_tipo_entidad", 7)
@@ -79,6 +82,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           rfc: er.personas.rfc || "",
           curp: er.personas.curp || "",
           id_proyecto: er.id_proyecto,
+          proyecto_nombre: er.proyectos?.nombre || "",
         }));
     },
     enabled: open && !!profile?.id_persona,
@@ -111,6 +115,38 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
       .map((p) => ({ value: p.id_persona.toString(), label: p.nombre_legal || p.email }));
   }, [misProspectos]);
 
+  const prospectPersonaIds = useMemo(() => {
+    return [...new Set(misProspectos.map((p) => p.id_persona))] as number[];
+  }, [misProspectos]);
+
+  const { data: activeProjectIdsByPersona = new Map<number, Set<number>>() } = useQuery({
+    queryKey: ["prospecto-active-projects-floating", prospectPersonaIds],
+    queryFn: async () => {
+      if (prospectPersonaIds.length === 0) return new Map<number, Set<number>>();
+
+      const { data, error } = await supabase
+        .from("entidades_relacionadas")
+        .select("id_persona, id_proyecto")
+        .eq("id_tipo_entidad", 7)
+        .eq("activo", true)
+        .in("id_persona", prospectPersonaIds);
+
+      if (error) throw error;
+
+      const map = new Map<number, Set<number>>();
+      (data || []).forEach((relation: any) => {
+        if (!relation.id_persona || !relation.id_proyecto) return;
+        if (!map.has(relation.id_persona)) {
+          map.set(relation.id_persona, new Set<number>());
+        }
+        map.get(relation.id_persona)?.add(relation.id_proyecto);
+      });
+
+      return map;
+    },
+    enabled: open && prospectPersonaIds.length > 0,
+  });
+
   const handleSelectProspecto = (value: string) => {
     if (!value) {
       setSelectedProspectoId(null);
@@ -134,10 +170,10 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
       // Collect all assigned projects
       const proyectos: ProspectoRelacion[] = relations
         .filter((r) => r.id_proyecto)
-        .map((r) => ({
+        .map((r: any) => ({
           entidad_relacionada_id: r.entidad_relacionada_id,
           id_proyecto: r.id_proyecto,
-          proyecto_nombre: projectNamesMap.get(r.id_proyecto) || `Proyecto ${r.id_proyecto}`,
+          proyecto_nombre: r.proyecto_nombre || projectNamesMap.get(r.id_proyecto) || `Proyecto ${r.id_proyecto}`,
         }))
         // Deduplicate
         .filter((p, idx, arr) => arr.findIndex((x) => x.id_proyecto === p.id_proyecto) === idx);
@@ -257,6 +293,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-floating"] });
+      queryClient.invalidateQueries({ queryKey: ["prospecto-active-projects-floating"] });
       queryClient.invalidateQueries({ queryKey: ["prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-showroom"] });
@@ -265,7 +302,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
       // Optimistically add to local state
       const proj = proyectos.find(p => p.id === variables.proyectoId);
       if (proj) {
-        setEditProyectos(prev => [...prev, {
+        setEditProyectos(prev => prev.some((p) => p.id_proyecto === proj.id) ? prev : [...prev, {
           entidad_relacionada_id: Date.now(), // temporary ID until refetch
           id_proyecto: proj.id,
           proyecto_nombre: proj.nombre,
@@ -292,6 +329,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     },
     onSuccess: (_data, removedId) => {
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-floating"] });
+      queryClient.invalidateQueries({ queryKey: ["prospecto-active-projects-floating"] });
       queryClient.invalidateQueries({ queryKey: ["prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-showroom"] });
@@ -421,9 +459,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   // Available projects to add (not already assigned)
   const availableProjectsForAdd = useMemo(() => {
-    const assignedIds = new Set(editProyectos.map((p) => p.id_proyecto));
+    const assignedIds = activeProjectIdsByPersona.get(selectedProspectoId || -1) || new Set<number>();
     return proyectos.filter((p) => !assignedIds.has(p.id));
-  }, [proyectos, editProyectos]);
+  }, [proyectos, activeProjectIdsByPersona, selectedProspectoId]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
