@@ -241,6 +241,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
       queryClient.invalidateQueries({ queryKey: ["prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-showroom"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-prospectos"] });
       toast.success("Proyecto agregado al prospecto");
       // Optimistically add to local state
       const proj = proyectos.find(p => p.id === variables.proyectoId);
