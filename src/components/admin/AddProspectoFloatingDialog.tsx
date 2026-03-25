@@ -293,6 +293,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-floating"] });
+      queryClient.invalidateQueries({ queryKey: ["prospecto-active-projects-floating"] });
       queryClient.invalidateQueries({ queryKey: ["prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-showroom"] });
@@ -301,7 +302,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
       // Optimistically add to local state
       const proj = proyectos.find(p => p.id === variables.proyectoId);
       if (proj) {
-        setEditProyectos(prev => [...prev, {
+        setEditProyectos(prev => prev.some((p) => p.id_proyecto === proj.id) ? prev : [...prev, {
           entidad_relacionada_id: Date.now(), // temporary ID until refetch
           id_proyecto: proj.id,
           proyecto_nombre: proj.nombre,
@@ -328,6 +329,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     },
     onSuccess: (_data, removedId) => {
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-floating"] });
+      queryClient.invalidateQueries({ queryKey: ["prospecto-active-projects-floating"] });
       queryClient.invalidateQueries({ queryKey: ["prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-showroom"] });
@@ -457,9 +459,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   // Available projects to add (not already assigned)
   const availableProjectsForAdd = useMemo(() => {
-    const assignedIds = new Set(editProyectos.map((p) => p.id_proyecto));
+    const assignedIds = activeProjectIdsByPersona.get(selectedProspectoId || -1) || new Set<number>();
     return proyectos.filter((p) => !assignedIds.has(p.id));
-  }, [proyectos, editProyectos]);
+  }, [proyectos, activeProjectIdsByPersona, selectedProspectoId]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
