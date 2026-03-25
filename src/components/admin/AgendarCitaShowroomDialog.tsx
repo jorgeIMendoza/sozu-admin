@@ -102,11 +102,11 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
     enabled: open && !!profile?.id_persona,
   });
 
-  // Flat options for combobox: show prospect name with all projects
+  // Flat options for combobox: show only prospect name
   const prospectoOptions = useMemo(() => {
     return prospectosAgrupados.map(p => ({
       value: p.id_persona.toString(),
-      label: `${p.nombre} — ${p.proyectos.map(pr => pr.nombre).join(", ")}`,
+      label: p.nombre,
     }));
   }, [prospectosAgrupados]);
 
