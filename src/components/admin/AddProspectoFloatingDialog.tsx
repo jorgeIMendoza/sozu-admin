@@ -262,7 +262,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   const addProjectToProspectMutation = useMutation({
     mutationFn: async ({ personaId, proyectoId: projId }: { personaId: number; proyectoId: number }) => {
       // Check if any relation already exists (active or inactive)
-      const { data: existing } = await supabase
+      const { data: existing, error: selectError } = await supabase
         .from("entidades_relacionadas")
         .select("id, activo")
         .eq("id_persona", personaId)
@@ -287,6 +287,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           if (error) throw error;
         }
       } else {
+        // Try insert; if unique constraint fails, fallback to update (RLS may have hidden the row)
         const { error } = await supabase
           .from("entidades_relacionadas")
           .insert([{
@@ -296,7 +297,21 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             id_persona_duena_lead: profile?.id_persona || null,
             activo: true,
           }]);
-        if (error) throw error;
+        if (error) {
+          if (error.code === "23505") {
+            // Unique constraint — row exists but was hidden by RLS; try to reactivate
+            const { error: updateError } = await supabase
+              .from("entidades_relacionadas")
+              .update({ activo: true, id_persona_duena_lead: profile?.id_persona || null })
+              .eq("id_persona", personaId)
+              .eq("id_tipo_entidad", 7)
+              .eq("id_proyecto", projId)
+              .eq("activo", false);
+            if (updateError) throw updateError;
+          } else {
+            throw error;
+          }
+        }
       }
     },
     onSuccess: (_data, variables) => {
