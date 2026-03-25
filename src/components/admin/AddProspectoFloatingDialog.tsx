@@ -46,11 +46,24 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   const [editProyectos, setEditProyectos] = useState<ProspectoRelacion[]>([]);
   const hasAppliedPreselect = useRef(false);
 
-  // Fetch agent's existing prospects (grouped by persona)
+  // Fetch agent's existing prospects (grouped by persona) and all active projects for those personas
   const { data: misProspectos = [] } = useQuery({
     queryKey: ["mis-prospectos-floating", profile?.id_persona],
     queryFn: async () => {
       if (!profile?.id_persona) return [];
+
+      const { data: ownedRelations, error: ownedError } = await supabase
+        .from("entidades_relacionadas")
+        .select("id_persona")
+        .eq("id_tipo_entidad", 7)
+        .eq("activo", true)
+        .eq("id_persona_duena_lead", profile.id_persona);
+
+      if (ownedError) throw ownedError;
+
+      const personaIds = [...new Set((ownedRelations || []).map((er: any) => er.id_persona).filter(Boolean))] as number[];
+      if (personaIds.length === 0) return [];
+
       const { data, error } = await supabase
         .from("entidades_relacionadas")
         .select(`
@@ -59,11 +72,14 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           id_proyecto,
           personas!entidades_relacionadas_id_persona_fkey (
             id, nombre_legal, email, telefono, clave_pais_telefono, tipo_persona, rfc, curp
+          ),
+          proyectos!entidades_relacionadas_id_proyecto_fkey (
+            id, nombre
           )
         `)
         .eq("id_tipo_entidad", 7)
         .eq("activo", true)
-        .eq("id_persona_duena_lead", profile.id_persona);
+        .in("id_persona", personaIds);
 
       if (error) throw error;
       return (data || [])
@@ -79,6 +95,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           rfc: er.personas.rfc || "",
           curp: er.personas.curp || "",
           id_proyecto: er.id_proyecto,
+          proyecto_nombre: er.proyectos?.nombre || "",
         }));
     },
     enabled: open && !!profile?.id_persona,
@@ -134,10 +151,10 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
       // Collect all assigned projects
       const proyectos: ProspectoRelacion[] = relations
         .filter((r) => r.id_proyecto)
-        .map((r) => ({
+        .map((r: any) => ({
           entidad_relacionada_id: r.entidad_relacionada_id,
           id_proyecto: r.id_proyecto,
-          proyecto_nombre: projectNamesMap.get(r.id_proyecto) || `Proyecto ${r.id_proyecto}`,
+          proyecto_nombre: r.proyecto_nombre || projectNamesMap.get(r.id_proyecto) || `Proyecto ${r.id_proyecto}`,
         }))
         // Deduplicate
         .filter((p, idx, arr) => arr.findIndex((x) => x.id_proyecto === p.id_proyecto) === idx);
