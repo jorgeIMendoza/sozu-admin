@@ -441,32 +441,45 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
               </div>
             )}
 
-            {/* Project selector (badges) */}
+            {/* Project selector (dropdown) */}
             {selectedProspecto && selectedProspectoData && selectedProspectoData.proyectos.length > 0 && (
               <div className="space-y-2">
                 <Label>Desarrollo para la cita <span className="text-destructive">*</span></Label>
-                <div className="flex flex-wrap gap-2">
-                  {selectedProspectoData.proyectos.map(p => {
+                {selectedProspectoData.proyectos.length === 1 ? (
+                  (() => {
+                    const p = selectedProspectoData.proyectos[0];
                     const color = projectColorMap.get(p.id) || PROJECT_COLORS[0];
-                    const isSelected = selectedProyectoId === p.id;
+                    if (!selectedProyectoId) handleSelectProject(p.id);
                     return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleSelectProject(p.id)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex items-center gap-1.5",
-                          isSelected
-                            ? `${color.badge} ${color.border} ring-2 ring-offset-1`
-                            : "bg-background text-foreground border-border hover:bg-muted"
-                        )}
-                      >
+                      <div className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border bg-muted/30 text-sm">
                         <span className={cn("h-2 w-2 rounded-full", color.dot)} />
                         {p.nombre}
-                      </button>
+                      </div>
                     );
-                  })}
-                </div>
+                  })()
+                ) : (
+                  <Select
+                    value={selectedProyectoId?.toString() || ""}
+                    onValueChange={(v) => handleSelectProject(parseInt(v))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona desarrollo..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectedProspectoData.proyectos.map(p => {
+                        const color = projectColorMap.get(p.id) || PROJECT_COLORS[0];
+                        return (
+                          <SelectItem key={p.id} value={p.id.toString()}>
+                            <span className="flex items-center gap-1.5">
+                              <span className={cn("h-2 w-2 rounded-full inline-block", color.dot)} />
+                              {p.nombre}
+                            </span>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             )}
 

@@ -17,6 +17,7 @@ import { useCtaTracker } from "@/hooks/useCtaTracker";
 interface AddProspectoFloatingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  preSelectedPersonaId?: number | null;
 }
 
 interface ProspectoRelacion {
@@ -25,7 +26,7 @@ interface ProspectoRelacion {
   proyecto_nombre: string;
 }
 
-export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoFloatingDialogProps) {
+export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPersonaId }: AddProspectoFloatingDialogProps) {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess } = useProjectAccess();
