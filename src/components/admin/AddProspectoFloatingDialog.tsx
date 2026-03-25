@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import { useCtaTracker } from "@/hooks/useCtaTracker";
 interface AddProspectoFloatingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  preSelectedPersonaId?: number | null;
 }
 
 interface ProspectoRelacion {
@@ -25,7 +26,7 @@ interface ProspectoRelacion {
   proyecto_nombre: string;
 }
 
-export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoFloatingDialogProps) {
+export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPersonaId }: AddProspectoFloatingDialogProps) {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess } = useProjectAccess();
@@ -43,6 +44,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
   const [curp, setCurp] = useState("");
   // Projects assigned to the selected prospect in edit mode
   const [editProyectos, setEditProyectos] = useState<ProspectoRelacion[]>([]);
+  const hasAppliedPreselect = useRef(false);
 
   // Fetch agent's existing prospects (grouped by persona)
   const { data: misProspectos = [] } = useQuery({
@@ -147,6 +149,17 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
 
   const isEditMode = selectedProspectoId !== null;
 
+  // Auto-select prospect when preSelectedPersonaId is provided
+  useEffect(() => {
+    if (open && preSelectedPersonaId && misProspectos.length > 0 && !hasAppliedPreselect.current) {
+      hasAppliedPreselect.current = true;
+      handleSelectProspecto(preSelectedPersonaId.toString());
+    }
+    if (!open) {
+      hasAppliedPreselect.current = false;
+    }
+  }, [open, preSelectedPersonaId, misProspectos]);
+
   // Fetch developments the agent has access to (with available inventory)
   const { data: proyectos = [] } = useQuery({
     queryKey: ["desarrollos-activos-floating", accessibleProjectIds, hasUnrestrictedAccess],
@@ -228,6 +241,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
       queryClient.invalidateQueries({ queryKey: ["prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-showroom"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-prospectos"] });
       toast.success("Proyecto agregado al prospecto");
       // Optimistically add to local state
       const proj = proyectos.find(p => p.id === variables.proyectoId);
@@ -262,6 +276,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
       queryClient.invalidateQueries({ queryKey: ["prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-showroom"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-prospectos"] });
       toast.success("Proyecto removido del prospecto");
     },
     onError: (error: any) => {
@@ -343,6 +358,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange }: AddProspectoF
       queryClient.invalidateQueries({ queryKey: ["prospectos"] });
       queryClient.invalidateQueries({ queryKey: ["mis-prospectos-floating"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-prospectos"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-prospectos"] });
       toast.success(isEditMode ? "Prospecto actualizado exitosamente" : "Prospecto creado exitosamente");
       handleClose();
     },
