@@ -706,7 +706,32 @@ export default function Prospectos() {
   // Mutation to add a project to a prospect
   const addProjectMutation = useMutation({
     mutationFn: async ({ personaId, proyectoId, agenteId }: { personaId: number; proyectoId: number; agenteId: number | null }) => {
-      const { error } = await supabase
+      const { data: existingRelation, error: existingError } = await supabase
+        .from('entidades_relacionadas')
+        .select('id')
+        .eq('id_persona', personaId)
+        .eq('id_tipo_entidad', 7)
+        .eq('id_proyecto', proyectoId)
+        .eq('activo', false)
+        .maybeSingle();
+
+      if (existingError) throw existingError;
+
+      if (existingRelation) {
+        const { error } = await supabase
+          .from('entidades_relacionadas')
+          .update({ activo: true, id_persona_duena_lead: agenteId })
+          .eq('id', existingRelation.id);
+
+        if (error) throw error;
+
+        return {
+          entidadRelacionadaId: existingRelation.id,
+          proyectoId,
+        };
+      }
+
+      const { data: insertedRelation, error } = await supabase
         .from('entidades_relacionadas')
         .insert([{
           id_persona: personaId,
@@ -714,11 +739,36 @@ export default function Prospectos() {
           id_proyecto: proyectoId,
           id_persona_duena_lead: agenteId,
           activo: true,
-        }]);
+        }])
+        .select('id')
+        .single();
       
       if (error) throw error;
+
+      return {
+        entidadRelacionadaId: insertedRelation.id,
+        proyectoId,
+      };
     },
-    onSuccess: () => {
+    onSuccess: ({ entidadRelacionadaId, proyectoId }) => {
+      const proyecto = proyectos.find((p) => p.id === proyectoId);
+
+      setEditingProspecto((current) => {
+        if (!current || current.proyectos.some((p) => p.id === proyectoId)) return current;
+
+        return {
+          ...current,
+          proyectos: [
+            ...current.proyectos,
+            {
+              id: proyectoId,
+              nombre: proyecto?.nombre || '',
+              entidad_relacionada_id: entidadRelacionadaId,
+            },
+          ],
+        };
+      });
+
       queryClient.invalidateQueries({ queryKey: ['prospectos'] });
       toast({ title: "Éxito", description: "Proyecto agregado al prospecto." });
     },
@@ -742,8 +792,19 @@ export default function Prospectos() {
         .eq('id', entidadRelacionadaId);
       
       if (error) throw error;
+
+      return entidadRelacionadaId;
     },
-    onSuccess: () => {
+    onSuccess: (removedId) => {
+      setEditingProspecto((current) => {
+        if (!current) return current;
+
+        return {
+          ...current,
+          proyectos: current.proyectos.filter((p) => p.entidad_relacionada_id !== removedId),
+        };
+      });
+
       queryClient.invalidateQueries({ queryKey: ['prospectos'] });
       toast({ title: "Éxito", description: "Proyecto removido del prospecto." });
     },
