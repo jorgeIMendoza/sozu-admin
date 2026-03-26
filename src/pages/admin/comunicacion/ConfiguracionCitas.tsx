@@ -1085,31 +1085,20 @@ export default function ConfiguracionCitas() {
                             </CardHeader>
                             <CardContent className="space-y-3">
                               <div className="flex flex-wrap gap-2">
-                                {generateSlots(duracionMinutos).map((slot) => {
-                                  const slotHour = slot.hour;
-                                  // Check if any override moved this slot's hour away
-                                  const movedOverride = dayOverrides.find((o: any) => o.hora_original === slotHour);
-                                  return (
+                                {generateSlots(duracionMinutos).map((slot) => (
                                     <button
                                       key={slot.label}
                                       onClick={() => toggleSlot(dayId, slot.label)}
                                       className={cn(
                                         "px-3 py-2 rounded-md border text-sm font-medium transition-all relative",
-                                        movedOverride
-                                          ? "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-700 line-through opacity-70"
-                                          : daySlots.has(slot.label)
-                                            ? "border-primary bg-primary text-primary-foreground"
-                                            : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
+                                        daySlots.has(slot.label)
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
                                       )}
-                                      title={movedOverride ? `Movida al ${movedOverride.fecha_nueva} a las ${String(movedOverride.hora_nueva).padStart(2, "0")}:00` : undefined}
                                     >
                                       {slot.label}
-                                      {movedOverride && (
-                                        <span className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border border-white" />
-                                      )}
                                     </button>
-                                  );
-                                })}
+                                ))}
                               </div>
                               {dayOverrides.length > 0 && (
                                 <div className="rounded-md border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-3">
