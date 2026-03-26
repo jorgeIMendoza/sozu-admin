@@ -2588,6 +2588,60 @@ export type Database = {
           },
         ]
       }
+      citas_horarios_overrides: {
+        Row: {
+          activo: boolean
+          fecha_creacion: string
+          fecha_nueva: string
+          fecha_original: string
+          hora_nueva: number
+          hora_original: number
+          id: number
+          id_configuracion_cita: number
+          id_horario: number
+          movido_por: string | null
+        }
+        Insert: {
+          activo?: boolean
+          fecha_creacion?: string
+          fecha_nueva: string
+          fecha_original: string
+          hora_nueva: number
+          hora_original: number
+          id?: number
+          id_configuracion_cita: number
+          id_horario: number
+          movido_por?: string | null
+        }
+        Update: {
+          activo?: boolean
+          fecha_creacion?: string
+          fecha_nueva?: string
+          fecha_original?: string
+          hora_nueva?: number
+          hora_original?: number
+          id?: number
+          id_configuracion_cita?: number
+          id_horario?: number
+          movido_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "citas_horarios_overrides_id_configuracion_cita_fkey"
+            columns: ["id_configuracion_cita"]
+            isOneToOne: false
+            referencedRelation: "configuracion_citas_usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "citas_horarios_overrides_id_horario_fkey"
+            columns: ["id_horario"]
+            isOneToOne: false
+            referencedRelation: "configuracion_citas_horarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comentarios_verificacion_documento: {
         Row: {
           activo: boolean
