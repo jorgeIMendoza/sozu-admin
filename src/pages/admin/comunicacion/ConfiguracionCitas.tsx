@@ -1086,9 +1086,7 @@ export default function ConfiguracionCitas() {
                             <CardContent className="space-y-3">
                               <div className="flex flex-wrap gap-2">
                                 {generateSlots(duracionMinutos).map((slot) => {
-                                  const slotHour = slot.hour;
-                                  // Check if any override moved this slot's hour away
-                                  const movedOverride = dayOverrides.find((o: any) => o.hora_original === slotHour);
+                                  return (
                                   return (
                                     <button
                                       key={slot.label}
