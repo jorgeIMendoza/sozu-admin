@@ -1047,31 +1047,69 @@ export default function ConfiguracionCitas() {
                       {Array.from(selectedDays).sort().map((dayId) => {
                         const dia = DIAS_SEMANA.find((d) => d.id === dayId);
                         const daySlots = selectedSlots.get(dayId) || new Set();
+                        // Find overrides for this config + day
+                        const dayOverrides = (configOverrides || []).filter(
+                          (o: any) => {
+                            const origDate = new Date(o.fecha_original + "T12:00:00");
+                            return origDate.getDay() === (dayId === 7 ? 0 : dayId);
+                          }
+                        );
                         return (
                           <Card key={dayId}>
                             <CardHeader className="pb-3">
                               <CardTitle className="text-base flex items-center gap-2">
                                 {dia?.nombre}
                                 <Badge variant="secondary" className="text-xs">{daySlots.size} {daySlots.size === 1 ? "horario" : "horarios"}</Badge>
+                                {dayOverrides.length > 0 && (
+                                  <Badge variant="outline" className="text-xs border-orange-300 text-orange-600">
+                                    {dayOverrides.length} movida{dayOverrides.length > 1 ? "s" : ""}
+                                  </Badge>
+                                )}
                               </CardTitle>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="space-y-3">
                               <div className="flex flex-wrap gap-2">
-                                {generateSlots(duracionMinutos).map((slot) => (
-                                  <button
-                                    key={slot.label}
-                                    onClick={() => toggleSlot(dayId, slot.label)}
-                                    className={cn(
-                                      "px-3 py-2 rounded-md border text-sm font-medium transition-all",
-                                      daySlots.has(slot.label)
-                                        ? "border-primary bg-primary text-primary-foreground"
-                                        : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
-                                    )}
-                                  >
-                                    {slot.label}
-                                  </button>
-                                ))}
+                                {generateSlots(duracionMinutos).map((slot) => {
+                                  const slotHour = slot.hour;
+                                  // Check if any override moved this slot's hour away
+                                  const movedOverride = dayOverrides.find((o: any) => o.hora_original === slotHour);
+                                  return (
+                                    <button
+                                      key={slot.label}
+                                      onClick={() => toggleSlot(dayId, slot.label)}
+                                      className={cn(
+                                        "px-3 py-2 rounded-md border text-sm font-medium transition-all relative",
+                                        movedOverride
+                                          ? "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-700 line-through opacity-70"
+                                          : daySlots.has(slot.label)
+                                            ? "border-primary bg-primary text-primary-foreground"
+                                            : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
+                                      )}
+                                      title={movedOverride ? `Movida al ${movedOverride.fecha_nueva} a las ${String(movedOverride.hora_nueva).padStart(2, "0")}:00` : undefined}
+                                    >
+                                      {slot.label}
+                                      {movedOverride && (
+                                        <span className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border border-white" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
                               </div>
+                              {dayOverrides.length > 0 && (
+                                <div className="rounded-md border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-3">
+                                  <p className="text-xs font-medium text-orange-700 dark:text-orange-300 mb-1.5 flex items-center gap-1.5">
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                    Slots movidos manualmente
+                                  </p>
+                                  <div className="space-y-1">
+                                    {dayOverrides.map((o: any) => (
+                                      <p key={o.id} className="text-xs text-orange-600 dark:text-orange-400">
+                                        {String(o.hora_original).padStart(2, "0")}:00 del {o.fecha_original} → {String(o.hora_nueva).padStart(2, "0")}:00 del {o.fecha_nueva}
+                                      </p>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </CardContent>
                           </Card>
                         );
