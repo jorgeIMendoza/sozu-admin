@@ -1119,56 +1119,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Try to find existing recurring event instance for this date/time
-    let existingInstance = await findRecurringEventInstance(token, scheduleCalendarId, tipoCitaSummary, fecha, hora_inicio, scheduleDuracion);
-    
-    // Fallback: try with tipos_cita name if config name didn't match (old events may use generic name)
-    if (!existingInstance && scheduleCitaNombre) {
-      const { data: tipoCitaFallback } = await supabase
-        .from("tipos_cita")
-        .select("nombre, descripcion")
-        .eq("id", tipoCitaId)
-        .maybeSingle();
-      const fallbackSummary = tipoCitaFallback?.descripcion || tipoCitaFallback?.nombre || "";
-      if (fallbackSummary && fallbackSummary !== tipoCitaSummary) {
-        console.log(`[schedule] Trying fallback summary: "${fallbackSummary}"`);
-        existingInstance = await findRecurringEventInstance(token, scheduleCalendarId, fallbackSummary, fecha, hora_inicio, scheduleDuracion);
-      }
-    }
-    
+    // Always create a standalone event (no longer searching for recurring instances)
     let calendarEvent: any;
-    
-    if (existingInstance) {
-      // PATCH the existing instance to add the agent as attendee
-      console.log(`[schedule] Found existing event instance ${existingInstance.id}, patching to add attendee ${agentEmailFinal}`);
-      calendarEvent = await patchEventWithAttendee(
-        token, scheduleCalendarId, existingInstance.id,
-        agentEmailFinal, agentName,
-        existingInstance.attendees || [],
-        existingInstance.description || scheduleDescInv || "",
-        scheduleCorrEnt, notas
-      );
-    } else {
-      // No recurring event found, create a standalone event
-      console.log(`[schedule] No existing event instance found, creating new event`);
-      let summary = scheduleCitaNombre || tipoCitaSummary || "Capacitación";
-      if (direccion_showroom && latitud_showroom && longitud_showroom) {
-        summary += ` — ${direccion_showroom}`;
-      }
-      
-      const bookingAttendees: { email: string }[] = [];
-      if (agentEmailFinal) bookingAttendees.push({ email: agentEmailFinal });
-      for (const cc of scheduleCorrEnt) {
-        if (!bookingAttendees.some(a => a.email === cc)) bookingAttendees.push({ email: cc });
-      }
-      
-      const notasSection = notas ? `\n\nNotas: ${notas}` : "";
-      const desc = scheduleDescInv 
-        ? `${scheduleDescInv}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`
-        : `Cita agendada para: ${agentEmailFinal}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`;
-      
-      calendarEvent = await createCalendarEvent(token, scheduleCalendarId, fecha, hora_inicio, horaFin, summary, agentEmailFinal, bookingAttendees, desc);
+    console.log(`[schedule] Creating standalone event for ${fecha} ${hora_inicio}`);
+    let summary = scheduleCitaNombre || tipoCitaSummary || "Capacitación";
+    if (direccion_showroom && latitud_showroom && longitud_showroom) {
+      summary += ` — ${direccion_showroom}`;
     }
+    
+    const bookingAttendees: { email: string }[] = [];
+    if (agentEmailFinal) bookingAttendees.push({ email: agentEmailFinal });
+    for (const cc of scheduleCorrEnt) {
+      if (!bookingAttendees.some(a => a.email === cc)) bookingAttendees.push({ email: cc });
+    }
+    
+    const notasSection = notas ? `\n\nNotas: ${notas}` : "";
+    const desc = scheduleDescInv 
+      ? `${scheduleDescInv}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`
+      : `Cita agendada para: ${agentEmailFinal}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`;
+    
+    calendarEvent = await createCalendarEvent(token, scheduleCalendarId, fecha, hora_inicio, horaFin, summary, agentEmailFinal, bookingAttendees, desc);
 
     let resultCita;
     const meetLink = calendarEvent.hangoutLink || null;
