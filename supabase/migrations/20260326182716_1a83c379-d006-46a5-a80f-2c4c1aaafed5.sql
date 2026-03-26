@@ -1,0 +1,1 @@
+UPDATE citas_horarios_overrides o SET hora_original = h.hora FROM configuracion_citas_horarios h WHERE o.id_horario = h.id AND o.hora_original != h.hora AND o.activo = true;
