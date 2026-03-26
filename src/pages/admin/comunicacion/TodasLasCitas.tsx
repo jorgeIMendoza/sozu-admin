@@ -455,6 +455,8 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
       }
 
       const newMap: Record<string, string> = {};
+      console.log("[RSVP] Raw response events:", JSON.stringify(data.events));
+      console.log("[RSVP] Looking for entries:", eventIds.map(e => ({ citaId: e.citaId, eventId: e.eventId, email: e.email })));
       for (const entry of eventIds) {
         const eventData = data.events[entry.eventId];
         if (eventData?.attendees) {
@@ -463,6 +465,9 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
           );
           if (attendee) {
             newMap[`${entry.citaId}`] = attendee.responseStatus;
+            console.log(`[RSVP] Cita ${entry.citaId}: ${entry.email} -> ${attendee.responseStatus}`);
+          } else {
+            console.warn(`[RSVP] Cita ${entry.citaId}: email ${entry.email} NOT found in attendees:`, eventData.attendees.map((a: any) => a.email));
           }
         }
       }
@@ -587,7 +592,12 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
             <DetailRow icon={Users} label="Capacidad">
               <div className="space-y-1.5">
                 <span>{slot.agendados ?? 0}/{config.max_invitados} agendados</span>
-                <Progress value={((slot.agendados ?? 0) / config.max_invitados) * 100} className="h-2" />
+                <RsvpProgressBar
+                  citas={slot.type === "group" ? (slot.citas || []) : (cita ? [cita] : [])}
+                  maxInvitados={config.max_invitados}
+                  rsvpMap={rsvpMap}
+                  rsvpLoading={rsvpLoading}
+                />
               </div>
             </DetailRow>
           )}
