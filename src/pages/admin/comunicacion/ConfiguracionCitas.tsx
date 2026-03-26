@@ -1085,9 +1085,7 @@ export default function ConfiguracionCitas() {
                             </CardHeader>
                             <CardContent className="space-y-3">
                               <div className="flex flex-wrap gap-2">
-                                {generateSlots(duracionMinutos).map((slot) => {
-                                  return (
-                                  return (
+                                {generateSlots(duracionMinutos).map((slot) => (
                                     <button
                                       key={slot.label}
                                       onClick={() => toggleSlot(dayId, slot.label)}
