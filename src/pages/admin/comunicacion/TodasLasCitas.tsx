@@ -1,19 +1,19 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   ChevronLeft, ChevronRight, User, Mail, Users, Eye, AlertTriangle,
   CheckCircle2, Loader2, RefreshCw, Clock, Calendar as CalendarIcon,
-  FileText, MapPin, Info
+  FileText, MapPin, Info, GripVertical, ArrowRight
 } from "lucide-react";
 import { format, startOfWeek, addDays, isBefore, isToday, addWeeks, subWeeks, getDay } from "date-fns";
 import { es } from "date-fns/locale";
@@ -45,6 +45,18 @@ interface Horario {
   id_usuario_email: string;
   dia_semana: number;
   hora: number;
+  activo: boolean;
+}
+
+interface HorarioOverride {
+  id: number;
+  id_configuracion_cita: number;
+  id_horario: number;
+  fecha_original: string;
+  hora_original: number;
+  fecha_nueva: string;
+  hora_nueva: number;
+  movido_por: string | null;
   activo: boolean;
 }
 
@@ -82,8 +94,17 @@ interface CalendarSlot {
   citas?: Cita[];
   hora: number;
   configId: number;
+  horarioId?: number;
   agendados?: number;
   maxInvitados?: number;
+  isOverride?: boolean;
+  overrideFrom?: { fecha: string; hora: number };
+}
+
+interface DragData {
+  slot: CalendarSlot;
+  sourceDayKey: string;
+  sourceHour: number;
 }
 
 type CalendarStatus = "verified" | "missing" | "pending" | "unknown";
@@ -115,7 +136,10 @@ function DetailRow({ icon: Icon, label, children, className }: {
 }
 
 // ─── Slot Card (Redesigned) ───
-function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calendarStatus: CalendarStatus; onClick: () => void }) {
+function SlotCard({ slot, calendarStatus, onClick, onDragStart }: {
+  slot: CalendarSlot; calendarStatus: CalendarStatus; onClick: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
+}) {
   if (slot.type === "empty" || slot.type === "group") {
     const isGroup = (slot.maxInvitados || 0) > 1;
     const agendados = slot.agendados || 0;
@@ -126,8 +150,11 @@ function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calen
     return (
       <div
         onClick={onClick}
+        draggable
+        onDragStart={onDragStart}
         className={cn(
-          "absolute inset-x-1 inset-y-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] leading-tight cursor-pointer transition-all group overflow-hidden",
+          "absolute inset-x-1 inset-y-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] leading-tight cursor-grab active:cursor-grabbing transition-all group overflow-hidden",
+          slot.isOverride && "ring-2 ring-orange-400 ring-offset-1",
           isFull
             ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-700 hover:shadow-md"
             : hasBookings
@@ -136,6 +163,7 @@ function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calen
         )}
       >
         <div className="flex items-center gap-1.5 truncate">
+          <GripVertical className="h-3 w-3 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
           {hasBookings ? (
             <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", isFull ? "bg-green-500" : "bg-blue-500")} />
           ) : (
@@ -144,6 +172,11 @@ function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calen
           <span className={cn("truncate font-semibold", hasBookings ? "text-foreground" : "text-muted-foreground")}>
             {slot.config?.nombre || "Disponible"}
           </span>
+          {slot.isOverride && (
+            <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 border-orange-300 text-orange-600 flex-shrink-0">
+              Movida
+            </Badge>
+          )}
         </div>
 
         {isGroup ? (
@@ -176,7 +209,6 @@ function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calen
   const hasInvitados = !!(cita.email_invitado || cita.nombre_invitado);
   const isCancelledCalendar = cita.estatus === "cancelada_calendar" || calendarStatus === "missing";
 
-  // Status-based colors
   const statusColors = isCancelledCalendar
     ? "bg-red-50 border-red-300 dark:bg-red-950/30 dark:border-red-700 hover:shadow-md"
     : cita.id_estatus_cita === 3
@@ -195,7 +227,6 @@ function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calen
         statusColors
       )}
     >
-      {/* Status icon + name */}
       <div className="flex items-center gap-1.5 font-semibold truncate text-foreground">
         {isCancelledCalendar ? (
           <AlertTriangle className="h-3 w-3 flex-shrink-0 text-destructive" />
@@ -213,7 +244,6 @@ function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calen
         <span className="truncate">{slot.config?.nombre || "Cita"}</span>
       </div>
 
-      {/* Invitado with mini avatar */}
       {cita.nombre_invitado && (
         <div className="truncate flex items-center gap-1.5 mt-1 text-muted-foreground">
           <div className="flex items-center justify-center w-4 h-4 rounded-full bg-primary/15 text-primary text-[8px] font-bold flex-shrink-0">
@@ -226,22 +256,20 @@ function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calen
   );
 }
 
-// ─── Stacked Slot Card (for multiple items) ───
+// ─── Stacked Slot Card ───
 function StackedSlotCard({ items, onSelectSlot }: {
   items: { slot: CalendarSlot; status: CalendarStatus }[];
   onSelectSlot: (slot: CalendarSlot) => void;
 }) {
   const citaItems = items.filter(i => i.slot.type === "cita");
-  const otherItems = items.filter(i => i.slot.type !== "cita");
   const totalCitas = citaItems.length;
 
-  if (items.length <= 1) return null; // shouldn't happen, handled elsewhere
+  if (items.length <= 1) return null;
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <div className="absolute inset-x-1 inset-y-0.5 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-2.5 py-1.5 cursor-pointer transition-all hover:shadow-md overflow-hidden">
-          {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 truncate">
               <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
@@ -254,7 +282,6 @@ function StackedSlotCard({ items, onSelectSlot }: {
             </Badge>
           </div>
 
-          {/* Preview chips (first 2 citas) */}
           <div className="mt-1 space-y-0.5">
             {citaItems.slice(0, 2).map((item, i) => (
               <div key={i} className="flex items-center gap-1 text-[9px] text-muted-foreground truncate">
@@ -293,7 +320,6 @@ function StackedSlotCard({ items, onSelectSlot }: {
                     : "bg-muted/30 border border-border hover:bg-muted/60"
                 )}
               >
-                {/* Avatar / indicator */}
                 {isCita && cita ? (
                   <div className={cn(
                     "flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold flex-shrink-0",
@@ -311,7 +337,6 @@ function StackedSlotCard({ items, onSelectSlot }: {
                   </div>
                 )}
 
-                {/* Info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">
                     {isCita ? (cita?.nombre_invitado || cita?.email_invitado || "Invitado") : (slot.config?.nombre || "Disponible")}
@@ -321,7 +346,6 @@ function StackedSlotCard({ items, onSelectSlot }: {
                   </p>
                 </div>
 
-                {/* Status badge */}
                 {isCita && statusInfo && (
                   <Badge
                     variant="outline"
@@ -364,7 +388,6 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-md p-0 overflow-hidden">
-        {/* Header with gradient */}
         <div className={cn(
           "px-6 pt-6 pb-4",
           isCancelledCalendar
@@ -384,13 +407,9 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
             </DialogTitle>
           </DialogHeader>
 
-          {/* Status badge */}
-          <div className="mt-3">
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
             {cita && st ? (
-              <Badge
-                variant={isCancelledCalendar ? "destructive" : st.variant}
-                className="text-xs"
-              >
+              <Badge variant={isCancelledCalendar ? "destructive" : st.variant} className="text-xs">
                 {isCancelledCalendar ? "No existe en Calendar" : st.label}
               </Badge>
             ) : (slot.agendados ?? 0) > 0 ? (
@@ -398,10 +417,15 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
             ) : (
               <Badge variant="outline" className="text-xs">Sin agendar</Badge>
             )}
+            {slot.isOverride && (
+              <Badge variant="outline" className="text-xs border-orange-300 text-orange-600">
+                <ArrowRight className="h-3 w-3 mr-1" />
+                Movida manualmente
+              </Badge>
+            )}
           </div>
         </div>
 
-        {/* Body */}
         <div className="px-6 pb-6 space-y-1">
           {config && (
             <DetailRow icon={User} label="Dueño">
@@ -418,6 +442,14 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
           {config?.descripcion_invitacion && (
             <DetailRow icon={FileText} label="Descripción">
               {config.descripcion_invitacion}
+            </DetailRow>
+          )}
+
+          {slot.isOverride && slot.overrideFrom && (
+            <DetailRow icon={ArrowRight} label="Movida desde">
+              <span className="text-orange-600 font-medium">
+                {slot.overrideFrom.fecha} a las {String(slot.overrideFrom.hora).padStart(2, "0")}:00
+              </span>
             </DetailRow>
           )}
 
@@ -442,13 +474,12 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
             </DetailRow>
           )}
 
-          {/* Group attendees list */}
           {slot.type === "group" && slot.citas && slot.citas.length > 0 && (
             <>
               <Separator className="my-2" />
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">Asistentes agendados</p>
               <div className="space-y-1.5 mt-1">
-                {slot.citas.map((c, i) => (
+                {slot.citas.map((c) => (
                   <div key={c.id} className="flex items-center gap-2 rounded-md bg-blue-50 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-800 px-3 py-2">
                     <div className={cn(
                       "flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold flex-shrink-0",
@@ -494,7 +525,6 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
             </DetailRow>
           )}
 
-          {/* Invitados section */}
           {cita && (cita.nombre_invitado || cita.email_invitado || cita.nombre_prospecto || cita.email_prospecto || cita.nombre_agente || cita.email_agente) && (
             <>
               <Separator className="my-2" />
@@ -530,7 +560,6 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
             </>
           )}
 
-          {/* CC & Enterados */}
           {config && ((config.correos_enterado_fijos?.length ?? 0) > 0 || (config.correos_enterado?.length ?? 0) > 0) && (
             <>
               <Separator className="my-2" />
@@ -555,7 +584,6 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
             </>
           )}
 
-          {/* Notes */}
           {cita?.notas && (
             <>
               <Separator className="my-2" />
@@ -571,15 +599,98 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
   );
 }
 
+// ─── Reschedule Confirmation Dialog ───
+function RescheduleDialog({ open, onClose, onConfirm, dragData, targetDay, targetHour, isPending }: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  dragData: DragData | null;
+  targetDay: string;
+  targetHour: number;
+  isPending: boolean;
+}) {
+  if (!dragData) return null;
+  const slot = dragData.slot;
+  const hasBookings = slot.type === "group" ? (slot.agendados || 0) > 0 : slot.type === "cita";
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ArrowRight className="h-5 w-5 text-primary" />
+            Reagendar slot
+          </DialogTitle>
+          <DialogDescription>
+            {hasBookings
+              ? "Este slot tiene reservas agendadas. Se actualizarán las reservas y se notificará a los invitados vía Google Calendar."
+              : "¿Mover este slot a la nueva fecha y hora?"}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 text-sm">
+            <div className="flex-1 rounded-md bg-muted/50 p-3 text-center">
+              <p className="text-[10px] text-muted-foreground uppercase font-medium">Desde</p>
+              <p className="font-semibold">{dragData.sourceDayKey}</p>
+              <p className="text-muted-foreground">{String(dragData.sourceHour).padStart(2, "0")}:00</p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <div className="flex-1 rounded-md bg-primary/10 p-3 text-center border border-primary/20">
+              <p className="text-[10px] text-muted-foreground uppercase font-medium">Hacia</p>
+              <p className="font-semibold">{targetDay}</p>
+              <p className="text-muted-foreground">{String(targetHour).padStart(2, "0")}:00</p>
+            </div>
+          </div>
+
+          <div className="rounded-md bg-muted/30 p-3 text-sm">
+            <p className="font-medium">{slot.config?.nombre || "Slot"}</p>
+            {hasBookings && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {slot.type === "group" ? `${slot.agendados} reserva(s) serán reagendadas` : "1 reserva será reagendada"}
+              </p>
+            )}
+          </div>
+
+          {hasBookings && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  Los invitados serán notificados del cambio de horario a través de Google Calendar.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>Cancelar</Button>
+          <Button onClick={onConfirm} disabled={isPending}>
+            {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Moviendo...</> : "Confirmar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Component ───
 
 export default function TodasLasCitas() {
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
+  const queryClient = useQueryClient();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [calendarStatuses, setCalendarStatuses] = useState<Map<number, CalendarStatus>>(new Map());
   const [selectedSlot, setSelectedSlot] = useState<CalendarSlot | null>(null);
+
+  // Drag & drop state
+  const [dragData, setDragData] = useState<DragData | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ dayKey: string; hour: number } | null>(null);
+  const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
+  const [pendingDrop, setPendingDrop] = useState<{ dayKey: string; hour: number } | null>(null);
 
   useEffect(() => {
     registrarVista("/admin/comunicacion/todas-las-citas");
@@ -612,7 +723,25 @@ export default function TodasLasCitas() {
     },
   });
 
+  // Fetch overrides for the visible week range (+ some margin)
   const weekEnd = addDays(weekStart, 6);
+  const { data: overrides = [] } = useQuery({
+    queryKey: ["citas-overrides", weekStart.toISOString()],
+    queryFn: async () => {
+      // Fetch overrides that have fecha_nueva or fecha_original within the visible week
+      const startStr = format(weekStart, "yyyy-MM-dd");
+      const endStr = format(weekEnd, "yyyy-MM-dd");
+      const { data, error } = await supabase
+        .from("citas_horarios_overrides")
+        .select("*")
+        .eq("activo", true)
+        .or(`fecha_nueva.gte.${startStr},fecha_original.gte.${startStr}`)
+        .or(`fecha_nueva.lte.${endStr},fecha_original.lte.${endStr}`);
+      if (error) { console.error("Error fetching overrides:", error); return []; }
+      return (data || []) as HorarioOverride[];
+    },
+  });
+
   const { data: citas = [], isLoading } = useQuery({
     queryKey: ["all-citas-reservas-week", weekStart.toISOString()],
     queryFn: async () => {
@@ -663,6 +792,40 @@ export default function TodasLasCitas() {
           email_agente: agente?.email || null,
         };
       }) as Cita[];
+    },
+  });
+
+  // ─── Reschedule mutation ───
+
+  const rescheduleMutation = useMutation({
+    mutationFn: async (params: {
+      id_horario: number;
+      id_configuracion_cita: number;
+      fecha_original: string;
+      hora_original: number;
+      fecha_nueva: string;
+      hora_nueva: number;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("reagendar-slot", {
+        body: { ...params, movido_por: "admin" },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message || "Slot reagendado exitosamente");
+      if (data?.calendar_errors?.length > 0) {
+        data.calendar_errors.forEach((err: string) => toast.warning(err));
+      }
+      queryClient.invalidateQueries({ queryKey: ["all-citas-reservas-week"] });
+      queryClient.invalidateQueries({ queryKey: ["citas-overrides"] });
+      setRescheduleDialogOpen(false);
+      setPendingDrop(null);
+      setDragData(null);
+    },
+    onError: (err: any) => {
+      toast.error(`Error al reagendar: ${err.message}`);
     },
   });
 
@@ -726,15 +889,12 @@ export default function TodasLasCitas() {
 
   const ocupacionSlots = useMemo(() => {
     const map = new Map<string, Cita[]>();
-
     filteredCitas.forEach((cita) => {
       const slotHour = Math.floor(parseTime(cita.hora_inicio));
       const key = `${cita.fecha}_${cita.id_configuracion_cita}_${slotHour}`;
-
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(cita);
     });
-
     return map;
   }, [filteredCitas]);
 
@@ -746,6 +906,24 @@ export default function TodasLasCitas() {
     });
   }, [horarios, ownerFilter, configMap]);
 
+  // Build override index: key = "fecha_original_horarioId" -> override
+  const overridesByOriginal = useMemo(() => {
+    const map = new Map<string, HorarioOverride>();
+    overrides.forEach(o => {
+      map.set(`${o.fecha_original}_${o.id_horario}`, o);
+    });
+    return map;
+  }, [overrides]);
+
+  // Build override index: key = "fecha_nueva_hora_nueva_configId" -> override
+  const overridesByNew = useMemo(() => {
+    const map = new Map<string, HorarioOverride>();
+    overrides.forEach(o => {
+      map.set(`${o.fecha_nueva}_${o.hora_nueva}_${o.id_configuracion_cita}`, o);
+    });
+    return map;
+  }, [overrides]);
+
   const singleEmptySlotsByDay = useMemo(() => {
     const map = new Map<string, CalendarSlot[]>();
     days.forEach(day => {
@@ -755,28 +933,56 @@ export default function TodasLasCitas() {
 
       dayHorarios.forEach(h => {
         const config = h.id_configuracion_cita ? configMap.get(h.id_configuracion_cita) : undefined;
-        
+
         if (config?.fecha_fin_recurrencia) {
           const endDate = new Date(config.fecha_fin_recurrencia + "T23:59:59");
           if (day > endDate) return;
         }
 
-        const key = `${dayKey}_${h.hora}`;
         const maxInv = config?.max_invitados || 1;
-
         if (maxInv > 1) return;
 
+        // Check if this slot was moved away
+        const overrideKey = `${dayKey}_${h.id}`;
+        const override = overridesByOriginal.get(overrideKey);
+        if (override) return; // This slot was moved elsewhere, don't show here
+
+        const key = `${dayKey}_${h.hora}`;
         const citasForConfig = ocupacionSlots.get(`${dayKey}_${h.id_configuracion_cita || 0}_${h.hora}`) || [];
 
         if (citasForConfig.length === 0) {
-          const slot: CalendarSlot = { type: "empty", config, hora: h.hora, configId: h.id_configuracion_cita || 0 };
+          const slot: CalendarSlot = { type: "empty", config, hora: h.hora, configId: h.id_configuracion_cita || 0, horarioId: h.id };
+          if (!map.has(key)) map.set(key, []);
+          map.get(key)!.push(slot);
+        }
+      });
+
+      // Add overrides that land on this day (slots moved TO here)
+      overrides.forEach(o => {
+        if (o.fecha_nueva !== dayKey) return;
+        if (!o.activo) return;
+        const config = configMap.get(o.id_configuracion_cita);
+        if (!config) return;
+        if (ownerFilter !== "all" && config.id_usuario_email !== ownerFilter) return;
+        const maxInv = config.max_invitados || 1;
+        if (maxInv > 1) return;
+
+        const key = `${dayKey}_${o.hora_nueva}`;
+        const citasForConfig = ocupacionSlots.get(`${dayKey}_${o.id_configuracion_cita}_${o.hora_nueva}`) || [];
+        
+        if (citasForConfig.length === 0) {
+          const slot: CalendarSlot = {
+            type: "empty", config, hora: o.hora_nueva, configId: o.id_configuracion_cita,
+            horarioId: o.id_horario, isOverride: true,
+            overrideFrom: { fecha: o.fecha_original, hora: o.hora_original },
+          };
           if (!map.has(key)) map.set(key, []);
           map.get(key)!.push(slot);
         }
       });
     });
     return map;
-  }, [days, filteredHorarios, ocupacionSlots, configMap]);
+  }, [days, filteredHorarios, ocupacionSlots, configMap, overridesByOriginal, overrides, ownerFilter]);
 
   const groupSlotsByDay = useMemo(() => {
     const map = new Map<string, CalendarSlot[]>();
@@ -797,17 +1003,39 @@ export default function TodasLasCitas() {
         const maxInv = config?.max_invitados || 1;
         if (maxInv <= 1) return;
 
+        // Check if moved away
+        const overrideKey = `${dayKey}_${h.id}`;
+        if (overridesByOriginal.has(overrideKey)) return;
+
         const key = `${dayKey}_${h.hora}`;
         const citasForConfig = ocupacionSlots.get(`${dayKey}_${h.id_configuracion_cita || 0}_${h.hora}`) || [];
 
         const slot: CalendarSlot = {
-          type: "group",
-          config,
-          hora: h.hora,
-          configId: h.id_configuracion_cita || 0,
-          agendados: citasForConfig.length,
-          maxInvitados: maxInv,
-          citas: citasForConfig,
+          type: "group", config, hora: h.hora, configId: h.id_configuracion_cita || 0,
+          horarioId: h.id, agendados: citasForConfig.length, maxInvitados: maxInv, citas: citasForConfig,
+        };
+
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(slot);
+      });
+
+      // Add group overrides landing here
+      overrides.forEach(o => {
+        if (o.fecha_nueva !== dayKey || !o.activo) return;
+        const config = configMap.get(o.id_configuracion_cita);
+        if (!config) return;
+        if (ownerFilter !== "all" && config.id_usuario_email !== ownerFilter) return;
+        const maxInv = config.max_invitados || 1;
+        if (maxInv <= 1) return;
+
+        const key = `${dayKey}_${o.hora_nueva}`;
+        const citasForConfig = ocupacionSlots.get(`${dayKey}_${o.id_configuracion_cita}_${o.hora_nueva}`) || [];
+
+        const slot: CalendarSlot = {
+          type: "group", config, hora: o.hora_nueva, configId: o.id_configuracion_cita,
+          horarioId: o.id_horario, agendados: citasForConfig.length, maxInvitados: maxInv,
+          citas: citasForConfig, isOverride: true,
+          overrideFrom: { fecha: o.fecha_original, hora: o.hora_original },
         };
 
         if (!map.has(key)) map.set(key, []);
@@ -816,7 +1044,73 @@ export default function TodasLasCitas() {
     });
 
     return map;
-  }, [days, filteredHorarios, ocupacionSlots, configMap]);
+  }, [days, filteredHorarios, ocupacionSlots, configMap, overridesByOriginal, overrides, ownerFilter]);
+
+  // ─── Drag & Drop handlers ───
+
+  const handleDragStart = useCallback((e: React.DragEvent, slot: CalendarSlot, dayKey: string, hour: number) => {
+    // Only allow dragging empty/group slots (not individual cita cards)
+    if (slot.type === "cita") {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", "slot");
+    setDragData({ slot, sourceDayKey: dayKey, sourceHour: hour });
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, dayKey: string, hour: number) => {
+    if (!dragData) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropTarget({ dayKey, hour });
+  }, [dragData]);
+
+  const handleDragLeave = useCallback(() => {
+    setDropTarget(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, dayKey: string, hour: number) => {
+    e.preventDefault();
+    if (!dragData) return;
+
+    // Don't drop on same spot
+    if (dayKey === dragData.sourceDayKey && hour === dragData.sourceHour) {
+      setDragData(null);
+      setDropTarget(null);
+      return;
+    }
+
+    setPendingDrop({ dayKey, hour });
+    setRescheduleDialogOpen(true);
+    setDropTarget(null);
+  }, [dragData]);
+
+  const handleDragEnd = useCallback(() => {
+    setDropTarget(null);
+    if (!rescheduleDialogOpen) {
+      setDragData(null);
+    }
+  }, [rescheduleDialogOpen]);
+
+  const confirmReschedule = useCallback(() => {
+    if (!dragData || !pendingDrop) return;
+
+    const slot = dragData.slot;
+    if (!slot.horarioId || !slot.configId) {
+      toast.error("No se puede mover este slot");
+      return;
+    }
+
+    rescheduleMutation.mutate({
+      id_horario: slot.horarioId,
+      id_configuracion_cita: slot.configId,
+      fecha_original: dragData.sourceDayKey,
+      hora_original: dragData.sourceHour,
+      fecha_nueva: pendingDrop.dayKey,
+      hora_nueva: pendingDrop.hour,
+    });
+  }, [dragData, pendingDrop, rescheduleMutation]);
 
   const now = new Date();
   const slotHeight = 80;
@@ -889,8 +1183,8 @@ export default function TodasLasCitas() {
           No en Calendar
         </span>
         <span className="flex items-center gap-1.5">
-          <CheckCircle2 className="h-3 w-3 text-green-600" />
-          Verificada
+          <span className="w-3 h-3 rounded ring-2 ring-orange-400 bg-orange-50" />
+          Movida manualmente
         </span>
       </div>
 
@@ -947,6 +1241,8 @@ export default function TodasLasCitas() {
                   const today = isToday(day);
                   const key = `${dayKey}_${hour}`;
 
+                  const isDropZone = dropTarget?.dayKey === dayKey && dropTarget?.hour === hour;
+
                   const slotCitas = (citasIndex.get(key) || []).map(cita => ({
                     type: "cita" as const,
                     cita,
@@ -962,11 +1258,15 @@ export default function TodasLasCitas() {
                     <div
                       key={`${hour}-${dayKey}`}
                       className={cn(
-                        "border-r border-b relative",
+                        "border-r border-b relative transition-colors",
                         past && "bg-muted/10",
-                        today && "bg-blue-50/20 dark:bg-blue-950/10"
+                        today && "bg-blue-50/20 dark:bg-blue-950/10",
+                        isDropZone && "bg-primary/10 ring-2 ring-inset ring-primary/30"
                       )}
                       style={{ height: slotHeight }}
+                      onDragOver={(e) => handleDragOver(e, dayKey, hour)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, dayKey, hour)}
                     >
                       {/* Half-hour guide */}
                       <div className="absolute left-0 right-0 border-b border-dashed border-border/20" style={{ top: slotHeight / 2 }} />
@@ -1004,7 +1304,6 @@ export default function TodasLasCitas() {
 
                         const totalItems = allItems.length;
 
-                        // If multiple items in one slot, use StackedSlotCard
                         if (totalItems > 1) {
                           return (
                             <div className="absolute inset-0" style={{ zIndex: 10 }}>
@@ -1016,7 +1315,6 @@ export default function TodasLasCitas() {
                           );
                         }
 
-                        // Single item — render normally
                         return allItems.map((item, idx) => (
                           <div
                             key={`item-${idx}`}
@@ -1029,7 +1327,12 @@ export default function TodasLasCitas() {
                               zIndex: item.slot.type === "cita" ? 10 : 5,
                             }}
                           >
-                            <SlotCard slot={item.slot} calendarStatus={item.status} onClick={() => setSelectedSlot(item.slot)} />
+                            <SlotCard
+                              slot={item.slot}
+                              calendarStatus={item.status}
+                              onClick={() => setSelectedSlot(item.slot)}
+                              onDragStart={(e) => handleDragStart(e, item.slot, dayKey, hour)}
+                            />
                           </div>
                         ));
                       })()}
@@ -1048,6 +1351,17 @@ export default function TodasLasCitas() {
         calendarStatus={selectedSlot?.cita ? (calendarStatuses.get(selectedSlot.cita.id) || (selectedSlot.cita.estatus === "cancelada_calendar" ? "missing" : "unknown")) : "unknown"}
         open={!!selectedSlot}
         onClose={() => setSelectedSlot(null)}
+      />
+
+      {/* Reschedule Confirmation Dialog */}
+      <RescheduleDialog
+        open={rescheduleDialogOpen}
+        onClose={() => { setRescheduleDialogOpen(false); setPendingDrop(null); setDragData(null); }}
+        onConfirm={confirmReschedule}
+        dragData={dragData}
+        targetDay={pendingDrop?.dayKey || ""}
+        targetHour={pendingDrop?.hour || 0}
+        isPending={rescheduleMutation.isPending}
       />
     </div>
   );
