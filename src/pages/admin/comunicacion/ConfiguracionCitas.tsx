@@ -588,58 +588,8 @@ export default function ConfiguracionCitas() {
       queryClient.invalidateQueries({ queryKey: ["config-citas-proyectos", selectedConfigId] });
       toast.success("Configuración guardada");
       setHasChanges(false);
-      if (calendarioEmail) createRecurringMeetsMutation.mutate();
     },
     onError: (error) => toast.error(`Error al guardar: ${error.message}`),
-  });
-
-  const createRecurringMeetsMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedConfig) throw new Error("No config selected");
-      if (selectedDays.size === 0) throw new Error("No hay días configurados");
-
-      const slotsConfig: { dia_semana: number; horas: string[] }[] = [];
-      for (const dayId of Array.from(selectedDays).sort()) {
-        const daySlots = selectedSlots.get(dayId);
-        if (daySlots && daySlots.size > 0) {
-          slotsConfig.push({ dia_semana: dayId, horas: Array.from(daySlots).sort() });
-        }
-      }
-      if (slotsConfig.length === 0) throw new Error("No hay horarios seleccionados");
-
-      const fechaFin = fechaFinRecurrencia || addMonths(new Date(), 3);
-      const fechaFinStr = `${fechaFin.getFullYear()}-${String(fechaFin.getMonth() + 1).padStart(2, "0")}-${String(fechaFin.getDate()).padStart(2, "0")}`;
-
-      const { data, error } = await supabase.functions.invoke("agendar-capacitacion", {
-        body: {
-          action: "create-recurring-meets",
-          calendar_owner_email: calendarioEmail || selectedConfig.id_usuario_email,
-          tipo_cita_id: selectedConfig.id_tipo_cita,
-          config_id: selectedConfig.id,
-          duracion_minutos: duracionMinutos,
-          slots_config: slotsConfig,
-          fecha_fin: fechaFinStr,
-          correos_enterado: correosEnterado,
-          round_robin_enterados: roundRobinEnterados,
-          descripcion_invitacion: descripcionInvitacion,
-          nombre_cita: selectedConfig.nombre,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
-    },
-    onSuccess: (data) => {
-      const created = data?.created_events?.filter((e: any) => e.action === "created")?.length || 0;
-      const updated = data?.created_events?.filter((e: any) => e.action === "updated")?.length || 0;
-      const parts = [];
-      if (updated > 0) parts.push(`${updated} actualizados`);
-      if (created > 0) parts.push(`${created} creados`);
-      toast.success(`Eventos sincronizados en Google Calendar: ${parts.join(", ") || "sin cambios"}`);
-      if (data?.errors?.length > 0) toast.warning(`${data.errors.length} errores: ${data.errors[0]}`);
-    },
-    onError: (error) => toast.error(`Error al crear Meet: ${error.message}`),
   });
 
   const loadingConfig = loadingConfigs || loadingHorarios;
