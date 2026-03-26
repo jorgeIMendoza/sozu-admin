@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   ChevronLeft, ChevronRight, User, Mail, Users, Eye, AlertTriangle,
@@ -92,6 +94,11 @@ function parseTime(t: string): number {
   return h + (m || 0) / 60;
 }
 
+function getInitials(name: string | null): string {
+  if (!name) return "?";
+  return name.split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+}
+
 // ─── Detail Row ───
 function DetailRow({ icon: Icon, label, children, className }: {
   icon: any; label: string; children: React.ReactNode; className?: string;
@@ -107,83 +114,237 @@ function DetailRow({ icon: Icon, label, children, className }: {
   );
 }
 
-// ─── Slot Card ───
+// ─── Slot Card (Redesigned) ───
 function SlotCard({ slot, calendarStatus, onClick }: { slot: CalendarSlot; calendarStatus: CalendarStatus; onClick: () => void }) {
   if (slot.type === "empty" || slot.type === "group") {
     const isGroup = (slot.maxInvitados || 0) > 1;
     const agendados = slot.agendados || 0;
     const hasBookings = isGroup && agendados > 0;
     const isFull = isGroup && agendados >= (slot.maxInvitados || 0);
+    const occupancyPercent = isGroup ? Math.round((agendados / (slot.maxInvitados || 1)) * 100) : 0;
+
     return (
       <div
         onClick={onClick}
         className={cn(
-          "absolute inset-x-1 inset-y-0.5 rounded-md border px-2 py-1 text-[10px] leading-tight cursor-pointer transition-all group",
-          hasBookings
-            ? "bg-primary/15 border-primary/50 hover:bg-primary/20 hover:shadow-sm"
-            : "border-dashed border-muted-foreground/20 bg-muted/5 hover:border-primary/40 hover:bg-primary/5"
+          "absolute inset-x-1 inset-y-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] leading-tight cursor-pointer transition-all group overflow-hidden",
+          isFull
+            ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-700 hover:shadow-md"
+            : hasBookings
+              ? "bg-blue-50 border-blue-300 dark:bg-blue-950/30 dark:border-blue-700 hover:shadow-md"
+              : "border-dashed border-muted-foreground/25 bg-muted/10 hover:border-primary/40 hover:bg-primary/5"
         )}
       >
         <div className="flex items-center gap-1.5 truncate">
           {hasBookings ? (
-            <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+            <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", isFull ? "bg-green-500" : "bg-blue-500")} />
           ) : (
-            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
+            <div className="w-2 h-2 rounded-full bg-muted-foreground/30 flex-shrink-0" />
           )}
-          <span className={cn("truncate font-medium", hasBookings ? "text-foreground" : "text-muted-foreground")}>{slot.config?.nombre || "Disponible"}</span>
+          <span className={cn("truncate font-semibold", hasBookings ? "text-foreground" : "text-muted-foreground")}>
+            {slot.config?.nombre || "Disponible"}
+          </span>
         </div>
-        <div className="text-[9px] truncate mt-0.5">
-          {isGroup
-            ? <span className={hasBookings ? "text-primary font-semibold" : "opacity-60"}>{agendados}/{slot.maxInvitados} agendados{isFull ? " · Completa" : ""}</span>
-            : <span className="opacity-60">{slot.config?.id_usuario_email}</span>}
-        </div>
+
+        {isGroup ? (
+          <div className="mt-1 space-y-1">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className={cn("font-medium", isFull ? "text-green-700 dark:text-green-400" : hasBookings ? "text-blue-700 dark:text-blue-400" : "text-muted-foreground")}>
+                {agendados}/{slot.maxInvitados}
+              </span>
+              {isFull && <span className="text-green-600 dark:text-green-400 font-semibold">Completa</span>}
+            </div>
+            <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+              <div
+                className={cn("h-full rounded-full transition-all", isFull ? "bg-green-500" : "bg-blue-500")}
+                style={{ width: `${occupancyPercent}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="text-[10px] truncate mt-0.5 text-muted-foreground">
+            {slot.config?.id_usuario_email}
+          </div>
+        )}
       </div>
     );
   }
 
+  // ─ Cita individual card ─
   const cita = slot.cita!;
   const st = STATUS_MAP[cita.id_estatus_cita ?? 0] || { label: "?", variant: "outline" as const, color: "" };
   const hasInvitados = !!(cita.email_invitado || cita.nombre_invitado);
   const isCancelledCalendar = cita.estatus === "cancelada_calendar" || calendarStatus === "missing";
 
+  // Status-based colors
+  const statusColors = isCancelledCalendar
+    ? "bg-red-50 border-red-300 dark:bg-red-950/30 dark:border-red-700 hover:shadow-md"
+    : cita.id_estatus_cita === 3
+      ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-700 hover:shadow-md"
+      : cita.id_estatus_cita === 2
+        ? "bg-yellow-50 border-yellow-300 dark:bg-yellow-950/30 dark:border-yellow-700 hover:shadow-md"
+        : hasInvitados
+          ? "bg-blue-50 border-blue-300 dark:bg-blue-950/30 dark:border-blue-700 hover:shadow-md"
+          : "bg-secondary/50 border-secondary hover:bg-secondary/80";
+
   return (
     <div
       onClick={onClick}
       className={cn(
-        "absolute inset-x-1 inset-y-0.5 rounded-md border px-2 py-1 text-[10px] leading-tight overflow-hidden cursor-pointer transition-all group",
-        isCancelledCalendar
-          ? "bg-destructive/8 border-destructive/25 hover:bg-destructive/15"
-          : hasInvitados
-            ? "bg-primary/8 border-primary/25 hover:bg-primary/15 hover:shadow-sm"
-            : "bg-secondary/50 border-secondary hover:bg-secondary/80"
+        "absolute inset-x-1 inset-y-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] leading-tight overflow-hidden cursor-pointer transition-all group",
+        statusColors
       )}
     >
-      {/* Status dot + name */}
-      <div className="flex items-center gap-1.5 font-medium truncate text-foreground">
+      {/* Status icon + name */}
+      <div className="flex items-center gap-1.5 font-semibold truncate text-foreground">
         {isCancelledCalendar ? (
           <AlertTriangle className="h-3 w-3 flex-shrink-0 text-destructive" />
         ) : calendarStatus === "verified" ? (
-          <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-success" />
+          <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-green-600" />
         ) : calendarStatus === "pending" ? (
           <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin text-muted-foreground" />
         ) : (
-          <div className={cn("w-2 h-2 rounded-full flex-shrink-0",
-            cita.id_estatus_cita === 1 ? "bg-primary" :
-            cita.id_estatus_cita === 2 ? "bg-warning" :
-            cita.id_estatus_cita === 3 ? "bg-success" : "bg-muted-foreground"
+          <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0",
+            cita.id_estatus_cita === 1 ? "bg-blue-500" :
+            cita.id_estatus_cita === 2 ? "bg-yellow-500" :
+            cita.id_estatus_cita === 3 ? "bg-green-500" : "bg-muted-foreground"
           )} />
         )}
         <span className="truncate">{slot.config?.nombre || "Cita"}</span>
       </div>
 
-      {/* Invitado */}
+      {/* Invitado with mini avatar */}
       {cita.nombre_invitado && (
-        <div className="truncate flex items-center gap-1 mt-0.5 text-muted-foreground">
-          <User className="h-2.5 w-2.5 flex-shrink-0" />
-          <span className="truncate">{cita.nombre_invitado}</span>
+        <div className="truncate flex items-center gap-1.5 mt-1 text-muted-foreground">
+          <div className="flex items-center justify-center w-4 h-4 rounded-full bg-primary/15 text-primary text-[8px] font-bold flex-shrink-0">
+            {getInitials(cita.nombre_invitado)}
+          </div>
+          <span className="truncate text-[10px]">{cita.nombre_invitado}</span>
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Stacked Slot Card (for multiple items) ───
+function StackedSlotCard({ items, onSelectSlot }: {
+  items: { slot: CalendarSlot; status: CalendarStatus }[];
+  onSelectSlot: (slot: CalendarSlot) => void;
+}) {
+  const citaItems = items.filter(i => i.slot.type === "cita");
+  const otherItems = items.filter(i => i.slot.type !== "cita");
+  const totalCitas = citaItems.length;
+
+  if (items.length <= 1) return null; // shouldn't happen, handled elsewhere
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <div className="absolute inset-x-1 inset-y-0.5 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-2.5 py-1.5 cursor-pointer transition-all hover:shadow-md overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 truncate">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
+              <span className="font-semibold text-[11px] text-foreground truncate">
+                {totalCitas > 0 ? `${totalCitas} cita${totalCitas > 1 ? "s" : ""}` : items[0].slot.config?.nombre || "Slots"}
+              </span>
+            </div>
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">
+              {items.length}
+            </Badge>
+          </div>
+
+          {/* Preview chips (first 2 citas) */}
+          <div className="mt-1 space-y-0.5">
+            {citaItems.slice(0, 2).map((item, i) => (
+              <div key={i} className="flex items-center gap-1 text-[9px] text-muted-foreground truncate">
+                <div className="flex items-center justify-center w-3.5 h-3.5 rounded-full bg-primary/15 text-primary text-[7px] font-bold flex-shrink-0">
+                  {getInitials(item.slot.cita?.nombre_invitado || null)}
+                </div>
+                <span className="truncate">{item.slot.cita?.nombre_invitado || item.slot.cita?.email_invitado || "Invitado"}</span>
+              </div>
+            ))}
+            {totalCitas > 2 && (
+              <div className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">+{totalCitas - 2} más</div>
+            )}
+          </div>
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-0" align="start">
+        <div className="p-3 border-b bg-muted/20">
+          <p className="text-sm font-semibold text-foreground">{items.length} elementos en este slot</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Click en cada uno para ver detalle</p>
+        </div>
+        <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
+          {items.map((item, i) => {
+            const slot = item.slot;
+            const isCita = slot.type === "cita";
+            const cita = slot.cita;
+            const statusInfo = cita ? STATUS_MAP[cita.id_estatus_cita ?? 0] : null;
+
+            return (
+              <div
+                key={i}
+                onClick={() => onSelectSlot(slot)}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-md px-3 py-2 cursor-pointer transition-colors",
+                  isCita
+                    ? "bg-blue-50/50 border border-blue-200 hover:bg-blue-100 dark:bg-blue-950/20 dark:border-blue-800 dark:hover:bg-blue-950/40"
+                    : "bg-muted/30 border border-border hover:bg-muted/60"
+                )}
+              >
+                {/* Avatar / indicator */}
+                {isCita && cita ? (
+                  <div className={cn(
+                    "flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold flex-shrink-0",
+                    cita.id_estatus_cita === 3
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                      : cita.id_estatus_cita === 2
+                        ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400"
+                        : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+                  )}>
+                    {getInitials(cita.nombre_invitado)}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center w-7 h-7 rounded-full bg-muted text-muted-foreground text-[10px] font-bold flex-shrink-0">
+                    <Clock className="h-3.5 w-3.5" />
+                  </div>
+                )}
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {isCita ? (cita?.nombre_invitado || cita?.email_invitado || "Invitado") : (slot.config?.nombre || "Disponible")}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {isCita && cita ? `${cita.hora_inicio} – ${cita.hora_fin}` : slot.config?.id_usuario_email || ""}
+                  </p>
+                </div>
+
+                {/* Status badge */}
+                {isCita && statusInfo && (
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[9px] px-1.5 py-0 h-4 flex-shrink-0",
+                      cita?.id_estatus_cita === 3 ? "border-green-300 text-green-700 dark:border-green-700 dark:text-green-400" :
+                      cita?.id_estatus_cita === 2 ? "border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-400" :
+                      "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-400"
+                    )}
+                  >
+                    {statusInfo.label}
+                  </Badge>
+                )}
+                {!isCita && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0 text-muted-foreground">
+                    Libre
+                  </Badge>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -207,9 +368,13 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
         <div className={cn(
           "px-6 pt-6 pb-4",
           isCancelledCalendar
-            ? "bg-destructive/5"
+            ? "bg-red-50 dark:bg-red-950/20"
             : cita
-              ? "bg-primary/5"
+              ? cita.id_estatus_cita === 3
+                ? "bg-green-50 dark:bg-green-950/20"
+                : cita.id_estatus_cita === 2
+                  ? "bg-yellow-50 dark:bg-yellow-950/20"
+                  : "bg-blue-50 dark:bg-blue-950/20"
               : "bg-muted/30"
         )}>
           <DialogHeader>
@@ -236,28 +401,24 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
 
         {/* Body */}
         <div className="px-6 pb-6 space-y-1">
-          {/* Owner */}
           {config && (
             <DetailRow icon={User} label="Dueño">
               {config.id_usuario_email}
             </DetailRow>
           )}
 
-          {/* Calendar email */}
           {config?.calendario_email && (
             <DetailRow icon={CalendarIcon} label="Calendar">
               {config.calendario_email}
             </DetailRow>
           )}
 
-          {/* Description */}
           {config?.descripcion_invitacion && (
             <DetailRow icon={FileText} label="Descripción">
               {config.descripcion_invitacion}
             </DetailRow>
           )}
 
-          {/* Date & Time (only for booked citas) */}
           {cita && (
             <>
               <Separator className="my-2" />
@@ -272,7 +433,10 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
 
           {config && (config.max_invitados || 1) > 1 && (
             <DetailRow icon={Users} label="Capacidad">
-              {slot.agendados ?? 0}/{config.max_invitados} agendados
+              <div className="space-y-1.5">
+                <span>{slot.agendados ?? 0}/{config.max_invitados} agendados</span>
+                <Progress value={((slot.agendados ?? 0) / config.max_invitados) * 100} className="h-2" />
+              </div>
             </DetailRow>
           )}
 
@@ -283,9 +447,16 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">Asistentes agendados</p>
               <div className="space-y-1.5 mt-1">
                 {slot.citas.map((c, i) => (
-                  <div key={c.id} className="flex items-center gap-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2">
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex-shrink-0">
-                      {i + 1}
+                  <div key={c.id} className="flex items-center gap-2 rounded-md bg-blue-50 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-800 px-3 py-2">
+                    <div className={cn(
+                      "flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold flex-shrink-0",
+                      c.id_estatus_cita === 3
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                        : c.id_estatus_cita === 2
+                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400"
+                          : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+                    )}>
+                      {getInitials(c.nombre_invitado || c.email_invitado)}
                     </div>
                     <div className="flex-1 min-w-0">
                       {(c.nombre_invitado || c.email_invitado) ? (
@@ -299,7 +470,14 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
                         <p className="text-sm text-muted-foreground italic">Invitado #{c.id}</p>
                       )}
                     </div>
-                    <Badge variant="outline" className="text-[10px] flex-shrink-0">
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[10px] flex-shrink-0",
+                        c.id_estatus_cita === 3 ? "border-green-300 text-green-700" :
+                        c.id_estatus_cita === 2 ? "border-yellow-300 text-yellow-700" :
+                        "border-blue-300 text-blue-700"
+                      )}
+                    >
                       {STATUS_MAP[c.id_estatus_cita ?? 0]?.label || "—"}
                     </Badge>
                   </div>
@@ -322,11 +500,16 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
 
               {(cita.nombre_invitado || cita.email_invitado) && (
                 <DetailRow icon={Users} label="Invitado">
-                  <div className="space-y-0.5">
-                    <p className="font-medium">{cita.nombre_invitado || cita.email_invitado}</p>
-                    {cita.email_invitado && cita.nombre_invitado && (
-                      <p className="text-xs text-muted-foreground">{cita.email_invitado}</p>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex-shrink-0">
+                      {getInitials(cita.nombre_invitado)}
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="font-medium">{cita.nombre_invitado || cita.email_invitado}</p>
+                      {cita.email_invitado && cita.nombre_invitado && (
+                        <p className="text-xs text-muted-foreground">{cita.email_invitado}</p>
+                      )}
+                    </div>
                   </div>
                 </DetailRow>
               )}
@@ -571,7 +754,6 @@ export default function TodasLasCitas() {
       dayHorarios.forEach(h => {
         const config = h.id_configuracion_cita ? configMap.get(h.id_configuracion_cita) : undefined;
         
-        // Skip if config has a fecha_fin_recurrencia and this day is past it
         if (config?.fecha_fin_recurrencia) {
           const endDate = new Date(config.fecha_fin_recurrencia + "T23:59:59");
           if (day > endDate) return;
@@ -672,7 +854,7 @@ export default function TodasLasCitas() {
   }, [filteredCitas, verifyMutation]);
 
   const now = new Date();
-  const slotHeight = 72;
+  const slotHeight = 80;
   const numDays = days.length;
 
   // Stats
@@ -726,19 +908,19 @@ export default function TodasLasCitas() {
       {/* Legend */}
       <div className="flex flex-wrap gap-5 text-xs text-muted-foreground px-1">
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded border border-dashed border-muted-foreground/25 bg-muted/5" />
+          <span className="w-3 h-3 rounded border border-dashed border-muted-foreground/25 bg-muted/10" />
           Disponible
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-primary" />
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
           Agendada
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-warning" />
+          <span className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
           Pendiente
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-success" />
+          <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
           Confirmada
         </span>
         <span className="flex items-center gap-1.5">
@@ -746,7 +928,7 @@ export default function TodasLasCitas() {
           No en Calendar
         </span>
         <span className="flex items-center gap-1.5">
-          <CheckCircle2 className="h-3 w-3 text-success" />
+          <CheckCircle2 className="h-3 w-3 text-green-600" />
           Verificada
         </span>
       </div>
@@ -769,19 +951,19 @@ export default function TodasLasCitas() {
                   key={day.toISOString()}
                   className={cn(
                     "border-b border-r py-3 px-2 text-center transition-colors",
-                    today && "bg-primary/5",
+                    today && "bg-blue-50/50 dark:bg-blue-950/20",
                     past && "bg-muted/30"
                   )}
                 >
                   <div className={cn(
                     "text-[11px] font-medium uppercase tracking-wider",
-                    today ? "text-primary" : "text-muted-foreground"
+                    today ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"
                   )}>
                     {format(day, "EEE", { locale: es })}
                   </div>
                   <div className={cn(
                     "text-xl font-bold mt-0.5",
-                    today ? "text-primary" : past ? "text-muted-foreground" : "text-foreground"
+                    today ? "text-blue-600 dark:text-blue-400" : past ? "text-muted-foreground" : "text-foreground"
                   )}>
                     {format(day, "d")}
                   </div>
@@ -821,14 +1003,14 @@ export default function TodasLasCitas() {
                       className={cn(
                         "border-r border-b relative",
                         past && "bg-muted/10",
-                        today && "bg-primary/[0.02]"
+                        today && "bg-blue-50/20 dark:bg-blue-950/10"
                       )}
                       style={{ height: slotHeight }}
                     >
                       {/* Half-hour guide */}
                       <div className="absolute left-0 right-0 border-b border-dashed border-border/20" style={{ top: slotHeight / 2 }} />
 
-                      {/* Render all items side by side when multiple */}
+                      {/* Render items */}
                       {(() => {
                         const groupConfigIds = new Set<number>();
                         groupSlots.forEach(slot => {
@@ -861,26 +1043,34 @@ export default function TodasLasCitas() {
 
                         const totalItems = allItems.length;
 
-                        return allItems.map((item, idx) => {
-                          const widthPercent = totalItems > 1 ? (100 / totalItems) : 100;
-                          const leftPercent = totalItems > 1 ? (idx * widthPercent) : 0;
-
+                        // If multiple items in one slot, use StackedSlotCard
+                        if (totalItems > 1) {
                           return (
-                            <div
-                              key={`item-${idx}`}
-                              className="absolute"
-                              style={{
-                                top: item.top,
-                                height: item.height,
-                                left: `calc(${leftPercent}% + ${idx > 0 ? 1 : 0}px)`,
-                                width: `calc(${widthPercent}% - ${totalItems > 1 ? 1 : 0}px)`,
-                                zIndex: item.slot.type === "cita" ? 10 : 5,
-                              }}
-                            >
-                              <SlotCard slot={item.slot} calendarStatus={item.status} onClick={() => setSelectedSlot(item.slot)} />
+                            <div className="absolute inset-0" style={{ zIndex: 10 }}>
+                              <StackedSlotCard
+                                items={allItems.map(item => ({ slot: item.slot, status: item.status }))}
+                                onSelectSlot={(slot) => setSelectedSlot(slot)}
+                              />
                             </div>
                           );
-                        });
+                        }
+
+                        // Single item — render normally
+                        return allItems.map((item, idx) => (
+                          <div
+                            key={`item-${idx}`}
+                            className="absolute"
+                            style={{
+                              top: item.top,
+                              height: item.height,
+                              left: 0,
+                              width: "100%",
+                              zIndex: item.slot.type === "cita" ? 10 : 5,
+                            }}
+                          >
+                            <SlotCard slot={item.slot} calendarStatus={item.status} onClick={() => setSelectedSlot(item.slot)} />
+                          </div>
+                        ));
                       })()}
                     </div>
                   );
