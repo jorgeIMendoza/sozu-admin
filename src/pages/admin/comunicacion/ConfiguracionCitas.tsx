@@ -1098,8 +1098,8 @@ export default function ConfiguracionCitas() {
                                     >
                                       {slot.label}
                                     </button>
-                                  );
-                                })}
+                                ))}
+                              </div>
                               </div>
                               {dayOverrides.length > 0 && (
                                 <div className="rounded-md border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-3">
