@@ -6120,20 +6120,45 @@ const Propiedades = () => {
                                    <p>No tienes acceso a descargar esta oferta</p>
                                  </TooltipContent>
                                </Tooltip>
-                             ) : (
-                               <Button
-                                 variant="outline"
-                                 size="icon"
-                                 onClick={() => handleDownloadOffer(offer)}
-                                 disabled={downloadingOfferId === offer.id}
-                               >
-                                 {downloadingOfferId === offer.id ? (
-                                   <Loader2 className="h-4 w-4 animate-spin" />
-                                 ) : (
-                                   <Download className="h-4 w-4" />
-                                 )}
-                               </Button>
-                             )}
+                              ) : (
+                                <div className="flex gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => handleDownloadOffer(offer)}
+                                    disabled={downloadingOfferId === offer.id}
+                                  >
+                                    {downloadingOfferId === offer.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Download className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={async () => {
+                                          const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+                                          sendOfferEmailDirect({
+                                            offerId: offer.id,
+                                            propertyNumber: offer.numero_propiedad || '',
+                                            recipientEmail: offer.lead_email,
+                                            recipientName: offer.lead_name,
+                                            tipo: 'propiedad',
+                                          });
+                                        }}
+                                      >
+                                        <Mail className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Enviar oferta por correo</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </div>
+                              )}
                            </TableCell>
                         </TableRow>
                       );
