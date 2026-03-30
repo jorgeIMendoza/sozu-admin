@@ -168,14 +168,16 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
       });
       return;
     }
-    const sinFirma = firmantes.filter(f => !f.firma_imagen);
-    if (sinFirma.length > 0) {
-      toast({
-        title: "Firma autógrafa requerida",
-        description: `Los siguientes firmantes no tienen firma: ${sinFirma.map(f => f.name).join(", ")}`,
-        variant: "destructive",
-      });
-      return;
+    if (firmaAutografa) {
+      const sinFirma = firmantes.filter(f => !f.firma_imagen);
+      if (sinFirma.length > 0) {
+        toast({
+          title: "Firma autógrafa requerida",
+          description: `Los siguientes firmantes no tienen firma: ${sinFirma.map(f => f.name).join(", ")}`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
     saveMutation.mutate({ html: currentHtml, firmantesConfig: firmantes, biometrica });
   };
