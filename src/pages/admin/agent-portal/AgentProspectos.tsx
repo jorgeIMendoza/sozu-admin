@@ -41,9 +41,9 @@ const AgentProspectos = () => {
   }, []);
 
   const { data: prospectos = [], isLoading } = useQuery({
-    queryKey: ["agent-prospectos", profile?.id_persona],
+    queryKey: ["agent-prospectos", effectivePersonaId],
     queryFn: async (): Promise<ProspectoAgrupado[]> => {
-      if (!profile?.id_persona) return [];
+      if (!effectivePersonaId) return [];
 
       const { data, error } = await supabase
         .from("entidades_relacionadas")
