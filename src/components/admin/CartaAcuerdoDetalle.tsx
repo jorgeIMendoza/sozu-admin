@@ -495,7 +495,8 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                     <p className="font-medium text-sm truncate">{f.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{f.cargo}</p>
                     <p className="text-xs text-muted-foreground truncate">{f.email}</p>
-                    {/* Signature preview */}
+                    {/* Signature preview - only show when firma autógrafa is enabled */}
+                    {firmaAutografa && (
                     <div className="mt-2">
                       {f.firma_imagen ? (
                         <div className="flex items-center gap-2">
@@ -522,6 +523,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
                         </Button>
                       )}
                     </div>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-2 shrink-0 mt-1">
                     <Button variant="ghost" size="icon" onClick={() => removeFirmante(i)}>
