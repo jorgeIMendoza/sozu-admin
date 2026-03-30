@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
@@ -23,6 +24,8 @@ interface ProspectoAgrupado {
 
 const AgentProspectos = () => {
   const { profile } = useAuth();
+  const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
+  const effectivePersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const queryClient = useQueryClient();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
