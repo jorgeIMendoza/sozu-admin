@@ -396,10 +396,19 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     refetchInterval: 30000,
   });
 
-  // Step 1: Ask for autograph before creating/continuing Mifiel doc
+  // Step 1: Ask for autograph before creating/continuing Mifiel doc (or skip if not required)
   const handleRequestAgentSignature = (action: "firmar" | "continuar") => {
     if (!personaForMifiel?.email || !personaForMifiel?.nombre_legal) {
       toast.error("Faltan datos del agente (nombre o email) para enviar a firma.");
+      return;
+    }
+    if (!requiereFirmaAutografa) {
+      // Skip autograph, proceed directly
+      if (action === "firmar") {
+        doFirmarCarta(null);
+      } else {
+        handleContinuarFirmaInternal();
+      }
       return;
     }
     setPendingSignAction(action);
