@@ -194,6 +194,18 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
     }
   };
 
+  const handleToggleFirmaAutografa = async (checked: boolean) => {
+    const { error } = await (supabase as any)
+      .from("cartas_acuerdo")
+      .update({ requiere_firma_autografa: checked, updated_at: new Date().toISOString() })
+      .eq("id", cartaId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["carta-acuerdo", cartaId] });
+    }
+  };
+
   const openSigningWidget = (widgetId: string) => {
     setSigningWidgetId(widgetId);
     setSigningOpen(true);
