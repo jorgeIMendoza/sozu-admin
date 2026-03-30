@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, FileSpreadsheet, Building2, Home, Filter, FileText, Car, Warehouse, Loader2, Download } from "lucide-react";
+import { Search, FileSpreadsheet, Building2, Home, Filter, FileText, Car, Warehouse, Loader2, Download, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1463,25 +1463,50 @@ export default function MisPropiedades() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() => handleDownloadOffer(offer)}
-                                  disabled={downloadingOfferId === offer.id}
-                                >
-                                  {downloadingOfferId === offer.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Download className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Descargar PDF de oferta</p>
-                              </TooltipContent>
-                            </Tooltip>
+                            <div className="flex gap-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => handleDownloadOffer(offer)}
+                                    disabled={downloadingOfferId === offer.id}
+                                  >
+                                    {downloadingOfferId === offer.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Download className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Descargar PDF de oferta</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={async () => {
+                                      const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+                                      sendOfferEmailDirect({
+                                        offerId: offer.id,
+                                        propertyNumber: offer.numero_propiedad || '',
+                                        recipientEmail: offer.lead_email,
+                                        recipientName: offer.lead_name,
+                                        tipo: 'propiedad',
+                                      });
+                                    }}
+                                  >
+                                    <Mail className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Enviar oferta por correo</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -1518,6 +1543,7 @@ export default function MisPropiedades() {
                      <TableHead>Esquema de Pago</TableHead>
                      <TableHead>Estatus Aprob.</TableHead>
                      <TableHead>Cuenta de Cobranza</TableHead>
+                     <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1594,6 +1620,31 @@ export default function MisPropiedades() {
                           ) : (
                             <span className="text-muted-foreground text-sm">Sin cuenta</span>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={async () => {
+                                  const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+                                  sendOfferEmailDirect({
+                                    offerId: offer.id,
+                                    propertyNumber: selectedPropertyForOffers?.numero_departamento || '',
+                                    recipientEmail: offer.lead_email,
+                                    recipientName: offer.lead_name,
+                                    tipo: 'producto',
+                                  });
+                                }}
+                              >
+                                <Mail className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Enviar oferta por correo</p>
+                            </TooltipContent>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     );

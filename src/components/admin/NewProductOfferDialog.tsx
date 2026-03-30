@@ -11,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ShoppingCart, UserPlus, AlertCircle, Info } from "lucide-react";
+import { ShoppingCart, UserPlus, AlertCircle, Info, Mail } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -759,14 +759,39 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
           productId: selectedProduct
         });
         // Enviar por correo al prospecto (fire-and-forget)
-        const { sendOfferEmailAfterDownload } = await import('@/services/ofertaEmailService');
-        sendOfferEmailAfterDownload({
+        const { sendOfferEmailAfterDownload, sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+        const emailSent = await sendOfferEmailAfterDownload({
           offerId: ofertaData.id,
           propertyNumber: propertyNumber || '',
           recipientEmail: formValues.email,
           recipientName: formValues.razon_social,
           tipo: 'producto',
         });
+        if (!emailSent) {
+          const offerParams = {
+            offerId: ofertaData.id,
+            propertyNumber: propertyNumber || '',
+            recipientEmail: formValues.email,
+            recipientName: formValues.razon_social,
+            tipo: 'producto' as const,
+          };
+          toast({
+            title: "Oferta descargada",
+            description: "La oferta no incluye datos bancarios. ¿Deseas enviarla por correo al prospecto?",
+            duration: 15000,
+            action: (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => sendOfferEmailDirect(offerParams)}
+              >
+                <Mail className="h-4 w-4 mr-1" />
+                Enviar
+              </Button>
+            ),
+          });
+        }
       } catch (pdfError) {
         console.error('Error generating PDF:', pdfError);
         toast({
