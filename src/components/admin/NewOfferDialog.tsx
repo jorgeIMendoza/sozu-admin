@@ -1312,6 +1312,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     setPendingFormData(null);
     setProductSchemeSelections({});
     setPropertySchemeSelection(null);
+    setSendEmailOnGenerate(false);
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
