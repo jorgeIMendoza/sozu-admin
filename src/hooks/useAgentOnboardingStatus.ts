@@ -180,7 +180,7 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
   const hasINE = docTypes.has(2) && docTypes.has(3);
   const hasPasaporte = docTypes.has(4);
   const hasIdentityDoc = hasINE || hasPasaporte;
-  const documentsComplete = hasIdentityDoc && docTypes.has(6) && docTypes.has(48);
+  const documentsComplete = hasIdentityDoc && docTypes.has(48);
   const documentsPartial = !documentsComplete && docTypes.size > 0;
 
   const bankComplete = cuentas.length > 0;
