@@ -132,12 +132,25 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     const hasINE = docTypes.has(2) && docTypes.has(3);
     const hasPasaporte = docTypes.has(4);
     const hasIdentityDoc = hasINE || hasPasaporte;
-    // For agents with inmobiliaria, carta de cumplimiento (48) is NOT required
     const identityDocsComplete = hasIdentityDoc;
     const identityDocsPartial = !identityDocsComplete && docTypes.size > 0;
 
     const identityComplete = basicComplete && addressComplete && identityDocsComplete;
     const identityPartial = !identityComplete && (basicPartial || basicComplete || addressPartial || addressComplete || identityDocsPartial);
+
+    // Missing items for identity step
+    const basicMissing: string[] = [];
+    if (!persona?.nombre_legal) basicMissing.push('Nombre completo');
+    if (!persona?.email) basicMissing.push('Correo electrónico');
+    if (!persona?.telefono) basicMissing.push('Teléfono');
+    if (!persona?.direccion_calle) basicMissing.push('Dirección (calle)');
+    if (!persona?.direccion_num_ext) basicMissing.push('Num. exterior');
+    if (!persona?.direccion_colonia) basicMissing.push('Colonia');
+    if (!persona?.direccion_codigo_postal) basicMissing.push('Código postal');
+    if (!persona?.direccion_id_pais) basicMissing.push('País');
+    if (!persona?.direccion_id_estado) basicMissing.push('Estado');
+    if (!persona?.direccion_id_municipio) basicMissing.push('Municipio');
+    if (!hasIdentityDoc) basicMissing.push('INE o Pasaporte');
 
     const inmoSteps: OnboardingStep[] = [
       { id: 'basic', label: 'Identidad', isComplete: identityComplete, hasPartialData: identityPartial },
@@ -146,7 +159,10 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
       { id: 'training', label: 'Capacitación', isComplete: true, hasPartialData: false },
     ];
     const inmoCompleted = inmoSteps.filter(s => s.isComplete).length;
-    return { steps: inmoSteps, completedCount: inmoCompleted, totalSteps: 4, percentage: Math.round((inmoCompleted / 4) * 100), isLoading: false, hasTrainingComplete: true, hasBasicIdentityComplete: identityComplete, canAccessComisiones: true, missingForComisiones: [] };
+    return {
+      steps: inmoSteps, completedCount: inmoCompleted, totalSteps: 4, percentage: Math.round((inmoCompleted / 4) * 100), isLoading: false, hasTrainingComplete: true, hasBasicIdentityComplete: identityComplete, canAccessComisiones: true, missingForComisiones: [],
+      missingByStep: { basic: basicMissing, fiscal: [], 'bank-accounts': [], training: [] },
+    };
   }
 
   // Evaluate steps
