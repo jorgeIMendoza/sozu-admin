@@ -142,6 +142,7 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
 
   const currentHtml = editorHtml ?? carta?.contenido_html ?? "";
   const biometrica = carta?.requiere_validacion_biometrica ?? false;
+  const firmaAutografa = carta?.requiere_firma_autografa ?? true;
 
   const addFirmante = () => {
     if (!newName.trim() || !newEmail.trim() || !newCargo.trim()) {
