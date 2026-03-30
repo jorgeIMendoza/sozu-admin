@@ -267,9 +267,7 @@ export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promis
 
     // Si no tenemos email, consultar de la BD
     if (!recipientEmail) {
-      const id_persona_lead = ofertaCheck.id_persona_lead;
-
-      if (!oferta?.id_persona_lead) {
+      if (!ofertaCheck?.id_persona_lead) {
         toast({
           title: "Sin prospecto",
           description: "La oferta no tiene un prospecto asignado.",
@@ -281,7 +279,7 @@ export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promis
       const { data: persona } = await supabase
         .from('personas')
         .select('email, nombre_legal')
-        .eq('id', oferta.id_persona_lead)
+        .eq('id', ofertaCheck.id_persona_lead)
         .single();
 
       if (!persona?.email) {
