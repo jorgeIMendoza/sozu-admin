@@ -2531,6 +2531,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </div>
             )}
 
+            {confirmBankingReasons.length > 0 && (
+              <div className="flex items-center gap-2 mt-2">
+                <Checkbox
+                  id="sendEmailOnGenerate"
+                  checked={sendEmailOnGenerate}
+                  onCheckedChange={(checked) => setSendEmailOnGenerate(checked === true)}
+                />
+                <label htmlFor="sendEmailOnGenerate" className="text-sm text-foreground cursor-pointer">
+                  También enviar oferta(s) por correo al prospecto
+                </label>
+              </div>
+            )}
+
             {productsWithPriceInfo.total > 0 ? (
               <p className="text-sm text-muted-foreground">
                 Se descargarán {1 + productsWithPriceInfo.valid.length} PDF(s) automáticamente.
