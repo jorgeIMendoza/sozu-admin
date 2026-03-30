@@ -1543,6 +1543,7 @@ export default function MisPropiedades() {
                      <TableHead>Esquema de Pago</TableHead>
                      <TableHead>Estatus Aprob.</TableHead>
                      <TableHead>Cuenta de Cobranza</TableHead>
+                     <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
