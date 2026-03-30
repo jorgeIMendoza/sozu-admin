@@ -812,6 +812,7 @@ export default function MisPropiedades() {
           enrichedOffer.mostrar_seccion_efectivo_en_oferta = offerData.mostrar_seccion_efectivo_en_oferta;
           enrichedOffer.id_estatus_aprobacion = offerData.id_estatus_aprobacion;
           enrichedOffer.estatus_aprobacion_nombre = (offerData as any).estatus_aprobacion?.nombre || null;
+          enrichedOffer.url = offerData.url;
         }
       } catch (err) {
         console.warn('Error fetching display options for offer:', offer.id);
