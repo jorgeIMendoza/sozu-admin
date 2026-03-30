@@ -51,11 +51,13 @@ export async function getOrCreateProductClabe(
         continue;
       }
       
-      if (count === 0) {
+      if (count === 0 && offer.clabe_stp_tmp_producto?.length === 18) {
         offersWithoutAccount.push({
           id: offer.id,
           clabe_stp_tmp_producto: offer.clabe_stp_tmp_producto!
         });
+      } else if (count === 0) {
+        console.warn('⚠️ CLABE con longitud incorrecta descartada:', offer.clabe_stp_tmp_producto, 'de oferta:', offer.id);
       }
     }
   }
