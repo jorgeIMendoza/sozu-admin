@@ -1621,6 +1621,31 @@ export default function MisPropiedades() {
                             <span className="text-muted-foreground text-sm">Sin cuenta</span>
                           )}
                         </TableCell>
+                        <TableCell>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={async () => {
+                                  const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+                                  sendOfferEmailDirect({
+                                    offerId: offer.id,
+                                    propertyNumber: selectedPropertyForOffers?.numero_departamento || '',
+                                    recipientEmail: offer.lead_email,
+                                    recipientName: offer.lead_name,
+                                    tipo: 'producto',
+                                  });
+                                }}
+                              >
+                                <Mail className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Enviar oferta por correo</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
