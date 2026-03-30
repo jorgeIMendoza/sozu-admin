@@ -1045,7 +1045,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         });
 
         // Enviar todas las ofertas por correo en un solo email
-        const { sendMultipleOffersEmail, sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+        const { sendMultipleOffersEmail, sendMultipleOffersEmailDirect } = await import('@/services/ofertaEmailService');
         const allOfferIdsForEmail = [
           result.offerId,
           ...result.productOffersResults.createdOffers.map(po => po.offerId),
@@ -1059,23 +1059,22 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         });
         // Si no se envió automáticamente, ofrecer botón manual
         if (!emailSent) {
-          const offerParams = {
-            offerId: result.offerId,
-            propertyNumber,
-            recipientEmail: result.leadEmail,
-            recipientName: result.leadName,
-            tipo: 'propiedad' as const,
-          };
           toast({
             title: "Oferta descargada",
-            description: "La oferta no incluye datos bancarios. ¿Deseas enviarla por correo al prospecto?",
+            description: "La oferta no incluye datos bancarios. ¿Deseas enviar todas las ofertas generadas por correo al prospecto?",
             duration: 15000,
             action: (
               <Button
                 variant="outline"
                 size="sm"
                 className="shrink-0"
-                onClick={() => sendOfferEmailDirect(offerParams)}
+                onClick={() => sendMultipleOffersEmailDirect({
+                  offerIds: allOfferIdsForEmail,
+                  propertyNumber,
+                  recipientEmail: result.leadEmail,
+                  recipientName: result.leadName,
+                  preGeneratedAttachments,
+                })}
               >
                 <Mail className="h-4 w-4 mr-1" />
                 Enviar

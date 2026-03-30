@@ -21,7 +21,7 @@ async function shouldShowBankingForProperty(offerId: number): Promise<boolean> {
       .from('ofertas')
       .select('id_esquema_pago_seleccionado, id_propiedad, id_persona_lead')
       .eq('id', offerId)
-      .single();
+      .maybeSingle();
 
     if (!oferta) return false;
 
@@ -37,7 +37,7 @@ async function shouldShowBankingForProperty(offerId: number): Promise<boolean> {
         .from('personas')
         .select('rfc')
         .eq('id', oferta.id_persona_lead)
-        .single();
+        .maybeSingle();
 
       if (!isValidRFC(persona?.rfc)) {
         console.log(`[ofertaEmail] Oferta ${offerId}: lead sin RFC válido, no muestra datos bancarios`);
@@ -54,7 +54,7 @@ async function shouldShowBankingForProperty(offerId: number): Promise<boolean> {
         .from('propiedades')
         .select('clabe_stp_tmp_apartado, id_edificio_modelo')
         .eq('id', oferta.id_propiedad)
-        .single();
+        .maybeSingle();
 
       if (!propiedad) return false;
 
@@ -68,21 +68,21 @@ async function shouldShowBankingForProperty(offerId: number): Promise<boolean> {
           .from('edificios_modelos')
           .select('id_edificio')
           .eq('id', propiedad.id_edificio_modelo)
-          .single();
+          .maybeSingle();
 
         if (edModelo?.id_edificio) {
           const { data: edificio } = await (supabase as any)
             .from('edificios')
             .select('id_proyecto')
             .eq('id', edModelo.id_edificio)
-            .single();
+            .maybeSingle();
 
           if (edificio?.id_proyecto) {
             const { data: proyecto } = await (supabase as any)
               .from('proyectos')
               .select('mostrar_seccion_efectivo_en_oferta')
               .eq('id', edificio.id_proyecto)
-              .single();
+              .maybeSingle();
 
             if (proyecto?.mostrar_seccion_efectivo_en_oferta) {
               // Verificar si hay cuenta bancaria del dueño (ownerStpBankAccount)
@@ -133,7 +133,7 @@ async function shouldShowBankingForProduct(offerId: number): Promise<boolean> {
       .from('ofertas')
       .select('id_esquema_pago_seleccionado, clabe_stp_tmp_producto')
       .eq('id', offerId)
-      .single();
+      .maybeSingle();
 
     if (!oferta) return false;
 
@@ -182,7 +182,7 @@ export async function sendOfferEmailAfterDownload(params: SendOfferEmailParams):
         .from('ofertas')
         .select('id_persona_lead')
         .eq('id', offerId)
-        .single();
+        .maybeSingle();
 
       if (!oferta?.id_persona_lead) {
         console.log(`[ofertaEmail] Oferta ${offerId} sin id_persona_lead, no se envía email`);
@@ -193,7 +193,7 @@ export async function sendOfferEmailAfterDownload(params: SendOfferEmailParams):
         .from('personas')
         .select('email, nombre_legal')
         .eq('id', oferta.id_persona_lead)
-        .single();
+        .maybeSingle();
 
       if (!persona?.email) {
         toast({
@@ -280,7 +280,7 @@ export async function sendMultipleOffersEmail(params: {
         .from('ofertas')
         .select('id_persona_lead')
         .eq('id', offerIds[0])
-        .single();
+        .maybeSingle();
 
       if (!oferta?.id_persona_lead) {
         console.log(`[ofertaEmail] Oferta ${offerIds[0]} sin id_persona_lead`);
@@ -291,7 +291,7 @@ export async function sendMultipleOffersEmail(params: {
         .from('personas')
         .select('email, nombre_legal')
         .eq('id', oferta.id_persona_lead)
-        .single();
+        .maybeSingle();
 
       if (!persona?.email) {
         toast({
@@ -354,6 +354,97 @@ export async function sendMultipleOffersEmail(params: {
  * Envía la oferta por correo electrónico sin validar datos bancarios.
  * Se usa para envío manual desde los botones de la interfaz.
  */
+export async function sendMultipleOffersEmailDirect(params: {
+  offerIds: number[];
+  propertyNumber?: string;
+  recipientEmail?: string;
+  recipientName?: string;
+  preGeneratedAttachments?: { base64: string; filename: string; offerId: number; tipo: string }[];
+}): Promise<void> {
+  try {
+    let { offerIds, propertyNumber, recipientEmail, recipientName, preGeneratedAttachments } = params;
+
+    if (!offerIds.length) return;
+
+    if (!recipientEmail) {
+      const { data: oferta } = await supabase
+        .from('ofertas')
+        .select('id_persona_lead')
+        .eq('id', offerIds[0])
+        .maybeSingle();
+
+      if (!oferta?.id_persona_lead) {
+        toast({
+          title: "Sin prospecto",
+          description: "Las ofertas no tienen un prospecto asignado.",
+          duration: 5000,
+        });
+        return;
+      }
+
+      const { data: persona } = await supabase
+        .from('personas')
+        .select('email, nombre_legal')
+        .eq('id', oferta.id_persona_lead)
+        .maybeSingle();
+
+      if (!persona?.email) {
+        toast({
+          title: "Sin correo del prospecto",
+          description: "El prospecto no tiene email registrado.",
+          duration: 5000,
+        });
+        return;
+      }
+
+      recipientEmail = persona.email;
+      recipientName = recipientName || persona.nombre_legal || '';
+    }
+
+    toast({
+      title: "Enviando ofertas...",
+      description: `Enviando ${offerIds.length} oferta(s) a ${recipientEmail}`,
+      duration: 3000,
+    });
+
+    const body: Record<string, unknown> = {
+      offerIds,
+      recipientEmail,
+      recipientName: recipientName || '',
+      propertyNumber: propertyNumber || '',
+    };
+
+    if (preGeneratedAttachments && preGeneratedAttachments.length > 0) {
+      body.preGeneratedAttachments = preGeneratedAttachments.map(att => ({
+        base64: att.base64,
+        filename: att.filename,
+        offerId: att.offerId,
+        tipo: att.tipo,
+      }));
+    }
+
+    const { error } = await supabase.functions.invoke('enviar-oferta-email', { body });
+
+    if (error) {
+      console.error('[ofertaEmail] Error al enviar email múltiple directo:', error);
+      toast({
+        title: "Email no enviado",
+        description: "No se pudieron enviar las ofertas por correo.",
+        duration: 4000,
+      });
+      return;
+    }
+
+    toast({
+      title: "Ofertas enviadas por correo",
+      description: `Se enviaron ${preGeneratedAttachments?.length || offerIds.length} oferta(s) a ${recipientEmail}`,
+      duration: 4000,
+    });
+  } catch (err) {
+    console.error('[ofertaEmail] Error inesperado en envío múltiple directo:', err);
+  }
+}
+
 export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promise<void> {
   try {
     let { offerId, propertyNumber, recipientEmail, recipientName } = params;
@@ -363,7 +454,7 @@ export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promis
       .from('ofertas')
       .select('url, id_persona_lead')
       .eq('id', offerId)
-      .single();
+      .maybeSingle();
 
     if (!ofertaCheck?.url) {
       toast({
@@ -389,7 +480,7 @@ export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promis
         .from('personas')
         .select('email, nombre_legal')
         .eq('id', ofertaCheck.id_persona_lead)
-        .single();
+        .maybeSingle();
 
       if (!persona?.email) {
         toast({
