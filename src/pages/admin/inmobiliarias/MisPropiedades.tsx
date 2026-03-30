@@ -863,6 +863,7 @@ export default function MisPropiedades() {
         id_producto,
         clabe_stp_tmp_producto,
         id_estatus_aprobacion,
+        url,
         estatus_aprobacion!ofertas_id_estatus_aprobacion_fkey(nombre),
         productos_servicios!ofertas_id_producto_fkey(nombre, precio_lista),
         esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(nombre)
