@@ -2360,7 +2360,14 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
       }
       onSaved();
     } catch (err: any) {
-      toast.error("Error al guardar: " + (err.message || "Error desconocido"));
+      const msg = err.message || "Error desconocido";
+      if (msg.includes("personas_rfc_key") || (msg.includes("duplicate") && msg.includes("rfc"))) {
+        toast.error("El RFC ingresado ya está dado de alta en el sistema. Verifica e ingresa un RFC diferente.");
+      } else if (msg.includes("personas_curp_key") || (msg.includes("duplicate") && msg.includes("curp"))) {
+        toast.error("El CURP ingresado ya está dado de alta en el sistema.");
+      } else {
+        toast.error("Error al guardar: " + msg);
+      }
     } finally {
       setSaving(false);
     }
