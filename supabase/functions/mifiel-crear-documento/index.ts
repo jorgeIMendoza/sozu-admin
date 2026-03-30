@@ -530,7 +530,7 @@ serve(async (req) => {
     const blocks = parseHtmlToBlocks(html);
     const pdfBytes = await renderBlocksToPdf(blocks, {
       firmantesConfig: firmantesConfig as any,
-      agentSignature: firma_autografa_agente || undefined,
+      agentSignature: requiereFirmaAutografa ? (firma_autografa_agente || undefined) : undefined,
       agentName: agente_nombre,
       agentRfc: agente_rfc || "[rfc_agente]",
       fechaActual,
