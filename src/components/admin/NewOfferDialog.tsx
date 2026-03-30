@@ -1045,9 +1045,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         });
 
         // Enviar por correo al prospecto (fire-and-forget)
-        const { sendOfferEmailAfterDownload } = await import('@/services/ofertaEmailService');
+        const { sendOfferEmailAfterDownload, sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
         // Enviar email para la oferta principal
-        sendOfferEmailAfterDownload({
+        const emailSent = await sendOfferEmailAfterDownload({
           offerId: result.offerId,
           propertyNumber,
           recipientEmail: result.leadEmail,
@@ -1056,12 +1056,38 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         });
         // Enviar email para cada oferta de producto
         for (const productOffer of result.productOffersResults.createdOffers) {
-          sendOfferEmailAfterDownload({
+          await sendOfferEmailAfterDownload({
             offerId: productOffer.offerId,
             propertyNumber,
             recipientEmail: result.leadEmail,
             recipientName: result.leadName,
             tipo: 'producto',
+          });
+        }
+        // Si no se envió automáticamente, ofrecer botón manual
+        if (!emailSent) {
+          const offerParams = {
+            offerId: result.offerId,
+            propertyNumber,
+            recipientEmail: result.leadEmail,
+            recipientName: result.leadName,
+            tipo: 'propiedad' as const,
+          };
+          toast({
+            title: "Oferta descargada",
+            description: "La oferta no incluye datos bancarios. ¿Deseas enviarla por correo al prospecto?",
+            duration: 15000,
+            action: (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => sendOfferEmailDirect(offerParams)}
+              >
+                <Mail className="h-4 w-4 mr-1" />
+                Enviar
+              </Button>
+            ),
           });
         }
       } catch (emailErr) {
