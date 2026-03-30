@@ -802,7 +802,7 @@ export default function MisPropiedades() {
       try {
         const { data: offerData } = await supabase
           .from('ofertas')
-          .select('mostrar_piso_en_oferta, mostrar_precio_m2_en_oferta, mostrar_seccion_efectivo_en_oferta, id_estatus_aprobacion, estatus_aprobacion!ofertas_id_estatus_aprobacion_fkey(nombre)')
+          .select('mostrar_piso_en_oferta, mostrar_precio_m2_en_oferta, mostrar_seccion_efectivo_en_oferta, id_estatus_aprobacion, url, estatus_aprobacion!ofertas_id_estatus_aprobacion_fkey(nombre)')
           .eq('id', offer.id)
           .single();
         
