@@ -351,8 +351,8 @@ async function renderBlocksToPdf(blocks: Block[], options?: { firmantesConfig?: 
       page.drawText(`Cargo: ${f.cargo || ""}`, { x: margin, y, size: fontSize, font, color: textColor });
       y -= lineHeight;
 
-      // Firmante signature image (if available)
-      if (f.firma_imagen) {
+      // Firmante signature image (if available and autografa is required)
+      if (f.firma_imagen && options?.requiereFirmaAutografa !== false) {
         const img = await embedBase64Image(f.firma_imagen);
         if (img) {
           const imgHeight = 80;
