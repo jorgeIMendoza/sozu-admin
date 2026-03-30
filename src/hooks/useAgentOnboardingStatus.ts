@@ -63,7 +63,7 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
       if (!personaId) return [];
       const { data, error } = await supabase
         .from('documentos')
-        .select('id_tipo_documento')
+        .select('id_tipo_documento, id_estatus_verificacion')
         .eq('id_persona', personaId)
         .eq('activo', true)
         .in('id_tipo_documento', [2, 3, 4, 6, 48]);
