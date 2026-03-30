@@ -194,9 +194,11 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
   const basicStageComplete = basicComplete && addressComplete && documentsComplete;
   const basicStagePartial = !basicStageComplete && (basicPartial || basicComplete || addressPartial || addressComplete || documentsPartial);
 
-  // Stage 2: fiscal = fiscal info + constancia (doc type 6)
-  const fiscalStageComplete = fiscalComplete && docTypes.has(6);
-  const fiscalStagePartial = !fiscalStageComplete && (fiscalPartial || fiscalComplete || docTypes.has(6));
+  // Stage 2: fiscal = fiscal info + constancia (doc type 6) — constancia must be approved (id_estatus_verificacion === 2)
+  const constanciaApproved = documentos.some((d: any) => d.id_tipo_documento === 6 && d.id_estatus_verificacion === 2);
+  const constanciaExists = docTypes.has(6);
+  const fiscalStageComplete = fiscalComplete && constanciaApproved;
+  const fiscalStagePartial = !fiscalStageComplete && (fiscalPartial || fiscalComplete || constanciaExists);
 
   const steps: OnboardingStep[] = [
     { id: 'basic', label: 'Identidad', isComplete: basicStageComplete, hasPartialData: basicStagePartial },

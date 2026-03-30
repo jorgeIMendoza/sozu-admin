@@ -1212,7 +1212,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   )}
 
                   {!firmaCompletada && !firmaEnProgreso && !isValidated && (
-                    !hasBasicIdentityComplete ? (
+                    !basicInfoAndDocsReady ? (
                       <div className="flex-1 text-center">
                         <Button
                           size="sm"
