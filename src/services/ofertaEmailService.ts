@@ -249,15 +249,25 @@ export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promis
   try {
     let { offerId, propertyNumber, recipientEmail, recipientName } = params;
 
+    // Verificar que la oferta tenga un PDF generado (url no nula)
+    const { data: ofertaCheck } = await supabase
+      .from('ofertas')
+      .select('url, id_persona_lead')
+      .eq('id', offerId)
+      .single();
+
+    if (!ofertaCheck?.url) {
+      toast({
+        title: "PDF no disponible",
+        description: "La oferta no tiene un PDF generado. Primero descarga la oferta para generar el PDF y luego intenta enviarla por correo.",
+        duration: 7000,
+      });
+      return;
+    }
+
     // Si no tenemos email, consultar de la BD
     if (!recipientEmail) {
-      const { data: oferta } = await supabase
-        .from('ofertas')
-        .select('id_persona_lead')
-        .eq('id', offerId)
-        .single();
-
-      if (!oferta?.id_persona_lead) {
+      if (!ofertaCheck?.id_persona_lead) {
         toast({
           title: "Sin prospecto",
           description: "La oferta no tiene un prospecto asignado.",
@@ -269,7 +279,7 @@ export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promis
       const { data: persona } = await supabase
         .from('personas')
         .select('email, nombre_legal')
-        .eq('id', oferta.id_persona_lead)
+        .eq('id', ofertaCheck.id_persona_lead)
         .single();
 
       if (!persona?.email) {
