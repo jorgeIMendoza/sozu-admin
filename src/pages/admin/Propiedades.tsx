@@ -3167,7 +3167,7 @@ const Propiedades = () => {
       try {
         const { data: offerData, error: offerError } = await supabase
           .from('ofertas')
-          .select('mostrar_piso_en_oferta, mostrar_precio_m2_en_oferta, mostrar_seccion_efectivo_en_oferta, id_estatus_aprobacion, estatus_aprobacion!ofertas_id_estatus_aprobacion_fkey(nombre)')
+          .select('mostrar_piso_en_oferta, mostrar_precio_m2_en_oferta, mostrar_seccion_efectivo_en_oferta, id_estatus_aprobacion, url, estatus_aprobacion!ofertas_id_estatus_aprobacion_fkey(nombre)')
           .eq('id', offer.id)
           .single();
         
@@ -3177,6 +3177,7 @@ const Propiedades = () => {
           enrichedOffer.mostrar_seccion_efectivo_en_oferta = offerData.mostrar_seccion_efectivo_en_oferta;
           enrichedOffer.id_estatus_aprobacion = offerData.id_estatus_aprobacion;
           enrichedOffer.estatus_aprobacion_nombre = (offerData as any).estatus_aprobacion?.nombre || null;
+          enrichedOffer.url = offerData.url;
         }
       } catch (err) {
         console.warn('Error fetching display options for offer:', offer.id);
@@ -3258,6 +3259,7 @@ const Propiedades = () => {
         id_producto,
         clabe_stp_tmp_producto,
         id_estatus_aprobacion,
+        url,
         estatus_aprobacion!ofertas_id_estatus_aprobacion_fkey(nombre),
         productos_servicios!ofertas_id_producto_fkey(
           nombre, 
@@ -6139,6 +6141,8 @@ const Propiedades = () => {
                                       <Button
                                         variant="outline"
                                         size="icon"
+                                        disabled={!offer.url}
+                                        title={!offer.url ? 'Primero descarga la oferta para generar el PDF' : 'Enviar oferta por correo'}
                                         onClick={async () => {
                                           const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
                                           sendOfferEmailDirect({
@@ -6618,6 +6622,8 @@ const Propiedades = () => {
                               <Button
                                 variant="outline"
                                 size="icon"
+                                disabled={!offer.url}
+                                title={!offer.url ? 'Primero descarga la oferta para generar el PDF' : 'Enviar oferta por correo'}
                                 onClick={async () => {
                                   const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
                                   sendOfferEmailDirect({
