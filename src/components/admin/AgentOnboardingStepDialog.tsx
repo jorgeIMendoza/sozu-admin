@@ -2362,12 +2362,19 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
         };
       }
 
-      const { error } = await supabase
+      const { data: updatedRow, error } = await supabase
         .from('personas')
         .update(updateData)
-        .eq('id', personaId);
+        .eq('id', personaId)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Update query cache immediately with the returned data
+      if (updatedRow) {
+        queryClient.setQueryData(['agent-onboarding-step-persona', personaId], updatedRow);
+      }
 
       // Sync phone to usuarios if basic step
       if (step === 'basic' && telefono.trim()) {
@@ -2383,7 +2390,7 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
       } else {
         toast.success("Información guardada correctamente.");
       }
-      onSaved();
+      await onSaved();
     } catch (err: any) {
       const msg = err.message || "Error desconocido";
       if (msg.includes("personas_rfc_key") || (msg.includes("duplicate") && msg.includes("rfc"))) {
