@@ -200,7 +200,7 @@ function cleanText(text: string): string {
     .trim();
 }
 
-async function renderBlocksToPdf(blocks: Block[], options?: { firmantesConfig?: { name: string; email: string; cargo?: string; firma_imagen?: string }[]; agentSignature?: string; agentName?: string; agentRfc?: string; fechaActual?: string }): Promise<Uint8Array> {
+async function renderBlocksToPdf(blocks: Block[], options?: { firmantesConfig?: { name: string; email: string; cargo?: string; firma_imagen?: string }[]; agentSignature?: string; agentName?: string; agentRfc?: string; fechaActual?: string; requiereFirmaAutografa?: boolean }): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -351,8 +351,8 @@ async function renderBlocksToPdf(blocks: Block[], options?: { firmantesConfig?: 
       page.drawText(`Cargo: ${f.cargo || ""}`, { x: margin, y, size: fontSize, font, color: textColor });
       y -= lineHeight;
 
-      // Firmante signature image (if available)
-      if (f.firma_imagen) {
+      // Firmante signature image (if available and autografa is required)
+      if (f.firma_imagen && options?.requiereFirmaAutografa !== false) {
         const img = await embedBase64Image(f.firma_imagen);
         if (img) {
           const imgHeight = 80;
@@ -534,6 +534,7 @@ serve(async (req) => {
       agentName: agente_nombre,
       agentRfc: agente_rfc || "[rfc_agente]",
       fechaActual,
+      requiereFirmaAutografa,
     });
 
     // 4. Build signatories: only firmantes with enviar_mifiel !== false + agent
