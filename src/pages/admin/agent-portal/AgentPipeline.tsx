@@ -372,6 +372,25 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
       : oferta.propiedad_nombre);
 
   const cuentaTipo = oferta.is_producto ? 'Producto' : 'Propiedad';
+  const hasUrl = !!oferta.url;
+
+  const handleSendEmail = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!hasUrl) {
+      toast({
+        title: "PDF no disponible",
+        description: "Descarga la oferta primero para generar el PDF.",
+        duration: 5000,
+      });
+      return;
+    }
+    const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+    sendOfferEmailDirect({
+      offerId: oferta.id,
+      propertyNumber: oferta.propiedad_nombre || '',
+      tipo: oferta.is_producto ? 'producto' : 'propiedad',
+    });
+  };
 
   return (
     <div onClick={onClick} className={cn("rounded-xl bg-white border-l-4 border border-gray-100 shadow-sm p-3.5 cursor-pointer active:scale-[0.98] transition-transform", stageInfo.borderColor)}>
@@ -411,11 +430,26 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
         )}
 
         <div className="flex items-center justify-between gap-2 pt-0.5">
-          {oferta.precio != null && oferta.precio > 0 && (
-            <span className="text-xs font-semibold text-[hsl(var(--agent-text))]">
-              {formatCurrency(oferta.precio)}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {oferta.precio != null && oferta.precio > 0 && (
+              <span className="text-xs font-semibold text-[hsl(var(--agent-text))]">
+                {formatCurrency(oferta.precio)}
+              </span>
+            )}
+            <button
+              onClick={handleSendEmail}
+              title={hasUrl ? 'Enviar oferta por correo' : 'Descarga la oferta primero'}
+              className={cn(
+                "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors",
+                hasUrl
+                  ? "text-[hsl(var(--agent-primary))] hover:bg-[hsl(var(--agent-primary)/0.1)]"
+                  : "text-[hsl(var(--agent-muted))] cursor-not-allowed"
+              )}
+            >
+              <Mail className="h-3 w-3" />
+              Enviar
+            </button>
+          </div>
           <span className="text-[10px] text-[hsl(var(--agent-text-secondary))] flex items-center gap-0.5 ml-auto">
             <Calendar className="h-3 w-3" />
             {format(new Date(oferta.fecha_generacion), 'dd MMM yyyy', { locale: es })}
