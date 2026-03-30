@@ -283,11 +283,11 @@ const AgentPerfil = () => {
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="h-14 w-14 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center text-white font-bold text-lg shrink-0">
-          {profile?.nombre?.[0]?.toUpperCase() || "A"}
+          {(displayName || "A")[0]?.toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-bold text-[hsl(var(--agent-text))] truncate">
-            {profile?.nombre || "Agente"}
+            {displayName || "Agente"}
           </h1>
           <p className="text-sm text-[hsl(var(--agent-text-secondary))]">
             {profile?.rol_nombre || "Agente Inmobiliario"}

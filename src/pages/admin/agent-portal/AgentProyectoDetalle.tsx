@@ -53,7 +53,8 @@ const AgentProyectoDetalle = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { profile } = useAuth();
-  const personaId = profile?.id_persona;
+  const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
+  const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const { hasTrainingComplete, isLoading: onboardingLoading } = useAgentOnboardingStatus(personaId);
   const { permissions } = useAgentPortalPermissions();
