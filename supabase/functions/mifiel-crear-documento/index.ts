@@ -496,6 +496,7 @@ serve(async (req) => {
     const usedCartaId = carta_acuerdo_id || templateData.id || null;
     const firmantesConfig: { name: string; email: string; cargo?: string }[] = templateData.firmantes_config || [];
     const requiereBiometrica: boolean = templateData.requiere_validacion_biometrica || false;
+    const requiereFirmaAutografa: boolean = templateData.requiere_firma_autografa !== false; // default true
 
     // 2. Replace placeholders
     const now = new Date();
