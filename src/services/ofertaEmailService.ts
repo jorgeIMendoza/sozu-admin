@@ -233,8 +233,94 @@ export async function sendOfferEmailAfterDownload(params: SendOfferEmailParams):
       description: `Se envió la oferta a ${recipientEmail}`,
       duration: 4000,
     });
+    return true;
   } catch (err) {
     console.error('[ofertaEmail] Error inesperado:', err);
     // Fire-and-forget: no lanzar error
+    return false;
+  }
+}
+
+/**
+ * Envía la oferta por correo electrónico sin validar datos bancarios.
+ * Se usa para envío manual desde los botones de la interfaz.
+ */
+export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promise<void> {
+  try {
+    let { offerId, propertyNumber, recipientEmail, recipientName } = params;
+
+    // Si no tenemos email, consultar de la BD
+    if (!recipientEmail) {
+      const { data: oferta } = await supabase
+        .from('ofertas')
+        .select('id_persona_lead')
+        .eq('id', offerId)
+        .single();
+
+      if (!oferta?.id_persona_lead) {
+        toast({
+          title: "Sin prospecto",
+          description: "La oferta no tiene un prospecto asignado.",
+          duration: 5000,
+        });
+        return;
+      }
+
+      const { data: persona } = await supabase
+        .from('personas')
+        .select('email, nombre_legal')
+        .eq('id', oferta.id_persona_lead)
+        .single();
+
+      if (!persona?.email) {
+        toast({
+          title: "Sin correo del prospecto",
+          description: "El prospecto no tiene email registrado.",
+          duration: 5000,
+        });
+        return;
+      }
+
+      recipientEmail = persona.email;
+      recipientName = recipientName || persona.nombre_legal || '';
+    }
+
+    toast({
+      title: "Enviando oferta...",
+      description: `Enviando a ${recipientEmail}`,
+      duration: 3000,
+    });
+
+    const { error } = await supabase.functions.invoke('enviar-oferta-email', {
+      body: {
+        offerIds: [offerId],
+        recipientEmail,
+        recipientName: recipientName || '',
+        propertyNumber: propertyNumber || '',
+      },
+    });
+
+    if (error) {
+      console.error('[ofertaEmail] Error al enviar email directo:', error);
+      toast({
+        title: "Email no enviado",
+        description: "No se pudo enviar la oferta por correo.",
+        duration: 4000,
+      });
+      return;
+    }
+
+    toast({
+      title: "Oferta enviada por correo",
+      description: `Se envió la oferta a ${recipientEmail}`,
+      duration: 4000,
+    });
+  } catch (err) {
+    console.error('[ofertaEmail] Error inesperado en envío directo:', err);
+    toast({
+      title: "Error",
+      description: "Ocurrió un error al enviar la oferta por correo.",
+      duration: 4000,
+    });
   }
 }
