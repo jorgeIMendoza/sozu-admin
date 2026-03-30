@@ -6622,6 +6622,8 @@ const Propiedades = () => {
                               <Button
                                 variant="outline"
                                 size="icon"
+                                disabled={!offer.url}
+                                title={!offer.url ? 'Primero descarga la oferta para generar el PDF' : 'Enviar oferta por correo'}
                                 onClick={async () => {
                                   const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
                                   sendOfferEmailDirect({
