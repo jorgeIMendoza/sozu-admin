@@ -198,6 +198,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [sendEmailOnGenerate, setSendEmailOnGenerate] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
   const [productSchemeSelections, setProductSchemeSelections] = useState<Record<number, number | null>>({});
   const [propertySchemeSelection, setPropertySchemeSelection] = useState<number | null>(null);
@@ -1057,31 +1058,17 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           recipientName: result.leadName,
           preGeneratedAttachments,
         });
-        // Si no se envió automáticamente, ofrecer botón manual
-        if (!emailSent) {
-          toast({
-            title: "Oferta descargada",
-            description: "La oferta no incluye datos bancarios. ¿Deseas enviar todas las ofertas generadas por correo al prospecto?",
-            duration: 15000,
-            action: (
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0"
-                onClick={() => sendMultipleOffersEmailDirect({
-                  offerIds: allOfferIdsForEmail,
-                  propertyNumber,
-                  recipientEmail: result.leadEmail,
-                  recipientName: result.leadName,
-                  preGeneratedAttachments,
-                })}
-              >
-                <Mail className="h-4 w-4 mr-1" />
-                Enviar
-              </Button>
-            ),
+        // Si no se envió automáticamente y el usuario eligió enviar antes de generar
+        if (!emailSent && sendEmailOnGenerate) {
+          await sendMultipleOffersEmailDirect({
+            offerIds: allOfferIdsForEmail,
+            propertyNumber,
+            recipientEmail: result.leadEmail,
+            recipientName: result.leadName,
+            preGeneratedAttachments,
           });
         }
+        setSendEmailOnGenerate(false);
       } catch (emailErr) {
         console.error('Error generating/sending offer:', emailErr);
         toast({
@@ -1311,6 +1298,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     setPendingFormData(null);
     setProductSchemeSelections({});
     setPropertySchemeSelection(null);
+    setSendEmailOnGenerate(false);
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
@@ -2540,6 +2528,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     </ul>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {confirmBankingReasons.length > 0 && (
+              <div className="flex items-center gap-2 mt-2">
+                <Checkbox
+                  id="sendEmailOnGenerate"
+                  checked={sendEmailOnGenerate}
+                  onCheckedChange={(checked) => setSendEmailOnGenerate(checked === true)}
+                />
+                <label htmlFor="sendEmailOnGenerate" className="text-sm text-foreground cursor-pointer">
+                  También enviar oferta(s) por correo al prospecto
+                </label>
               </div>
             )}
 
