@@ -458,7 +458,7 @@ serve(async (req) => {
     if (carta_acuerdo_id) {
       const { data, error } = await supabase
         .from("cartas_acuerdo")
-        .select("contenido_html, firmantes_config, requiere_validacion_biometrica")
+        .select("contenido_html, firmantes_config, requiere_validacion_biometrica, requiere_firma_autografa")
         .eq("id", carta_acuerdo_id)
         .single();
       if (error) throw new Error("No se encontró la carta de acuerdo: " + error.message);
