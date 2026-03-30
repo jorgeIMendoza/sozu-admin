@@ -3259,6 +3259,7 @@ const Propiedades = () => {
         id_producto,
         clabe_stp_tmp_producto,
         id_estatus_aprobacion,
+        url,
         estatus_aprobacion!ofertas_id_estatus_aprobacion_fkey(nombre),
         productos_servicios!ofertas_id_producto_fkey(
           nombre, 
