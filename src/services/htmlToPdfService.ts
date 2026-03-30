@@ -1329,7 +1329,7 @@ class HTMLToPDFService {
         .from('categorias_producto')
         .select('nombre, tiene_metraje')
         .eq('id', product.id_categoria)
-        .single();
+        .maybeSingle();
       
       categoria_nombre = categoria?.nombre;
       tiene_metraje = categoria?.tiene_metraje || false;
@@ -1378,7 +1378,7 @@ class HTMLToPDFService {
         .from('entidades_relacionadas')
         .select('id_persona')
         .eq('id', product.id_entidad_relacionada_dueno)
-        .single();
+        .maybeSingle();
 
       if (entidadRelacionada?.id_persona) {
         // Fetch owner data
@@ -1386,7 +1386,7 @@ class HTMLToPDFService {
           .from('personas')
           .select('id, nombre_legal, email, telefono')
           .eq('id', entidadRelacionada.id_persona)
-          .single();
+          .maybeSingle();
 
         ownerData = persona;
 
@@ -1402,7 +1402,7 @@ class HTMLToPDFService {
           .eq('id_persona', entidadRelacionada.id_persona)
           .eq('es_cuenta_fisica_para_stp', true)
           .eq('activo', true)
-          .single();
+          .maybeSingle();
 
         if (stpAccount) {
           // Fetch bank name
@@ -1412,7 +1412,7 @@ class HTMLToPDFService {
               .from('bancos')
               .select('nombre')
               .eq('id', stpAccount.id_banco)
-              .single();
+              .maybeSingle();
             
             banco_nombre = banco?.nombre || banco_nombre;
           }
