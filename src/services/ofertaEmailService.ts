@@ -186,7 +186,7 @@ export async function sendOfferEmailAfterDownload(params: SendOfferEmailParams):
 
       if (!oferta?.id_persona_lead) {
         console.log(`[ofertaEmail] Oferta ${offerId} sin id_persona_lead, no se envía email`);
-        return;
+        return false;
       }
 
       const { data: persona } = await supabase
