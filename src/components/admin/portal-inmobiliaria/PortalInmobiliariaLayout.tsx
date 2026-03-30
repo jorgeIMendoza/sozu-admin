@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
+import { InmobiliariaImpersonationSelector } from "./InmobiliariaImpersonationSelector";
 import { APP_VERSION } from "@/lib/config";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
 import { Badge } from "@/components/ui/badge";
