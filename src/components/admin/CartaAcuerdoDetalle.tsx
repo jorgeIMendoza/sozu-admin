@@ -342,6 +342,26 @@ export function CartaAcuerdoDetalle({ cartaId, cartaNombre }: CartaAcuerdoDetall
             )}
           </div>
           <div className="flex items-center gap-3">
+            {/* Firma autógrafa toggle */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <PenTool className="h-4 w-4 text-muted-foreground" />
+                    <Label htmlFor="autografa-toggle" className="text-xs cursor-pointer">Autógrafa</Label>
+                    <Switch
+                      id="autografa-toggle"
+                      checked={firmaAutografa}
+                      onCheckedChange={handleToggleFirmaAutografa}
+                      disabled={cartaLoading}
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  Si se activa, se solicitará firma autógrafa a los firmantes configurados y al agente antes de enviar a firma digital.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {/* Biometric toggle */}
             <TooltipProvider>
               <Tooltip>
