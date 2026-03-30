@@ -54,7 +54,7 @@ const AgentPerfil = () => {
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const displayName = isImpersonating ? impersonatedAgentName : profile?.nombre;
-  const { steps, completedCount, totalSteps, percentage, isLoading } = useAgentOnboardingStatus(personaId);
+  const { steps, completedCount, totalSteps, percentage, isLoading, missingByStep } = useAgentOnboardingStatus(personaId);
   const { permissions } = useAgentPortalPermissions();
   const perfilPerms = permissions['/admin/agent/perfil'];
   const { registrarVista } = useActivityLogger();
@@ -428,6 +428,20 @@ const AgentPerfil = () => {
                   <p className="text-xs text-[hsl(var(--agent-text-secondary))] truncate">
                     {block.description}
                   </p>
+                  {status !== 'complete' && (missingByStep[block.stepId] || []).length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {(missingByStep[block.stepId] || []).slice(0, 3).map((item, i) => (
+                        <span key={i} className="inline-block text-[10px] leading-tight px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                          {item}
+                        </span>
+                      ))}
+                      {(missingByStep[block.stepId] || []).length > 3 && (
+                        <span className="inline-block text-[10px] leading-tight px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                          +{(missingByStep[block.stepId] || []).length - 3} más
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <ChevronRight className="h-4 w-4 text-[hsl(var(--agent-muted))] shrink-0" />

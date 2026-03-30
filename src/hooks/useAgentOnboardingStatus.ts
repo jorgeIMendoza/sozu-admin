@@ -19,6 +19,7 @@ interface OnboardingStatus {
   hasBasicIdentityComplete: boolean;
   canAccessComisiones: boolean;
   missingForComisiones: string[];
+  missingByStep: Record<string, string[]>;
 }
 
 export function useAgentOnboardingStatus(personaId: number | null | undefined): OnboardingStatus {
@@ -131,12 +132,25 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     const hasINE = docTypes.has(2) && docTypes.has(3);
     const hasPasaporte = docTypes.has(4);
     const hasIdentityDoc = hasINE || hasPasaporte;
-    // For agents with inmobiliaria, carta de cumplimiento (48) is NOT required
     const identityDocsComplete = hasIdentityDoc;
     const identityDocsPartial = !identityDocsComplete && docTypes.size > 0;
 
     const identityComplete = basicComplete && addressComplete && identityDocsComplete;
     const identityPartial = !identityComplete && (basicPartial || basicComplete || addressPartial || addressComplete || identityDocsPartial);
+
+    // Missing items for identity step
+    const basicMissing: string[] = [];
+    if (!persona?.nombre_legal) basicMissing.push('Nombre completo');
+    if (!persona?.email) basicMissing.push('Correo electrónico');
+    if (!persona?.telefono) basicMissing.push('Teléfono');
+    if (!persona?.direccion_calle) basicMissing.push('Dirección (calle)');
+    if (!persona?.direccion_num_ext) basicMissing.push('Num. exterior');
+    if (!persona?.direccion_colonia) basicMissing.push('Colonia');
+    if (!persona?.direccion_codigo_postal) basicMissing.push('Código postal');
+    if (!persona?.direccion_id_pais) basicMissing.push('País');
+    if (!persona?.direccion_id_estado) basicMissing.push('Estado');
+    if (!persona?.direccion_id_municipio) basicMissing.push('Municipio');
+    if (!hasIdentityDoc) basicMissing.push('INE o Pasaporte');
 
     const inmoSteps: OnboardingStep[] = [
       { id: 'basic', label: 'Identidad', isComplete: identityComplete, hasPartialData: identityPartial },
@@ -145,7 +159,10 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
       { id: 'training', label: 'Capacitación', isComplete: true, hasPartialData: false },
     ];
     const inmoCompleted = inmoSteps.filter(s => s.isComplete).length;
-    return { steps: inmoSteps, completedCount: inmoCompleted, totalSteps: 4, percentage: Math.round((inmoCompleted / 4) * 100), isLoading: false, hasTrainingComplete: true, hasBasicIdentityComplete: identityComplete, canAccessComisiones: true, missingForComisiones: [] };
+    return {
+      steps: inmoSteps, completedCount: inmoCompleted, totalSteps: 4, percentage: Math.round((inmoCompleted / 4) * 100), isLoading: false, hasTrainingComplete: true, hasBasicIdentityComplete: identityComplete, canAccessComisiones: true, missingForComisiones: [],
+      missingByStep: { basic: basicMissing, fiscal: [], 'bank-accounts': [], training: [] },
+    };
   }
 
   // Evaluate steps
@@ -200,6 +217,50 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
   const fiscalStageComplete = fiscalComplete && constanciaApproved;
   const fiscalStagePartial = !fiscalStageComplete && (fiscalPartial || fiscalComplete || constanciaExists);
 
+  // Missing items per step
+  const basicMissing: string[] = [];
+  if (!persona?.nombre_legal) basicMissing.push('Nombre completo');
+  if (!persona?.email) basicMissing.push('Correo electrónico');
+  if (!persona?.telefono) basicMissing.push('Teléfono');
+  if (!persona?.direccion_calle) basicMissing.push('Dirección (calle)');
+  if (!persona?.direccion_num_ext) basicMissing.push('Num. exterior');
+  if (!persona?.direccion_colonia) basicMissing.push('Colonia');
+  if (!persona?.direccion_codigo_postal) basicMissing.push('Código postal');
+  if (!persona?.direccion_id_pais) basicMissing.push('País');
+  if (!persona?.direccion_id_estado) basicMissing.push('Estado');
+  if (!persona?.direccion_id_municipio) basicMissing.push('Municipio');
+  if (!hasIdentityDoc) basicMissing.push('INE o Pasaporte');
+  if (!docTypes.has(48)) basicMissing.push('Carta de comercialización');
+
+  const fiscalMissing: string[] = [];
+  if (!persona?.rfc) fiscalMissing.push('RFC');
+  if (!persona?.regimen) fiscalMissing.push('Régimen fiscal');
+  if (!persona?.uso_cfdi) fiscalMissing.push('Uso CFDI');
+  if (!persona?.direccion_fiscal_calle) fiscalMissing.push('Calle fiscal');
+  if (!persona?.direccion_fiscal_colonia) fiscalMissing.push('Colonia fiscal');
+  if (!persona?.direccion_fiscal_codigo_postal) fiscalMissing.push('C.P. fiscal');
+  if (!persona?.direccion_fiscal_id_pais) fiscalMissing.push('País fiscal');
+  if (!persona?.direccion_fiscal_id_estado) fiscalMissing.push('Estado fiscal');
+  if (!persona?.direccion_fiscal_id_municipio) fiscalMissing.push('Municipio fiscal');
+  if (!constanciaExists) fiscalMissing.push('Constancia de situación fiscal');
+  else if (!constanciaApproved) fiscalMissing.push('Constancia pendiente de aprobación');
+
+  const bankMissing: string[] = [];
+  if (!bankComplete) bankMissing.push('Cuenta bancaria');
+
+  const trainingMissing: string[] = [];
+  if (!trainingComplete) {
+    if (trainingPartial) trainingMissing.push('Cita programada (pendiente de asistencia)');
+    else trainingMissing.push('Agendar capacitación');
+  }
+
+  const missingByStep: Record<string, string[]> = {
+    basic: basicMissing,
+    fiscal: fiscalMissing,
+    'bank-accounts': bankMissing,
+    training: trainingMissing,
+  };
+
   const steps: OnboardingStep[] = [
     { id: 'basic', label: 'Identidad', isComplete: basicStageComplete, hasPartialData: basicStagePartial },
     { id: 'fiscal', label: 'Información fiscal', isComplete: fiscalStageComplete, hasPartialData: fiscalStagePartial },
@@ -225,5 +286,6 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     hasBasicIdentityComplete: basicStageComplete,
     canAccessComisiones: basicStageComplete && fiscalStageComplete && bankComplete,
     missingForComisiones,
+    missingByStep,
   };
 }

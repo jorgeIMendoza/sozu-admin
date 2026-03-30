@@ -131,11 +131,13 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
   const title = STEP_TITLES[step];
   const description = STEP_DESCRIPTIONS[step];
 
-  const handleSaved = () => {
+  const handleSaved = async () => {
+    // Await refetch while dialog is still open (query enabled) to avoid stale cache
+    await queryClient.refetchQueries({ queryKey: ['agent-onboarding-step-persona', personaId] });
+    await queryClient.refetchQueries({ queryKey: ['agent-onboarding-persona', personaId] });
     queryClient.invalidateQueries({ queryKey: ['agent-onboarding-persona'] });
     queryClient.invalidateQueries({ queryKey: ['agent-onboarding-docs'] });
     queryClient.invalidateQueries({ queryKey: ['agent-onboarding-bank'] });
-    queryClient.invalidateQueries({ queryKey: ['agent-onboarding-step-persona'] });
     onOpenChange(false);
   };
 
@@ -1426,7 +1428,7 @@ interface StepFormProps {
   step: 'basic' | 'address' | 'fiscal';
   persona: any;
   personaId: number;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
 }
 
 // ---------- Agent Training Step ----------
@@ -2141,13 +2143,14 @@ interface StepFormProps {
   step: 'basic' | 'address' | 'fiscal';
   persona: any;
   personaId: number;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
   onTrackSave?: () => void;
   onTrackFieldChange?: () => void;
   basicDocTypes?: number[];
 }
 
 function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackFieldChange, basicDocTypes }: StepFormProps) {
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(step === 'basic' ? 'personal' : step === 'fiscal' ? 'datos' : '');
 
@@ -2360,12 +2363,19 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
         };
       }
 
-      const { error } = await supabase
+      const { data: updatedRow, error } = await supabase
         .from('personas')
         .update(updateData)
-        .eq('id', personaId);
+        .eq('id', personaId)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Update query cache immediately with the returned data
+      if (updatedRow) {
+        queryClient.setQueryData(['agent-onboarding-step-persona', personaId], updatedRow);
+      }
 
       // Sync phone to usuarios if basic step
       if (step === 'basic' && telefono.trim()) {
@@ -2381,7 +2391,7 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
       } else {
         toast.success("Información guardada correctamente.");
       }
-      onSaved();
+      await onSaved();
     } catch (err: any) {
       const msg = err.message || "Error desconocido";
       if (msg.includes("personas_rfc_key") || (msg.includes("duplicate") && msg.includes("rfc"))) {
