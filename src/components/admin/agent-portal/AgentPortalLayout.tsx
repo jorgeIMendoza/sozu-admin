@@ -36,6 +36,7 @@ export const AgentPortalLayout = () => {
 
   const { profile } = useAuth();
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
+  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
 
   // Check if user has other menus beyond Portal de Agente
   const { data: hasOtherMenus = false } = useQuery({
