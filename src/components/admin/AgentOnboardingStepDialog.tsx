@@ -131,11 +131,13 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
   const title = STEP_TITLES[step];
   const description = STEP_DESCRIPTIONS[step];
 
-  const handleSaved = () => {
+  const handleSaved = async () => {
+    // Await refetch while dialog is still open (query enabled) to avoid stale cache
+    await queryClient.refetchQueries({ queryKey: ['agent-onboarding-step-persona', personaId] });
+    await queryClient.refetchQueries({ queryKey: ['agent-onboarding-persona', personaId] });
     queryClient.invalidateQueries({ queryKey: ['agent-onboarding-persona'] });
     queryClient.invalidateQueries({ queryKey: ['agent-onboarding-docs'] });
     queryClient.invalidateQueries({ queryKey: ['agent-onboarding-bank'] });
-    queryClient.invalidateQueries({ queryKey: ['agent-onboarding-step-persona'] });
     onOpenChange(false);
   };
 
