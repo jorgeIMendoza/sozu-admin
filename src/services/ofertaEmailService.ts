@@ -225,7 +225,7 @@ export async function sendOfferEmailAfterDownload(params: SendOfferEmailParams):
         description: "La oferta se descargó pero no se pudo enviar por correo.",
         duration: 4000,
       });
-      return;
+      return false;
     }
 
     toast({
