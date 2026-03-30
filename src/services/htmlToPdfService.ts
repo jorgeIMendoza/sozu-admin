@@ -238,7 +238,7 @@ class HTMLToPDFService {
           .from('estatus_aprobacion')
           .select('nombre')
           .eq('id', offerDetails.id_estatus_aprobacion)
-          .single();
+          .maybeSingle();
         estatus_aprobacion_nombre_prod = estatusData?.nombre || null;
       }
 
