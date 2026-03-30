@@ -450,7 +450,13 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       }
       refetchFirma();
     } catch (err: any) {
-      toast.error("Error al enviar a firma: " + (err.message || "Error"));
+      const msg = err.message || "Error";
+      const isCreditError = /cr[eé]ditos|402|no puedes continuar/i.test(msg);
+      if (isCreditError) {
+        toast.error("No fue posible procesar la firma. Contacta al administrador para resolver un problema con los créditos de verificación biométrica.");
+      } else {
+        toast.error("Error al enviar a firma: " + msg);
+      }
     } finally {
       setSendingToMifiel(false);
     }
