@@ -2150,6 +2150,7 @@ interface StepFormProps {
 }
 
 function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackFieldChange, basicDocTypes }: StepFormProps) {
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(step === 'basic' ? 'personal' : step === 'fiscal' ? 'datos' : '');
 
