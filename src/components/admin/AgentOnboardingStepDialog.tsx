@@ -1862,7 +1862,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
   };
 
-  const isCompleted = existingCita?.estatus === 'asistio' || (existingCita as any)?.id_estatus_cita === 3;
+  const isCompleted = hasTrainingComplete || existingCita?.estatus === 'asistio' || (existingCita as any)?.id_estatus_cita === 3;
   const isProgrammed = (existingCita?.estatus === 'programada' || (existingCita as any)?.id_estatus_cita === 1) && !citaCancelledExternally;
   const isPendingConfirmation = (existingCita as any)?.id_estatus_cita === 2;
   const isNoShow = existingCita?.estatus === 'no_asistio';
