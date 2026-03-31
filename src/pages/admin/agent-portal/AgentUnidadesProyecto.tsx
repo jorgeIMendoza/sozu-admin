@@ -73,6 +73,12 @@ const AgentUnidadesProyecto = () => {
   const priceCommitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [recamarasFilter, setRecamarasFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [lastKnownTotalCount, setLastKnownTotalCount] = useState(PAGE_SIZE);
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const isSearchActive = normalizedSearchQuery.length > 0;
+  const requestedPage = isSearchActive ? 0 : page;
+  const requestedPageSize = isSearchActive ? Math.max(PAGE_SIZE, lastKnownTotalCount) : PAGE_SIZE;
 
   // Resolve proyecto/modelo ID from URL to name for pre-selecting filter, then clean URL
   const [paramsResolved, setParamsResolved] = useState(!proyectoIdParam && !modeloIdParam);
@@ -129,8 +135,8 @@ const AgentUnidadesProyecto = () => {
     sortPrice: sortOrder === "none" ? null : sortOrder,
     minPrice: priceRange ? priceRange[0] : null,
     maxPrice: priceRange ? priceRange[1] : null,
-    page,
-    pageSize: PAGE_SIZE,
+    page: requestedPage,
+    pageSize: requestedPageSize,
   });
 
   const pageProperties = useMemo(() => {
@@ -183,6 +189,12 @@ const AgentUnidadesProyecto = () => {
   const projectCounts = inventarioData?.projectCounts || {};
   const isLoading = isLoadingData;
 
+  useEffect(() => {
+    if (totalCount > 0) {
+      setLastKnownTotalCount((current) => Math.max(current, totalCount));
+    }
+  }, [totalCount]);
+
   const priceBoundsRef = useRef<{ min: number; max: number } | null>(null);
   const priceBounds = useMemo(() => {
     const props = inventarioData?.propiedades || [];
@@ -233,19 +245,20 @@ const AgentUnidadesProyecto = () => {
     return { precioAjustado, enganche, mensualidadesTotal, entrega, mensualidad, numMensualidades };
   };
 
-  useEffect(() => { setPage(0); }, [filterProjectNames, filterModelNames, recamarasFilter, filterLevels, filterBodega, filterEstacionamiento, priceRange]);
+  useEffect(() => { setPage(0); }, [filterProjectNames, filterModelNames, recamarasFilter, filterLevels, filterBodega, filterEstacionamiento, priceRange, normalizedSearchQuery]);
   useEffect(() => { setSelectedSchemeId(null); setSchemesOpen(false); }, [selectedProperty?.id]);
 
   const SortIcon = sortOrder === "asc" ? ArrowUp : sortOrder === "desc" ? ArrowDown : ArrowUpDown;
 
   const filteredPageProperties = useMemo(() => {
-    let result = pageProperties;
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      result = result.filter(p => String(p.numero_propiedad).toLowerCase().includes(q));
+    if (!isSearchActive) {
+      return pageProperties;
     }
-    return result;
-  }, [pageProperties, searchQuery]);
+
+    return pageProperties.filter((p) =>
+      String(p.numero_propiedad ?? "").toLowerCase().includes(normalizedSearchQuery)
+    );
+  }, [isSearchActive, normalizedSearchQuery, pageProperties]);
 
   const toggleChip = <T,>(arr: T[], val: T): T[] =>
     arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val];
@@ -420,12 +433,13 @@ const AgentUnidadesProyecto = () => {
             )}
           </button>
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--agent-text-secondary))]" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-10 pl-9 pr-3 rounded-xl border border-gray-200 bg-white text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+              className="w-full h-10 pl-9 pr-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm font-medium text-[hsl(var(--agent-text))] placeholder:text-[hsl(var(--agent-text-secondary))] placeholder:opacity-100 caret-[hsl(var(--agent-primary))] shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="Buscar..."
+              style={{ WebkitTextFillColor: "hsl(var(--agent-text))" }}
             />
           </div>
           <button
