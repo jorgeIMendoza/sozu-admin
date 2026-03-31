@@ -42,8 +42,9 @@ interface ProspectoAgrupado {
 
 export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaShowroomDialogProps) {
   const { profile, user } = useAuth();
-  const { impersonatedAgentPersonaId } = useAgentImpersonation();
+  const { impersonatedAgentPersonaId, impersonatedAgentEmail } = useAgentImpersonation();
   const effectivePersonaId = impersonatedAgentPersonaId || profile?.id_persona;
+  const effectiveAgentEmail = impersonatedAgentEmail || user?.email || profile?.email;
   const queryClient = useQueryClient();
   const { track } = useCtaTracker();
   const hasTrackedFieldFill = useRef(false);
@@ -296,10 +297,10 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
           fecha: selectedDate,
           hora_inicio: horaInicio,
           id_persona: parseInt(selectedProspecto),
-          agent_email: user?.email || profile?.email,
+          agent_email: effectiveAgentEmail,
           config_id: selectedConfigId,
           id_persona_prospecto: parseInt(selectedProspecto),
-          id_agente: profile?.id_persona,
+          id_agente: effectivePersonaId,
           id_proyecto: selectedProyectoId,
           notas: notas || null,
         },
