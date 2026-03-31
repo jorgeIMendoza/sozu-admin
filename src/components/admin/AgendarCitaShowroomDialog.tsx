@@ -58,9 +58,9 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
 
   // Fetch prospects grouped by persona with all projects
   const { data: prospectosAgrupados = [] } = useQuery({
-    queryKey: ["mis-prospectos-showroom", profile?.id_persona],
+    queryKey: ["mis-prospectos-showroom", effectivePersonaId],
     queryFn: async (): Promise<ProspectoAgrupado[]> => {
-      if (!profile?.id_persona) return [];
+      if (!effectivePersonaId) return [];
 
       const { data, error } = await supabase
         .from("entidades_relacionadas")
@@ -76,7 +76,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
         `)
         .eq("id_tipo_entidad", 7)
         .eq("activo", true)
-        .eq("id_persona_duena_lead", profile.id_persona);
+        .eq("id_persona_duena_lead", effectivePersonaId);
 
       if (error) throw error;
 
