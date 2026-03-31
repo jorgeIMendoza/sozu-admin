@@ -651,7 +651,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Email <span className="text-destructive">*</span></Label>
-                <Input type="email" placeholder="Ingresa el email" value={email} onChange={(e) => { setEmail(e.target.value); trackFieldFill(); }} />
+                <Input type="email" placeholder="Ingresa el email" value={email} onChange={(e) => handleEmailChange(e.target.value)} disabled={isEditMode && !!selectedProspectoId} />
               </div>
               <div className="space-y-2">
                 <Label>Teléfono <span className="text-destructive">*</span></Label>
