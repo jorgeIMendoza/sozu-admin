@@ -493,6 +493,17 @@ const MiProyectoDetalle = () => {
         </div>
       )}
 
+      {/* Vistas Section */}
+      {vistas.length > 0 && (
+        <div className="space-y-2 px-1">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Eye className="h-5 w-5" /> Vistas
+          </h2>
+          <hr className="border-border" />
+          <VistasCarousel vistas={vistas} />
+        </div>
+      )}
+
       {/* Map Section */}
       {(project.latitud && project.longitud) && (
         <div className="space-y-2 px-1">
