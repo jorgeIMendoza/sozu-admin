@@ -264,12 +264,17 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   const showSearch = proyectos.length > 10;
 
-  // Available projects for new prospect creation (not already selected, and not already assigned to existing persona)
+  // Projects already assigned to this existing persona (from any agent/context)
+  const existingPersonaProjectIds = useMemo(() => {
+    if (!existingPersonaId) return new Set<number>();
+    return activeProjectIdsByPersona.get(existingPersonaId) || new Set<number>();
+  }, [existingPersonaId, activeProjectIdsByPersona]);
+
+  // Available projects for new prospect creation (not already selected in this session)
   const availableProjectsForNew = useMemo(() => {
     const selectedSet = new Set(selectedProyectoIds);
-    const existingSet = existingPersonaId ? (activeProjectIdsByPersona.get(existingPersonaId) || new Set<number>()) : new Set<number>();
-    return proyectos.filter((p) => !selectedSet.has(p.id) && !existingSet.has(p.id));
-  }, [proyectos, selectedProyectoIds, existingPersonaId, activeProjectIdsByPersona]);
+    return proyectos.filter((p) => !selectedSet.has(p.id));
+  }, [proyectos, selectedProyectoIds]);
 
   // Add project to existing prospect
   const addProjectToProspectMutation = useMutation({
@@ -641,9 +646,16 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                   <Combobox
                     value=""
                     onValueChange={(value) => {
-                      if (value) setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
+                      if (value && !existingPersonaProjectIds.has(parseInt(value))) {
+                        setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
+                      }
                     }}
-                    options={availableProjectsForNew.map((p) => ({ value: p.id.toString(), label: p.nombre }))}
+                    options={availableProjectsForNew.map((p) => ({
+                      value: p.id.toString(),
+                      label: existingPersonaProjectIds.has(p.id)
+                        ? `${p.nombre} (ya registrado)`
+                        : p.nombre,
+                    }))}
                     placeholder={selectedProyectoIds.length > 0 ? "Agregar otro desarrollo..." : "Seleccionar desarrollo..."}
                     searchPlaceholder="Buscar desarrollo..."
                     emptyText="No se encontró el desarrollo"
@@ -652,16 +664,31 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                   <Select
                     value=""
                     onValueChange={(value) => {
-                      if (value) setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
+                      if (value && !existingPersonaProjectIds.has(parseInt(value))) {
+                        setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
+                      }
                     }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={selectedProyectoIds.length > 0 ? "Agregar otro desarrollo..." : "Seleccionar desarrollo..."} />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableProjectsForNew.map((p) => (
-                        <SelectItem key={p.id} value={p.id.toString()}>{p.nombre}</SelectItem>
-                      ))}
+                      {availableProjectsForNew.map((p) => {
+                        const alreadyAssigned = existingPersonaProjectIds.has(p.id);
+                        return (
+                          <SelectItem
+                            key={p.id}
+                            value={p.id.toString()}
+                            disabled={alreadyAssigned}
+                            className={alreadyAssigned ? "opacity-50" : ""}
+                          >
+                            {p.nombre}
+                            {alreadyAssigned && (
+                              <span className="ml-1 text-xs text-muted-foreground">(ya registrado)</span>
+                            )}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 )
