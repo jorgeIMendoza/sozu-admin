@@ -264,12 +264,17 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   const showSearch = proyectos.length > 10;
 
-  // Available projects for new prospect creation (not already selected, and not already assigned to existing persona)
+  // Projects already assigned to this existing persona (from any agent/context)
+  const existingPersonaProjectIds = useMemo(() => {
+    if (!existingPersonaId) return new Set<number>();
+    return activeProjectIdsByPersona.get(existingPersonaId) || new Set<number>();
+  }, [existingPersonaId, activeProjectIdsByPersona]);
+
+  // Available projects for new prospect creation (not already selected in this session)
   const availableProjectsForNew = useMemo(() => {
     const selectedSet = new Set(selectedProyectoIds);
-    const existingSet = existingPersonaId ? (activeProjectIdsByPersona.get(existingPersonaId) || new Set<number>()) : new Set<number>();
-    return proyectos.filter((p) => !selectedSet.has(p.id) && !existingSet.has(p.id));
-  }, [proyectos, selectedProyectoIds, existingPersonaId, activeProjectIdsByPersona]);
+    return proyectos.filter((p) => !selectedSet.has(p.id));
+  }, [proyectos, selectedProyectoIds]);
 
   // Add project to existing prospect
   const addProjectToProspectMutation = useMutation({
