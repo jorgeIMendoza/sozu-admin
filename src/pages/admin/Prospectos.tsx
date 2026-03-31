@@ -1010,20 +1010,25 @@ export default function Prospectos() {
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-wrap gap-1 items-center">
+                  <div className="flex flex-col gap-1.5">
                     {prospecto.proyectos.map((p) => (
-                      <Badge key={p.entidad_relacionada_id} variant="secondary" className="text-xs flex items-center gap-1 pr-1">
-                        <span className="max-w-[120px] truncate">{p.nombre}</span>
-                        {(canUpdate || isSuperAdmin) && prospecto.proyectos.length > 1 && (
-                          <button
-                            onClick={() => removeProjectMutation.mutate(p.entidad_relacionada_id)}
-                            className="ml-0.5 rounded-full hover:bg-destructive/20 hover:text-destructive p-0.5"
-                            title="Quitar proyecto"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        )}
-                      </Badge>
+                      <div key={p.entidad_relacionada_id} className="flex items-center gap-1.5">
+                        <Badge variant="secondary" className="text-xs flex items-center gap-1 pr-1 shrink-0">
+                          <span className="max-w-[120px] truncate">{p.nombre}</span>
+                          {(canUpdate || isSuperAdmin) && prospecto.proyectos.length > 1 && (
+                            <button
+                              onClick={() => removeProjectMutation.mutate(p.entidad_relacionada_id)}
+                              className="ml-0.5 rounded-full hover:bg-destructive/20 hover:text-destructive p-0.5"
+                              title="Quitar proyecto"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                          {p.agente_nombre || "Sin agente"}
+                        </span>
+                      </div>
                     ))}
                     {prospecto.proyectos.length === 0 && (
                       <span className="text-sm text-muted-foreground">Sin proyecto</span>
@@ -1058,26 +1063,6 @@ export default function Prospectos() {
                       </Popover>
                     )}
                   </div>
-                </TableCell>
-                <TableCell>
-                  <Combobox
-                    value={prospecto.id_persona_duena_lead?.toString() || ""}
-                    onValueChange={(value) => {
-                      const agenteId = value ? parseInt(value) : null;
-                      updateMutation.mutate({
-                        id: prospecto.id,
-                        id_persona_duena_lead: agenteId
-                      });
-                    }}
-                    options={agentes.map((agente) => ({
-                      value: agente.id.toString(),
-                      label: agente.nombre_legal
-                    }))}
-                    placeholder="Sin agente asignado"
-                    emptyText="No se encontró el agente"
-                    searchPlaceholder="Buscar agente..."
-                    className="w-full"
-                  />
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {formatDate(prospecto.fecha_creacion)}
