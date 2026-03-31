@@ -264,11 +264,12 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   const showSearch = proyectos.length > 10;
 
-  // Available projects for new prospect creation (not already selected)
+  // Available projects for new prospect creation (not already selected, and not already assigned to existing persona)
   const availableProjectsForNew = useMemo(() => {
     const selectedSet = new Set(selectedProyectoIds);
-    return proyectos.filter((p) => !selectedSet.has(p.id));
-  }, [proyectos, selectedProyectoIds]);
+    const existingSet = existingPersonaId ? (activeProjectIdsByPersona.get(existingPersonaId) || new Set<number>()) : new Set<number>();
+    return proyectos.filter((p) => !selectedSet.has(p.id) && !existingSet.has(p.id));
+  }, [proyectos, selectedProyectoIds, existingPersonaId, activeProjectIdsByPersona]);
 
   // Add project to existing prospect
   const addProjectToProspectMutation = useMutation({
@@ -433,7 +434,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     },
     onError: (error: any) => {
       const msg = error.message || "Ocurrió un error inesperado";
-      if (msg.includes("personas_rfc_key") || msg.includes("duplicate") && msg.includes("rfc")) {
+      if (msg.includes("uq_entrel_persona_tipo_proy") || (error.code === "23505" && msg.includes("entrel"))) {
+        toast.error("Este prospecto ya tiene interés registrado en uno o más de los desarrollos seleccionados. Revisa los desarrollos e intenta de nuevo.");
+      } else if (msg.includes("personas_rfc_key") || msg.includes("duplicate") && msg.includes("rfc")) {
         toast.error("El RFC ingresado ya está registrado en el sistema. Por favor, verifica e ingresa un RFC diferente.");
       } else if (msg.includes("personas_curp_key") || msg.includes("duplicate") && msg.includes("curp")) {
         toast.error("La CURP ingresada ya está registrada en el sistema. Por favor, verifica e ingresa una CURP diferente.");
