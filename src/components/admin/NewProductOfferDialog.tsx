@@ -29,6 +29,7 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { isValidRFC } from "@/utils/fiscalDataValidation";
@@ -118,6 +119,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
 
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -342,11 +344,39 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
     enabled: !!selectedCategory,
   });
 
-  // Fetch existing personas for search
+  // Determine effective persona ID for prospect filtering
+  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const effectivePersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
+  const shouldFilterByOwner = !isSuperAdmin || isImpersonating;
+
+  // Fetch existing personas for search - filtered by ownership for non-super-admins
   const { data: existingPersonas = [] } = useQuery({
-    queryKey: ['personas-search', searchTerm],
+    queryKey: ['personas-search', searchTerm, shouldFilterByOwner, effectivePersonaId],
     queryFn: async () => {
       if (searchTerm.length < 2) return [];
+
+      if (shouldFilterByOwner && effectivePersonaId) {
+        const { data, error } = await supabase
+          .from("entidades_relacionadas")
+          .select("personas!entidades_relacionadas_id_persona_fkey(*)")
+          .eq("id_tipo_entidad", 7)
+          .eq("activo", true)
+          .eq("id_persona_duena_lead", effectivePersonaId);
+        
+        if (error) throw error;
+        const s = searchTerm.toLowerCase();
+        const unique = new Map<number, any>();
+        (data || []).forEach((er: any) => {
+          if (!er.personas) return;
+          const p = er.personas;
+          if (p.nombre_legal?.toLowerCase().includes(s) || p.email?.toLowerCase().includes(s) || p.rfc?.toLowerCase().includes(s)) {
+            unique.set(p.id, p);
+          }
+        });
+        return Array.from(unique.values()).slice(0, 10);
+      }
+
+      // Super admin without impersonation - search all
       const { data, error } = await supabase
         .from('personas')
         .select('*')
