@@ -11,7 +11,7 @@ export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
 type CalendarView = "days" | "months" | "years";
 
-function Calendar({ className, classNames, showOutsideDays = true, onSelect, ...props }: CalendarProps) {
+function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps & { onSelect?: any }) {
   const [month, setMonth] = React.useState<Date>(props.month || new Date());
   const [view, setView] = React.useState<CalendarView>("days");
   const [yearRangeStart, setYearRangeStart] = React.useState<number>(
