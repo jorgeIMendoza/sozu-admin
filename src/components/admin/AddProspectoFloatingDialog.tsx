@@ -34,7 +34,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   const hasTrackedFieldFill = useRef(false);
 
   const [selectedProspectoId, setSelectedProspectoId] = useState<number | null>(null);
-  const [proyectoId, setProyectoId] = useState("");
+  const [selectedProyectoIds, setSelectedProyectoIds] = useState<number[]>([]);
   const [tipoPersona, setTipoPersona] = useState("pf");
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
@@ -182,7 +182,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         .filter((p, idx, arr) => arr.findIndex((x) => x.id_proyecto === p.id_proyecto) === idx);
 
       setEditProyectos(proyectos);
-      setProyectoId(""); // Clear the add-project selector
+      setSelectedProyectoIds([]); // Clear new-mode selections
     }
   };
 
@@ -260,6 +260,12 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   });
 
   const showSearch = proyectos.length > 10;
+
+  // Available projects for new prospect creation (not already selected)
+  const availableProjectsForNew = useMemo(() => {
+    const selectedSet = new Set(selectedProyectoIds);
+    return proyectos.filter((p) => !selectedSet.has(p.id));
+  }, [proyectos, selectedProyectoIds]);
 
   // Add project to existing prospect
   const addProjectToProspectMutation = useMutation({
@@ -356,9 +362,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
         if (updateError) throw updateError;
       } else {
-        // Validate project for new prospect
-        if (!proyectoId) {
-          throw new Error("Completa los campos obligatorios");
+        // Validate projects for new prospect
+        if (selectedProyectoIds.length === 0) {
+          throw new Error("Selecciona al menos un desarrollo de interés");
         }
 
         let personaId: number;
@@ -398,15 +404,18 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           personaId = persona.id;
         }
 
+        // Insert one entidad_relacionada per selected project
+        const inserts = selectedProyectoIds.map((projId) => ({
+          id_persona: personaId,
+          id_tipo_entidad: 7,
+          id_proyecto: projId,
+          id_persona_duena_lead: profile?.id_persona || null,
+          activo: true,
+        }));
+
         const { error: entidadError } = await supabase
           .from("entidades_relacionadas")
-          .insert([{
-            id_persona: personaId,
-            id_tipo_entidad: 7,
-            id_proyecto: parseInt(proyectoId),
-            id_persona_duena_lead: profile?.id_persona || null,
-            activo: true,
-          }]);
+          .insert(inserts);
 
         if (entidadError) throw entidadError;
       }
@@ -478,7 +487,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   const handleClose = () => {
     setSelectedProspectoId(null);
-    setProyectoId("");
+    setSelectedProyectoIds([]);
     setTipoPersona("pf");
     setNombre("");
     setEmail("");
@@ -600,27 +609,56 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             </div>
           ) : (
             <div className="space-y-2">
-              <Label>Desarrollo de Interés <span className="text-destructive">*</span></Label>
-              {showSearch ? (
-                <Combobox
-                  value={proyectoId}
-                  onValueChange={setProyectoId}
-                  options={proyectos.map((p) => ({ value: p.id.toString(), label: p.nombre }))}
-                  placeholder="Seleccionar desarrollo..."
-                  searchPlaceholder="Buscar desarrollo..."
-                  emptyText="No se encontró el desarrollo"
-                />
-              ) : (
-                <Select value={proyectoId} onValueChange={setProyectoId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar desarrollo..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {proyectos.map((p) => (
-                      <SelectItem key={p.id} value={p.id.toString()}>{p.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <Label>Desarrollos de Interés <span className="text-destructive">*</span></Label>
+              {/* Selected projects as badges */}
+              {selectedProyectoIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 min-h-[36px] items-center p-2 border border-border rounded-md bg-background">
+                  {selectedProyectoIds.map((id) => {
+                    const proj = proyectos.find((p) => p.id === id);
+                    return (
+                      <Badge key={id} variant="secondary" className="text-xs flex items-center gap-1 pr-1">
+                        {proj?.nombre || `Proyecto ${id}`}
+                        <button
+                          onClick={() => setSelectedProyectoIds((prev) => prev.filter((pid) => pid !== id))}
+                          className="ml-0.5 rounded-full hover:bg-destructive/20 hover:text-destructive p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Add project selector */}
+              {availableProjectsForNew.length > 0 && (
+                showSearch ? (
+                  <Combobox
+                    value=""
+                    onValueChange={(value) => {
+                      if (value) setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
+                    }}
+                    options={availableProjectsForNew.map((p) => ({ value: p.id.toString(), label: p.nombre }))}
+                    placeholder={selectedProyectoIds.length > 0 ? "Agregar otro desarrollo..." : "Seleccionar desarrollo..."}
+                    searchPlaceholder="Buscar desarrollo..."
+                    emptyText="No se encontró el desarrollo"
+                  />
+                ) : (
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      if (value) setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={selectedProyectoIds.length > 0 ? "Agregar otro desarrollo..." : "Seleccionar desarrollo..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableProjectsForNew.map((p) => (
+                        <SelectItem key={p.id} value={p.id.toString()}>{p.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )
               )}
             </div>
           )}
@@ -709,7 +747,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             <Button variant="outline" onClick={handleClose}>Cancelar</Button>
             <Button
               onClick={() => { track({ page: "modal_prospecto", elementId: "modal_prospecto_guardar" }); createMutation.mutate(); }}
-              disabled={createMutation.isPending || (!isEditMode && !proyectoId) || !nombre || !email || !telefono}
+              disabled={createMutation.isPending || (!isEditMode && selectedProyectoIds.length === 0) || !nombre || !email || !telefono}
               className="bg-emerald-500 hover:bg-emerald-600 text-white"
             >
               {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Guardando...</> : isEditMode ? "Actualizar" : "Guardar"}
