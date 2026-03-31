@@ -11,7 +11,7 @@ export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
 type CalendarView = "days" | "months" | "years";
 
-function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
+function Calendar({ className, classNames, showOutsideDays = true, onSelect, ...props }: CalendarProps) {
   const [month, setMonth] = React.useState<Date>(props.month || new Date());
   const [view, setView] = React.useState<CalendarView>("days");
   const [yearRangeStart, setYearRangeStart] = React.useState<number>(
@@ -22,6 +22,17 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
     setMonth(newMonth);
     props.onMonthChange?.(newMonth);
   };
+
+  // Wrap onSelect to auto-navigate to the selected date's month
+  const handleSelect = React.useCallback((...args: any[]) => {
+    const date = args[0] as Date | undefined;
+    if (date && (date.getMonth() !== month.getMonth() || date.getFullYear() !== month.getFullYear())) {
+      handleMonthChange(new Date(date.getFullYear(), date.getMonth(), 1));
+    }
+    if (onSelect) {
+      (onSelect as any)(...args);
+    }
+  }, [month, onSelect]);
 
   const months = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
