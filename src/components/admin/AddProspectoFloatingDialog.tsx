@@ -487,7 +487,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   const handleClose = () => {
     setSelectedProspectoId(null);
-    setProyectoId("");
+    setSelectedProyectoIds([]);
     setTipoPersona("pf");
     setNombre("");
     setEmail("");
