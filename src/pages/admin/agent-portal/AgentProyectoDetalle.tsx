@@ -495,6 +495,14 @@ const AgentProyectoDetalle = () => {
           </section>
         )}
 
+        {/* Vistas */}
+        {vistas.length > 0 && (
+          <section>
+            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Vistas</h2>
+            <VistasCarousel vistas={vistas} />
+          </section>
+        )}
+
         {/* Ubicación */}
         {(project.direccion || (project.latitud && project.longitud)) && (
           <section>
