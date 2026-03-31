@@ -6,7 +6,7 @@ import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Building2, MapPin, Loader2, ChevronLeft, ChevronRight, BedDouble, Bath, ShowerHead, Star, ArrowLeft, Maximize2, CheckCircle, Search, UserPlus, CalendarDays, User, Bell, LogOut, Check, SlidersHorizontal } from "lucide-react";
+import { Building2, MapPin, Loader2, ChevronLeft, ChevronRight, BedDouble, Bath, ShowerHead, Star, ArrowLeft, Maximize2, CheckCircle, Search, UserPlus, CalendarDays, User, Bell, LogOut, Check, SlidersHorizontal, Eye } from "lucide-react";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import useEmblaCarousel from "embla-carousel-react";
