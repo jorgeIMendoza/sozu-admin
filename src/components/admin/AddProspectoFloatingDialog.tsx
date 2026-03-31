@@ -91,7 +91,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           proyecto_nombre: er.proyectos?.nombre || "",
         }));
     },
-    enabled: open && !!profile?.id_persona,
+    enabled: open && !!effectivePersonaId,
   });
 
   // Fetch project names for assigned projects
