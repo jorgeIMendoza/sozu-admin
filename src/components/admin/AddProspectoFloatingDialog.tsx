@@ -361,28 +361,47 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           throw new Error("Completa los campos obligatorios");
         }
 
-        // Create new persona
-        const { data: persona, error: personaError } = await supabase
-          .from("personas")
-          .insert([{
-            tipo_persona: tipoPersona,
-            nombre_legal: nombre,
-            email,
-            telefono,
-            clave_pais_telefono: clavePais,
-            rfc: rfc || null,
-            curp: curp || null,
-            activo: true,
-          }])
-          .select()
-          .single();
+        let personaId: number;
 
-        if (personaError) throw personaError;
+        if (existingPersonaId) {
+          // Reuse existing persona – update their info
+          personaId = existingPersonaId;
+          await supabase
+            .from("personas")
+            .update({
+              tipo_persona: tipoPersona,
+              nombre_legal: nombre,
+              telefono,
+              clave_pais_telefono: clavePais,
+              rfc: rfc || null,
+              curp: curp || null,
+            })
+            .eq("id", personaId);
+        } else {
+          // Create new persona
+          const { data: persona, error: personaError } = await supabase
+            .from("personas")
+            .insert([{
+              tipo_persona: tipoPersona,
+              nombre_legal: nombre,
+              email,
+              telefono,
+              clave_pais_telefono: clavePais,
+              rfc: rfc || null,
+              curp: curp || null,
+              activo: true,
+            }])
+            .select()
+            .single();
+
+          if (personaError) throw personaError;
+          personaId = persona.id;
+        }
 
         const { error: entidadError } = await supabase
           .from("entidades_relacionadas")
           .insert([{
-            id_persona: persona.id,
+            id_persona: personaId,
             id_tipo_entidad: 7,
             id_proyecto: parseInt(proyectoId),
             id_persona_duena_lead: profile?.id_persona || null,
