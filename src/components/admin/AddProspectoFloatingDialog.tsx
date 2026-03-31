@@ -609,27 +609,56 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             </div>
           ) : (
             <div className="space-y-2">
-              <Label>Desarrollo de Interés <span className="text-destructive">*</span></Label>
-              {showSearch ? (
-                <Combobox
-                  value={proyectoId}
-                  onValueChange={setProyectoId}
-                  options={proyectos.map((p) => ({ value: p.id.toString(), label: p.nombre }))}
-                  placeholder="Seleccionar desarrollo..."
-                  searchPlaceholder="Buscar desarrollo..."
-                  emptyText="No se encontró el desarrollo"
-                />
-              ) : (
-                <Select value={proyectoId} onValueChange={setProyectoId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar desarrollo..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {proyectos.map((p) => (
-                      <SelectItem key={p.id} value={p.id.toString()}>{p.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <Label>Desarrollos de Interés <span className="text-destructive">*</span></Label>
+              {/* Selected projects as badges */}
+              {selectedProyectoIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 min-h-[36px] items-center p-2 border border-border rounded-md bg-background">
+                  {selectedProyectoIds.map((id) => {
+                    const proj = proyectos.find((p) => p.id === id);
+                    return (
+                      <Badge key={id} variant="secondary" className="text-xs flex items-center gap-1 pr-1">
+                        {proj?.nombre || `Proyecto ${id}`}
+                        <button
+                          onClick={() => setSelectedProyectoIds((prev) => prev.filter((pid) => pid !== id))}
+                          className="ml-0.5 rounded-full hover:bg-destructive/20 hover:text-destructive p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Add project selector */}
+              {availableProjectsForNew.length > 0 && (
+                showSearch ? (
+                  <Combobox
+                    value=""
+                    onValueChange={(value) => {
+                      if (value) setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
+                    }}
+                    options={availableProjectsForNew.map((p) => ({ value: p.id.toString(), label: p.nombre }))}
+                    placeholder={selectedProyectoIds.length > 0 ? "Agregar otro desarrollo..." : "Seleccionar desarrollo..."}
+                    searchPlaceholder="Buscar desarrollo..."
+                    emptyText="No se encontró el desarrollo"
+                  />
+                ) : (
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      if (value) setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={selectedProyectoIds.length > 0 ? "Agregar otro desarrollo..." : "Seleccionar desarrollo..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableProjectsForNew.map((p) => (
+                        <SelectItem key={p.id} value={p.id.toString()}>{p.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )
               )}
             </div>
           )}
