@@ -306,32 +306,9 @@ export async function sendMultipleOffersEmail(params: {
       recipientName = recipientName || persona.nombre_legal || '';
     }
 
-    // Enviar offerIds + preGeneratedAttachments como fallback
-    // El edge function intentará descargar desde Storage primero, 
-    // si no encuentra URL usará los adjuntos pre-generados
-    const body: Record<string, unknown> = {
-      offerIds,
-      recipientEmail,
-      recipientName: recipientName || '',
-      propertyNumber: propertyNumber || '',
-    };
-
-    console.log('[ofertaEmail] Envío múltiple preparado:', {
-      offerIds,
-      totalOfferIds: offerIds.length,
-      totalAttachments: preGeneratedAttachments?.length || 0,
-      recipientEmail,
-    });
-
-    // Incluir preGeneratedAttachments para ofertas que aún no tienen URL en Storage
-    if (preGeneratedAttachments && preGeneratedAttachments.length > 0) {
-      body.preGeneratedAttachments = preGeneratedAttachments.map(att => ({
-        base64: att.base64,
-        filename: att.filename,
-        offerId: att.offerId,
-        tipo: att.tipo,
-      }));
-    }
+    // Priorizar siempre offerIds + PDFs ya guardados en Storage.
+    // Evitamos reenviar base64 desde mobile porque hace el payload muy pesado en iPhone/iOS.
+    // Los adjuntos pre-generados quedan solo como compatibilidad futura, pero no se envían aquí.
 
     const { error } = await supabase.functions.invoke('enviar-oferta-email', { body });
 
