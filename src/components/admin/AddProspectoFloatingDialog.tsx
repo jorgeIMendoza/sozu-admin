@@ -11,6 +11,7 @@ import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 
@@ -28,6 +29,8 @@ interface ProspectoRelacion {
 
 export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPersonaId }: AddProspectoFloatingDialogProps) {
   const { profile } = useAuth();
+  const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
+  const effectivePersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const queryClient = useQueryClient();
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess } = useProjectAccess();
   const { track } = useCtaTracker();
@@ -69,7 +72,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         `)
         .eq("id_tipo_entidad", 7)
         .eq("activo", true)
-        .eq("id_persona_duena_lead", profile.id_persona);
+        .eq("id_persona_duena_lead", effectivePersonaId!);
 
       if (error) throw error;
       return (data || [])
@@ -88,7 +91,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           proyecto_nombre: er.proyectos?.nombre || "",
         }));
     },
-    enabled: open && !!profile?.id_persona,
+    enabled: open && !!effectivePersonaId,
   });
 
   // Fetch project names for assigned projects
@@ -409,7 +412,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           id_persona: personaId,
           id_tipo_entidad: 7,
           id_proyecto: projId,
-          id_persona_duena_lead: profile?.id_persona || null,
+          id_persona_duena_lead: effectivePersonaId || null,
           activo: true,
         }));
 
