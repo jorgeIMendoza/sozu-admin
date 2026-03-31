@@ -847,6 +847,29 @@ export default function Prospectos() {
     },
   });
 
+  // Mutation to change agent for a specific project relation
+  const changeAgentMutation = useMutation({
+    mutationFn: async ({ entidadRelacionadaId, agenteId }: { entidadRelacionadaId: number; agenteId: number | null }) => {
+      const { error } = await supabase
+        .from('entidades_relacionadas')
+        .update({ id_persona_duena_lead: agenteId })
+        .eq('id', entidadRelacionadaId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prospectos'] });
+      toast({ title: "Éxito", description: "Agente actualizado correctamente." });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: `Error al cambiar el agente: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   const getStatusBadge = (statusId?: number, statusName?: string) => {
     if (!statusName) return null;
     
@@ -964,7 +987,7 @@ export default function Prospectos() {
               <TableHead className="font-semibold text-foreground">RFC</TableHead>
               <TableHead className="font-semibold text-foreground">Teléfono</TableHead>
               <TableHead className="font-semibold text-foreground w-40">Estatus</TableHead>
-              <TableHead className="font-semibold text-foreground">Proyectos / Agente</TableHead>
+              <TableHead className="font-semibold text-foreground">Desarrollo / Agente</TableHead>
               <TableHead className="font-semibold text-foreground">Fecha de Creación</TableHead>
               <TableHead className="font-semibold text-foreground text-center">Acciones</TableHead>
             </TableRow>
@@ -1024,9 +1047,34 @@ export default function Prospectos() {
                             </button>
                           )}
                         </Badge>
-                        <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
-                          {p.agente_nombre || "Sin agente"}
-                        </span>
+                        {(canUpdate || isSuperAdmin) ? (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button className="text-[10px] text-muted-foreground truncate max-w-[120px] hover:text-foreground hover:underline cursor-pointer transition-colors">
+                                {p.agente_nombre || "Sin agente"}
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-2" align="start">
+                              <Combobox
+                                value={p.id_persona_duena_lead?.toString() || ""}
+                                onValueChange={(value) => {
+                                  changeAgentMutation.mutate({
+                                    entidadRelacionadaId: p.entidad_relacionada_id,
+                                    agenteId: value ? parseInt(value) : null,
+                                  });
+                                }}
+                                options={agentes.map((a: any) => ({ value: a.id.toString(), label: a.nombre_legal }))}
+                                placeholder="Cambiar agente..."
+                                searchPlaceholder="Buscar agente..."
+                                emptyText="No hay agentes disponibles"
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                            {p.agente_nombre || "Sin agente"}
+                          </span>
+                        )}
                       </div>
                     ))}
                     {prospecto.proyectos.length === 0 && (

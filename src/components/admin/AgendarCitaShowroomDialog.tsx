@@ -134,7 +134,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
         .from("reservas_citas")
         .select("id, fecha, hora_inicio, hora_fin, estatus, notas, id_configuracion_cita, id_proyecto")
         .eq("id_persona_prospecto", parseInt(selectedProspecto))
-        .eq("id_tipo_cita", 2)
+        .in("id_tipo_cita", [2, 5])
         .eq("activo", true)
         .in("estatus", ["programada"])
         .order("fecha", { ascending: false })
@@ -166,7 +166,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
       const { data: configs } = await supabase
         .from("configuracion_citas_usuarios")
         .select("id, nombre, duracion_minutos, fecha_fin_recurrencia, id_usuario_email")
-        .eq("id_tipo_cita", 2)
+        .in("id_tipo_cita", [2, 5])
         .eq("activo", true)
         .in("id", configIds);
 
@@ -205,7 +205,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
       const { data } = await supabase
         .from("reservas_citas")
         .select("fecha, hora_inicio, id_configuracion_cita")
-        .eq("id_tipo_cita", 2)
+        .in("id_tipo_cita", [2, 5])
         .eq("activo", true)
         .in("id_configuracion_cita", configIds);
       return data || [];
