@@ -357,6 +357,7 @@ function ProjectCard({
             </button>
           )}
         </div>
+        </div>
       </div>
 
       {/* Share Dialog */}
