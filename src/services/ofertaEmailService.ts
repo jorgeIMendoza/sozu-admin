@@ -309,6 +309,12 @@ export async function sendMultipleOffersEmail(params: {
     // Priorizar siempre offerIds + PDFs ya guardados en Storage.
     // Evitamos reenviar base64 desde mobile porque hace el payload muy pesado en iPhone/iOS.
     // Los adjuntos pre-generados quedan solo como compatibilidad futura, pero no se envían aquí.
+    const body: Record<string, unknown> = {
+      offerIds,
+      recipientEmail,
+      recipientName: recipientName || '',
+      propertyNumber: propertyNumber || '',
+    };
 
     const { error } = await supabase.functions.invoke('enviar-oferta-email', { body });
 
