@@ -182,7 +182,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         .filter((p, idx, arr) => arr.findIndex((x) => x.id_proyecto === p.id_proyecto) === idx);
 
       setEditProyectos(proyectos);
-      setProyectoId(""); // Clear the add-project selector
+      setSelectedProyectoIds([]); // Clear new-mode selections
     }
   };
 
