@@ -2791,7 +2791,6 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
       {/* Navigation buttons */}
       {!isDocTab && (
         <div className="flex gap-3">
-          {/* Back button on non-first tabs */}
           {currentTabIndex > 0 && (
             <button
               onClick={() => setActiveTab(currentTabs[currentTabIndex - 1])}
@@ -2800,26 +2799,15 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
               Atrás
             </button>
           )}
-          {/* Next / Save button */}
-          {isLastDataTab ? (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Guardar y finalizar"}
-            </button>
-          ) : (
-            <button
-              onClick={handleNextTab}
-              disabled={saving}
-              className="flex-1 py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : (
-                <>Siguiente <ChevronRight className="h-4 w-4" /></>
-              )}
-            </button>
-          )}
+          <button
+            onClick={isLastTab ? handleSave : handleNextTab}
+            disabled={saving}
+            className="flex-1 py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : isLastTab ? "Guardar y finalizar" : (
+              <>Siguiente <ChevronRight className="h-4 w-4" /></>
+            )}
+          </button>
         </div>
       )}
     </div>
