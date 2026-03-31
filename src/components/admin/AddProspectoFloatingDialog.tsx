@@ -652,6 +652,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
               <div className="space-y-2">
                 <Label>Email <span className="text-destructive">*</span></Label>
                 <Input type="email" placeholder="Ingresa el email" value={email} onChange={(e) => handleEmailChange(e.target.value)} disabled={isEditMode && !!selectedProspectoId} />
+                {existingPersonaId && !isEditMode && (
+                  <p className="text-[10px] text-blue-600 font-medium">✓ Persona existente encontrada — se vinculará al prospecto</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Teléfono <span className="text-destructive">*</span></Label>
