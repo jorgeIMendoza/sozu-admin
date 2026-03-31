@@ -362,9 +362,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
         if (updateError) throw updateError;
       } else {
-        // Validate project for new prospect
-        if (!proyectoId) {
-          throw new Error("Completa los campos obligatorios");
+        // Validate projects for new prospect
+        if (selectedProyectoIds.length === 0) {
+          throw new Error("Selecciona al menos un desarrollo de interés");
         }
 
         let personaId: number;
@@ -404,15 +404,18 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           personaId = persona.id;
         }
 
+        // Insert one entidad_relacionada per selected project
+        const inserts = selectedProyectoIds.map((projId) => ({
+          id_persona: personaId,
+          id_tipo_entidad: 7,
+          id_proyecto: projId,
+          id_persona_duena_lead: profile?.id_persona || null,
+          activo: true,
+        }));
+
         const { error: entidadError } = await supabase
           .from("entidades_relacionadas")
-          .insert([{
-            id_persona: personaId,
-            id_tipo_entidad: 7,
-            id_proyecto: parseInt(proyectoId),
-            id_persona_duena_lead: profile?.id_persona || null,
-            activo: true,
-          }]);
+          .insert(inserts);
 
         if (entidadError) throw entidadError;
       }
