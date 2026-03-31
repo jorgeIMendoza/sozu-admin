@@ -72,7 +72,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         `)
         .eq("id_tipo_entidad", 7)
         .eq("activo", true)
-        .eq("id_persona_duena_lead", profile.id_persona);
+        .eq("id_persona_duena_lead", effectivePersonaId!);
 
       if (error) throw error;
       return (data || [])
