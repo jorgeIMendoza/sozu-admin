@@ -2538,7 +2538,7 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
   const currentTabs: readonly string[] = step === 'basic' ? basicTabs : step === 'fiscal' ? fiscalTabs : [];
   const currentTabLabels = step === 'basic' ? basicTabLabels : step === 'fiscal' ? fiscalTabLabels : [];
   const currentTabIndex = currentTabs.indexOf(activeTab);
-  const isLastDataTab = step === 'basic' ? activeTab === 'address' : step === 'fiscal' ? activeTab === 'direccion' : true;
+  const isLastTab = currentTabIndex === currentTabs.length - 1;
   const isDocTab = activeTab === 'documents' || activeTab === 'constancia';
 
   const handleNextTab = async () => {
