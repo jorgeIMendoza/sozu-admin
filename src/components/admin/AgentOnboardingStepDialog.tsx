@@ -1946,8 +1946,12 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       {isCompleted ? (
         <div className="text-center py-6 space-y-2">
           <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
-          <p className="text-sm font-semibold text-emerald-600">¡Capacitación confirmada!</p>
-          <p className="text-xs text-muted-foreground">Tu asistencia fue confirmada por el administrador.</p>
+          <p className="text-sm font-semibold text-emerald-600">¡Capacitación completada!</p>
+          <p className="text-xs text-muted-foreground">
+            {existingCita?.fecha
+              ? `Asistencia confirmada el ${existingCita.fecha}.`
+              : 'Este paso ya está completado. No requiere acción adicional.'}
+          </p>
         </div>
       ) : isPendingConfirmation ? (
         <div className="text-center py-6 space-y-2">
