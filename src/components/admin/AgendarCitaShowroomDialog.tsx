@@ -102,7 +102,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
 
       return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
     },
-    enabled: open && !!profile?.id_persona,
+    enabled: open && !!effectivePersonaId,
   });
 
   // Flat options for combobox: show only prospect name
