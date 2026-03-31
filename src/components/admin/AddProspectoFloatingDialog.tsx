@@ -34,7 +34,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   const hasTrackedFieldFill = useRef(false);
 
   const [selectedProspectoId, setSelectedProspectoId] = useState<number | null>(null);
-  const [proyectoId, setProyectoId] = useState("");
+  const [selectedProyectoIds, setSelectedProyectoIds] = useState<number[]>([]);
   const [tipoPersona, setTipoPersona] = useState("pf");
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
