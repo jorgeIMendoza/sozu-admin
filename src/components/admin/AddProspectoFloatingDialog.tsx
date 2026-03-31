@@ -45,6 +45,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   // Projects assigned to the selected prospect in edit mode
   const [editProyectos, setEditProyectos] = useState<ProspectoRelacion[]>([]);
   const hasAppliedPreselect = useRef(false);
+  // When an existing persona is found by email (not in agent's prospects)
+  const [existingPersonaId, setExistingPersonaId] = useState<number | null>(null);
+  const emailLookupTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch agent's existing prospects (grouped by persona)
   const { data: misProspectos = [] } = useQuery({
