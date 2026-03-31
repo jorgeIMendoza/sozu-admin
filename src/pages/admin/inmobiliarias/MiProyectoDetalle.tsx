@@ -185,6 +185,21 @@ const MiProyectoDetalle = () => {
     enabled: projectId > 0,
   });
 
+  // Fetch vistas del proyecto
+  const { data: vistas = [] } = useQuery({
+    queryKey: ["proyecto-detalle-vistas", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("vistas")
+        .select("id, nombre, url")
+        .eq("id_proyecto", projectId)
+        .eq("activo", true);
+      if (error) return [];
+      return (data || []).filter((v: any) => v.url);
+    },
+    enabled: projectId > 0,
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
