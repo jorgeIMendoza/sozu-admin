@@ -209,6 +209,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
+  const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
   const { registrarGeneracionOferta } = useActivityLogger();
 
   const form = useForm<FormData>({
