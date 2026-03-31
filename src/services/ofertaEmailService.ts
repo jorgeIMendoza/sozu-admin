@@ -398,15 +398,7 @@ export async function sendMultipleOffersEmailDirect(params: {
       propertyNumber: propertyNumber || '',
     };
 
-    if (preGeneratedAttachments && preGeneratedAttachments.length > 0) {
-      body.preGeneratedAttachments = preGeneratedAttachments.map(att => ({
-        base64: att.base64,
-        filename: att.filename,
-        offerId: att.offerId,
-        tipo: att.tipo,
-      }));
-    }
-
+    // Priorizar PDFs ya persistidos en Storage para evitar payloads grandes en mobile/iPhone.
     const { error } = await supabase.functions.invoke('enviar-oferta-email', { body });
 
     if (error) {
