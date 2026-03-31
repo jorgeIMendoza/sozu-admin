@@ -1458,7 +1458,7 @@ interface StepFormProps {
 
 function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange }: { personaId: number; onSaved: () => void; onTrackSave?: () => void; onTrackFieldChange?: () => void }) {
   const queryClient = useQueryClient();
-  const { hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
+  const { hasBasicIdentityComplete, hasTrainingComplete } = useAgentOnboardingStatus(personaId);
   const [saving, setSaving] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedSlot, setSelectedSlot] = useState('');
@@ -1862,7 +1862,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
   };
 
-  const isCompleted = existingCita?.estatus === 'asistio' || (existingCita as any)?.id_estatus_cita === 3;
+  const isCompleted = hasTrainingComplete || existingCita?.estatus === 'asistio' || (existingCita as any)?.id_estatus_cita === 3;
   const isProgrammed = (existingCita?.estatus === 'programada' || (existingCita as any)?.id_estatus_cita === 1) && !citaCancelledExternally;
   const isPendingConfirmation = (existingCita as any)?.id_estatus_cita === 2;
   const isNoShow = existingCita?.estatus === 'no_asistio';
@@ -1946,8 +1946,12 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       {isCompleted ? (
         <div className="text-center py-6 space-y-2">
           <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
-          <p className="text-sm font-semibold text-emerald-600">¡Capacitación confirmada!</p>
-          <p className="text-xs text-muted-foreground">Tu asistencia fue confirmada por el administrador.</p>
+          <p className="text-sm font-semibold text-emerald-600">¡Capacitación completada!</p>
+          <p className="text-xs text-muted-foreground">
+            {existingCita?.fecha
+              ? `Asistencia confirmada el ${existingCita.fecha}.`
+              : 'Este paso ya está completado. No requiere acción adicional.'}
+          </p>
         </div>
       ) : isPendingConfirmation ? (
         <div className="text-center py-6 space-y-2">
