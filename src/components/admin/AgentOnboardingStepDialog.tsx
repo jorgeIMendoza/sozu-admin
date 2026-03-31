@@ -2530,15 +2530,150 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
     </div>
   );
 
+  const basicTabs = ['personal', 'address', 'documents'] as const;
+  const basicTabLabels = ['Datos personales', 'Dirección', 'Documentos'];
+  const fiscalTabs = ['datos', 'direccion', 'constancia'] as const;
+  const fiscalTabLabels = ['Datos', 'Dirección', 'Constancia'];
+
+  const currentTabs = step === 'basic' ? basicTabs : step === 'fiscal' ? fiscalTabs : [];
+  const currentTabLabels = step === 'basic' ? basicTabLabels : step === 'fiscal' ? fiscalTabLabels : [];
+  const currentTabIndex = currentTabs.indexOf(activeTab as any);
+  const isLastDataTab = step === 'basic' ? activeTab === 'address' : step === 'fiscal' ? activeTab === 'direccion' : true;
+  const isDocTab = activeTab === 'documents' || activeTab === 'constancia';
+
+  const handleNextTab = async () => {
+    // Save first, then advance
+    onTrackSave?.();
+    setSaving(true);
+    try {
+      let updateData: any = {};
+      let validationError = false;
+
+      if (step === 'basic' && activeTab === 'personal') {
+        if (telefono.trim() && telefono.trim().length !== 10) {
+          toast.error("El teléfono debe tener 10 dígitos.");
+          validationError = true;
+        }
+        if (!validationError && curp.trim()) {
+          const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+          if (!curpRegex.test(curp.trim().toUpperCase())) {
+            toast.error("El formato del CURP no es válido (18 caracteres alfanuméricos).");
+            validationError = true;
+          }
+        }
+        if (!validationError) {
+          updateData = {
+            nombre_legal: nombre.trim() || null,
+            email: email.trim() || null,
+            telefono: telefono.trim() || null,
+            curp: curp.trim().toUpperCase() || null,
+            sexo: sexo || null,
+          };
+        }
+      } else if (step === 'basic' && activeTab === 'address') {
+        updateData = {
+          direccion_calle: calle.trim() || null,
+          direccion_num_ext: numExt.trim() || null,
+          direccion_num_int: numInt.trim() || null,
+          direccion_colonia: colonia.trim() || null,
+          direccion_codigo_postal: cp.trim() || null,
+          direccion_id_pais: idPais || null,
+          direccion_id_estado: idEstado ? parseInt(idEstado) : null,
+          direccion_id_municipio: idMunicipio ? parseInt(idMunicipio) : null,
+        };
+      } else if (step === 'fiscal' && activeTab === 'datos') {
+        if (rfc.trim()) {
+          const rfcValidation = validateRFC(rfc);
+          if (!rfcValidation.isValid) {
+            toast.error(rfcValidation.error || "RFC inválido.");
+            validationError = true;
+          }
+        }
+        if (!validationError) {
+          updateData = {
+            rfc: rfc.trim().toUpperCase() || null,
+            regimen: regimen || null,
+            uso_cfdi: usoCfdi || null,
+          };
+        }
+      } else if (step === 'fiscal' && activeTab === 'direccion') {
+        updateData = {
+          direccion_fiscal_calle: fCalle.trim() || null,
+          direccion_fiscal_num_ext: fNumExt.trim() || null,
+          direccion_fiscal_num_int: fNumInt.trim() || null,
+          direccion_fiscal_colonia: fColonia.trim() || null,
+          direccion_fiscal_codigo_postal: fCp.trim() || null,
+          direccion_fiscal_id_pais: fIdPais || null,
+          direccion_fiscal_id_estado: fIdEstado ? parseInt(fIdEstado) : null,
+          direccion_fiscal_id_municipio: fIdMunicipio ? parseInt(fIdMunicipio) : null,
+        };
+      }
+
+      if (validationError) {
+        setSaving(false);
+        return;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        const { data: updatedRow, error } = await supabase
+          .from('personas')
+          .update(updateData)
+          .eq('id', personaId)
+          .select()
+          .single();
+        if (error) throw error;
+        if (updatedRow) {
+          queryClient.setQueryData(['agent-onboarding-step-persona', personaId], updatedRow);
+        }
+        // Sync phone if basic personal tab
+        if (step === 'basic' && activeTab === 'personal' && telefono.trim()) {
+          await supabase.from('usuarios').update({ telefono: telefono.trim() }).eq('id_persona', personaId);
+        }
+      }
+
+      toast.success("Información guardada.");
+      // Advance to next tab
+      const nextIndex = currentTabIndex + 1;
+      if (nextIndex < currentTabs.length) {
+        setActiveTab(currentTabs[nextIndex]);
+      }
+    } catch (err: any) {
+      const msg = err.message || "Error desconocido";
+      if (msg.includes("personas_rfc_key") || (msg.includes("duplicate") && msg.includes("rfc"))) {
+        toast.error("El RFC ingresado ya está dado de alta en el sistema.");
+      } else if (msg.includes("personas_curp_key") || (msg.includes("duplicate") && msg.includes("curp"))) {
+        toast.error("El CURP ingresado ya está dado de alta en el sistema.");
+      } else {
+        toast.error("Error al guardar: " + msg);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-5 pb-4">
       {step === 'basic' && (
-        <Tabs defaultValue="personal" className="w-full" onValueChange={setActiveTab}>
+        <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="personal" className="text-xs">Datos personales</TabsTrigger>
             <TabsTrigger value="address" className="text-xs">Dirección</TabsTrigger>
             <TabsTrigger value="documents" className="text-xs">Documentos</TabsTrigger>
           </TabsList>
+
+          {/* Step indicator */}
+          <div className="flex items-center justify-center gap-1.5 mb-3">
+            {basicTabs.map((tab, i) => (
+              <div key={tab} className={cn(
+                "h-1.5 rounded-full transition-all duration-300",
+                i === currentTabIndex ? "w-6 bg-primary" : i < currentTabIndex ? "w-4 bg-emerald-400" : "w-4 bg-muted"
+              )} />
+            ))}
+            <span className="text-[10px] text-muted-foreground ml-2">
+              {currentTabIndex + 1} de {basicTabs.length}
+            </span>
+          </div>
+
           <TabsContent value="personal" className="space-y-4">
             <div>
               <Label className="text-sm font-semibold">Nombre completo *</Label>
@@ -2589,12 +2724,26 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
       )}
 
       {step === 'fiscal' && (
-        <Tabs defaultValue="datos" className="w-full" onValueChange={setActiveTab}>
+        <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="datos" className="text-xs">Datos</TabsTrigger>
             <TabsTrigger value="direccion" className="text-xs">Dirección</TabsTrigger>
             <TabsTrigger value="constancia" className="text-xs">Constancia</TabsTrigger>
           </TabsList>
+
+          {/* Step indicator */}
+          <div className="flex items-center justify-center gap-1.5 mb-3">
+            {fiscalTabs.map((tab, i) => (
+              <div key={tab} className={cn(
+                "h-1.5 rounded-full transition-all duration-300",
+                i === currentTabIndex ? "w-6 bg-primary" : i < currentTabIndex ? "w-4 bg-emerald-400" : "w-4 bg-muted"
+              )} />
+            ))}
+            <span className="text-[10px] text-muted-foreground ml-2">
+              {currentTabIndex + 1} de {fiscalTabs.length}
+            </span>
+          </div>
+
           <TabsContent value="datos" className="space-y-4">
             <div>
               <Label className="text-sm font-semibold">RFC *</Label>
@@ -2639,15 +2788,39 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
         </Tabs>
       )}
 
-      {/* Hide save button on document-only tabs (documents in basic, constancia in fiscal) */}
-      {activeTab !== 'documents' && activeTab !== 'constancia' && (
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
-        >
-          {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Guardar"}
-        </button>
+      {/* Navigation buttons */}
+      {!isDocTab && (
+        <div className="flex gap-3">
+          {/* Back button on non-first tabs */}
+          {currentTabIndex > 0 && (
+            <button
+              onClick={() => setActiveTab(currentTabs[currentTabIndex - 1])}
+              className="flex-shrink-0 px-5 py-4 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-all"
+            >
+              Atrás
+            </button>
+          )}
+          {/* Next / Save button */}
+          {isLastDataTab ? (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Guardar y finalizar"}
+            </button>
+          ) : (
+            <button
+              onClick={handleNextTab}
+              disabled={saving}
+              className="flex-1 py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : (
+                <>Siguiente <ChevronRight className="h-4 w-4" /></>
+              )}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
