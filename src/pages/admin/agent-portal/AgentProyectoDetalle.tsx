@@ -207,8 +207,24 @@ const AgentProyectoDetalle = () => {
     enabled: projectId > 0,
   });
 
-  // Fetch galería multimedia (images)
-  const { data: multimedia = [] } = useQuery({
+   // Fetch vistas del proyecto
+   const { data: vistas = [] } = useQuery({
+     queryKey: ["agent-proyecto-vistas", projectId],
+     queryFn: async () => {
+       const { data, error } = await (supabase as any)
+         .from("vistas")
+         .select("id, nombre, url")
+         .eq("id_proyecto", projectId)
+         .eq("activo", true)
+         .order("orden");
+       if (error) throw error;
+       return data || [];
+     },
+     enabled: projectId > 0,
+   });
+
+   // Fetch galería multimedia (images)
+   const { data: multimedia = [] } = useQuery({
     queryKey: ["agent-proyecto-multimedia", projectId],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
