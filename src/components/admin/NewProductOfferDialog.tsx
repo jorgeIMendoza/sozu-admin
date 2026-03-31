@@ -119,6 +119,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
 
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),

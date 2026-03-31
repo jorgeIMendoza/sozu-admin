@@ -248,12 +248,40 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     ? (parseFloat(watchedEnganche) / parseInt(watchedNumeroPagosEnganche)).toFixed(2)
     : "0.00";
 
-  // Search persons query
+  // Determine effective persona ID for prospect filtering
+  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const effectivePersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
+  const shouldFilterByOwner = !isSuperAdmin || isImpersonating;
+
+  // Search persons query - filtered by ownership for non-super-admins
   const { data: persons = [] } = useQuery({
-    queryKey: ["persons-search", searchTerm],
+    queryKey: ["persons-search", searchTerm, shouldFilterByOwner, effectivePersonaId],
     queryFn: async () => {
       if (searchTerm.length < 2) return [];
       
+      if (shouldFilterByOwner && effectivePersonaId) {
+        // Filter through entidades_relacionadas to only show owned prospects
+        const { data, error } = await supabase
+          .from("entidades_relacionadas")
+          .select("personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal, email, telefono, clave_pais_telefono, rfc, curp, tipo_persona)")
+          .eq("id_tipo_entidad", 7)
+          .eq("activo", true)
+          .eq("id_persona_duena_lead", effectivePersonaId);
+        
+        if (error) throw error;
+        const s = searchTerm.toLowerCase();
+        const unique = new Map<number, any>();
+        (data || []).forEach((er: any) => {
+          if (!er.personas) return;
+          const p = er.personas;
+          if (p.nombre_legal?.toLowerCase().includes(s) || p.email?.toLowerCase().includes(s) || p.rfc?.toLowerCase().includes(s)) {
+            unique.set(p.id, p);
+          }
+        });
+        return Array.from(unique.values()).slice(0, 10);
+      }
+      
+      // Super admin without impersonation - search all personas
       const { data, error } = await supabase
         .from("personas")
         .select("id, nombre_legal, email, telefono, clave_pais_telefono, rfc, curp, tipo_persona")
