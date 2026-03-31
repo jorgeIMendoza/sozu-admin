@@ -233,8 +233,7 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
           );
         },
       }}
-      {...props}
-      onSelect={wrappedOnSelect as any}
+      {...restProps}
     />
   );
 }
