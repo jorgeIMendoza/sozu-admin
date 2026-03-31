@@ -8,6 +8,7 @@ import { Loader2, CalendarDays, Plus, Clock, AlertCircle, CalendarCheck } from "
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { format, addDays, isBefore, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { Combobox } from "@/components/ui/combobox";
@@ -41,6 +42,8 @@ interface ProspectoAgrupado {
 
 export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaShowroomDialogProps) {
   const { profile, user } = useAuth();
+  const { impersonatedAgentPersonaId } = useAgentImpersonation();
+  const effectivePersonaId = impersonatedAgentPersonaId || profile?.id_persona;
   const queryClient = useQueryClient();
   const { track } = useCtaTracker();
   const hasTrackedFieldFill = useRef(false);
@@ -55,9 +58,9 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
 
   // Fetch prospects grouped by persona with all projects
   const { data: prospectosAgrupados = [] } = useQuery({
-    queryKey: ["mis-prospectos-showroom", profile?.id_persona],
+    queryKey: ["mis-prospectos-showroom", effectivePersonaId],
     queryFn: async (): Promise<ProspectoAgrupado[]> => {
-      if (!profile?.id_persona) return [];
+      if (!effectivePersonaId) return [];
 
       const { data, error } = await supabase
         .from("entidades_relacionadas")
@@ -73,7 +76,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
         `)
         .eq("id_tipo_entidad", 7)
         .eq("activo", true)
-        .eq("id_persona_duena_lead", profile.id_persona);
+        .eq("id_persona_duena_lead", effectivePersonaId);
 
       if (error) throw error;
 
@@ -99,7 +102,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
 
       return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
     },
-    enabled: open && !!profile?.id_persona,
+    enabled: open && !!effectivePersonaId,
   });
 
   // Flat options for combobox: show only prospect name
