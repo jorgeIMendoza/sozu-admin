@@ -152,7 +152,7 @@ class HTMLToPDFService {
           .from('estatus_aprobacion')
           .select('nombre')
           .eq('id', offerDetails.id_estatus_aprobacion)
-          .single();
+          .maybeSingle();
         estatus_aprobacion_nombre = estatusData?.nombre || null;
       }
 
@@ -2199,7 +2199,7 @@ export const generateOfferPDFAsBase64 = async (offerData: OfferData): Promise<{ 
         .from('estatus_aprobacion')
         .select('nombre')
         .eq('id', offerDetails.id_estatus_aprobacion)
-        .single();
+        .maybeSingle();
       estatus_aprobacion_nombre = estatusData?.nombre || null;
     }
 

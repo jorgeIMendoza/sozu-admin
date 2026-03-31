@@ -596,9 +596,9 @@ const AgentUnidadesProyecto = () => {
                   </div>
                 )}
                 {selectedProperty.precio_lista > 0 && (
-                  <div className="bg-emerald-50 rounded-xl p-4 text-center">
-                    <p className="text-xs text-muted-foreground">Precio de Lista</p>
-                    <p className="text-xl font-bold text-foreground">{formatPrice(selectedProperty.precio_lista)}</p>
+                  <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded-xl p-4 text-center">
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400">Precio de Lista</p>
+                    <p className="text-xl font-bold text-emerald-900 dark:text-emerald-100">{formatPrice(selectedProperty.precio_lista)}</p>
                   </div>
                 )}
                 {getSchemesForProperty(selectedProperty).length > 0 && (
