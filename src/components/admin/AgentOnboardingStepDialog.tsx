@@ -2789,16 +2789,16 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
       )}
 
       {/* Navigation buttons */}
-      {!isDocTab && (
-        <div className="flex gap-3">
-          {currentTabIndex > 0 && (
-            <button
-              onClick={() => setActiveTab(currentTabs[currentTabIndex - 1])}
-              className="flex-shrink-0 px-5 py-4 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-all"
-            >
-              Atrás
-            </button>
-          )}
+      <div className="flex gap-3">
+        {currentTabIndex > 0 && (
+          <button
+            onClick={() => setActiveTab(currentTabs[currentTabIndex - 1])}
+            className="flex-shrink-0 px-5 py-4 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-all"
+          >
+            Atrás
+          </button>
+        )}
+        {!isDocTab && (
           <button
             onClick={isLastTab ? handleSave : handleNextTab}
             disabled={saving}
@@ -2808,8 +2808,8 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
               <>Siguiente <ChevronRight className="h-4 w-4" /></>
             )}
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
