@@ -216,7 +216,7 @@ const AgentProyectoDetalle = () => {
          .select("id, nombre, url")
          .eq("id_proyecto", projectId)
          .eq("activo", true)
-         .order("orden");
+         .order("nombre");
        if (error) throw error;
        return data || [];
      },
