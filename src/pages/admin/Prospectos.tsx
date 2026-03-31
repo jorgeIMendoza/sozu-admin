@@ -110,6 +110,8 @@ export default function Prospectos() {
           id: er.id_proyecto,
           nombre: proyectosMap.get(er.id_proyecto) || '',
           entidad_relacionada_id: er.id,
+          agente_nombre: er.agente?.nombre_legal || undefined,
+          id_persona_duena_lead: er.id_persona_duena_lead || undefined,
         }))
         // Deduplicate by project id
         .filter((p: ProspectoProyecto, idx: number, arr: ProspectoProyecto[]) =>
