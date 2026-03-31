@@ -181,7 +181,8 @@ const AgentInventario = () => {
                 track({ page: 'agent_inventario', elementId: 'input_buscar_desarrollo', elementLabel: 'Buscar desarrollo', elementType: 'input' });
               }
             }}
-            className="pl-9 h-10 rounded-xl bg-white border-gray-200"
+            className="pl-9 h-10 rounded-xl bg-[hsl(var(--card))] border-[hsl(var(--border))] text-[hsl(var(--agent-text))] placeholder:text-[hsl(var(--agent-text-secondary))]"
+            style={{ WebkitTextFillColor: "hsl(var(--agent-text))" }}
           />
         </div>
       </AgentPortalHeader>
