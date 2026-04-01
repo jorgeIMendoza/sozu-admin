@@ -16,6 +16,7 @@ import { GoogleMapComponent } from "@/components/admin/GoogleMapComponent";
 import { VistasCarousel } from "@/components/admin/VistasCarousel";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
 
 // Map amenity names to minimalist Lucide icons
 const amenityIconMap: Record<string, any> = {
