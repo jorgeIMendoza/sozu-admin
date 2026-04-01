@@ -194,6 +194,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
         ...c,
         responsable: personaMap.get(c.id_usuario_email) || c.id_usuario_email,
         proyecto_id: configToProject.get(c.id) || null,
+        tipo_cita_id: c.id_tipo_cita,
       }));
 
       return { configs: enrichedConfigs, horarios: horarios || [] };
