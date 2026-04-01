@@ -627,13 +627,24 @@ const AgentProyectoDetalle = () => {
                 const modelImage = m.url_imagen_portada || m.plano_arquitectonico;
                 return (
                   <div key={m.id} className="min-w-[260px] max-w-[280px] flex-shrink-0 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                    {modelImage ? (
-                      <img src={modelImage} alt={m.nombre} className="w-full h-40 object-cover" loading="lazy" />
-                    ) : (
-                      <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
-                        <Building2 className="h-10 w-10 text-gray-300" />
-                      </div>
-                    )}
+                    {(() => {
+                      const allImages: string[] = [];
+                      if (m.url_imagen_portada) allImages.push(m.url_imagen_portada);
+                      (m.multimediaImages || []).forEach((url: string) => {
+                        if (!allImages.includes(url)) allImages.push(url);
+                      });
+                      if (m.plano_arquitectonico && !allImages.includes(m.plano_arquitectonico)) allImages.push(m.plano_arquitectonico);
+
+                      if (allImages.length === 0) {
+                        return (
+                          <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
+                            <Building2 className="h-10 w-10 text-gray-300" />
+                          </div>
+                        );
+                      }
+
+                      return <ModelCardCarousel images={allImages} alt={m.nombre} />;
+                    })()}
                     <div className="p-3.5">
                       <p className="text-base font-bold text-foreground">{m.nombre}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
