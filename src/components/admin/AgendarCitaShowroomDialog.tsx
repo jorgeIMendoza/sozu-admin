@@ -320,9 +320,14 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
 
       if (fnError) throw fnError;
       if (fnData?.error) throw new Error(fnData.error === "no_disponible" ? fnData.message : fnData.error);
+      return fnData;
     },
-    onSuccess: () => {
-      toast.success("Cita al showroom agendada exitosamente");
+    onSuccess: (data: any) => {
+      if (data?.warning) {
+        toast.warning(data.warning);
+      } else {
+        toast.success("Cita al showroom agendada exitosamente");
+      }
       queryClient.invalidateQueries({ queryKey: ["existing-reservations-showroom-multi"] });
       queryClient.invalidateQueries({ queryKey: ["existing-cita-prospecto"] });
       handleClose();
