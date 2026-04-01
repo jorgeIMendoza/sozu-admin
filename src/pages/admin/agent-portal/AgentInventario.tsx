@@ -338,7 +338,8 @@ function ProjectCard({
           {canRead && (
             <button
               onClick={onViewProject}
-              className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-[hsl(214.3_31.8%_91.4%)] bg-[hsl(0_0%_100%)] py-2 text-xs font-medium text-[hsl(222.2_84%_4.9%)] hover:bg-[hsl(210_40%_96.1%)] transition-colors shadow-sm"
+              style={{ colorScheme: "light" }}
             >
               <Eye className="h-3.5 w-3.5" />
               Ver Desarrollo
