@@ -446,6 +446,10 @@ async function createCalendarEvent(token: string, calendarId: string, fecha: str
   if (attendees && attendees.length > 0) {
     event.attendees = attendees;
   }
+  // Hide attendees from each other so the prospect doesn't see enterados/organizer
+  event.guestsCanSeeOtherGuests = false;
+  // Attempt to show a branded name instead of the calendar owner's name
+  event.organizer = { displayName: "Cita Sozu" };
 
   const attemptCreate = async (eventPayload: any, withMeet: boolean): Promise<Response> => {
     const url = withMeet
