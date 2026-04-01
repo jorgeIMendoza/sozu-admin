@@ -50,7 +50,54 @@ function getAmenityIcon(name: string) {
   return Star;
 }
 
-const AgentProyectoDetalle = () => {
+const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) => {
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, dragFree: false });
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const onSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setSelectedIndex(emblaApi.selectedScrollSnap());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    emblaApi.on("select", onSelect);
+    onSelect();
+    return () => { emblaApi.off("select", onSelect); };
+  }, [emblaApi, onSelect]);
+
+  if (images.length === 1) {
+    return <img src={images[0]} alt={alt} className="w-full h-40 object-cover" loading="lazy" />;
+  }
+
+  return (
+    <div className="relative">
+      <div className="overflow-hidden" ref={emblaRef}>
+        <div className="flex">
+          {images.map((url, i) => (
+            <div key={i} className="flex-[0_0_100%] min-w-0">
+              <img src={url} alt={`${alt} ${i + 1}`} className="w-full h-40 object-cover" loading="lazy" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+        {images.map((_, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); emblaApi?.scrollTo(i); }}
+            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === selectedIndex ? 'bg-white' : 'bg-white/50'}`}
+          />
+        ))}
+      </div>
+      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm rounded-lg px-2 py-0.5 text-[10px] font-medium text-white">
+        {selectedIndex + 1}/{images.length}
+      </div>
+    </div>
+  );
+};
+
+
   const { id } = useParams<{ id: string }>();
   const projectId = parseInt(id || "0");
   const navigate = useNavigate();
