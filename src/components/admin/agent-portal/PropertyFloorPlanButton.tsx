@@ -14,42 +14,77 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
   const { data: planUrl, isLoading } = useQuery({
     queryKey: ["property-floor-plan", propertyId],
     queryFn: async () => {
+      // 1. Get property data
       const { data: prop } = await (supabase as any)
         .from("propiedades")
-        .select("id_edificio_modelo, numero_piso")
+        .select("id_edificio_modelo, numero_piso, numero_propiedad")
         .eq("id", propertyId)
         .single();
 
       if (!prop?.id_edificio_modelo) return null;
 
-      const { data: planoModelo } = await (supabase as any)
-        .from("modelos_planos_arquitectonicos")
-        .select("url_imagen")
-        .eq("id_edificio_modelo", prop.id_edificio_modelo)
-        .eq("activo", true)
-        .limit(1)
-        .maybeSingle();
+      const numeroPiso = prop.numero_piso;
 
-      if (planoModelo?.url_imagen) return planoModelo.url_imagen;
-
-      const { data: em } = await (supabase as any)
+      // 2. Get edificio_modelo with modelo fallback
+      const { data: emData } = await (supabase as any)
         .from("edificios_modelos")
-        .select("id_edificio")
+        .select("id, id_edificio, id_modelo, modelos(plano_arquitectonico)")
         .eq("id", prop.id_edificio_modelo)
         .single();
 
-      if (!em?.id_edificio) return null;
+      const planoArquitectonico = emData?.modelos?.plano_arquitectonico || null;
+
+      // 3. Extract unit number (strip floor prefix)
+      const rawPropertyNumber = (prop.numero_propiedad || "").toString().trim();
+      const propertyDigits = rawPropertyNumber.replace(/\D/g, "");
+      const floorDigits = (numeroPiso?.toString() || "").replace(/\D/g, "");
+
+      const extractedDeptoDigits =
+        floorDigits && propertyDigits.startsWith(floorDigits) && propertyDigits.length > floorDigits.length
+          ? propertyDigits.slice(floorDigits.length)
+          : propertyDigits;
+
+      const numeroDepaRaw = extractedDeptoDigits || rawPropertyNumber;
+      const numeroDepa = numeroDepaRaw.length === 1 ? numeroDepaRaw.padStart(2, "0") : numeroDepaRaw;
+
+      // 4. Query modelos_planos_arquitectonicos by edificio_modelo + nivel
+      let planoArqUrl: string | null = planoArquitectonico;
+      const emId = emData?.id;
+      if (emId && numeroPiso && numeroDepa) {
+        const { data: planosArq } = await (supabase as any)
+          .from("modelos_planos_arquitectonicos")
+          .select("imagen_url, departamentos")
+          .eq("id_edificio_modelo", emId)
+          .eq("nivel", numeroPiso)
+          .eq("activo", true);
+
+        if (planosArq && planosArq.length > 0) {
+          const normalizeForMatch = (v: string) => v.replace(/^0+/, "") || "0";
+          const depaMatch = (planosArq as any[]).find((p: any) => {
+            const depts: string[] = Array.isArray(p.departamentos) ? p.departamentos : [];
+            return depts.some(d => d === numeroDepa || normalizeForMatch(d) === normalizeForMatch(numeroDepa));
+          });
+          if (depaMatch) {
+            planoArqUrl = depaMatch.imagen_url || planoArqUrl;
+          }
+        }
+      }
+
+      if (planoArqUrl) return planoArqUrl;
+
+      // 5. Fallback: edificios_niveles_planos
+      if (!emData?.id_edificio) return null;
 
       const { data: planoEdificio } = await (supabase as any)
         .from("edificios_niveles_planos")
-        .select("url_imagen")
-        .eq("id_edificio", em.id_edificio)
-        .eq("nivel", prop.numero_piso || "1")
+        .select("imagen_url")
+        .eq("id_edificio", emData.id_edificio)
+        .eq("nivel", numeroPiso || "1")
         .eq("activo", true)
         .limit(1)
         .maybeSingle();
 
-      return planoEdificio?.url_imagen || null;
+      return planoEdificio?.imagen_url || null;
     },
     enabled: propertyId > 0,
     staleTime: 300_000,
