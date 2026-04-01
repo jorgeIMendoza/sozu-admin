@@ -419,13 +419,14 @@ const AgentInicio = () => {
                       {cita.ubicacion && <span className="text-xs text-[hsl(var(--agent-text-secondary))]">· {cita.ubicacion}</span>}
                     </div>
                   </div>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
-                    cita.id_estatus_cita === 3 ? 'bg-green-100 text-green-700' :
-                    cita.id_estatus_cita === 1 ? 'bg-blue-100 text-blue-700' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>
-                    {cita.estatus_cita?.nombre || cita.estatus || 'Pendiente'}
-                  </span>
+                  {(() => {
+                    const badge = getCitaStatusBadge(cita);
+                    return (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${badge.className}`}>
+                        {badge.label}
+                      </span>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
