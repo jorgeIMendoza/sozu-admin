@@ -408,13 +408,18 @@ const AgentInicio = () => {
                     <Calendar className="h-4 w-4 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
+                     <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
                       {cita.tipos_cita?.nombre || 'Cita'} {cita.proyectos?.nombre ? `· ${cita.proyectos.nombre}` : ''}
                     </p>
+                    {cita.personas?.nombre_legal && (
+                      <p className="text-xs text-[hsl(var(--agent-text))] truncate font-medium">
+                        {cita.personas.nombre_legal}
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-[hsl(var(--agent-text-secondary))] flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} · {cita.hora_inicio?.slice(0, 5)}
+                        {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} · {cita.hora_inicio?.slice(0, 5)}{cita.hora_fin ? ` - ${cita.hora_fin.slice(0, 5)}` : ''}
                       </span>
                       {cita.ubicacion && <span className="text-xs text-[hsl(var(--agent-text-secondary))]">· {cita.ubicacion}</span>}
                     </div>
