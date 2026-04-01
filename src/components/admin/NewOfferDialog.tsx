@@ -2433,7 +2433,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
 
     {/* Confirmation Dialog for generating multiple offers */}
     <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-      <AlertDialogContent className="max-w-lg">
+      <AlertDialogContent className={cn("max-w-lg", forceLight && "light")}>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
