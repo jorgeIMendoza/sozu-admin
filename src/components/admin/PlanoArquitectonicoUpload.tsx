@@ -558,6 +558,7 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
         })}
       </div>
     </div>
+    </>
   );
 }
 
