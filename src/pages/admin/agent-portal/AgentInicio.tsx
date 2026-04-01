@@ -180,6 +180,26 @@ const AgentInicio = () => {
     enabled: !!agentEmail,
   });
 
+  // Fetch citas agendadas
+  const { data: citas = [], isLoading: citasLoading } = useQuery({
+    queryKey: ['agent-citas', personaId],
+    queryFn: async () => {
+      if (!personaId) return [];
+      const { data } = await (supabase as any)
+        .from('reservas_citas')
+        .select('id, fecha, hora_inicio, hora_fin, ubicacion, estatus, id_estatus_cita, id_proyecto, notas, proyectos(nombre), tipos_cita(nombre), estatus_cita(nombre)')
+        .eq('id_agente', personaId)
+        .eq('activo', true)
+        .order('fecha', { ascending: true });
+      return data || [];
+    },
+    enabled: !!personaId,
+  });
+
+  const today = new Date().toISOString().split('T')[0];
+  const citasProximas = citas.filter((c: any) => c.fecha >= today && (!c.id_estatus_cita || c.id_estatus_cita <= 3));
+  const citasHistorial = citas.filter((c: any) => c.fecha < today || (c.id_estatus_cita && c.id_estatus_cita > 3)).slice(0, 5);
+
   const isLoading = onboardingLoading || metricsLoading;
 
   const formatCurrency = (value: number) => {
