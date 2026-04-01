@@ -187,7 +187,7 @@ const AgentInicio = () => {
       if (!personaId) return [];
       const { data } = await (supabase as any)
         .from('reservas_citas')
-        .select('id, fecha, hora_inicio, hora_fin, ubicacion, estatus, id_estatus_cita, id_proyecto, notas, proyectos(nombre), tipos_cita(nombre), estatus_cita(nombre)')
+        .select('id, fecha, hora_inicio, hora_fin, ubicacion, estatus, id_estatus_cita, id_proyecto, notas, proyectos(nombre), tipos_cita(nombre), estatus_cita(nombre), personas!reservas_citas_id_persona_prospecto_fkey(nombre_legal)')
         .eq('id_agente', personaId)
         .eq('activo', true)
         .order('fecha', { ascending: true });
@@ -408,13 +408,18 @@ const AgentInicio = () => {
                     <Calendar className="h-4 w-4 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
+                     <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
                       {cita.tipos_cita?.nombre || 'Cita'} {cita.proyectos?.nombre ? `· ${cita.proyectos.nombre}` : ''}
                     </p>
+                    {cita.personas?.nombre_legal && (
+                      <p className="text-xs text-[hsl(var(--agent-text))] truncate font-medium">
+                        {cita.personas.nombre_legal}
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-[hsl(var(--agent-text-secondary))] flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} · {cita.hora_inicio?.slice(0, 5)}
+                        {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} · {cita.hora_inicio?.slice(0, 5)}{cita.hora_fin ? ` - ${cita.hora_fin.slice(0, 5)}` : ''}
                       </span>
                       {cita.ubicacion && <span className="text-xs text-[hsl(var(--agent-text-secondary))]">· {cita.ubicacion}</span>}
                     </div>
@@ -444,8 +449,14 @@ const AgentInicio = () => {
                     <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
                       {cita.tipos_cita?.nombre || 'Cita'} {cita.proyectos?.nombre ? `· ${cita.proyectos.nombre}` : ''}
                     </p>
-                    <span className="text-xs text-[hsl(var(--agent-text-secondary))]">
-                      {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {cita.personas?.nombre_legal && (
+                      <p className="text-xs text-[hsl(var(--agent-text))] truncate font-medium">
+                        {cita.personas.nombre_legal}
+                      </p>
+                    )}
+                    <span className="text-xs text-[hsl(var(--agent-text-secondary))] flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })} · {cita.hora_inicio?.slice(0, 5)}{cita.hora_fin ? ` - ${cita.hora_fin.slice(0, 5)}` : ''}
                     </span>
                   </div>
                   {(() => {

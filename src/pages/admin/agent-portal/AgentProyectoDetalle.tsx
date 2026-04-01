@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { Building2, MapPin, ArrowLeft, Calendar, CalendarPlus, Loader2, Download, Share2, ChevronRight, ChevronDown, HardHat, Image as ImageIcon, Maximize2, BedDouble, Bath, Mail, Copy, Dumbbell, Car, TreePine, Shield, Coffee, Waves, Warehouse, ShoppingBag, PersonStanding, Clapperboard, Sofa, Dog, Bike, Baby, Utensils, Gamepad2, BookOpen, Wind, Sparkles, Star, Lock } from "lucide-react";
+import { Building2, MapPin, ArrowLeft, Calendar, CalendarPlus, Loader2, Download, Share2, ChevronRight, ChevronDown, HardHat, Image as ImageIcon, Maximize2, BedDouble, Bath, Mail, Copy, Dumbbell, Car, TreePine, Shield, Coffee, Waves, Warehouse, ShoppingBag, PersonStanding, Clapperboard, Sofa, Dog, Bike, Baby, Utensils, Gamepad2, BookOpen, Wind, Sparkles, Star, Lock, FileImage } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
@@ -67,6 +67,7 @@ const AgentProyectoDetalle = () => {
   const [shareOpen, setShareOpen] = useState(false);
   const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
   const [showAllAmenidades, setShowAllAmenidades] = useState(false);
+  const [planoModeloUrl, setPlanoModeloUrl] = useState<string | null>(null);
 
   const publicUrl = `https://www.sozu.com/desarrollos/${projectId}`;
 
@@ -316,11 +317,39 @@ const AgentProyectoDetalle = () => {
         }
       });
 
+      // Fetch floor plans for each edificio_modelo
+      const { data: planos } = await (supabase as any)
+        .from("modelos_planos_arquitectonicos")
+        .select("id, id_edificio_modelo, imagen_url")
+        .in("id_edificio_modelo", emIds)
+        .eq("activo", true);
+
+      // Find the most common floor plan per modelo (the one appearing in most edificio_modelos)
+      const planosPorModelo = new Map<number, string>();
+      if (planos?.length) {
+        for (const [mid, entry] of modeloMap.entries()) {
+          const modelPlanos = planos.filter((pl: any) => entry.emIds.includes(pl.id_edificio_modelo));
+          if (modelPlanos.length > 0) {
+            // Count occurrences of each imagen_url
+            const urlCounts = new Map<string, number>();
+            modelPlanos.forEach((pl: any) => {
+              urlCounts.set(pl.imagen_url, (urlCounts.get(pl.imagen_url) || 0) + 1);
+            });
+            // Pick the most frequent
+            let bestUrl = modelPlanos[0].imagen_url;
+            let bestCount = 0;
+            urlCounts.forEach((count, url) => { if (count > bestCount) { bestCount = count; bestUrl = url; } });
+            planosPorModelo.set(mid, bestUrl);
+          }
+        }
+      }
+
       return Array.from(modeloMap.values()).map(v => ({
         ...v.modelo,
         minPrice: v.minPrice === Infinity ? null : v.minPrice,
         m2: v.m2 || null,
         availableCount: v.availableCount,
+        planoUrl: planosPorModelo.get(v.modelo.id) || null,
       }));
     },
     enabled: projectId > 0,
@@ -614,10 +643,19 @@ const AgentProyectoDetalle = () => {
                           <p className="text-base font-bold text-foreground italic">{formatCurrency(m.minPrice)}</p>
                         </div>
                       )}
+                      {m.planoUrl && (
+                        <button
+                          onClick={() => setPlanoModeloUrl(m.planoUrl)}
+                          className="mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-xs font-medium text-muted-foreground hover:bg-gray-50 transition-colors"
+                        >
+                          <FileImage className="h-3.5 w-3.5" />
+                          Ver plano
+                        </button>
+                      )}
                       {m.availableCount > 0 && (
                         <button
                           onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_unidades_modelo', elementLabel: 'Ver unidades', metadata: { modelo_id: m.id } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}&modelo=${m.id}`); }}
-                          className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-foreground hover:bg-gray-50 transition-colors"
+                          className="mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-foreground hover:bg-gray-50 transition-colors"
                         >
                           Ver unidades
                           <ChevronRight className="h-4 w-4" />
@@ -745,6 +783,17 @@ const AgentProyectoDetalle = () => {
               Copiar link
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Plano de modelo dialog */}
+      <Dialog open={!!planoModeloUrl} onOpenChange={() => setPlanoModeloUrl(null)}>
+        <DialogContent className="max-w-lg p-2">
+          <DialogHeader>
+            <DialogTitle>Plano arquitectónico</DialogTitle>
+          </DialogHeader>
+          {planoModeloUrl && (
+            <img src={planoModeloUrl} alt="Plano del modelo" className="w-full object-contain max-h-[70vh] rounded-lg" />
+          )}
         </DialogContent>
       </Dialog>
     </div>
