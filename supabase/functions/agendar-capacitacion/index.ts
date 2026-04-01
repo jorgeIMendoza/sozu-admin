@@ -1101,6 +1101,28 @@ Deno.serve(async (req) => {
     agentName = personaData?.nombre_legal || "";
     const agentEmailFinal = agent_email || personaData?.email || "";
 
+    // Resolve prospect email if this is a showroom/prospect appointment
+    let prospectoEmail = prospecto_email || "";
+    let prospectoName = "";
+    if (id_persona_prospecto && !prospectoEmail) {
+      const { data: prospData } = await supabase
+        .from("personas")
+        .select("nombre_legal, email")
+        .eq("id", id_persona_prospecto)
+        .maybeSingle();
+      prospectoEmail = prospData?.email || "";
+      prospectoName = prospData?.nombre_legal || "";
+    } else if (id_persona_prospecto && prospectoEmail) {
+      const { data: prospData } = await supabase
+        .from("personas")
+        .select("nombre_legal")
+        .eq("id", id_persona_prospecto)
+        .maybeSingle();
+      prospectoName = prospData?.nombre_legal || "";
+    }
+
+    const isShowroomCita = !!id_persona_prospecto;
+
     // Use the config's nombre (e.g. "Capacitación Daiku") to find the recurring event
     let tipoCitaSummary = scheduleCitaNombre || "";
     if (!tipoCitaSummary) {
@@ -1114,7 +1136,6 @@ Deno.serve(async (req) => {
 
     // If re-scheduling, remove agent from old event's description
     if (existingEventId) {
-      // We don't delete the recurring event, just remove the agent from description if possible
       try {
         const oldEvent = await fetch(
           `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(scheduleCalendarId)}/events/${encodeURIComponent(existingEventId)}`,
@@ -1123,15 +1144,13 @@ Deno.serve(async (req) => {
         if (oldEvent.ok) {
           const oldEvData = await oldEvent.json();
           let oldDesc = oldEvData.description || "";
-          // Clear notas, asistentes, and agent info from old event description
           let cleanDesc = oldDesc
             .replace(/\n*Notas:.*(?:\n|$)/g, "")
             .replace(/\n*--- Asistentes ---[\s\S]*/g, "")
             .replace(/\n*--- Enterados ---[\s\S]*/g, "")
             .replace(/\n+$/, "");
-          // Also remove attendees list from the event
           const oldAttendees = (oldEvData.attendees || []).filter(
-            (a: any) => a.email !== agentEmailFinal
+            (a: any) => a.email !== agentEmailFinal && a.email !== prospectoEmail
           );
           await fetch(
             `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(scheduleCalendarId)}/events/${encodeURIComponent(existingEventId)}`,
@@ -1144,24 +1163,57 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Always create a standalone event (no longer searching for recurring instances)
+    // Always create a standalone event
     let calendarEvent: any;
-    console.log(`[schedule] Creating standalone event for ${fecha} ${hora_inicio}`);
+    console.log(`[schedule] Creating standalone event for ${fecha} ${hora_inicio}, isShowroom=${isShowroomCita}`);
     let summary = scheduleCitaNombre || tipoCitaSummary || "Capacitación";
     
+    // Build attendees list - for showroom, include the prospect as primary attendee
     const bookingAttendees: { email: string }[] = [];
-    if (agentEmailFinal) bookingAttendees.push({ email: agentEmailFinal });
+    
+    if (isShowroomCita && prospectoEmail) {
+      // Prospect is the primary attendee for showroom appointments
+      bookingAttendees.push({ email: prospectoEmail });
+      console.log(`[schedule] Added prospect as attendee: ${prospectoEmail}`);
+    }
+    
+    if (agentEmailFinal) {
+      if (!bookingAttendees.some(a => a.email === agentEmailFinal)) {
+        bookingAttendees.push({ email: agentEmailFinal });
+      }
+    }
     for (const cc of scheduleCorrEnt) {
       if (!bookingAttendees.some(a => a.email === cc)) bookingAttendees.push({ email: cc });
     }
     
+    console.log(`[schedule] Final attendees list: ${JSON.stringify(bookingAttendees.map(a => a.email))}`);
+    
+    // Build description based on appointment type
     const notasSection = notas ? `\n\nNotas: ${notas}` : "";
-    const desc = scheduleDescInv 
-      ? `${scheduleDescInv}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`
-      : `Cita agendada para: ${agentEmailFinal}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`;
+    let desc: string;
+    if (isShowroomCita) {
+      const prospLabel = prospectoName ? `${prospectoName} (${prospectoEmail})` : prospectoEmail;
+      const agentLabel = agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal;
+      desc = scheduleDescInv 
+        ? `${scheduleDescInv}${notasSection}\n\n--- Prospecto ---\n• ${prospLabel}\n\n--- Agente ---\n• ${agentLabel}`
+        : `Cita con prospecto: ${prospLabel}${notasSection}\n\n--- Agente ---\n• ${agentLabel}`;
+    } else {
+      desc = scheduleDescInv 
+        ? `${scheduleDescInv}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`
+        : `Cita agendada para: ${agentEmailFinal}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`;
+    }
     
     const eventLocation = direccion_showroom || undefined;
     calendarEvent = await createCalendarEvent(token, scheduleCalendarId, fecha, hora_inicio, horaFin, summary, agentEmailFinal, bookingAttendees, desc, eventLocation);
+    
+    // Check if attendees were actually added (Google might have silently dropped them)
+    const createdAttendees = calendarEvent.attendees || [];
+    const attendeesAdded = createdAttendees.length > 0;
+    if (!attendeesAdded && bookingAttendees.length > 0) {
+      console.warn(`[schedule] WARNING: Event created but NO attendees were added. Requested: ${JSON.stringify(bookingAttendees.map(a => a.email))}. Google may have rejected them.`);
+    } else {
+      console.log(`[schedule] Event created with ${createdAttendees.length} attendees: ${JSON.stringify(createdAttendees.map((a: any) => a.email))}`);
+    }
 
     let resultCita;
     const meetLink = calendarEvent.hangoutLink || null;
