@@ -67,6 +67,7 @@ const AgentProyectoDetalle = () => {
   const [shareOpen, setShareOpen] = useState(false);
   const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
   const [showAllAmenidades, setShowAllAmenidades] = useState(false);
+  const [planoModeloUrl, setPlanoModeloUrl] = useState<string | null>(null);
 
   const publicUrl = `https://www.sozu.com/desarrollos/${projectId}`;
 
