@@ -446,6 +446,10 @@ async function createCalendarEvent(token: string, calendarId: string, fecha: str
   if (attendees && attendees.length > 0) {
     event.attendees = attendees;
   }
+  // Hide attendees from each other so the prospect doesn't see enterados/organizer
+  event.guestsCanSeeOtherGuests = false;
+  // Attempt to show a branded name instead of the calendar owner's name
+  event.organizer = { displayName: "Cita Sozu" };
 
   const attemptCreate = async (eventPayload: any, withMeet: boolean): Promise<Response> => {
     const url = withMeet
@@ -1091,15 +1095,19 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "no_disponible", message: "El horario seleccionado no está disponible." }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Get agent name for description
+    // Get agent name for description — use id_agente when available (showroom), fallback to id_persona
     let agentName = "";
-    const { data: personaData } = await supabase
-      .from("personas")
-      .select("nombre_legal, email")
-      .eq("id", id_persona)
-      .maybeSingle();
-    agentName = personaData?.nombre_legal || "";
-    const agentEmailFinal = agent_email || personaData?.email || "";
+    let agentEmailFinal = agent_email || "";
+    const agentIdForLookup = id_agente || id_persona;
+    if (agentIdForLookup) {
+      const { data: agentData } = await supabase
+        .from("personas")
+        .select("nombre_legal, email")
+        .eq("id", agentIdForLookup)
+        .maybeSingle();
+      agentName = agentData?.nombre_legal || "";
+      if (!agentEmailFinal) agentEmailFinal = agentData?.email || "";
+    }
 
     // Resolve prospect email if this is a showroom/prospect appointment
     let prospectoEmail = prospecto_email || "";
@@ -1201,8 +1209,8 @@ Deno.serve(async (req) => {
       const prospLabel = prospectoName ? `${prospectoName} (${prospectoEmail})` : prospectoEmail;
       const agentLabel = agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal;
       desc = scheduleDescInv 
-        ? `${scheduleDescInv}${notasSection}\n\n--- Prospecto ---\n• ${prospLabel}\n\n--- Agente ---\n• ${agentLabel}`
-        : `Cita con prospecto: ${prospLabel}${notasSection}\n\n--- Agente ---\n• ${agentLabel}`;
+        ? `${scheduleDescInv}${notasSection}\n\n--- Invitado ---\n• ${prospLabel}\n\n--- Atiende ---\n• ${agentLabel}`
+        : `Cita con prospecto: ${prospLabel}${notasSection}\n\n--- Atiende ---\n• ${agentLabel}`;
     } else {
       desc = scheduleDescInv 
         ? `${scheduleDescInv}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`
