@@ -435,11 +435,19 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
                         {nivel.planosArquitectonicos.map((plano) => (
                           <div key={plano.id} className="border border-primary/20 rounded-lg bg-primary/5 p-2 space-y-2">
                             <div className="flex items-center gap-2">
-                              <img
-                                src={plano.imagen_url}
-                                alt={plano.nombre_original}
-                                className="w-12 h-10 object-contain rounded border border-border bg-background flex-shrink-0"
-                              />
+                              <div
+                                className="relative flex-shrink-0 cursor-pointer group/thumb"
+                                onClick={() => setPreviewUrl(plano.imagen_url)}
+                              >
+                                <img
+                                  src={plano.imagen_url}
+                                  alt={plano.nombre_original}
+                                  className="w-12 h-10 object-contain rounded border border-border bg-background"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 bg-foreground/30 rounded transition-opacity">
+                                  <ZoomIn className="h-3 w-3 text-background" />
+                                </div>
+                              </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-[10px] font-medium truncate">{plano.nombre_original}</p>
                                 <p className="text-[9px] text-muted-foreground">
