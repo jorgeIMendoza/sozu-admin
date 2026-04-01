@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   ImagePlus, Trash2, Loader2, ChevronDown, ChevronRight,
-  AlertTriangle, Upload, Check, Building2
+  AlertTriangle, Upload, Check, Building2, ZoomIn
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -92,6 +93,7 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
   const [uploadingState, setUploadingState] = useState<UploadingState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingUpload, setPendingUpload] = useState<{ emId: number; nivel: number } | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   if (!modeloId) {
     return <SimplePlanoUpload currentUrl={currentUrl} onUrlChange={onUrlChange} />;
@@ -348,6 +350,15 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
   }
 
   return (
+    <>
+      {/* Image preview dialog */}
+      {previewUrl && (
+        <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
+          <DialogContent className="sm:max-w-[90vw] max-h-[90vh] p-2 bg-foreground/95 border-none">
+            <img src={previewUrl} alt="Vista previa" className="w-full h-full max-h-[85vh] object-contain rounded" />
+          </DialogContent>
+        </Dialog>
+      )}
     <div className="space-y-2">
       <Label>Planos Arquitectónicos por Piso</Label>
       <p className="text-[10px] text-muted-foreground">
@@ -433,11 +444,19 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
                         {nivel.planosArquitectonicos.map((plano) => (
                           <div key={plano.id} className="border border-primary/20 rounded-lg bg-primary/5 p-2 space-y-2">
                             <div className="flex items-center gap-2">
-                              <img
-                                src={plano.imagen_url}
-                                alt={plano.nombre_original}
-                                className="w-12 h-10 object-contain rounded border border-border bg-background flex-shrink-0"
-                              />
+                              <div
+                                className="relative flex-shrink-0 cursor-pointer group/thumb"
+                                onClick={() => setPreviewUrl(plano.imagen_url)}
+                              >
+                                <img
+                                  src={plano.imagen_url}
+                                  alt={plano.nombre_original}
+                                  className="w-12 h-10 object-contain rounded border border-border bg-background"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 bg-foreground/30 rounded transition-opacity">
+                                  <ZoomIn className="h-3 w-3 text-background" />
+                                </div>
+                              </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-[10px] font-medium truncate">{plano.nombre_original}</p>
                                 <p className="text-[9px] text-muted-foreground">
@@ -539,6 +558,7 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
         })}
       </div>
     </div>
+    </>
   );
 }
 
