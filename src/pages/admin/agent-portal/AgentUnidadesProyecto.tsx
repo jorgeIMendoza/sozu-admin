@@ -21,6 +21,7 @@ import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { PropertyFloorPlan } from "@/components/admin/agent-portal/PropertyFloorPlan";
 
 const PAGE_SIZE = 30;
 type SortOrder = "none" | "asc" | "desc";
