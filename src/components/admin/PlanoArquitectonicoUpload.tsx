@@ -93,6 +93,7 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
   const [uploadingState, setUploadingState] = useState<UploadingState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingUpload, setPendingUpload] = useState<{ emId: number; nivel: number } | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   if (!modeloId) {
     return <SimplePlanoUpload currentUrl={currentUrl} onUrlChange={onUrlChange} />;
