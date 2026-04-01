@@ -983,7 +983,7 @@ Deno.serve(async (req) => {
     }
 
     // ---- Action: schedule (default) ----
-    const { fecha, hora_inicio, id_persona, agent_email, direccion_showroom, latitud_showroom, longitud_showroom, config_id, id_persona_prospecto, id_agente, id_proyecto, notas } = body;
+    const { fecha, hora_inicio, id_persona, agent_email, direccion_showroom, latitud_showroom, longitud_showroom, config_id, id_persona_prospecto, id_agente, id_proyecto, notas, prospecto_email } = body;
 
     if (!fecha || !hora_inicio || !id_persona) {
       return new Response(JSON.stringify({ error: "Faltan campos obligatorios: fecha, hora_inicio, id_persona" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
