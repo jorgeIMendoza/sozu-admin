@@ -449,8 +449,14 @@ const AgentInicio = () => {
                     <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
                       {cita.tipos_cita?.nombre || 'Cita'} {cita.proyectos?.nombre ? `· ${cita.proyectos.nombre}` : ''}
                     </p>
-                    <span className="text-xs text-[hsl(var(--agent-text-secondary))]">
-                      {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {cita.personas?.nombre_legal && (
+                      <p className="text-xs text-[hsl(var(--agent-text))] truncate font-medium">
+                        {cita.personas.nombre_legal}
+                      </p>
+                    )}
+                    <span className="text-xs text-[hsl(var(--agent-text-secondary))] flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })} · {cita.hora_inicio?.slice(0, 5)}{cita.hora_fin ? ` - ${cita.hora_fin.slice(0, 5)}` : ''}
                     </span>
                   </div>
                   {(() => {
