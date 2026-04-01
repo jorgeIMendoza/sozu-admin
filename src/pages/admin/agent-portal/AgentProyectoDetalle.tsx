@@ -14,7 +14,8 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleMapComponent } from "@/components/admin/GoogleMapComponent";
 import { VistasCarousel } from "@/components/admin/VistasCarousel";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import useEmblaCarousel from "embla-carousel-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
 
@@ -48,6 +49,53 @@ function getAmenityIcon(name: string) {
   }
   return Star;
 }
+
+const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) => {
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, dragFree: false });
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const onSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setSelectedIndex(emblaApi.selectedScrollSnap());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    emblaApi.on("select", onSelect);
+    onSelect();
+    return () => { emblaApi.off("select", onSelect); };
+  }, [emblaApi, onSelect]);
+
+  if (images.length === 1) {
+    return <img src={images[0]} alt={alt} className="w-full h-40 object-cover" loading="lazy" />;
+  }
+
+  return (
+    <div className="relative">
+      <div className="overflow-hidden" ref={emblaRef}>
+        <div className="flex">
+          {images.map((url, i) => (
+            <div key={i} className="flex-[0_0_100%] min-w-0">
+              <img src={url} alt={`${alt} ${i + 1}`} className="w-full h-40 object-cover" loading="lazy" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+        {images.map((_, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); emblaApi?.scrollTo(i); }}
+            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === selectedIndex ? 'bg-white' : 'bg-white/50'}`}
+          />
+        ))}
+      </div>
+      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm rounded-lg px-2 py-0.5 text-[10px] font-medium text-white">
+        {selectedIndex + 1}/{images.length}
+      </div>
+    </div>
+  );
+};
 
 const AgentProyectoDetalle = () => {
   const { id } = useParams<{ id: string }>();
@@ -344,12 +392,30 @@ const AgentProyectoDetalle = () => {
         }
       }
 
+      // Fetch multimedia images per modelo
+      const modeloIds = Array.from(modeloMap.keys());
+      const { data: multimediaModelos } = await (supabase as any)
+        .from("multimedias_modelo")
+        .select("id, id_modelo, url")
+        .in("id_modelo", modeloIds)
+        .eq("activo", true)
+        .eq("es_imagen", true);
+
+      const multimediaPorModelo = new Map<number, string[]>();
+      (multimediaModelos || []).forEach((mm: any) => {
+        if (!multimediaPorModelo.has(mm.id_modelo)) {
+          multimediaPorModelo.set(mm.id_modelo, []);
+        }
+        multimediaPorModelo.get(mm.id_modelo)!.push(mm.url);
+      });
+
       return Array.from(modeloMap.values()).map(v => ({
         ...v.modelo,
         minPrice: v.minPrice === Infinity ? null : v.minPrice,
         m2: v.m2 || null,
         availableCount: v.availableCount,
         planoUrl: planosPorModelo.get(v.modelo.id) || null,
+        multimediaImages: multimediaPorModelo.get(v.modelo.id) || [],
       }));
     },
     enabled: projectId > 0,
@@ -605,16 +671,27 @@ const AgentProyectoDetalle = () => {
             <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Modelos</h2>
             <div className="flex overflow-x-auto gap-3 pb-2 -mx-1 px-1">
               {modelos.map((m: any) => {
-                const modelImage = m.url_imagen_portada || m.plano_arquitectonico;
+                
                 return (
                   <div key={m.id} className="min-w-[260px] max-w-[280px] flex-shrink-0 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                    {modelImage ? (
-                      <img src={modelImage} alt={m.nombre} className="w-full h-40 object-cover" loading="lazy" />
-                    ) : (
-                      <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
-                        <Building2 className="h-10 w-10 text-gray-300" />
-                      </div>
-                    )}
+                    {(() => {
+                      const allImages: string[] = [];
+                      if (m.url_imagen_portada) allImages.push(m.url_imagen_portada);
+                      (m.multimediaImages || []).forEach((url: string) => {
+                        if (!allImages.includes(url)) allImages.push(url);
+                      });
+                      if (m.plano_arquitectonico && !allImages.includes(m.plano_arquitectonico)) allImages.push(m.plano_arquitectonico);
+
+                      if (allImages.length === 0) {
+                        return (
+                          <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
+                            <Building2 className="h-10 w-10 text-gray-300" />
+                          </div>
+                        );
+                      }
+
+                      return <ModelCardCarousel images={allImages} alt={m.nombre} />;
+                    })()}
                     <div className="p-3.5">
                       <p className="text-base font-bold text-foreground">{m.nombre}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
