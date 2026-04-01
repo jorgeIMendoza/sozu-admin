@@ -499,7 +499,7 @@ const AgentUnidadesProyecto = () => {
 
       {/* Filters Drawer */}
       <Drawer open={filtersDrawerOpen} onOpenChange={setFiltersDrawerOpen}>
-        <DrawerContent className="max-h-[85vh]">
+        <DrawerContent className="light max-h-[85vh]">
           <DrawerHeader className="pb-2">
             <DrawerTitle className="flex items-center justify-between">
               <span>Filtrar unidades</span>
