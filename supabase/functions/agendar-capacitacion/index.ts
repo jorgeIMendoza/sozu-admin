@@ -1168,22 +1168,28 @@ Deno.serve(async (req) => {
     console.log(`[schedule] Creating standalone event for ${fecha} ${hora_inicio}, isShowroom=${isShowroomCita}`);
     let summary = scheduleCitaNombre || tipoCitaSummary || "Capacitación";
     
-    // Build attendees list - for showroom, include the prospect as primary attendee
-    const bookingAttendees: { email: string }[] = [];
+    // Build attendees list with enriched objects (displayName, organizer)
+    const bookingAttendees: { email: string; displayName?: string; organizer?: boolean; responseStatus?: string }[] = [];
     
     if (isShowroomCita && prospectoEmail) {
       // Prospect is the primary attendee for showroom appointments
-      bookingAttendees.push({ email: prospectoEmail });
+      bookingAttendees.push({ email: prospectoEmail, ...(prospectoName ? { displayName: prospectoName } : {}) });
       console.log(`[schedule] Added prospect as attendee: ${prospectoEmail}`);
     }
     
     if (agentEmailFinal) {
       if (!bookingAttendees.some(a => a.email === agentEmailFinal)) {
-        bookingAttendees.push({ email: agentEmailFinal });
+        bookingAttendees.push({ email: agentEmailFinal, ...(agentName ? { displayName: agentName } : {}) });
       }
     }
     for (const cc of scheduleCorrEnt) {
       if (!bookingAttendees.some(a => a.email === cc)) bookingAttendees.push({ email: cc });
+    }
+
+    // Add calendar owner with organizer: false so it doesn't appear as the organizer to other attendees
+    if (scheduleCalendarId && !bookingAttendees.some(a => a.email === scheduleCalendarId)) {
+      bookingAttendees.push({ email: scheduleCalendarId, organizer: false });
+      console.log(`[schedule] Added calendar owner with organizer=false: ${scheduleCalendarId}`);
     }
     
     console.log(`[schedule] Final attendees list: ${JSON.stringify(bookingAttendees.map(a => a.email))}`);
