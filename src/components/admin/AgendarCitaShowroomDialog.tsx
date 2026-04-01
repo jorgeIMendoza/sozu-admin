@@ -170,7 +170,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
 
       const { data: configs } = await supabase
         .from("configuracion_citas_usuarios")
-        .select("id, nombre, duracion_minutos, fecha_fin_recurrencia, id_usuario_email")
+        .select("id, nombre, duracion_minutos, fecha_fin_recurrencia, id_usuario_email, id_tipo_cita")
         .in("id_tipo_cita", [2, 5])
         .eq("activo", true)
         .in("id", configIds);
