@@ -1,11 +1,12 @@
+import { useLayoutEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { Home, Building2, BarChart3, DollarSign, User, Users, LucideIcon, ArrowLeft, MessageCircleQuestion } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
+import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useAuth } from "@/contexts/AuthContext";
-import { useDynamicMenus } from "@/hooks/useDynamicMenus";
 import { useAgentHasInmobiliaria } from "@/hooks/useAgentHasInmobiliaria";
 import { AgentPortalImpersonationSelector } from "./AgentPortalImpersonationSelector";
 
@@ -33,10 +34,20 @@ export const AgentPortalLayout = () => {
   const navigate = useNavigate();
   const { permissions, isLoading: permLoading } = useAgentPortalPermissions();
   const { hasInmobiliaria } = useAgentHasInmobiliaria();
+  const { theme, setTheme } = useTheme();
+  const previousThemeRef = useRef(theme ?? "system");
 
   const { profile } = useAuth();
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+
+  useLayoutEffect(() => {
+    setTheme("light");
+
+    return () => {
+      setTheme(previousThemeRef.current);
+    };
+  }, [setTheme]);
 
   // Check if user has other menus beyond Portal de Agente
   const { data: hasOtherMenus = false } = useQuery({
@@ -97,7 +108,7 @@ export const AgentPortalLayout = () => {
   const showBackButton = !isAgentRole && hasOtherMenus;
 
   return (
-    <div className="agent-portal min-h-screen flex flex-col" style={{ background: "hsl(var(--agent-bg))" }}>
+    <div className="agent-portal light min-h-screen flex flex-col" style={{ background: "hsl(var(--agent-bg))", colorScheme: "light" }}>
       {showBackButton && (
         <div className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100 px-4 py-2">
           <button
