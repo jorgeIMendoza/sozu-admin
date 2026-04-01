@@ -170,7 +170,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
 
       const { data: configs } = await supabase
         .from("configuracion_citas_usuarios")
-        .select("id, nombre, duracion_minutos, fecha_fin_recurrencia, id_usuario_email")
+        .select("id, nombre, duracion_minutos, fecha_fin_recurrencia, id_usuario_email, id_tipo_cita")
         .in("id_tipo_cita", [2, 5])
         .eq("activo", true)
         .in("id", configIds);
@@ -194,6 +194,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
         ...c,
         responsable: personaMap.get(c.id_usuario_email) || c.id_usuario_email,
         proyecto_id: configToProject.get(c.id) || null,
+        tipo_cita_id: c.id_tipo_cita,
       }));
 
       return { configs: enrichedConfigs, horarios: horarios || [] };
@@ -293,6 +294,14 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
       const hour = parseInt(selectedHour);
       const horaInicio = `${String(hour).padStart(2, "0")}:00`;
 
+      // Find the selected slot to get its tipo_cita_id
+      const selectedSlot = selectedDateData?.slots?.find(
+        (s: any) => s.hour === hour && s.configId === selectedConfigId
+      );
+      // Get tipo_cita_id from the config
+      const configData = availabilityData?.configs?.find((c: any) => c.id === selectedConfigId);
+      const tipoCitaId = configData?.tipo_cita_id || 2;
+
       const { data: fnData, error: fnError } = await supabase.functions.invoke("agendar-capacitacion", {
         body: {
           fecha: selectedDate,
@@ -304,14 +313,21 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaSho
           id_agente: effectivePersonaId,
           id_proyecto: selectedProyectoId,
           notas: notas || null,
+          tipo_cita_id: tipoCitaId,
+          prospecto_email: selectedProspectoData?.email || null,
         },
       });
 
       if (fnError) throw fnError;
       if (fnData?.error) throw new Error(fnData.error === "no_disponible" ? fnData.message : fnData.error);
+      return fnData;
     },
-    onSuccess: () => {
-      toast.success("Cita al showroom agendada exitosamente");
+    onSuccess: (data: any) => {
+      if (data?.warning) {
+        toast.warning(data.warning);
+      } else {
+        toast.success("Cita al showroom agendada exitosamente");
+      }
       queryClient.invalidateQueries({ queryKey: ["existing-reservations-showroom-multi"] });
       queryClient.invalidateQueries({ queryKey: ["existing-cita-prospecto"] });
       handleClose();
