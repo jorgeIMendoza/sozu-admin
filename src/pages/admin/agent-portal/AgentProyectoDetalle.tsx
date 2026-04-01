@@ -97,7 +97,7 @@ const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) =
   );
 };
 
-
+const AgentProyectoDetalle = () => {
   const { id } = useParams<{ id: string }>();
   const projectId = parseInt(id || "0");
   const navigate = useNavigate();
