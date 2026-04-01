@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   ImagePlus, Trash2, Loader2, ChevronDown, ChevronRight,
-  AlertTriangle, Upload, Check, Building2
+  AlertTriangle, Upload, Check, Building2, ZoomIn
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
