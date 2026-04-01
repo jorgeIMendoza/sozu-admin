@@ -21,7 +21,7 @@ import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { PropertyFloorPlan } from "@/components/admin/agent-portal/PropertyFloorPlan";
+import { PropertyFloorPlanButton } from "@/components/admin/agent-portal/PropertyFloorPlanButton";
 
 const PAGE_SIZE = 30;
 type SortOrder = "none" | "asc" | "desc";
@@ -611,7 +611,7 @@ const AgentUnidadesProyecto = () => {
                     )}
                   </div>
                 )}
-                <PropertyFloorPlan propertyId={selectedProperty.id} />
+                <PropertyFloorPlanButton propertyId={selectedProperty.id} />
                 {selectedProperty.precio_lista > 0 && (
                   <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded-xl p-4 text-center">
                     <p className="text-xs text-emerald-600 dark:text-emerald-400">Precio de Lista</p>
