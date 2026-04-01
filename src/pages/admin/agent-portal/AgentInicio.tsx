@@ -448,6 +448,15 @@ const AgentInicio = () => {
                       {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                   </div>
+                  {(() => {
+                    const badge = getCitaStatusBadge(cita);
+                    return (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${badge.className}`}>
+                        {badge.label}
+                      </span>
+                    );
+                  })()}
+                  </div>
                 </div>
               ))}
             </div>
