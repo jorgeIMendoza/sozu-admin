@@ -12,7 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { 
   CalendarPlus, UserPlus, TrendingUp, DollarSign, 
   ShoppingCart, CheckCircle2, AlertCircle, Loader2,
-  ChevronRight, Building2
+  ChevronRight, Building2, Calendar, Clock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
