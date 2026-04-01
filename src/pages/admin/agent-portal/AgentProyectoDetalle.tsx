@@ -433,55 +433,6 @@ const AgentProyectoDetalle = () => {
           </section>
         )}
 
-        {/* Amenidades */}
-        {amenidades.length > 0 && (
-          <section>
-            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Amenidades</h2>
-            <div className="grid grid-cols-3 gap-2">
-              {amenidades.map((a: any) => {
-                const AmenityIcon = getAmenityIcon(a.nombre);
-                return (
-                  <div key={a.id} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">
-                    <div className="h-10 w-10 mx-auto mb-1.5 rounded-full bg-[hsl(var(--agent-primary))]/10 flex items-center justify-center">
-                      <AmenityIcon className="h-5 w-5 text-[hsl(var(--agent-primary))]" />
-                    </div>
-                    <p className="text-[11px] text-foreground font-medium leading-tight">{a.nombre}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* Avance de obra */}
-        {avanceObra > 0 && (
-          <section>
-            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Avance de obra</h2>
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <div className="flex items-baseline justify-between mb-1">
-                <span className="text-2xl font-bold text-foreground">{avanceObra}%</span>
-                <span className="text-[11px] text-muted-foreground">{nombreEstatus}</span>
-              </div>
-              <Progress value={avanceObra} className="h-2 mt-2" />
-            </div>
-          </section>
-        )}
-
-        {/* Video de avance de obra (most recent) */}
-        {latestVideo && (() => {
-          const embedUrl = getYoutubeEmbedUrl(latestVideo.link);
-          if (!embedUrl) return null;
-          return (
-            <section>
-              <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Video de avance</h2>
-              {latestVideo.nombre && <p className="text-sm font-medium text-foreground mb-2">{latestVideo.nombre}</p>}
-              <div className="rounded-xl overflow-hidden border border-gray-100">
-                <iframe src={embedUrl} className="w-full aspect-video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-              </div>
-            </section>
-          );
-        })()}
-
         {/* Galería */}
         {multimedia.length > 0 && (
           <section>
@@ -514,11 +465,32 @@ const AgentProyectoDetalle = () => {
           </section>
         )}
 
-        {/* Vistas */}
-        {vistas.length > 0 && (
+        {/* Amenidades */}
+        {amenidades.length > 0 && (
           <section>
-            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Vistas</h2>
-            <VistasCarousel vistas={vistas} />
+            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Amenidades</h2>
+            <div className="grid grid-cols-3 gap-2">
+              {(showAllAmenidades ? amenidades : amenidades.slice(0, 6)).map((a: any) => {
+                const AmenityIcon = getAmenityIcon(a.nombre);
+                return (
+                  <div key={a.id} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">
+                    <div className="h-10 w-10 mx-auto mb-1.5 rounded-full bg-[hsl(var(--agent-primary))]/10 flex items-center justify-center">
+                      <AmenityIcon className="h-5 w-5 text-[hsl(var(--agent-primary))]" />
+                    </div>
+                    <p className="text-[11px] text-foreground font-medium leading-tight">{a.nombre}</p>
+                  </div>
+                );
+              })}
+            </div>
+            {amenidades.length > 6 && (
+              <button
+                onClick={() => setShowAllAmenidades(!showAllAmenidades)}
+                className="mt-2 w-full text-center text-xs font-semibold text-[hsl(var(--agent-primary))] flex items-center justify-center gap-1"
+              >
+                {showAllAmenidades ? 'Ver menos' : `Ver todas (${amenidades.length})`}
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAllAmenidades ? 'rotate-180' : ''}`} />
+              </button>
+            )}
           </section>
         )}
 
@@ -561,15 +533,60 @@ const AgentProyectoDetalle = () => {
           </section>
         )}
 
-        {/* Modelos */}
+        {/* Vistas */}
+        {vistas.length > 0 && (
+          <section>
+            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Vistas</h2>
+            <VistasCarousel vistas={vistas} />
+          </section>
+        )}
+
+        {/* Avance de obra */}
+        {avanceObra > 0 && (
+          <section>
+            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Avance de obra</h2>
+            <div className="bg-white rounded-xl border border-gray-100 p-4">
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="text-2xl font-bold text-foreground">{avanceObra}%</span>
+                <span className="text-[11px] text-muted-foreground">{nombreEstatus}</span>
+              </div>
+              <Progress value={avanceObra} className="h-2 mt-2" />
+            </div>
+          </section>
+        )}
+
+        {/* Video de avance de obra (most recent) */}
+        {latestVideo && (() => {
+          const embedUrl = getYoutubeEmbedUrl(latestVideo.link);
+          if (!embedUrl) return null;
+          return (
+            <section>
+              <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Video de avance</h2>
+              {latestVideo.nombre && <p className="text-sm font-medium text-foreground mb-2">{latestVideo.nombre}</p>}
+              <div className="rounded-xl overflow-hidden border border-gray-100">
+                <iframe src={embedUrl} className="w-full aspect-video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* Modelos — horizontal gallery */}
         {modelos.length > 0 && (
           <section>
             <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Modelos</h2>
-            <div className="space-y-3">
-              {modelos.map((m: any) => (
-                <div key={m.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <div>
+            <div className="flex overflow-x-auto gap-3 pb-2 -mx-1 px-1">
+              {modelos.map((m: any) => {
+                const modelImage = m.url_imagen_portada || m.plano_arquitectonico;
+                return (
+                  <div key={m.id} className="min-w-[260px] max-w-[280px] flex-shrink-0 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    {modelImage ? (
+                      <img src={modelImage} alt={m.nombre} className="w-full h-40 object-cover" loading="lazy" />
+                    ) : (
+                      <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
+                        <Building2 className="h-10 w-10 text-gray-300" />
+                      </div>
+                    )}
+                    <div className="p-3.5">
                       <p className="text-base font-bold text-foreground">{m.nombre}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                         {m.m2 && (
@@ -591,27 +608,25 @@ const AgentProyectoDetalle = () => {
                           </span>
                         )}
                       </div>
+                      {m.minPrice && (
+                        <div className="mt-2">
+                          <p className="text-[10px] text-muted-foreground">Desde</p>
+                          <p className="text-base font-bold text-foreground italic">{formatCurrency(m.minPrice)}</p>
+                        </div>
+                      )}
+                      {m.availableCount > 0 && (
+                        <button
+                          onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_unidades_modelo', elementLabel: 'Ver unidades', metadata: { modelo_id: m.id } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}&modelo=${m.id}`); }}
+                          className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-foreground hover:bg-gray-50 transition-colors"
+                        >
+                          Ver unidades
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
-                    {m.minPrice && (
-                      <div className="text-right flex-shrink-0 ml-3">
-                        <p className="text-[10px] text-muted-foreground">Desde</p>
-                        <p className="text-base font-bold text-foreground italic">{formatCurrency(m.minPrice)}</p>
-                      </div>
-                    )}
                   </div>
-                  {m.availableCount > 0 && (
-                    <div className="mt-3">
-                      <button
-                        onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_unidades_modelo', elementLabel: 'Ver unidades', metadata: { modelo_id: m.id } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}&modelo=${m.id}`); }}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-foreground hover:bg-gray-50 transition-colors"
-                      >
-                        Ver unidades
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
@@ -659,7 +674,7 @@ const AgentProyectoDetalle = () => {
           </section>
         )}
 
-        {/* CTA: Generar oferta comercial */}
+        {/* CTA: Generar oferta + Agendar cita */}
         <section className="bg-[hsl(var(--agent-primary))]/10 rounded-2xl p-5 text-center">
           <p className="text-sm font-semibold text-foreground mb-3">¿Tu cliente está interesado en este proyecto?</p>
           {inventarioPerms.canGenerateOffer && (
@@ -681,6 +696,14 @@ const AgentProyectoDetalle = () => {
             </Button>
             )
           )}
+          <Button
+            variant="outline"
+            onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita', metadata: { proyecto_id: projectId } }); setAgendarCitaOpen(true); }}
+            className="w-full mt-2 rounded-xl h-12 text-sm font-semibold"
+          >
+            <CalendarPlus className="h-4 w-4 mr-2" />
+            Agendar cita
+          </Button>
           <p className="text-xs text-muted-foreground mt-3">
             Las ofertas permiten dar seguimiento formal al interés del cliente.
           </p>
@@ -694,6 +717,9 @@ const AgentProyectoDetalle = () => {
           </Button>
         </div>
       </div>
+
+      {/* Agendar cita dialog */}
+      <AgendarCitaShowroomDialog open={agendarCitaOpen} onOpenChange={setAgendarCitaOpen} />
 
       {/* Share Dialog */}
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
