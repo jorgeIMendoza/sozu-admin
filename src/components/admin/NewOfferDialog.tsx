@@ -999,6 +999,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       
       // Generate PDFs client-side and download
       let allOfferIdsForEmail: number[] = [];
+      const emailServicePromise = import('@/services/ofertaEmailService');
       try {
         const allOfferIds = [result.offerId];
         for (const productOffer of result.productOffersResults.createdOffers) {
@@ -1092,8 +1093,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       }
 
       try {
-        // Enviar todas las ofertas por correo en un solo email usando los PDFs persistidos en Storage
-        const { sendMultipleOffersEmail, sendMultipleOffersEmailDirect } = await import('@/services/ofertaEmailService');
+        // Reutilizar el módulo ya precargado antes de generar PDFs para evitar fallos de carga tardía en iPhone/WebKit.
+        const { sendMultipleOffersEmail, sendMultipleOffersEmailDirect } = await emailServicePromise;
         const emailSent = await sendMultipleOffersEmail({
           offerIds: allOfferIdsForEmail,
           propertyNumber,
