@@ -690,6 +690,7 @@ const AgentUnidadesProyecto = () => {
                       hidePdfOptions={true}
                       preSelectedSchemeId={selectedSchemeId}
                       hideBankingInPdf={isAgentRole && !hasBasicIdentityComplete}
+                      forceLight={true}
                       customTrigger={
                         <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-emerald-600 text-white font-semibold text-sm shadow-lg hover:bg-emerald-700 active:scale-[0.98] transition-all">
                           <FileText className="h-5 w-5" />
