@@ -72,7 +72,7 @@ export default function ConfiguracionCitas() {
   const [selectedDays, setSelectedDays] = useState<Set<number>>(new Set());
   const [selectedSlots, setSelectedSlots] = useState<Map<number, Set<string>>>(new Map());
   const [duracionMinutos, setDuracionMinutos] = useState<number>(60);
-  const [calendarioEmail, setCalendarioEmail] = useState<string>("");
+  const [calendarioEmail, setCalendarioEmail] = useState<string>("citas@souom.com");
   const [maxInvitados, setMaxInvitados] = useState<number>(1);
   const [selectedProyectoIds, setSelectedProyectoIds] = useState<number[]>([]);
   const [correosEnterado, setCorreosEnterado] = useState<string[]>([]);
