@@ -6453,19 +6453,25 @@ const Propiedades = () => {
                                 ) : (
                                   productSchemes.map((scheme) => {
                                     const tramos = scheme.tramos_mensualidad as any[];
-                                    const isEscalonado = Array.isArray(tramos) && tramos.length > 0;
-                                    const hasFixedAmount = isEscalonado && tramos.some((t: any) => t.monto_mensualidad && t.monto_mensualidad > 0);
-                                    return (
-                                      <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                                        <div>
-                                          <div className="font-medium">{scheme.nombre}</div>
-                                          <div className="text-xs text-muted-foreground">
-                                            {isEscalonado
-                                              ? hasFixedAmount
-                                                ? `Eng: ${scheme.porcentaje_enganche || 0}% | Mensualidades: ${tramos.map((t: any) => `$${(t.monto_mensualidad / 100).toLocaleString('es-MX')}`).join(' / ')} | Ent: ${scheme.porcentaje_entrega || 0}%`
-                                                : `Eng: ${scheme.porcentaje_enganche || 0}% | Escalonado (${tramos.length} tramos) | Ent: ${scheme.porcentaje_entrega || 0}%`
-                                              : `Eng: ${scheme.porcentaje_enganche}% • Mens: ${scheme.porcentaje_mensualidades}% • Ent: ${scheme.porcentaje_entrega}%`
-                                            }
+                                     const isEscalonado = Array.isArray(tramos) && tramos.length > 0;
+                                     const productPrice = (() => {
+                                       // Use the offer's product price if available
+                                       if (schemeSelectionOffer) {
+                                         const pl = schemeSelectionOffer.product_precio_lista || 0;
+                                         const m2 = schemeSelectionOffer.product_metraje || 0;
+                                         return schemeSelectionOffer.tiene_metraje && m2 > 0 ? pl * m2 : pl;
+                                       }
+                                       return 0;
+                                     })();
+                                     return (
+                                       <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                                         <div>
+                                           <div className="font-medium">{scheme.nombre}</div>
+                                           <div className="text-xs text-muted-foreground">
+                                             {isEscalonado
+                                               ? formatEscalonadoLabel(scheme, tramos, productPrice)
+                                               : `Eng: ${scheme.porcentaje_enganche}% • Mens: ${scheme.porcentaje_mensualidades}% • Ent: ${scheme.porcentaje_entrega}%`
+                                             }
                                           </div>
                                         </div>
                                       </SelectItem>

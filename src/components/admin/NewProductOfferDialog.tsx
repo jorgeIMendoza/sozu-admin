@@ -1022,12 +1022,10 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
                                         <div className="flex flex-col">
                                           <span>{scheme.nombre}</span>
                                           <span className="text-xs text-muted-foreground">
-                                            {isEscalonado
-                                              ? hasFixedAmount
-                                                ? `Eng: ${scheme.porcentaje_enganche || 0}% | Mensualidades: ${tramos.map((t: any) => `$${(t.monto_mensualidad / 100).toLocaleString('es-MX')}`).join(' / ')} | Ent: ${scheme.porcentaje_entrega || 0}%`
-                                                : `Eng: ${scheme.porcentaje_enganche || 0}% | Escalonado (${tramos.length} tramos) | Ent: ${scheme.porcentaje_entrega || 0}%`
-                                              : `Eng: ${scheme.porcentaje_enganche}% | Mens: ${scheme.porcentaje_mensualidades}% (${scheme.numero_mensualidades}) | Ent: ${scheme.porcentaje_entrega}%`
-                                            }
+                                             {isEscalonado
+                                               ? formatEscalonadoLabel(scheme, tramos, selectedProductData?.precio_lista)
+                                               : `Eng: ${scheme.porcentaje_enganche}% | Mens: ${scheme.porcentaje_mensualidades}% (${scheme.numero_mensualidades}) | Ent: ${scheme.porcentaje_entrega}%`
+                                             }
                                           </span>
                                         </div>
                                       </SelectItem>
