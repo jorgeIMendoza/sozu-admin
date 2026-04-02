@@ -1026,7 +1026,11 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
       }
 
       if (hasFixedAmountTramos) {
-        // Fixed amount mode: show mensualidades + contra-entrega
+        // Fixed amount mode: show "Durante la obra:" + mensualidades monto + contra-entrega (no percentages)
+        currentPage.drawText('Durante la obra:', {
+          x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray,
+        });
+        lineY -= 12;
         for (let idx = 0; idx < scheme.tramos_mensualidad.length; idx++) {
           const tramo = scheme.tramos_mensualidad[idx];
           currentPage.drawText(`${tramo.numero_mensualidades} mensualidades:`, {
@@ -1039,7 +1043,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
           });
           lineY -= 12;
         }
-        // Contra-entrega as remainder
+        // Contra-entrega as remainder (no percentage)
         const totalFixedMens = scheme.tramos_mensualidad.reduce((sum: number, t: any) => 
           sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0);
         const contraEntrega = amounts.finalPrice - amounts.enganche - totalFixedMens;
