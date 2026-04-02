@@ -77,7 +77,9 @@ interface PaymentScheme {
   tramos_mensualidad?: Array<{
     orden: number;
     numero_mensualidades: number;
-    monto: number;
+    monto?: number;
+    monto_mensualidad?: number;
+    fecha_limite?: string;
   }> | null;
 }
 
@@ -215,11 +217,58 @@ export class OfertaPdfNativeService {
       return {
         enganche: finalPrice * (scheme.porcentaje_enganche / 100),
         mensualidad:
-          (finalPrice * (scheme.porcentaje_mensualidades / 100)) /
-          scheme.numero_mensualidades,
+          scheme.numero_mensualidades > 0
+            ? (finalPrice * (scheme.porcentaje_mensualidades / 100)) /
+              scheme.numero_mensualidades
+            : 0,
         entrega: finalPrice * (scheme.porcentaje_entrega / 100),
         finalPrice,
         adjustment,
+      };
+    };
+
+    const getEscalonadoDisplayData = (
+      scheme: PaymentScheme,
+      amounts: ReturnType<typeof calculatePaymentAmounts>
+    ) => {
+      const isEscalonado =
+        Array.isArray(scheme.tramos_mensualidad) &&
+        scheme.tramos_mensualidad.length > 0;
+
+      const hasFixedAmountTramos =
+        isEscalonado &&
+        scheme.tramos_mensualidad!.some(
+          (tramo) => (tramo.monto_mensualidad ?? 0) > 0
+        );
+
+      const totalFixedMens = hasFixedAmountTramos
+        ? scheme.tramos_mensualidad!.reduce(
+            (sum, tramo) =>
+              sum +
+              ((tramo.monto_mensualidad ?? 0) / 100) *
+                (tramo.numero_mensualidades || 0),
+            0
+          )
+        : 0;
+
+      const montoMensualText = hasFixedAmountTramos
+        ? Array.from(
+            new Set(
+              scheme.tramos_mensualidad!.map((tramo) =>
+                formatCurrency((tramo.monto_mensualidad ?? 0) / 100)
+              )
+            )
+          ).join(" / ")
+        : formatCurrency(amounts.mensualidad);
+
+      const montoEntrega = hasFixedAmountTramos
+        ? Math.max(0, amounts.finalPrice - amounts.enganche - totalFixedMens)
+        : amounts.entrega;
+
+      return {
+        isEscalonado,
+        montoMensualText,
+        montoEntregaText: formatCurrency(montoEntrega),
       };
     };
 
@@ -548,6 +597,7 @@ export class OfertaPdfNativeService {
           data.offerData.id_esquema_pago_seleccionado === scheme.id;
         const amounts = calculatePaymentAmounts(scheme);
         const hasSavings = amounts.adjustment < 0;
+        const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts);
 
         // Background
         if (isSelected) {
@@ -642,45 +692,48 @@ export class OfertaPdfNativeService {
         pdf.setFontSize(8);
         pdf.setFont("helvetica", "normal");
 
-        // Final price
-        pdf.setTextColor(grayColor);
-        pdf.text("Precio final:", schemeX + schemePadding, lineY);
-        pdf.setTextColor(primaryColor);
-        pdf.setFont("helvetica", "bold");
-        pdf.text(
-          formatCurrency(amounts.finalPrice),
-          schemeX + schemeWidth - schemePadding,
-          lineY,
-          { align: "right" }
-        );
-        lineY += 4;
-
-        // Savings (if applicable)
-        if (hasSavings) {
-          pdf.setFont("helvetica", "normal");
+        if (!escalonadoDisplay.isEscalonado) {
+          // Final price
           pdf.setTextColor(grayColor);
-          pdf.text(
-            `Ahorro (${Math.abs(scheme.porcentaje_descuento_aumento)}%):`,
-            schemeX + schemePadding,
-            lineY
-          );
+          pdf.text("Precio final:", schemeX + schemePadding, lineY);
           pdf.setTextColor(primaryColor);
           pdf.setFont("helvetica", "bold");
           pdf.text(
-            formatCurrency(Math.abs(amounts.adjustment)),
+            formatCurrency(amounts.finalPrice),
             schemeX + schemeWidth - schemePadding,
             lineY,
             { align: "right" }
           );
           lineY += 4;
+
+          // Savings (if applicable)
+          if (hasSavings) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setTextColor(grayColor);
+            pdf.text(
+              `Ahorro (${Math.abs(scheme.porcentaje_descuento_aumento)}%):`,
+              schemeX + schemePadding,
+              lineY
+            );
+            pdf.setTextColor(primaryColor);
+            pdf.setFont("helvetica", "bold");
+            pdf.text(
+              formatCurrency(Math.abs(amounts.adjustment)),
+              schemeX + schemeWidth - schemePadding,
+              lineY,
+              { align: "right" }
+            );
+            lineY += 4;
+          }
         }
 
         // Down payment
-        if (scheme.porcentaje_enganche > 0) {
+        if (escalonadoDisplay.isEscalonado || scheme.porcentaje_enganche > 0) {
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(grayColor);
-          const engancheLabel =
-            scheme.numero_pagos_enganche > 1
+          const engancheLabel = escalonadoDisplay.isEscalonado
+            ? "Enganche:"
+            : scheme.numero_pagos_enganche > 1
               ? `Enganche (en ${scheme.numero_pagos_enganche} pagos):`
               : "Enganche:";
           pdf.text(engancheLabel, schemeX + schemePadding, lineY);
@@ -695,57 +748,37 @@ export class OfertaPdfNativeService {
           lineY += 4;
         }
 
-        // Monthly payments
-        if (
-          scheme.porcentaje_mensualidades > 0 &&
-          scheme.numero_mensualidades > 0
-        ) {
-          // "Durante la obra" total
+        if (escalonadoDisplay.isEscalonado) {
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(grayColor);
-          pdf.text("Durante la obra:", schemeX + schemePadding, lineY);
+          pdf.text("Monto mensual:", schemeX + schemePadding, lineY);
           pdf.setTextColor(primaryColor);
           pdf.setFont("helvetica", "bold");
           pdf.text(
-            `${scheme.porcentaje_mensualidades}% ${formatCurrency(
-              amounts.finalPrice * (scheme.porcentaje_mensualidades / 100)
-            )}`,
+            escalonadoDisplay.montoMensualText,
             schemeX + schemeWidth - schemePadding,
             lineY,
             { align: "right" }
           );
           lineY += 4;
 
-          // Tiered payments (tramos)
-          if (scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0) {
-            scheme.tramos_mensualidad.forEach((tramo, idx) => {
-              const mensualidadesAcumuladas = scheme.tramos_mensualidad!
-                .slice(0, idx)
-                .reduce((acc, t) => acc + t.numero_mensualidades, 0);
-
-              pdf.setFont("helvetica", "normal");
-              pdf.setTextColor(grayColor);
-              pdf.text(
-                `${tramo.numero_mensualidades} mensualidades:`,
-                schemeX + schemePadding,
-                lineY
-              );
-              pdf.setTextColor(primaryColor);
-              pdf.setFont("helvetica", "bold");
-              let mensualidadText = formatCurrency(tramo.monto);
-              if (idx > 0) {
-                mensualidadText += ` (mes ${mensualidadesAcumuladas + 1}+)`;
-              }
-              pdf.text(
-                mensualidadText,
-                schemeX + schemeWidth - schemePadding,
-                lineY,
-                { align: "right" }
-              );
-              lineY += 4;
-            });
-          } else {
-            // Uniform payments
+          pdf.setFont("helvetica", "normal");
+          pdf.setTextColor(grayColor);
+          pdf.text("Monto a la entrega:", schemeX + schemePadding, lineY);
+          pdf.setTextColor(primaryColor);
+          pdf.setFont("helvetica", "bold");
+          pdf.text(
+            escalonadoDisplay.montoEntregaText,
+            schemeX + schemeWidth - schemePadding,
+            lineY,
+            { align: "right" }
+          );
+        } else {
+          // Monthly payments
+          if (
+            scheme.porcentaje_mensualidades > 0 &&
+            scheme.numero_mensualidades > 0
+          ) {
             pdf.setFont("helvetica", "normal");
             pdf.setTextColor(grayColor);
             pdf.text(
@@ -763,21 +796,21 @@ export class OfertaPdfNativeService {
             );
             lineY += 4;
           }
-        }
 
-        // Delivery payment
-        if (scheme.porcentaje_entrega > 0) {
-          pdf.setFont("helvetica", "normal");
-          pdf.setTextColor(grayColor);
-          pdf.text("A la entrega:", schemeX + schemePadding, lineY);
-          pdf.setTextColor(primaryColor);
-          pdf.setFont("helvetica", "bold");
-          pdf.text(
-            `${scheme.porcentaje_entrega}% ${formatCurrency(amounts.entrega)}`,
-            schemeX + schemeWidth - schemePadding,
-            lineY,
-            { align: "right" }
-          );
+          // Delivery payment
+          if (scheme.porcentaje_entrega > 0) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setTextColor(grayColor);
+            pdf.text("A la entrega:", schemeX + schemePadding, lineY);
+            pdf.setTextColor(primaryColor);
+            pdf.setFont("helvetica", "bold");
+            pdf.text(
+              `${scheme.porcentaje_entrega}% ${formatCurrency(amounts.entrega)}`,
+              schemeX + schemeWidth - schemePadding,
+              lineY,
+              { align: "right" }
+            );
+          }
         }
       });
 
