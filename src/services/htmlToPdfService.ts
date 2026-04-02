@@ -109,6 +109,38 @@ interface ProjectAmenity {
 class HTMLToPDFService {
   private doc: jsPDF | null = null;
 
+  private normalizePaymentSchemeTramos<T extends { tramos_mensualidad?: unknown }>(scheme: T): T & {
+    tramos_mensualidad?: Array<{
+      orden: number;
+      numero_mensualidades: number;
+      monto?: number;
+      monto_mensualidad?: number;
+      fecha_limite?: string;
+    }> | null;
+  } {
+    const rawTramos = scheme.tramos_mensualidad;
+    let parsedTramos = rawTramos;
+
+    if (typeof rawTramos === 'string') {
+      try {
+        parsedTramos = JSON.parse(rawTramos);
+      } catch {
+        parsedTramos = null;
+      }
+    }
+
+    return {
+      ...scheme,
+      tramos_mensualidad: Array.isArray(parsedTramos) ? parsedTramos as Array<{
+        orden: number;
+        numero_mensualidades: number;
+        monto?: number;
+        monto_mensualidad?: number;
+        fecha_limite?: string;
+      }> : null,
+    };
+  }
+
   async generateOfferPDF(offerData: OfferData): Promise<void> {
     try {
       console.log('Starting PDF generation for offer:', offerData.offerId);
@@ -231,6 +263,10 @@ class HTMLToPDFService {
         .eq('activo', true)
         .order('nombre', { ascending: true });
 
+      const normalizedPaymentSchemes = (paymentSchemes || []).map((scheme) =>
+        this.normalizePaymentSchemeTramos(scheme)
+      );
+
       // Fetch creator and lead info
       const [creatorInfo, leadInfo, legalNotices] = await Promise.all([
         this.fetchCreatorInfo(offerDetails.email_creador),
@@ -267,7 +303,7 @@ class HTMLToPDFService {
         templateOfferData,
         propertyDetails,
         productDetails,
-        paymentSchemes || [],
+        normalizedPaymentSchemes,
         creatorInfo,
         leadInfo,
         legalNotices
@@ -1071,24 +1107,10 @@ class HTMLToPDFService {
     }
 
     // Mark the selected scheme
-    const schemesWithSelection = schemes.map((scheme) => {
-      const rawTramos = scheme.tramos_mensualidad;
-      let parsedTramos = rawTramos;
-
-      if (typeof rawTramos === 'string') {
-        try {
-          parsedTramos = JSON.parse(rawTramos);
-        } catch {
-          parsedTramos = null;
-        }
-      }
-
-      return {
-        ...scheme,
-        tramos_mensualidad: Array.isArray(parsedTramos) ? parsedTramos : null,
-        is_selected: scheme.id === selectedSchemeId,
-      };
-    });
+    const schemesWithSelection = schemes.map((scheme) => ({
+      ...this.normalizePaymentSchemeTramos(scheme),
+      is_selected: scheme.id === selectedSchemeId,
+    }));
 
     console.log('Found payment schemes:', schemesWithSelection);
     return schemesWithSelection;
@@ -2155,6 +2177,10 @@ export const generateOfferPDFAsBase64 = async (offerData: OfferData): Promise<{ 
       .eq('activo', true)
       .order('nombre', { ascending: true });
 
+    const normalizedPaymentSchemes = (paymentSchemes || []).map((scheme) =>
+      service.normalizePaymentSchemeTramos(scheme)
+    );
+
     const [creatorInfo, leadInfo, legalNotices] = await Promise.all([
       (service as any).fetchCreatorInfo(offerDetails.email_creador),
       (service as any).fetchLeadInfo(offerDetails.id_persona_lead),
@@ -2186,7 +2212,7 @@ export const generateOfferPDFAsBase64 = async (offerData: OfferData): Promise<{ 
       } as any,
       propertyDetails,
       productDetails,
-      paymentSchemes: paymentSchemes || [],
+      paymentSchemes: normalizedPaymentSchemes,
       creatorInfo,
       leadInfo,
       legalNotices,
