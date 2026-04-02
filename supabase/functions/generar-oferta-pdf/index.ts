@@ -1058,33 +1058,46 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
       } else {
         // Monthly payments (percentage mode)
         if (scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0) {
-          currentPage.drawText('Durante la obra:', { 
-            x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray 
-          });
-          const totalMensText = `${scheme.porcentaje_mensualidades}% ${formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}`;
-          currentPage.drawText(totalMensText, {
-            x: schemeX + schemeWidth - padding - helveticaBold.widthOfTextAtSize(totalMensText, 8),
-            y: lineY, size: 8, font: helveticaBold, color: black,
-          });
-          lineY -= 12;
+          const isEscalonado = scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0;
 
-          if (scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0) {
-            let mensualidadesAcumuladas = 0;
+          if (isEscalonado) {
+            // Escalonado percentage mode: no percentages, calculate per-tramo amount
+            currentPage.drawText('Durante la obra:', { 
+              x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray 
+            });
+            const totalMensAmount = amounts.finalPrice * (scheme.porcentaje_mensualidades / 100);
+            const totalMensText = formatCurrency(totalMensAmount);
+            currentPage.drawText(totalMensText, {
+              x: schemeX + schemeWidth - padding - helveticaBold.widthOfTextAtSize(totalMensText, 8),
+              y: lineY, size: 8, font: helveticaBold, color: black,
+            });
+            lineY -= 12;
+
+            const mensualidadPerMonth = totalMensAmount / scheme.numero_mensualidades;
             for (let idx = 0; idx < scheme.tramos_mensualidad.length; idx++) {
               const tramo = scheme.tramos_mensualidad[idx];
               currentPage.drawText(`${tramo.numero_mensualidades} mensualidades:`, {
                 x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray,
               });
-              let mensualidadText = formatCurrency(tramo.monto);
-              if (idx > 0) mensualidadText += ` (mes ${mensualidadesAcumuladas + 1}+)`;
+              const mensualidadText = formatCurrency(mensualidadPerMonth);
               currentPage.drawText(mensualidadText, {
                 x: schemeX + schemeWidth - padding - helveticaBold.widthOfTextAtSize(mensualidadText, 8),
                 y: lineY, size: 8, font: helveticaBold, color: black,
               });
-              mensualidadesAcumuladas += tramo.numero_mensualidades;
               lineY -= 12;
             }
           } else {
+            // Standard (non-escalonado): show with percentage
+            currentPage.drawText('Durante la obra:', { 
+              x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray 
+            });
+            const totalMensText = `${scheme.porcentaje_mensualidades}% ${formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}`;
+            currentPage.drawText(totalMensText, {
+              x: schemeX + schemeWidth - padding - helveticaBold.widthOfTextAtSize(totalMensText, 8),
+              y: lineY, size: 8, font: helveticaBold, color: black,
+            });
+            lineY -= 12;
+
             currentPage.drawText(`${scheme.numero_mensualidades} mensualidades:`, {
               x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray,
             });
@@ -1098,10 +1111,13 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
 
         // Delivery payment
         if (scheme.porcentaje_entrega > 0) {
+          const isEscalonado = scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0;
           currentPage.drawText('A la entrega:', { 
             x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray 
           });
-          const entregaText = `${scheme.porcentaje_entrega}% ${formatCurrency(amounts.entrega)}`;
+          const entregaText = isEscalonado
+            ? formatCurrency(amounts.entrega)
+            : `${scheme.porcentaje_entrega}% ${formatCurrency(amounts.entrega)}`;
           currentPage.drawText(entregaText, {
             x: schemeX + schemeWidth - padding - helveticaBold.widthOfTextAtSize(entregaText, 8),
             y: lineY, size: 8, font: helveticaBold, color: black,

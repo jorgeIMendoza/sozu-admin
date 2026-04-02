@@ -594,39 +594,43 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                               <>
                                 {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
                                   <>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                      <span style={{ color: '#000000' }}>Durante la obra:</span>
-                                      <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                        {scheme.porcentaje_mensualidades}% {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
-                                      </span>
-                                    </div>
-                                    
                                     {scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0 ? (
                                       <>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                          <span style={{ color: '#000000' }}>Durante la obra:</span>
+                                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                            {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
+                                          </span>
+                                        </div>
                                         {scheme.tramos_mensualidad.map((tramo, idx) => {
-                                          const mensualidadesAcumuladas = scheme.tramos_mensualidad!
-                                            .slice(0, idx)
-                                            .reduce((acc, t) => acc + t.numero_mensualidades, 0);
+                                          const mensualidadPerMonth = (amounts.finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades;
                                           return (
                                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
                                               <span style={{ color: '#000000' }}>
                                                 {tramo.numero_mensualidades} mensualidades:
                                               </span>
                                               <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                                {formatCurrency(tramo.monto)}
-                                                {idx > 0 && <span style={{ fontWeight: 'normal', marginLeft: '4px', color: '#666666' }}>(mes {mensualidadesAcumuladas + 1}+)</span>}
+                                                {formatCurrency(mensualidadPerMonth)}
                                               </span>
                                             </div>
                                           );
                                         })}
                                       </>
                                     ) : (
-                                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
-                                        <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                          {formatCurrency(amounts.mensualidad)}
-                                        </span>
-                                      </div>
+                                      <>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                          <span style={{ color: '#000000' }}>Durante la obra:</span>
+                                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                            {scheme.porcentaje_mensualidades}% {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
+                                          </span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                          <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
+                                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                            {formatCurrency(amounts.mensualidad)}
+                                          </span>
+                                        </div>
+                                      </>
                                     )}
                                   </>
                                 )}
@@ -635,7 +639,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ color: '#000000' }}>A la entrega:</span>
                                     <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                      {scheme.porcentaje_entrega}% {formatCurrency(amounts.entrega)}
+                                      {!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0) ? `${scheme.porcentaje_entrega}% ` : ''}{formatCurrency(amounts.entrega)}
                                     </span>
                                   </div>
                                 )}
