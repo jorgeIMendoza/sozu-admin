@@ -72,7 +72,7 @@ export default function ConfiguracionCitas() {
   const [selectedDays, setSelectedDays] = useState<Set<number>>(new Set());
   const [selectedSlots, setSelectedSlots] = useState<Map<number, Set<string>>>(new Map());
   const [duracionMinutos, setDuracionMinutos] = useState<number>(60);
-  const [calendarioEmail, setCalendarioEmail] = useState<string>("");
+  const [calendarioEmail, setCalendarioEmail] = useState<string>("citas@souom.com");
   const [maxInvitados, setMaxInvitados] = useState<number>(1);
   const [selectedProyectoIds, setSelectedProyectoIds] = useState<number[]>([]);
   const [correosEnterado, setCorreosEnterado] = useState<string[]>([]);
@@ -311,7 +311,7 @@ export default function ConfiguracionCitas() {
   useEffect(() => {
     if (selectedConfig) {
       setDuracionMinutos(selectedConfig.duracion_minutos || 60);
-      setCalendarioEmail(selectedConfig.calendario_email || "");
+      setCalendarioEmail("citas@souom.com");
       setMaxInvitados(selectedConfig.max_invitados || 1);
       setCorreosEnterado(selectedConfig.correos_enterado || []);
       setCorreosEnteradoFijos((selectedConfig as any).correos_enterado_fijos || []);
@@ -536,8 +536,7 @@ export default function ConfiguracionCitas() {
     mutationFn: async () => {
       if (!selectedConfigId || !selectedConfig) throw new Error("No config selected");
       if (selectedProyectoIds.length === 0) throw new Error("Selecciona al menos un proyecto");
-      if (!calendarioEmail.trim() || !calendarioEmail.includes("@")) throw new Error("El email del calendario Google es obligatorio");
-      if (calendarAccessStatus !== "ok") throw new Error("El acceso al calendario debe estar verificado correctamente antes de guardar");
+      const fixedCalendarioEmail = "citas@souom.com";
       const configId = parseInt(selectedConfigId);
 
       // 1. Update configuracion_citas_usuarios
@@ -546,7 +545,7 @@ export default function ConfiguracionCitas() {
         .update({
           nombre: selectedConfig.nombre,
           duracion_minutos: duracionMinutos,
-          calendario_email: calendarioEmail || null,
+          calendario_email: fixedCalendarioEmail,
           max_invitados: maxInvitados,
           correos_enterado: correosEnterado,
           correos_enterado_fijos: correosEnteradoFijos,
@@ -871,42 +870,14 @@ export default function ConfiguracionCitas() {
                           </div>
 
                           <div className="space-y-2">
-                            <div className="p-3 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
-                              <div className="flex items-start gap-2">
-                                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                                <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
-                                  <p className="font-medium">Configuración previa requerida</p>
-                                  <p>Antes de ingresar el email, comparta el calendario con la cuenta de servicio y otorgue permiso de <strong>"Realizar cambios en eventos"</strong>.</p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <code className="bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded text-[11px] select-all break-all">{SERVICE_ACCOUNT_EMAIL}</code>
-                                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => { navigator.clipboard.writeText(SERVICE_ACCOUNT_EMAIL); toast.success("Email copiado"); }}>
-                                      <Copy className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
                             <Label>Email del calendario Google</Label>
                             <div className="flex items-center gap-2 max-w-md">
                               <Input
                                 type="email"
-                                placeholder="ejemplo@dominio.com"
-                                value={calendarioEmail}
-                                onChange={(e) => { setCalendarioEmail(e.target.value); setCalendarAccessStatus("idle"); setHasChanges(true); }}
-                                onBlur={async () => {
-                                  const email = calendarioEmail.trim();
-                                  if (!email || !email.includes("@")) return;
-                                  setCalendarVerifying(true);
-                                  setCalendarAccessStatus("idle");
-                                  try {
-                                    const { data, error } = await supabase.functions.invoke("agendar-capacitacion", {
-                                      body: { action: "verify-calendar-access", calendar_email: email, calendar_owner_email: email },
-                                    });
-                                    if (error) { setCalendarAccessStatus("error"); return; }
-                                    setCalendarAccessStatus(data?.accessible ? "ok" : "error");
-                                  } catch { setCalendarAccessStatus("error"); }
-                                  finally { setCalendarVerifying(false); }
-                                }}
+                                value="citas@souom.com"
+                                readOnly
+                                disabled
+                                className="bg-muted cursor-not-allowed"
                               />
                               {calendarVerifying && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />}
                               {!calendarVerifying && calendarAccessStatus === "ok" && <Check className="h-5 w-5 text-green-600 shrink-0" />}
