@@ -1576,7 +1576,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                             </SelectItem>
                             {p.paymentSchemes?.map((scheme: any) => (
                               <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                                {scheme.nombre}
+                                <div className="flex flex-col">
+                                  <span>{scheme.nombre}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {(() => {
+                                      const tramos = scheme.tramos_mensualidad as any[];
+                                      const isEscalonado = Array.isArray(tramos) && tramos.length > 0;
+                                      if (isEscalonado) {
+                                        return formatEscalonadoLabel(scheme, tramos, p.precioFinal);
+                                      }
+                                      return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${scheme.porcentaje_mensualidades || 0}% (${scheme.numero_mensualidades || 0} pagos) | Ent: ${scheme.porcentaje_entrega || 0}%`;
+                                    })()}
+                                  </span>
+                                </div>
                               </SelectItem>
                             ))}
                           </SelectContent>
