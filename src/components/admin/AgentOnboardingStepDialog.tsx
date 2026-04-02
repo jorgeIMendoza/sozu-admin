@@ -1869,17 +1869,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
     setSaving(true);
     try {
-      // Deactivate existing bookings with same config only (programada/no_asistio)
-      const citasToDeactivate = allCitas.filter((c: any) =>
-        (c.estatus === 'programada' || c.estatus === 'no_asistio') &&
-        (!selectedConfigId || c.id_configuracion_cita === selectedConfigId || !c.id_configuracion_cita)
-      );
-      for (const c of citasToDeactivate) {
-        await supabase
-          .from('reservas_citas')
-          .update({ activo: false, estatus: 'cancelada' })
-          .eq('id', c.id);
-      }
+      // No longer deactivate existing citas — allow multiple simultaneous citas
 
       // Insert a new record with status "Pendiente de confirmación"
       const { error } = await supabase
