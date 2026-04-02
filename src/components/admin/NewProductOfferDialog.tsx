@@ -1013,16 +1013,23 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {productPaymentSchemes.map((scheme: any) => (
-                                    <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                                      <div className="flex flex-col">
-                                        <span>{scheme.nombre}</span>
-                                        <span className="text-xs text-muted-foreground">
-                                          Eng: {scheme.porcentaje_enganche}% | Mens: {scheme.porcentaje_mensualidades}% ({scheme.numero_mensualidades}) | Ent: {scheme.porcentaje_entrega}%
-                                        </span>
-                                      </div>
-                                    </SelectItem>
-                                  ))}
+                                  {productPaymentSchemes.map((scheme: any) => {
+                                    const tramos = scheme.tramos_mensualidad as any[];
+                                    const hasFixedAmount = Array.isArray(tramos) && tramos.some((t: any) => t.monto_mensualidad && t.monto_mensualidad > 0);
+                                    return (
+                                      <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                                        <div className="flex flex-col">
+                                          <span>{scheme.nombre}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {hasFixedAmount
+                                              ? `Eng: ${scheme.porcentaje_enganche || 0}% | Monto de mensualidades: ${tramos.map((t: any) => `$${(t.monto_mensualidad / 100).toLocaleString('es-MX')}`).join(' / ')}`
+                                              : `Eng: ${scheme.porcentaje_enganche}% | Mens: ${scheme.porcentaje_mensualidades}% (${scheme.numero_mensualidades}) | Ent: ${scheme.porcentaje_entrega}%`
+                                            }
+                                          </span>
+                                        </div>
+                                      </SelectItem>
+                                    );
+                                  })}
                                 </SelectContent>
                               </Select>
                               <FormMessage />
