@@ -84,6 +84,8 @@ interface PaymentScheme {
     orden: number;
     numero_mensualidades: number;
     monto: number;
+    monto_mensualidad?: number;
+    fecha_limite?: string;
   }> | null;
 }
 
@@ -542,66 +544,102 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                         </div>
                       )}
                       
-                      {scheme.porcentaje_enganche > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#000000' }}>
-                            Enganche{scheme.numero_pagos_enganche > 1 ? ` (en ${scheme.numero_pagos_enganche} pagos)` : ''}:
-                          </span>
-                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                            {scheme.porcentaje_enganche}% {formatCurrency(amounts.enganche)}
-                          </span>
-                        </div>
-                      )}
-                      
-                      {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
-                        <>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#000000' }}>Durante la obra:</span>
-                            <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                              {scheme.porcentaje_mensualidades}% {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
-                            </span>
-                          </div>
-                          
-                          {scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0 ? (
-                            // Tiered payments
-                            <>
-                              {scheme.tramos_mensualidad.map((tramo, idx) => {
-                                const mensualidadesAcumuladas = scheme.tramos_mensualidad!
-                                  .slice(0, idx)
-                                  .reduce((acc, t) => acc + t.numero_mensualidades, 0);
-                                return (
+                      {(() => {
+                        const hasFixedAmountTramos = scheme.tramos_mensualidad && 
+                          scheme.tramos_mensualidad.length > 0 && 
+                          scheme.tramos_mensualidad.some(t => (t.monto_mensualidad ?? 0) > 0);
+
+                        return (
+                          <>
+                            {scheme.porcentaje_enganche > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: '#000000' }}>
+                                  Enganche{scheme.numero_pagos_enganche > 1 ? ` (en ${scheme.numero_pagos_enganche} pagos)` : ''}:
+                                </span>
+                                <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                  {scheme.porcentaje_enganche}% {formatCurrency(amounts.enganche)}
+                                </span>
+                              </div>
+                            )}
+
+                            {hasFixedAmountTramos ? (
+                              // Fixed amount mode
+                              <>
+                                {scheme.tramos_mensualidad!.map((tramo, idx) => (
                                   <div key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ color: '#000000' }}>
                                       {tramo.numero_mensualidades} mensualidades:
                                     </span>
                                     <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                      {formatCurrency(tramo.monto)}
-                                      {idx > 0 && <span style={{ fontWeight: 'normal', marginLeft: '4px', color: '#666666' }}>(mes {mensualidadesAcumuladas + 1}+)</span>}
+                                      {formatCurrency((tramo.monto_mensualidad || 0) / 100)}
                                     </span>
                                   </div>
-                                );
-                              })}
-                            </>
-                          ) : (
-                            // Uniform payments
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
-                              <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                {formatCurrency(amounts.mensualidad)}
-                              </span>
-                            </div>
-                          )}
-                        </>
-                      )}
-                      
-                      {scheme.porcentaje_entrega > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#000000' }}>A la entrega:</span>
-                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                            {scheme.porcentaje_entrega}% {formatCurrency(amounts.entrega)}
-                          </span>
-                        </div>
-                      )}
+                                ))}
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: '#000000' }}>A la entrega:</span>
+                                  <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                    {formatCurrency(
+                                      amounts.finalPrice - amounts.enganche - 
+                                      scheme.tramos_mensualidad!.reduce((sum, t) => sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0)
+                                    )}
+                                  </span>
+                                </div>
+                              </>
+                            ) : (
+                              // Percentage mode
+                              <>
+                                {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
+                                  <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                      <span style={{ color: '#000000' }}>Durante la obra:</span>
+                                      <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                        {scheme.porcentaje_mensualidades}% {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
+                                      </span>
+                                    </div>
+                                    
+                                    {scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0 ? (
+                                      <>
+                                        {scheme.tramos_mensualidad.map((tramo, idx) => {
+                                          const mensualidadesAcumuladas = scheme.tramos_mensualidad!
+                                            .slice(0, idx)
+                                            .reduce((acc, t) => acc + t.numero_mensualidades, 0);
+                                          return (
+                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                              <span style={{ color: '#000000' }}>
+                                                {tramo.numero_mensualidades} mensualidades:
+                                              </span>
+                                              <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                                {formatCurrency(tramo.monto)}
+                                                {idx > 0 && <span style={{ fontWeight: 'normal', marginLeft: '4px', color: '#666666' }}>(mes {mensualidadesAcumuladas + 1}+)</span>}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </>
+                                    ) : (
+                                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
+                                        <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                          {formatCurrency(amounts.mensualidad)}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                                
+                                {scheme.porcentaje_entrega > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: '#000000' }}>A la entrega:</span>
+                                    <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                      {scheme.porcentaje_entrega}% {formatCurrency(amounts.entrega)}
+                                    </span>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
