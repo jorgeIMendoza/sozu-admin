@@ -1784,17 +1784,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
     setSaving(true);
 
-    // Only deactivate existing bookings for the SAME config (not all citas)
-    const citasToDeactivate = allCitas.filter((c: any) =>
-      c.id_configuracion_cita === selectedConfigId &&
-      (c.estatus === 'programada' || c.estatus === 'no_asistio')
-    );
-    for (const cita of citasToDeactivate) {
-      await supabase
-        .from('reservas_citas')
-        .update({ activo: false, estatus: 'cancelada' })
-        .eq('id', cita.id);
-    }
+    // No longer deactivate existing citas — allow multiple simultaneous citas per config
     try {
       const { data: persona } = await supabase
         .from('personas')
