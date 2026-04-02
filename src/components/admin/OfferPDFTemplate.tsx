@@ -357,19 +357,14 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                                   <p className="text-xs text-muted-foreground">Mensualidades</p>
                                   {scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0 ? (
                                     <div className="space-y-1">
-                                      {scheme.tramos_mensualidad.map((tramo, idx) => {
-                                        const mensualidadesAcumuladas = scheme.tramos_mensualidad!
-                                          .slice(0, idx)
-                                          .reduce((acc, t) => acc + t.numero_mensualidades, 0);
-                                        return (
+                                      {(() => {
+                                        const mensualidadPerMonth = (calculation.finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades;
+                                        return scheme.tramos_mensualidad!.map((tramo, idx) => (
                                           <div key={idx} className="text-xs">
-                                            <p className="font-bold">{tramo.numero_mensualidades} pagos de {formatCurrency(tramo.monto)}</p>
-                                            {idx > 0 && (
-                                              <p className="text-[10px] text-muted-foreground">(a partir del mes {mensualidadesAcumuladas + 1})</p>
-                                            )}
+                                            <p className="font-bold">{tramo.numero_mensualidades} pagos de {formatCurrency(mensualidadPerMonth)}</p>
                                           </div>
-                                        );
-                                      })}
+                                        ));
+                                      })()}
                                     </div>
                                   ) : (
                                     <>
@@ -383,7 +378,6 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                           )}
 
                           {hasFixedAmountTramos ? (
-                            // Fixed amount: show contra-entrega as calculated remainder
                             <div className="text-center">
                               <p className="text-xs text-muted-foreground">Contra Entrega</p>
                               <p className="font-bold text-xs">{formatCurrency(
@@ -396,7 +390,9 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                               <div className="text-center">
                                 <p className="text-xs text-muted-foreground">Contra Entrega</p>
                                 <p className="font-bold text-xs">{formatCurrency(calculation.entrega)}</p>
-                                <p className="text-xs text-muted-foreground">({scheme.porcentaje_entrega}%)</p>
+                                {!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0) && (
+                                  <p className="text-xs text-muted-foreground">({scheme.porcentaje_entrega}%)</p>
+                                )}
                               </div>
                             )
                           )}
