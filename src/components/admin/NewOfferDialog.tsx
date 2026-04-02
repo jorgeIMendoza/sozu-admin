@@ -558,7 +558,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       
       const { data, error } = await supabase
         .from("esquemas_pago")
-        .select("id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades, porcentaje_descuento_aumento")
+        .select("id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades, porcentaje_descuento_aumento, tramos_mensualidad")
         .eq("id_proyecto", projectId)
         .is("id_producto", null)
         .eq("es_manual", false)
