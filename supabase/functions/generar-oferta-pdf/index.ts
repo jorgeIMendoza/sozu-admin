@@ -1759,7 +1759,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprob
       if (hasSavings) schemeHeight += 12;
       if (scheme.porcentaje_enganche > 0) schemeHeight += 12;
       if (hasFixedAmountTramos) {
-        schemeHeight += tramosCount * 12 + 12;
+        schemeHeight += tramosCount * 12 + 12 + 12;
       } else {
         if (scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0) {
           schemeHeight += 24;
