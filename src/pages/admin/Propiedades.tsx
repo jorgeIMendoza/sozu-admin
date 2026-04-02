@@ -6019,11 +6019,23 @@ const Propiedades = () => {
                                    } />
                                  </SelectTrigger>
                                 <SelectContent className="bg-background border z-50">
-                                  {availableSchemes.map((scheme) => (
-                                    <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                                      {scheme.nombre}
-                                    </SelectItem>
-                                  ))}
+                                  {availableSchemes.map((scheme) => {
+                                    const tramos = scheme.tramos_mensualidad as any[];
+                                    const hasFixedAmount = Array.isArray(tramos) && tramos.some((t: any) => t.monto_mensualidad && t.monto_mensualidad > 0);
+                                    return (
+                                      <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                                        <div className="flex flex-col">
+                                          <span>{scheme.nombre}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {hasFixedAmount
+                                              ? `Eng: ${scheme.porcentaje_enganche || 0}% | Monto de mensualidades: ${tramos.map((t: any) => `$${(t.monto_mensualidad / 100).toLocaleString('es-MX')}`).join(' / ')}`
+                                              : `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${scheme.porcentaje_mensualidades || 0}% (${scheme.numero_mensualidades || 0} pagos) | Ent: ${scheme.porcentaje_entrega || 0}%${scheme.porcentaje_descuento_aumento ? ` | ${scheme.porcentaje_descuento_aumento > 0 ? '+' : ''}${scheme.porcentaje_descuento_aumento}%` : ''}`
+                                            }
+                                          </span>
+                                        </div>
+                                      </SelectItem>
+                                    );
+                                  })}
                                 </SelectContent>
                               </Select>
                             )}
@@ -6439,16 +6451,23 @@ const Propiedades = () => {
                                     No hay esquemas disponibles
                                   </div>
                                 ) : (
-                                  productSchemes.map((scheme) => (
-                                    <SelectItem key={scheme.id} value={scheme.id.toString()}>
-                                      <div>
-                                        <div className="font-medium">{scheme.nombre}</div>
-                                        <div className="text-xs text-muted-foreground">
-                                          Eng: {scheme.porcentaje_enganche}% • Mens: {scheme.porcentaje_mensualidades}% • Ent: {scheme.porcentaje_entrega}%
+                                  productSchemes.map((scheme) => {
+                                    const tramos = scheme.tramos_mensualidad as any[];
+                                    const hasFixedAmount = Array.isArray(tramos) && tramos.some((t: any) => t.monto_mensualidad && t.monto_mensualidad > 0);
+                                    return (
+                                      <SelectItem key={scheme.id} value={scheme.id.toString()}>
+                                        <div>
+                                          <div className="font-medium">{scheme.nombre}</div>
+                                          <div className="text-xs text-muted-foreground">
+                                            {hasFixedAmount
+                                              ? `Eng: ${scheme.porcentaje_enganche || 0}% | Monto de mensualidades: ${tramos.map((t: any) => `$${(t.monto_mensualidad / 100).toLocaleString('es-MX')}`).join(' / ')}`
+                                              : `Eng: ${scheme.porcentaje_enganche}% • Mens: ${scheme.porcentaje_mensualidades}% • Ent: ${scheme.porcentaje_entrega}%`
+                                            }
+                                          </div>
                                         </div>
-                                      </div>
-                                    </SelectItem>
-                                  ))
+                                      </SelectItem>
+                                    );
+                                  })
                                 )}
                               </SelectContent>
                             </Select>
