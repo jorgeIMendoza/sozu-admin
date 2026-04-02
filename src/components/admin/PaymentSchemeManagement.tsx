@@ -147,6 +147,19 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
                 <span className="font-medium">No. Mensualidades:</span> {scheme.numero_mensualidades}
               </div>
             </div>
+            {Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0 && (
+              <div className="pt-2 border-t">
+                <span className="font-medium text-sm">Tramos escalonados:</span>
+                <div className="mt-1 space-y-1">
+                  {scheme.tramos_mensualidad.map((tramo: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-2 text-sm">
+                      <Badge variant="outline" className="text-xs">Tramo {tramo.orden || idx + 1}</Badge>
+                      <span>{tramo.numero_mensualidades} meses</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {hasAdjustment && (
               <div className="pt-2 border-t">
                 <div className="flex justify-between items-center">
