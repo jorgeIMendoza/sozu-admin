@@ -3423,7 +3423,7 @@ const Propiedades = () => {
   const fetchAvailableSchemes = async (projectId: number) => {
     const { data, error } = await supabase
       .from('esquemas_pago')
-      .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+      .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades, tramos_mensualidad, porcentaje_descuento_aumento')
       .eq('id_proyecto', projectId)
       .eq('es_manual', false)
       .eq('activo', true)
