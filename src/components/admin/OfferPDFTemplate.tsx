@@ -341,23 +341,31 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                             const isEscalonado = !!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0);
 
                             if (isEscalonado) {
-                              const montoMensual = hasFixedAmountTramos
-                                ? Math.max(...scheme.tramos_mensualidad!.map((tramo) => (tramo.monto_mensualidad || 0) / 100), 0)
-                                : calculation.mensualidad;
-                              const montoEntrega = hasFixedAmountTramos
-                                ? calculation.finalPrice - calculation.enganche -
-                                  scheme.tramos_mensualidad!.reduce((sum, t) => sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0)
-                                : calculation.entrega;
+                              const montoMensualTexto = hasFixedAmountTramos
+                                ? Array.from(
+                                    new Set(
+                                      scheme.tramos_mensualidad!.map((tramo) =>
+                                        formatCurrency((tramo.monto_mensualidad || 0) / 100)
+                                      )
+                                    )
+                                  ).join(" / ")
+                                : formatCurrency(calculation.mensualidad);
+                              const montoEntregaTexto = hasFixedAmountTramos
+                                ? formatCurrency(
+                                    calculation.finalPrice - calculation.enganche -
+                                      scheme.tramos_mensualidad!.reduce((sum, t) => sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0)
+                                  )
+                                : formatCurrency(calculation.entrega);
 
                               return (
                                 <>
                                   <div className="text-center">
                                     <p className="text-xs text-muted-foreground">Monto mensual</p>
-                                    <p className="font-bold text-xs">{formatCurrency(montoMensual)}</p>
+                                    <p className="font-bold text-xs">{montoMensualTexto}</p>
                                   </div>
                                   <div className="text-center">
                                     <p className="text-xs text-muted-foreground">Monto a la entrega</p>
-                                    <p className="font-bold text-xs">{formatCurrency(montoEntrega)}</p>
+                                    <p className="font-bold text-xs">{montoEntregaTexto}</p>
                                   </div>
                                 </>
                               );

@@ -562,89 +562,74 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                               </div>
                             )}
 
-                            {hasFixedAmountTramos ? (
-                              // Fixed amount mode: "Durante la obra" + mensualidades + contra-entrega (no percentages)
-                              <>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                  <span style={{ color: '#000000' }}>Durante la obra:</span>
-                                  <span></span>
-                                </div>
-                                {scheme.tramos_mensualidad!.map((tramo, idx) => (
-                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ color: '#000000' }}>
-                                      {tramo.numero_mensualidades} mensualidades:
-                                    </span>
-                                    <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                      {formatCurrency((tramo.monto_mensualidad || 0) / 100)}
-                                    </span>
-                                  </div>
-                                ))}
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                  <span style={{ color: '#000000' }}>A la entrega:</span>
-                                  <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                    {formatCurrency(
-                                      amounts.finalPrice - amounts.enganche - 
-                                      scheme.tramos_mensualidad!.reduce((sum, t) => sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0)
-                                    )}
-                                  </span>
-                                </div>
-                              </>
-                            ) : (
-                              // Percentage mode
-                              <>
-                                {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
+                            {(() => {
+                              const isEscalonado = !!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0);
+
+                              if (isEscalonado) {
+                                const montoMensualTexto = hasFixedAmountTramos
+                                  ? Array.from(
+                                      new Set(
+                                        scheme.tramos_mensualidad!.map((tramo) =>
+                                          formatCurrency((tramo.monto_mensualidad || 0) / 100)
+                                        )
+                                      )
+                                    ).join(' / ')
+                                  : formatCurrency(amounts.mensualidad);
+                                const montoEntregaTexto = hasFixedAmountTramos
+                                  ? formatCurrency(
+                                      amounts.finalPrice - amounts.enganche -
+                                        scheme.tramos_mensualidad!.reduce((sum, t) => sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0)
+                                    )
+                                  : formatCurrency(amounts.entrega);
+
+                                return (
                                   <>
-                                    {scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0 ? (
-                                      <>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                          <span style={{ color: '#000000' }}>Durante la obra:</span>
-                                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                            {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
-                                          </span>
-                                        </div>
-                                        {scheme.tramos_mensualidad.map((tramo, idx) => {
-                                          const mensualidadPerMonth = (amounts.finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades;
-                                          return (
-                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                              <span style={{ color: '#000000' }}>
-                                                {tramo.numero_mensualidades} mensualidades:
-                                              </span>
-                                              <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                                {formatCurrency(mensualidadPerMonth)}
-                                              </span>
-                                            </div>
-                                          );
-                                        })}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                          <span style={{ color: '#000000' }}>Durante la obra:</span>
-                                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                            {scheme.porcentaje_mensualidades}% {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
-                                          </span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                          <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
-                                          <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                            {formatCurrency(amounts.mensualidad)}
-                                          </span>
-                                        </div>
-                                      </>
-                                    )}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                      <span style={{ color: '#000000' }}>Monto mensual:</span>
+                                      <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                        {montoMensualTexto}
+                                      </span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                      <span style={{ color: '#000000' }}>Monto a la entrega:</span>
+                                      <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                        {montoEntregaTexto}
+                                      </span>
+                                    </div>
                                   </>
-                                )}
-                                
-                                {scheme.porcentaje_entrega > 0 && (
-                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ color: '#000000' }}>A la entrega:</span>
-                                    <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                      {!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0) ? `${scheme.porcentaje_entrega}% ` : ''}{formatCurrency(amounts.entrega)}
-                                    </span>
-                                  </div>
-                                )}
-                              </>
-                            )}
+                                );
+                              }
+
+                              return (
+                                <>
+                                  {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
+                                    <>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ color: '#000000' }}>Durante la obra:</span>
+                                        <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                          {scheme.porcentaje_mensualidades}% {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
+                                        <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                          {formatCurrency(amounts.mensualidad)}
+                                        </span>
+                                      </div>
+                                    </>
+                                  )}
+
+                                  {scheme.porcentaje_entrega > 0 && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                      <span style={{ color: '#000000' }}>A la entrega:</span>
+                                      <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                        {scheme.porcentaje_entrega}% {formatCurrency(amounts.entrega)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </>
                         );
                       })()}
