@@ -1921,6 +1921,11 @@ async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprob
       }
 
       if (hasFixedAmountTramos) {
+        // Fixed amount mode: show "Durante la obra:" + mensualidades monto + contra-entrega (no percentages)
+        currentPage.drawText('Durante la obra:', {
+          x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray,
+        });
+        lineY -= 12;
         for (let idx = 0; idx < scheme.tramos_mensualidad.length; idx++) {
           const tramo = scheme.tramos_mensualidad[idx];
           currentPage.drawText(`${tramo.numero_mensualidades} mensualidades:`, {
