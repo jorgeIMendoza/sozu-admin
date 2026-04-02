@@ -337,65 +337,60 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                             </div>
                           )}
 
-                          {hasFixedAmountTramos ? (
-                            // Fixed amount mode: show "Durante la obra" + monto mensual (no percentages)
-                            <div className="text-center">
-                              <p className="text-xs text-muted-foreground">Durante la obra</p>
-                              {scheme.tramos_mensualidad!.map((tramo, idx) => (
-                                <div key={idx} className="text-xs">
-                                  <p className="font-bold">
-                                    {tramo.numero_mensualidades} pagos de {formatCurrency((tramo.monto_mensualidad || 0) / 100)}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            // Percentage mode
-                            <>
-                              {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
-                                <div className="text-center">
-                                  <p className="text-xs text-muted-foreground">Mensualidades</p>
-                                  {scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0 ? (
-                                    <div className="space-y-1">
-                                      {(() => {
-                                        const mensualidadPerMonth = (calculation.finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades;
-                                        return scheme.tramos_mensualidad!.map((tramo, idx) => (
-                                          <div key={idx} className="text-xs">
-                                            <p className="font-bold">{tramo.numero_mensualidades} pagos de {formatCurrency(mensualidadPerMonth)}</p>
-                                          </div>
-                                        ));
-                                      })()}
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <p className="font-bold text-xs">{formatCurrency(calculation.mensualidad)}</p>
-                                      <p className="text-xs text-muted-foreground">{scheme.numero_mensualidades} meses</p>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                            </>
-                          )}
+                          {(() => {
+                            const isEscalonado = !!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0);
 
-                          {hasFixedAmountTramos ? (
-                            <div className="text-center">
-                              <p className="text-xs text-muted-foreground">Contra Entrega</p>
-                              <p className="font-bold text-xs">{formatCurrency(
-                                calculation.finalPrice - calculation.enganche - 
-                                scheme.tramos_mensualidad!.reduce((sum, t) => sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0)
-                              )}</p>
-                            </div>
-                          ) : (
-                            scheme.porcentaje_entrega > 0 && (
-                              <div className="text-center">
-                                <p className="text-xs text-muted-foreground">Contra Entrega</p>
-                                <p className="font-bold text-xs">{formatCurrency(calculation.entrega)}</p>
-                                {!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0) && (
-                                  <p className="text-xs text-muted-foreground">({scheme.porcentaje_entrega}%)</p>
+                            if (isEscalonado) {
+                              const montoMensualTexto = hasFixedAmountTramos
+                                ? Array.from(
+                                    new Set(
+                                      scheme.tramos_mensualidad!.map((tramo) =>
+                                        formatCurrency((tramo.monto_mensualidad || 0) / 100)
+                                      )
+                                    )
+                                  ).join(" / ")
+                                : formatCurrency(calculation.mensualidad);
+                              const montoEntregaTexto = hasFixedAmountTramos
+                                ? formatCurrency(
+                                    calculation.finalPrice - calculation.enganche -
+                                      scheme.tramos_mensualidad!.reduce((sum, t) => sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0)
+                                  )
+                                : formatCurrency(calculation.entrega);
+
+                              return (
+                                <>
+                                  <div className="text-center">
+                                    <p className="text-xs text-muted-foreground">Monto mensual</p>
+                                    <p className="font-bold text-xs">{montoMensualTexto}</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-xs text-muted-foreground">Monto a la entrega</p>
+                                    <p className="font-bold text-xs">{montoEntregaTexto}</p>
+                                  </div>
+                                </>
+                              );
+                            }
+
+                            return (
+                              <>
+                                {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
+                                  <div className="text-center">
+                                    <p className="text-xs text-muted-foreground">Mensualidades</p>
+                                    <p className="font-bold text-xs">{formatCurrency(calculation.mensualidad)}</p>
+                                    <p className="text-xs text-muted-foreground">{scheme.numero_mensualidades} meses</p>
+                                  </div>
                                 )}
-                              </div>
-                            )
-                          )}
+
+                                {scheme.porcentaje_entrega > 0 && (
+                                  <div className="text-center">
+                                    <p className="text-xs text-muted-foreground">Contra Entrega</p>
+                                    <p className="font-bold text-xs">{formatCurrency(calculation.entrega)}</p>
+                                    <p className="text-xs text-muted-foreground">({scheme.porcentaje_entrega}%)</p>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </>
                       );
                     })()}
