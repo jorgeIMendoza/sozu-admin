@@ -4,12 +4,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, DollarSign } from "lucide-react";
+import { Plus, Trash2, DollarSign, CalendarIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
 
 export interface Tramo {
   orden: number;
   numero_mensualidades: number;
   monto_mensualidad?: number;
+  fecha_limite?: string; // ISO date string, optional
 }
 
 interface TramosEscalonadosSectionProps {
@@ -56,7 +62,7 @@ export const TramosEscalonadosSection = ({
     onTramosChange(updated);
   };
 
-  const updateTramo = (index: number, field: keyof Tramo, value: number) => {
+  const updateTramo = (index: number, field: keyof Tramo, value: number | string | undefined) => {
     const updated = tramos.map((t, i) =>
       i === index ? { ...t, [field]: value } : t
     );
@@ -158,6 +164,50 @@ export const TramosEscalonadosSection = ({
                   )}
                 </div>
               )}
+              {allowFixedAmount && (
+                <div className="flex items-center gap-2 ml-16">
+                  <CalendarIcon className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                          "h-7 text-xs justify-start font-normal flex-1",
+                          !tramo.fecha_limite && "text-muted-foreground"
+                        )}
+                      >
+                        {tramo.fecha_limite
+                          ? format(parseISO(tramo.fecha_limite), "dd/MM/yyyy", { locale: es })
+                          : "Fecha límite (opcional)"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={tramo.fecha_limite ? parseISO(tramo.fecha_limite) : undefined}
+                        onSelect={(date) => {
+                          updateTramo(index, "fecha_limite", date ? format(date, "yyyy-MM-dd") : undefined);
+                        }}
+                        disabled={(date) => date < new Date()}
+                        initialFocus
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {tramo.fecha_limite && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-destructive"
+                      onClick={() => updateTramo(index, "fecha_limite", undefined)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 
@@ -192,6 +242,9 @@ export const TramosEscalonadosSection = ({
           {allowFixedAmount && hasAnyMonto && (
             <p className="text-xs text-muted-foreground border-t pt-2">
               💡 Al definir montos fijos, el porcentaje de mensualidades se ignorará y el restante irá a contra-entrega automáticamente al generar la oferta.
+              {tramos.some(t => t.fecha_limite) && (
+                <> Si defines una fecha límite, el número de mensualidades se calculará desde la fecha de generación de la oferta hasta esa fecha.</>
+              )}
             </p>
           )}
         </div>
