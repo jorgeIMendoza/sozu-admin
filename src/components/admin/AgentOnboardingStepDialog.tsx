@@ -2155,20 +2155,12 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                 </div>
               )}
 
-              {isProgrammedForConfig && (
-                <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3">
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
-                    Ya tienes una cita programada para esta configuración. Si reagendas, se cancelará la anterior.
-                  </p>
-                </div>
-              )}
-
               <button
                 onClick={handleSchedule}
                 disabled={saving || !selectedDate || !selectedSlot}
                 className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : citaCancelledExternally ? "Reprogramar Cita" : isProgrammedForConfig ? "Reagendar Cita" : "Agendar Cita"}
+                {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : citaCancelledExternally ? "Reprogramar Cita" : "Agendar Cita"}
               </button>
             </>
           )}
