@@ -109,7 +109,7 @@ interface ProjectAmenity {
 class HTMLToPDFService {
   private doc: jsPDF | null = null;
 
-  private normalizePaymentSchemeTramos<T extends { tramos_mensualidad?: unknown }>(scheme: T): T & {
+  normalizePaymentSchemeTramos<T extends { tramos_mensualidad?: unknown }>(scheme: T): T & {
     tramos_mensualidad?: Array<{
       orden: number;
       numero_mensualidades: number;
