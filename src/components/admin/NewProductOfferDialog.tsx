@@ -1017,7 +1017,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
                                   {productPaymentSchemes.map((scheme: any) => {
                                     const tramos = scheme.tramos_mensualidad as any[];
                                     const isEscalonado = Array.isArray(tramos) && tramos.length > 0;
-                                    const hasFixedAmount = isEscalonado && tramos.some((t: any) => t.monto_mensualidad && t.monto_mensualidad > 0);
+                                    
                                     return (
                                       <SelectItem key={scheme.id} value={scheme.id.toString()}>
                                         <div className="flex flex-col">
