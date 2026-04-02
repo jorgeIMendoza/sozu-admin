@@ -1879,12 +1879,16 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
     setSaving(true);
     try {
-      // Deactivate any existing booking
-      if (existingCita && (existingCita.estatus === 'programada' || existingCita.estatus === 'no_asistio')) {
+      // Deactivate existing bookings with same config only (programada/no_asistio)
+      const citasToDeactivate = allCitas.filter((c: any) =>
+        (c.estatus === 'programada' || c.estatus === 'no_asistio') &&
+        (!selectedConfigId || c.id_configuracion_cita === selectedConfigId || !c.id_configuracion_cita)
+      );
+      for (const c of citasToDeactivate) {
         await supabase
           .from('reservas_citas')
           .update({ activo: false, estatus: 'cancelada' })
-          .eq('id', existingCita.id);
+          .eq('id', c.id);
       }
 
       // Insert a new record with status "Pendiente de confirmación"
