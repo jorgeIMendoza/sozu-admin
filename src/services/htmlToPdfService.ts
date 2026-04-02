@@ -90,6 +90,13 @@ interface PaymentScheme {
   porcentaje_entrega: number;
   porcentaje_descuento_aumento: number;
   es_manual: boolean;
+  tramos_mensualidad?: Array<{
+    orden: number;
+    numero_mensualidades: number;
+    monto?: number;
+    monto_mensualidad?: number;
+    fecha_limite?: string;
+  }> | null;
   is_selected?: boolean;
 }
 
@@ -1064,10 +1071,24 @@ class HTMLToPDFService {
     }
 
     // Mark the selected scheme
-    const schemesWithSelection = schemes.map(scheme => ({
-      ...scheme,
-      is_selected: scheme.id === selectedSchemeId
-    }));
+    const schemesWithSelection = schemes.map((scheme) => {
+      const rawTramos = scheme.tramos_mensualidad;
+      let parsedTramos = rawTramos;
+
+      if (typeof rawTramos === 'string') {
+        try {
+          parsedTramos = JSON.parse(rawTramos);
+        } catch {
+          parsedTramos = null;
+        }
+      }
+
+      return {
+        ...scheme,
+        tramos_mensualidad: Array.isArray(parsedTramos) ? parsedTramos : null,
+        is_selected: scheme.id === selectedSchemeId,
+      };
+    });
 
     console.log('Found payment schemes:', schemesWithSelection);
     return schemesWithSelection;
