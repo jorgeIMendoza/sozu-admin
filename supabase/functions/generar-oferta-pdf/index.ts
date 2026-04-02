@@ -829,6 +829,10 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
       const amounts = calculatePaymentAmounts(scheme, propiedad.precio_lista);
       const hasSavings = amounts.adjustment < 0;
 
+      // Check if this is a fixed-amount tramos scheme
+      const hasFixedAmountTramos = scheme.tramos_mensualidad?.length > 0 && 
+        scheme.tramos_mensualidad.some((t: any) => t.monto_mensualidad && t.monto_mensualidad > 0);
+
       // Calculate dynamic height based on content
       const tramosCount = scheme.tramos_mensualidad?.length || 0;
       let schemeHeight = 45;
@@ -837,13 +841,17 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
       }
       if (hasSavings) schemeHeight += 12;
       if (scheme.porcentaje_enganche > 0) schemeHeight += 12;
-      if (scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0) {
-        schemeHeight += 24;
-        if (tramosCount > 0) {
-          schemeHeight += tramosCount * 12;
+      if (hasFixedAmountTramos) {
+        schemeHeight += tramosCount * 12 + 12; // tramos + contra-entrega
+      } else {
+        if (scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0) {
+          schemeHeight += 24;
+          if (tramosCount > 0) {
+            schemeHeight += tramosCount * 12;
+          }
         }
+        if (scheme.porcentaje_entrega > 0) schemeHeight += 12;
       }
-      if (scheme.porcentaje_entrega > 0) schemeHeight += 12;
 
       const col = i % 2;
       const xOffset = col * (schemeWidth + 10);
