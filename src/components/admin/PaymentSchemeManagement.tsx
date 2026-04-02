@@ -151,12 +151,17 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
               <div className="pt-2 border-t">
                 <span className="font-medium text-sm">Tramos escalonados:</span>
                 <div className="mt-1 space-y-1">
-                  {scheme.tramos_mensualidad.map((tramo: any, idx: number) => (
-                    <div key={idx} className="flex items-center gap-2 text-sm">
-                      <Badge variant="outline" className="text-xs">Tramo {tramo.orden || idx + 1}</Badge>
-                      <span>{tramo.numero_mensualidades} meses</span>
-                    </div>
-                  ))}
+                    {scheme.tramos_mensualidad.map((tramo: any, idx: number) => (
+                     <div key={idx} className="flex items-center gap-2 text-sm">
+                       <Badge variant="outline" className="text-xs">Tramo {tramo.orden || idx + 1}</Badge>
+                       <span>{tramo.numero_mensualidades} meses</span>
+                       {tramo.monto_mensualidad && tramo.monto_mensualidad > 0 && (
+                         <Badge variant="secondary" className="text-xs">
+                           ${(tramo.monto_mensualidad / 100).toLocaleString("es-MX")}/mes
+                         </Badge>
+                       )}
+                     </div>
+                   ))}
                 </div>
               </div>
             )}
