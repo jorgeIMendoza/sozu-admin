@@ -1860,10 +1860,14 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
   };
 
-  const isCompleted = hasTrainingComplete || existingCita?.estatus === 'asistio' || (existingCita as any)?.id_estatus_cita === 3;
-  const isProgrammed = (existingCita?.estatus === 'programada' || (existingCita as any)?.id_estatus_cita === 1) && !citaCancelledExternally;
-  const isPendingConfirmation = (existingCita as any)?.id_estatus_cita === 2;
-  const isNoShow = existingCita?.estatus === 'no_asistio';
+  // Completed = at least one cita confirmed across all configs
+  const anyCompleted = allCitas.some((c: any) => c.id_estatus_cita === 3 || c.estatus === 'asistio');
+  const allCompleted = hasTrainingComplete || anyCompleted;
+  // For the current selected config, check if there's already a programmed cita
+  const currentConfigCita = selectedConfigId ? allCitas.find((c: any) => c.id_configuracion_cita === selectedConfigId) : existingCita;
+  const isProgrammedForConfig = currentConfigCita && (currentConfigCita.estatus === 'programada' || (currentConfigCita as any).id_estatus_cita === 1) && !citaCancelledExternally;
+  const isPendingConfirmation = (currentConfigCita as any)?.id_estatus_cita === 2;
+  const isNoShow = currentConfigCita?.estatus === 'no_asistio';
 
   const availableSlots = dbSlots.filter(s => !s.is_full);
 
