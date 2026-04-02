@@ -1493,36 +1493,30 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     staleTime: 0,
   });
 
-  // Fetch existing appointment — prioritize completed (asistio) over others
-  const { data: existingCita } = useQuery({
+  // Fetch ALL existing appointments for this agent (not just one)
+  const { data: allCitas = [] } = useQuery({
     queryKey: ['agent-training-cita', personaId],
     queryFn: async () => {
-      // First check if there's a completed cita
-      const { data: completedCita } = await supabase
-        .from('reservas_citas')
-        .select('*')
-        .eq('id_persona', personaId)
-        .eq('activo', true)
-        .or('estatus.eq.asistio,id_estatus_cita.eq.3')
-        .order('fecha_creacion', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (completedCita) return completedCita;
-
-      // Otherwise get the latest cita
       const { data, error } = await supabase
         .from('reservas_citas')
         .select('*')
         .eq('id_persona', personaId)
-        .in('estatus', ['programada', 'asistio', 'cancelada', 'no_asistio'])
-        .order('fecha_creacion', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .eq('activo', true)
+        .in('estatus', ['programada', 'asistio', 'no_asistio'])
+        .order('fecha_creacion', { ascending: false });
       if (error) throw error;
-      return data;
+      return data || [];
     },
     staleTime: 0,
   });
+
+  // For backward compat, derive existingCita as the one matching selectedConfigId, or first non-completed
+  const existingCitaForConfig = selectedConfigId
+    ? allCitas.find((c: any) => c.id_configuracion_cita === selectedConfigId)
+    : null;
+  const existingCita = existingCitaForConfig || allCitas.find((c: any) =>
+    c.estatus === 'programada' || c.estatus === 'no_asistio'
+  ) || allCitas[0] || null;
 
   // Fetch training configs matching agent's projects (DB-only)
   const { data: trainingConfigs = [], isLoading: loadingConfigs } = useQuery({
@@ -1790,12 +1784,16 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
     setSaving(true);
 
-    // Deactivate any existing booking before creating a new one
-    if (existingCita && (existingCita.estatus === 'programada' || existingCita.estatus === 'no_asistio')) {
+    // Only deactivate existing bookings for the SAME config (not all citas)
+    const citasToDeactivate = allCitas.filter((c: any) =>
+      c.id_configuracion_cita === selectedConfigId &&
+      (c.estatus === 'programada' || c.estatus === 'no_asistio')
+    );
+    for (const cita of citasToDeactivate) {
       await supabase
         .from('reservas_citas')
         .update({ activo: false, estatus: 'cancelada' })
-        .eq('id', existingCita.id);
+        .eq('id', cita.id);
     }
     try {
       const { data: persona } = await supabase
@@ -1862,10 +1860,14 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
   };
 
-  const isCompleted = hasTrainingComplete || existingCita?.estatus === 'asistio' || (existingCita as any)?.id_estatus_cita === 3;
-  const isProgrammed = (existingCita?.estatus === 'programada' || (existingCita as any)?.id_estatus_cita === 1) && !citaCancelledExternally;
-  const isPendingConfirmation = (existingCita as any)?.id_estatus_cita === 2;
-  const isNoShow = existingCita?.estatus === 'no_asistio';
+  // Completed = at least one cita confirmed across all configs
+  const anyCompleted = allCitas.some((c: any) => c.id_estatus_cita === 3 || c.estatus === 'asistio');
+  const allCompleted = hasTrainingComplete || anyCompleted;
+  // For the current selected config, check if there's already a programmed cita
+  const currentConfigCita = selectedConfigId ? allCitas.find((c: any) => c.id_configuracion_cita === selectedConfigId) : existingCita;
+  const isProgrammedForConfig = currentConfigCita && (currentConfigCita.estatus === 'programada' || (currentConfigCita as any).id_estatus_cita === 1) && !citaCancelledExternally;
+  const isPendingConfirmation = (currentConfigCita as any)?.id_estatus_cita === 2;
+  const isNoShow = currentConfigCita?.estatus === 'no_asistio';
 
   const availableSlots = dbSlots.filter(s => !s.is_full);
 
@@ -1877,12 +1879,16 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
     setSaving(true);
     try {
-      // Deactivate any existing booking
-      if (existingCita && (existingCita.estatus === 'programada' || existingCita.estatus === 'no_asistio')) {
+      // Deactivate existing bookings with same config only (programada/no_asistio)
+      const citasToDeactivate = allCitas.filter((c: any) =>
+        (c.estatus === 'programada' || c.estatus === 'no_asistio') &&
+        (!selectedConfigId || c.id_configuracion_cita === selectedConfigId || !c.id_configuracion_cita)
+      );
+      for (const c of citasToDeactivate) {
         await supabase
           .from('reservas_citas')
           .update({ activo: false, estatus: 'cancelada' })
-          .eq('id', existingCita.id);
+          .eq('id', c.id);
       }
 
       // Insert a new record with status "Pendiente de confirmación"
@@ -1915,13 +1921,39 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
   return (
     <div className="space-y-5 pb-4">
-      {/* Config name removed from here — shown below in Fechas disponibles */}
-
-      {/* Status */}
-      {(existingCita || citaCancelledExternally) && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-foreground">Estado actual:</span>
-          {getStatusBadge()}
+      {/* Existing citas list */}
+      {allCitas.length > 0 && (
+        <div className="space-y-2">
+          <span className="text-sm font-semibold text-foreground">Tus capacitaciones</span>
+          <div className="space-y-2">
+            {allCitas.map((cita: any) => {
+              const estatusCita = cita.id_estatus_cita;
+              const cfgName = trainingConfigs.find((c: any) => c.id === cita.id_configuracion_cita)?.nombre;
+              const badge = estatusCita === 3 || cita.estatus === 'asistio'
+                ? <Badge className="bg-emerald-500 text-white border-0 text-[10px]"><CheckCircle2 className="h-3 w-3 mr-0.5" />Confirmada</Badge>
+                : estatusCita === 2
+                  ? <Badge className="bg-amber-500 text-white border-0 text-[10px]"><Clock className="h-3 w-3 mr-0.5" />Pend. confirmación</Badge>
+                  : estatusCita === 1 || cita.estatus === 'programada'
+                    ? <Badge className="bg-blue-500 text-white border-0 text-[10px]"><CalendarDays className="h-3 w-3 mr-0.5" />Agendada</Badge>
+                    : cita.estatus === 'no_asistio'
+                      ? <Badge variant="destructive" className="text-[10px]">No asistió</Badge>
+                      : null;
+              return (
+                <div key={cita.id} className="flex items-center justify-between rounded-lg border border-border/60 p-2.5 bg-card">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium">{cita.fecha}</span>
+                      {cita.hora_inicio !== '00:00' && (
+                        <span className="text-[10px] text-muted-foreground">{cita.hora_inicio?.slice(0, 5)}</span>
+                      )}
+                      {badge}
+                    </div>
+                    {cfgName && <p className="text-[10px] text-muted-foreground">{cfgName}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -1943,17 +1975,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         </div>
       )}
 
-      {isCompleted ? (
-        <div className="text-center py-6 space-y-2">
-          <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
-          <p className="text-sm font-semibold text-emerald-600">¡Capacitación completada!</p>
-          <p className="text-xs text-muted-foreground">
-            {existingCita?.fecha
-              ? `Asistencia confirmada el ${existingCita.fecha}.`
-              : 'Este paso ya está completado. No requiere acción adicional.'}
-          </p>
-        </div>
-      ) : isPendingConfirmation ? (
+      {isPendingConfirmation && !allCompleted ? (
         <div className="text-center py-6 space-y-2">
           <Clock className="h-12 w-12 text-amber-500 mx-auto" />
           <p className="text-sm font-semibold text-amber-600">Pendiente de confirmación</p>
@@ -2153,10 +2175,10 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                 </div>
               )}
 
-              {isProgrammed && (
+              {isProgrammedForConfig && (
                 <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3">
                   <p className="text-xs text-amber-700 dark:text-amber-400">
-                    Ya tienes una cita programada. Si reagendas, se cancelará la anterior.
+                    Ya tienes una cita programada para esta configuración. Si reagendas, se cancelará la anterior.
                   </p>
                 </div>
               )}
@@ -2166,7 +2188,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                 disabled={saving || !selectedDate || !selectedSlot}
                 className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : citaCancelledExternally ? "Reprogramar Cita" : isProgrammed ? "Reagendar Cita" : "Agendar Cita"}
+                {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : citaCancelledExternally ? "Reprogramar Cita" : isProgrammedForConfig ? "Reagendar Cita" : "Agendar Cita"}
               </button>
             </>
           )}
