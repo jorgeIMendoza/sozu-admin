@@ -450,6 +450,76 @@ export default function InmobComisiones() {
         </>
       )}
 
+      {/* Commission detail modal */}
+      <Dialog open={!!selectedComision} onOpenChange={(v) => { if (!v) setSelectedComision(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Detalle de Comisión</DialogTitle>
+          </DialogHeader>
+          {selectedComision && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs">Proyecto</p>
+                  <p className="font-medium">{selectedComision.proyecto}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Unidad</p>
+                  <p className="font-medium">{selectedComision.unidad}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Agente</p>
+                  <p className="font-medium">{selectedComision.agente}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Estatus</p>
+                  {estatusBadge(selectedComision.estatus)}
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Compradores</p>
+                  <div className="space-y-0.5">
+                    {selectedComision.clientes?.map((c: ClienteInfo, i: number) => (
+                      <p key={i} className="font-medium">{c.nombre}</p>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Fecha de pago</p>
+                  <p className="font-medium">{formatFechaPago(selectedComision.fechaPago)}</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Valor de venta</span>
+                  <span className="font-semibold">{fmt2(selectedComision.venta)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Comisión</span>
+                  <span className="font-bold text-emerald-600">{fmt2(selectedComision.comision)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">IVA</span>
+                  <span className="text-sm">{selectedComision.ivaIncluido ? "Incluido" : "+ IVA"}</span>
+                </div>
+              </div>
+
+              {selectedComision.facturaUrl && (
+                <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => { setPdfUrl(selectedComision.facturaUrl); setSelectedComision(null); }}>
+                  <FileText className="h-4 w-4" /> Ver factura
+                </Button>
+              )}
+
+              {selectedComision.estatus === "Pagada" && selectedComision.comprobantePagoUrl && (
+                <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => { setPdfUrl(selectedComision.comprobantePagoUrl); setSelectedComision(null); }}>
+                  <Eye className="h-4 w-4" /> Ver comprobante de pago
+                </Button>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <PdfViewerDialog
         open={!!pdfUrl}
         onOpenChange={open => { if (!open) setPdfUrl(null); }}
