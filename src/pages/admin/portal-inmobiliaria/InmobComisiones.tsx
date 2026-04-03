@@ -885,6 +885,7 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
       estatus,
       fechaPago,
       facturaUrl: facturaUrlMap.get(cuentaId) || null,
+      comprobantePagoUrl: com.url_evidencia_pago || null,
     });
   }
 
