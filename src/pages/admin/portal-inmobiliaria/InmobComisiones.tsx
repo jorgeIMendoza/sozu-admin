@@ -180,6 +180,7 @@ export default function InmobComisiones() {
   const [currentPage, setCurrentPage] = useState(1);
   const [estatusFilter, setEstatusFilter] = useState<string>("todos");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [selectedComision, setSelectedComision] = useState<any | null>(null);
 
   const monthFilterLabel = useMemo(() => getMonthFilterLabel(selectedMonths), [selectedMonths]);
   const dateRanges = useMemo(() => buildDateRangesFromMonths(selectedMonths), [selectedMonths]);
