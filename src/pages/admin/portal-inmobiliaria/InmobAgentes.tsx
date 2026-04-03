@@ -25,10 +25,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Users, TrendingUp, FileText, ShoppingCart, MoreHorizontal, Eye, Pencil, Power, KeyRound, FolderOpen, HelpCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, Users, TrendingUp, FileText, ShoppingCart, MoreHorizontal, Eye, Pencil, Power, KeyRound, FolderOpen, HelpCircle, ChevronDown, ChevronRight, Upload, UserPlus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { BulkUploadMisAgentesDialog } from "@/components/admin/BulkUploadMisAgentesDialog";
 
 const fmtCurrency = (v: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(v);
@@ -47,21 +48,39 @@ export default function InmobAgentes() {
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [activeTab, setActiveTab] = useState<"activos" | "desactivados">("activos");
   const [resetTarget, setResetTarget] = useState<any | null>(null);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
+  const [newAgentName, setNewAgentName] = useState("");
+  const [newAgentEmail, setNewAgentEmail] = useState("");
+  const [newAgentPhone, setNewAgentPhone] = useState("");
+  const [addingAgent, setAddingAgent] = useState(false);
   const currentUserEmail = (profile?.email || "").toLowerCase();
+
+  // Get inmobiliaria name for bulk upload
+  const { data: inmobiliariaData } = useQuery({
+    queryKey: ["inmob-agentes-inmob-nombre", personaId],
+    queryFn: async () => {
+      if (!personaId) return null;
+      const { data } = await supabase
+        .from("personas")
+        .select("nombre_legal, nombre_comercial")
+        .eq("id", personaId)
+        .maybeSingle() as any;
+      return data;
+    },
+    enabled: !!personaId,
+    staleTime: 10 * 60_000,
+  });
+  const inmobiliariaNombre = inmobiliariaData?.nombre_comercial || inmobiliariaData?.nombre_legal || "Inmobiliaria";
 
   const { data: isSozu = false } = useQuery({
     queryKey: ["inmob-agentes-is-sozu", personaId],
     queryFn: async () => {
       if (!personaId) return false;
-      const { data } = await supabase
-        .from("personas")
-        .select("nombre_legal")
-        .eq("id", personaId)
-        .maybeSingle() as any;
-      const nombreLegal = (data?.nombre_legal || "").toLowerCase();
+      const nombreLegal = (inmobiliariaData?.nombre_legal || "").toLowerCase();
       return nombreLegal.includes("real estate ventures");
     },
-    enabled: !!personaId,
+    enabled: !!personaId && !!inmobiliariaData,
     staleTime: 10 * 60_000,
   });
 
@@ -920,19 +939,67 @@ export default function InmobAgentes() {
     staleTime: 5 * 60_000,
   });
 
+  const handleAddAgent = async () => {
+    if (!newAgentEmail || !newAgentName) {
+      toast.error("Nombre y email son obligatorios");
+      return;
+    }
+    setAddingAgent(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('bulk-create-agents', {
+        body: {
+          agents: [{
+            nombre: newAgentName,
+            telefono: newAgentPhone,
+            email: newAgentEmail,
+            inmobiliaria: inmobiliariaNombre,
+            inmobiliariaId: personaId,
+          }],
+        },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success("Agente registrado exitosamente");
+        setIsAddAgentOpen(false);
+        setNewAgentName("");
+        setNewAgentEmail("");
+        setNewAgentPhone("");
+        queryClient.invalidateQueries({ queryKey: ["inmob-agents-full"] });
+      } else {
+        toast.error(data?.error || data?.message || "Error al registrar agente");
+      }
+    } catch (err: any) {
+      toast.error("Error: " + (err.message || "Intenta de nuevo"));
+    } finally {
+      setAddingAgent(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Agentes</h1>
-        <p className="text-sm text-muted-foreground">Gestión y rendimiento de los agentes de tu inmobiliaria</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Agentes</h1>
+          <p className="text-sm text-muted-foreground">Gestión y rendimiento de los agentes de tu inmobiliaria</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setIsBulkUploadOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Carga masiva
+          </Button>
+          <Button size="sm" onClick={() => setIsAddAgentOpen(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Agregar agente
+          </Button>
+        </div>
       </div>
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MiniKpi icon={Users} label="Agentes Activos" value={totalAgentes} loading={isLoading} />
-        <MiniKpi icon={FileText} label="Ofertas Totales" value={totalOfertas} loading={isLoading} />
-        <MiniKpi icon={ShoppingCart} label="Ventas Cerradas" value={totalVendidas} loading={isLoading} />
-        <MiniKpi icon={TrendingUp} label="Prospectos" value={totalProspectos} loading={isLoading} />
+        <MiniKpi icon={FileText} label="Ofertas Totales" value={totalOfertas} loading={isLoading} onClick={() => navigate(`${NAV_PREFIX}/pipeline`)} />
+        <MiniKpi icon={ShoppingCart} label="Ventas Cerradas" value={totalVendidas} loading={isLoading} onClick={() => navigate(`${NAV_PREFIX}/pipeline?etapa=cierre`)} />
+        <MiniKpi icon={TrendingUp} label="Prospectos" value={totalProspectos} loading={isLoading} onClick={() => navigate(`${NAV_PREFIX}/prospectos`)} />
       </div>
 
       {/* Search */}
@@ -1051,6 +1118,49 @@ export default function InmobAgentes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add Agent Dialog */}
+      <Dialog open={isAddAgentOpen} onOpenChange={(open) => { if (!open) setIsAddAgentOpen(false); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Agregar agente</DialogTitle>
+            <DialogDescription>Registra un nuevo agente para {inmobiliariaNombre}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Nombre *</Label>
+              <Input value={newAgentName} onChange={(e) => setNewAgentName(e.target.value)} placeholder="Nombre completo" />
+            </div>
+            <div className="space-y-2">
+              <Label>Correo electrónico *</Label>
+              <Input value={newAgentEmail} onChange={(e) => setNewAgentEmail(e.target.value)} type="email" placeholder="correo@ejemplo.com" />
+            </div>
+            <div className="space-y-2">
+              <Label>Teléfono</Label>
+              <Input value={newAgentPhone} onChange={(e) => setNewAgentPhone(e.target.value)} placeholder="10 dígitos" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddAgentOpen(false)}>Cancelar</Button>
+            <Button onClick={handleAddAgent} disabled={addingAgent || !newAgentName || !newAgentEmail}>
+              {addingAgent ? "Registrando…" : "Registrar agente"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Upload Dialog */}
+      {personaId && (
+        <BulkUploadMisAgentesDialog
+          open={isBulkUploadOpen}
+          onClose={() => setIsBulkUploadOpen(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["inmob-agents-full"] });
+          }}
+          inmobiliariaId={personaId}
+          inmobiliariaNombre={inmobiliariaNombre}
+        />
+      )}
     </div>
   );
 }
@@ -1398,9 +1508,9 @@ function AgentProjectAccessDialog({ agent, inmobProjects, onClose }: {
   );
 }
 
-function MiniKpi({ icon: Icon, label, value, loading }: { icon: any; label: string; value: number; loading: boolean }) {
+function MiniKpi({ icon: Icon, label, value, loading, onClick }: { icon: any; label: string; value: number; loading: boolean; onClick?: () => void }) {
   return (
-    <Card className="sozu-card">
+    <Card className={cn("sozu-card", onClick && "cursor-pointer hover:border-primary/40 transition-colors")} onClick={onClick}>
       <CardContent className="p-4 flex items-center gap-3">
         {loading ? (
           <Skeleton className="h-12 w-full" />
