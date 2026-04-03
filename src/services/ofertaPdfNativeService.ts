@@ -778,6 +778,20 @@ export class OfertaPdfNativeService {
             lineY,
             { align: "right" }
           );
+          lineY += 3;
+
+          if (escalonadoDisplay.fechaFinalText) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(6);
+            pdf.setTextColor(grayColor);
+            pdf.text(
+              escalonadoDisplay.fechaFinalText,
+              schemeX + schemeWidth - schemePadding,
+              lineY,
+              { align: "right" }
+            );
+            pdf.setFontSize(8);
+          }
           lineY += 4;
 
           pdf.setFont("helvetica", "normal");
