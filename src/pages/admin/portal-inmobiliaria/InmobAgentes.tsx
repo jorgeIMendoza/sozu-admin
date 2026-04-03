@@ -1508,9 +1508,9 @@ function AgentProjectAccessDialog({ agent, inmobProjects, onClose }: {
   );
 }
 
-function MiniKpi({ icon: Icon, label, value, loading }: { icon: any; label: string; value: number; loading: boolean }) {
+function MiniKpi({ icon: Icon, label, value, loading, onClick }: { icon: any; label: string; value: number; loading: boolean; onClick?: () => void }) {
   return (
-    <Card className="sozu-card">
+    <Card className={cn("sozu-card", onClick && "cursor-pointer hover:border-primary/40 transition-colors")} onClick={onClick}>
       <CardContent className="p-4 flex items-center gap-3">
         {loading ? (
           <Skeleton className="h-12 w-full" />
