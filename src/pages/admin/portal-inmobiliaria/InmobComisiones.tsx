@@ -92,7 +92,7 @@ function ClienteCell({ clientes }: { clientes: ClienteInfo[] }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Clientes de la operación</DialogTitle>
+            <DialogTitle>Compradores de la operación</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             {clientes.map((c, i) => (

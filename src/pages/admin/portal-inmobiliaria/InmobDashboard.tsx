@@ -1314,7 +1314,7 @@ export default function InmobDashboard() {
           text: type === "aprobada" ? "Oferta aprobada" : type === "firmada" ? "Contrato firmado" : "Nueva oferta generada",
           detail: `${o.email_creador?.split("@")[0] || "—"} · ${ofertaLabel}`,
           time: formatDistanceToNow(new Date(o.fecha_generacion), { addSuffix: true, locale: es }),
-          to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}`,
+          to: `${NAV_PREFIX}/pipeline?meses=${encodeURIComponent(selectedMonths.join(","))}&offerId=${o.id}`,
         };
       });
   }, [filteredOfertas]);
