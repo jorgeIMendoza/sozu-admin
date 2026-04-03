@@ -56,19 +56,31 @@ export default function InmobAgentes() {
   const [addingAgent, setAddingAgent] = useState(false);
   const currentUserEmail = (profile?.email || "").toLowerCase();
 
+  // Get inmobiliaria name for bulk upload
+  const { data: inmobiliariaData } = useQuery({
+    queryKey: ["inmob-agentes-inmob-nombre", personaId],
+    queryFn: async () => {
+      if (!personaId) return null;
+      const { data } = await supabase
+        .from("personas")
+        .select("nombre_legal, nombre_comercial")
+        .eq("id", personaId)
+        .maybeSingle() as any;
+      return data;
+    },
+    enabled: !!personaId,
+    staleTime: 10 * 60_000,
+  });
+  const inmobiliariaNombre = inmobiliariaData?.nombre_comercial || inmobiliariaData?.nombre_legal || "Inmobiliaria";
+
   const { data: isSozu = false } = useQuery({
     queryKey: ["inmob-agentes-is-sozu", personaId],
     queryFn: async () => {
       if (!personaId) return false;
-      const { data } = await supabase
-        .from("personas")
-        .select("nombre_legal")
-        .eq("id", personaId)
-        .maybeSingle() as any;
-      const nombreLegal = (data?.nombre_legal || "").toLowerCase();
+      const nombreLegal = (inmobiliariaData?.nombre_legal || "").toLowerCase();
       return nombreLegal.includes("real estate ventures");
     },
-    enabled: !!personaId,
+    enabled: !!personaId && !!inmobiliariaData,
     staleTime: 10 * 60_000,
   });
 
