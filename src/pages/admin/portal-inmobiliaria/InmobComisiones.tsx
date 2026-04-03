@@ -370,7 +370,7 @@ export default function InmobComisiones() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRows.map((r: any, idx: number) => (
-                      <TableRow key={`${r.cuentaId}-${idx}`}>
+                      <TableRow key={`${r.cuentaId}-${idx}`} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedComision(r)}>
                         <TableCell className="font-medium">{r.proyecto}</TableCell>
                         <TableCell><ClienteCell clientes={r.clientes} /></TableCell>
                         <TableCell>{r.unidad}</TableCell>
@@ -384,7 +384,7 @@ export default function InmobComisiones() {
                         </TableCell>
                         <TableCell>{estatusBadge(r.estatus)}</TableCell>
                         <TableCell>{formatFechaPago(r.fechaPago)}</TableCell>
-                        <TableCell>
+                        <TableCell onClick={e => e.stopPropagation()}>
                           {r.facturaUrl ? (
                             <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setPdfUrl(r.facturaUrl)}>
                               <FileText className="h-3.5 w-3.5" /> Ver
