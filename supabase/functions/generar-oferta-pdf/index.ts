@@ -522,7 +522,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
     };
   }
 
-  function getEscalonadoDisplayData(scheme: any, amounts: ReturnType<typeof calculatePaymentAmounts>) {
+  function getEscalonadoDisplayData(scheme: any, amounts: ReturnType<typeof calculatePaymentAmounts>, fechaGeneracion: string) {
     const isEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
     const hasFixedAmountTramos = isEscalonado &&
       scheme.tramos_mensualidad.some((t: any) => (t.monto_mensualidad || 0) > 0);
@@ -546,11 +546,30 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
       ? formatCurrency(amounts.finalPrice - amounts.enganche - totalFixedMens)
       : formatCurrency(amounts.entrega);
 
+    let fechaFinalText = '';
+    if (isEscalonado) {
+      const tramos = scheme.tramos_mensualidad;
+      const lastTramo = tramos[tramos.length - 1];
+      if (lastTramo.fecha_limite) {
+        const parts = lastTramo.fecha_limite.split('-');
+        fechaFinalText = `hasta ${parts[2]}/${parts[1]}/${parts[0]}`;
+      } else {
+        const totalMeses = tramos.reduce((sum: number, t: any) => sum + (t.numero_mensualidades || 0), 0);
+        const startDate = new Date(fechaGeneracion);
+        startDate.setMonth(startDate.getMonth() + totalMeses);
+        const dd = String(startDate.getDate()).padStart(2, '0');
+        const mm = String(startDate.getMonth() + 1).padStart(2, '0');
+        const yyyy = startDate.getFullYear();
+        fechaFinalText = `hasta ${dd}/${mm}/${yyyy}`;
+      }
+    }
+
     return {
       isEscalonado,
       hasFixedAmountTramos,
       montoMensualText,
       montoEntregaText,
+      fechaFinalText,
     };
   }
 
