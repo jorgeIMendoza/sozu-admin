@@ -498,14 +498,12 @@ export default function InmobComisiones() {
                   <span className="text-sm text-muted-foreground">Comisión</span>
                   <span className="font-bold text-emerald-600">{fmt2(selectedComision.comision)}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">IVA</span>
-                  <span className="text-sm">
-                    {selectedComision.ivaIncluido 
-                      ? "Incluido" 
-                      : <>{fmt2(selectedComision.comision * 0.16)} <span className="text-muted-foreground">(+ IVA)</span></>}
-                  </span>
-                </div>
+                {!selectedComision.ivaIncluido && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">IVA (16%)</span>
+                    <span className="text-sm font-medium">{fmt2(selectedComision.comision * 0.16)}</span>
+                  </div>
+                )}
               </div>
 
               {selectedComision.facturaUrl && (
