@@ -886,7 +886,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
       const amounts = calculatePaymentAmounts(scheme, propiedad.precio_lista);
       const hasSavings = amounts.adjustment < 0;
 
-      const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts);
+      const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts, oferta.fecha_generacion);
 
       // Calculate dynamic height based on content
       const tramosCount = scheme.tramos_mensualidad?.length || 0;
