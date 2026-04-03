@@ -1767,7 +1767,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprob
       const amounts = calculatePaymentAmounts(scheme, producto.precio_lista);
       const hasSavings = amounts.adjustment < 0;
 
-      const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts);
+      const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts, oferta.fecha_generacion);
 
       // Calculate dynamic height
       const tramosCount = scheme.tramos_mensualidad?.length || 0;
