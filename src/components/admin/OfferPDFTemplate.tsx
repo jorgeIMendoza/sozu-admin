@@ -357,11 +357,26 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                                   )
                                 : formatCurrency(calculation.entrega);
 
+                              // Calculate end date
+                              const tramos = scheme.tramos_mensualidad!;
+                              const lastTramo = tramos[tramos.length - 1];
+                              let fechaFinalStr = '';
+                              if (lastTramo.fecha_limite) {
+                                const d = new Date(lastTramo.fecha_limite + 'T00:00:00');
+                                fechaFinalStr = d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                              } else {
+                                const totalMeses = tramos.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
+                                const startDate = new Date(offerData.fecha_generacion);
+                                startDate.setMonth(startDate.getMonth() + totalMeses);
+                                fechaFinalStr = startDate.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                              }
+
                               return (
                                 <>
                                   <div className="text-center">
                                     <p className="text-xs text-muted-foreground">Monto mensual</p>
                                     <p className="font-bold text-xs">{montoMensualTexto}</p>
+                                    <p className="text-xs text-muted-foreground">hasta {fechaFinalStr}</p>
                                   </div>
                                   <div className="text-center">
                                     <p className="text-xs text-muted-foreground">Monto a la entrega</p>

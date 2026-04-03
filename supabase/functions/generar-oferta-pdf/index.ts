@@ -522,7 +522,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
     };
   }
 
-  function getEscalonadoDisplayData(scheme: any, amounts: ReturnType<typeof calculatePaymentAmounts>) {
+  function getEscalonadoDisplayData(scheme: any, amounts: ReturnType<typeof calculatePaymentAmounts>, fechaGeneracion: string) {
     const isEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
     const hasFixedAmountTramos = isEscalonado &&
       scheme.tramos_mensualidad.some((t: any) => (t.monto_mensualidad || 0) > 0);
@@ -546,11 +546,30 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
       ? formatCurrency(amounts.finalPrice - amounts.enganche - totalFixedMens)
       : formatCurrency(amounts.entrega);
 
+    let fechaFinalText = '';
+    if (isEscalonado) {
+      const tramos = scheme.tramos_mensualidad;
+      const lastTramo = tramos[tramos.length - 1];
+      if (lastTramo.fecha_limite) {
+        const parts = lastTramo.fecha_limite.split('-');
+        fechaFinalText = `hasta ${parts[2]}/${parts[1]}/${parts[0]}`;
+      } else {
+        const totalMeses = tramos.reduce((sum: number, t: any) => sum + (t.numero_mensualidades || 0), 0);
+        const startDate = new Date(fechaGeneracion);
+        startDate.setMonth(startDate.getMonth() + totalMeses);
+        const dd = String(startDate.getDate()).padStart(2, '0');
+        const mm = String(startDate.getMonth() + 1).padStart(2, '0');
+        const yyyy = startDate.getFullYear();
+        fechaFinalText = `hasta ${dd}/${mm}/${yyyy}`;
+      }
+    }
+
     return {
       isEscalonado,
       hasFixedAmountTramos,
       montoMensualText,
       montoEntregaText,
+      fechaFinalText,
     };
   }
 
@@ -867,7 +886,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
       const amounts = calculatePaymentAmounts(scheme, propiedad.precio_lista);
       const hasSavings = amounts.adjustment < 0;
 
-      const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts);
+      const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts, oferta.fecha_generacion);
 
       // Calculate dynamic height based on content
       const tramosCount = scheme.tramos_mensualidad?.length || 0;
@@ -878,7 +897,7 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
       if (hasSavings) schemeHeight += 12;
       if (scheme.porcentaje_enganche > 0) schemeHeight += 12;
       if (escalonadoDisplay.isEscalonado) {
-        schemeHeight += 24;
+        schemeHeight += 32;
       } else {
         if (scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0) {
           schemeHeight += 24;
@@ -1063,7 +1082,16 @@ async function generatePropertyOfferPdf(supabase: any, oferta: any, estatus_apro
           x: schemeX + schemeWidth - padding - helveticaBold.widthOfTextAtSize(escalonadoDisplay.montoMensualText, 8),
           y: lineY, size: 8, font: helveticaBold, color: black,
         });
-        lineY -= 12;
+        lineY -= 8;
+        if (escalonadoDisplay.fechaFinalText) {
+          currentPage.drawText(escalonadoDisplay.fechaFinalText, {
+            x: schemeX + schemeWidth - padding - helvetica.widthOfTextAtSize(escalonadoDisplay.fechaFinalText, 6),
+            y: lineY, size: 6, font: helvetica, color: gray,
+          });
+          lineY -= 10;
+        } else {
+          lineY -= 4;
+        }
 
         currentPage.drawText('Monto a la entrega:', {
           x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray,
@@ -1748,7 +1776,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprob
       const amounts = calculatePaymentAmounts(scheme, producto.precio_lista);
       const hasSavings = amounts.adjustment < 0;
 
-      const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts);
+      const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts, oferta.fecha_generacion);
 
       // Calculate dynamic height
       const tramosCount = scheme.tramos_mensualidad?.length || 0;
@@ -1757,7 +1785,7 @@ async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprob
       if (hasSavings) schemeHeight += 12;
       if (scheme.porcentaje_enganche > 0) schemeHeight += 12;
       if (escalonadoDisplay.isEscalonado) {
-        schemeHeight += 24;
+        schemeHeight += 32;
       } else {
         if (scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0) {
           schemeHeight += 24;
@@ -1926,7 +1954,16 @@ async function generateProductOfferPdf(supabase: any, oferta: any, estatus_aprob
           x: schemeX + schemeWidth - padding - helveticaBold.widthOfTextAtSize(escalonadoDisplay.montoMensualText, 8),
           y: lineY, size: 8, font: helveticaBold, color: black,
         });
-        lineY -= 12;
+        lineY -= 8;
+        if (escalonadoDisplay.fechaFinalText) {
+          currentPage.drawText(escalonadoDisplay.fechaFinalText, {
+            x: schemeX + schemeWidth - padding - helvetica.widthOfTextAtSize(escalonadoDisplay.fechaFinalText, 6),
+            y: lineY, size: 6, font: helvetica, color: gray,
+          });
+          lineY -= 10;
+        } else {
+          lineY -= 4;
+        }
 
         currentPage.drawText('Monto a la entrega:', {
           x: schemeX + padding, y: lineY, size: 8, font: helvetica, color: gray,

@@ -582,6 +582,19 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                                     )
                                   : formatCurrency(amounts.entrega);
 
+                                const tramosArr = scheme.tramos_mensualidad!;
+                                const lastTramo = tramosArr[tramosArr.length - 1];
+                                let fechaFinalStr = '';
+                                if (lastTramo.fecha_limite) {
+                                  const d = new Date(lastTramo.fecha_limite + 'T00:00:00');
+                                  fechaFinalStr = d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                } else {
+                                  const totalMeses = tramosArr.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
+                                  const startDate = new Date(offerData.fecha_generacion);
+                                  startDate.setMonth(startDate.getMonth() + totalMeses);
+                                  fechaFinalStr = startDate.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                }
+
                                 return (
                                   <>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -589,6 +602,10 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                                       <span style={{ color: '#000000', fontWeight: 'bold' }}>
                                         {montoMensualTexto}
                                       </span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '7px', color: '#666' }}>
+                                      <span></span>
+                                      <span>hasta {fechaFinalStr}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                       <span style={{ color: '#000000' }}>Monto a la entrega:</span>

@@ -229,7 +229,8 @@ export class OfertaPdfNativeService {
 
     const getEscalonadoDisplayData = (
       scheme: PaymentScheme,
-      amounts: ReturnType<typeof calculatePaymentAmounts>
+      amounts: ReturnType<typeof calculatePaymentAmounts>,
+      fechaGeneracion: string
     ) => {
       const isEscalonado =
         Array.isArray(scheme.tramos_mensualidad) &&
@@ -265,10 +266,27 @@ export class OfertaPdfNativeService {
         ? Math.max(0, amounts.finalPrice - amounts.enganche - totalFixedMens)
         : amounts.entrega;
 
+      // Calculate end date
+      let fechaFinalText = '';
+      if (isEscalonado) {
+        const tramos = scheme.tramos_mensualidad!;
+        const lastTramo = tramos[tramos.length - 1];
+        if (lastTramo.fecha_limite) {
+          const d = new Date(lastTramo.fecha_limite + 'T00:00:00');
+          fechaFinalText = `hasta ${d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+        } else {
+          const totalMeses = tramos.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
+          const startDate = new Date(fechaGeneracion);
+          startDate.setMonth(startDate.getMonth() + totalMeses);
+          fechaFinalText = `hasta ${startDate.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+        }
+      }
+
       return {
         isEscalonado,
         montoMensualText,
         montoEntregaText: formatCurrency(montoEntrega),
+        fechaFinalText,
       };
     };
 
@@ -597,7 +615,7 @@ export class OfertaPdfNativeService {
           data.offerData.id_esquema_pago_seleccionado === scheme.id;
         const amounts = calculatePaymentAmounts(scheme);
         const hasSavings = amounts.adjustment < 0;
-        const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts);
+        const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts, data.offerData.fecha_generacion);
 
         // Background
         if (isSelected) {
@@ -760,6 +778,20 @@ export class OfertaPdfNativeService {
             lineY,
             { align: "right" }
           );
+          lineY += 3;
+
+          if (escalonadoDisplay.fechaFinalText) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(6);
+            pdf.setTextColor(grayColor);
+            pdf.text(
+              escalonadoDisplay.fechaFinalText,
+              schemeX + schemeWidth - schemePadding,
+              lineY,
+              { align: "right" }
+            );
+            pdf.setFontSize(8);
+          }
           lineY += 4;
 
           pdf.setFont("helvetica", "normal");
