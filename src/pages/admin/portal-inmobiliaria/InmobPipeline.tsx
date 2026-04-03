@@ -235,7 +235,7 @@ async function enrichOfertas(data: any[], agentNameMap: Map<string, string>) {
 import { buildDateRangesFromMonths as buildDateRanges } from "@/components/ui/month-multi-selector";
 
 export default function InmobPipeline() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
   const { data: agents = [], isLoading: agentsLoading } = useInmobAgents();
