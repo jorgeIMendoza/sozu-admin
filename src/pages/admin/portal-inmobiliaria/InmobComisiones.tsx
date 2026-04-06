@@ -649,6 +649,19 @@ async function fetchSozuComisiones(agentEmails: string[], dateRanges: { start: s
   // Fetch compradores
   const compradoresMap = await fetchCompradores(cuentaIds);
 
+  // Fetch comisionistas for url_evidencia_pago (Sozu's own comisionista entries)
+  const { data: sozuComisionistas } = await (supabase as any)
+    .from("comisionistas")
+    .select("id_cuenta_cobranza, url_evidencia_pago")
+    .in("id_cuenta_cobranza", cuentaIds)
+    .eq("activo", true);
+  const comprobanteMap = new Map<number, string>();
+  (sozuComisionistas || []).forEach((c: any) => {
+    if (c.url_evidencia_pago && !comprobanteMap.has(c.id_cuenta_cobranza)) {
+      comprobanteMap.set(c.id_cuenta_cobranza, c.url_evidencia_pago);
+    }
+  });
+
   // Check enganche
   const { data: acuerdos } = await supabase
     .from("acuerdos_pago")
@@ -715,7 +728,7 @@ async function fetchSozuComisiones(agentEmails: string[], dateRanges: { start: s
       estatus,
       fechaPago: cuenta.fecha_pago_comision || null,
       facturaUrl: (!cuenta.es_draft_factura_comision && cuenta.url_factura_comision) ? cuenta.url_factura_comision : null,
-      comprobantePagoUrl: null,
+      comprobantePagoUrl: comprobanteMap.get(cuenta.id) || null,
     });
   }
 
