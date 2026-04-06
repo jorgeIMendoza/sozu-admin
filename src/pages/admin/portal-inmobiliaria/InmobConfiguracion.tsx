@@ -13,8 +13,10 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, CreditCard, User, Save, Plus, Edit, AlertCircle, Copy, FolderOpen } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Building2, CreditCard, User, Save, Plus, Edit, AlertCircle, Copy, FolderOpen, UserCheck } from "lucide-react";
 import { toast } from "sonner";
+import { PersonForm } from "@/components/admin/PersonForm";
 
 export default function InmobConfiguracion() {
   const { registrarVista } = useActivityLogger();
@@ -28,6 +30,10 @@ export default function InmobConfiguracion() {
   const [isEditingBank, setIsEditingBank] = useState(false);
   const [bankForm, setBankForm] = useState<any>({});
   const [copiarDireccion, setCopiarDireccion] = useState(false);
+  const [isNewRepLegalDialogOpen, setIsNewRepLegalDialogOpen] = useState(false);
+  const [isNewRepComDialogOpen, setIsNewRepComDialogOpen] = useState(false);
+
+
 
   useEffect(() => {
     registrarVista("/admin/portal-inmobiliaria/configuracion");
@@ -130,7 +136,108 @@ export default function InmobConfiguracion() {
     },
   });
 
-  // Pre-fill fiscal form when persona loads
+  // Fetch representante legal name
+  const { data: repLegalNombre } = useQuery({
+    queryKey: ["inmob-config-rep-legal", persona?.id_entidad_relacionada_rep_leg],
+    queryFn: async () => {
+      const repLegId = persona?.id_entidad_relacionada_rep_leg;
+      if (!repLegId) return null;
+      const { data } = await supabase
+        .from("entidades_relacionadas")
+        .select("personas!entidades_relacionadas_id_persona_fkey(nombre_legal)")
+        .eq("id", repLegId)
+        .single() as any;
+      return data?.personas?.nombre_legal || null;
+    },
+    enabled: !!persona?.id_entidad_relacionada_rep_leg,
+  });
+
+  // Fetch representante comercial name
+  const { data: repComNombre } = useQuery({
+    queryKey: ["inmob-config-rep-com", persona?.id_entidad_relacionada_rep_com],
+    queryFn: async () => {
+      const repComId = persona?.id_entidad_relacionada_rep_com;
+      if (!repComId) return null;
+      const { data } = await supabase
+        .from("entidades_relacionadas")
+        .select("personas!entidades_relacionadas_id_persona_fkey(nombre_legal)")
+        .eq("id", repComId)
+        .single() as any;
+      return data?.personas?.nombre_legal || null;
+    },
+    enabled: !!persona?.id_entidad_relacionada_rep_com,
+  });
+
+  // Create representante legal mutation
+  const createRepLegalMutation = useMutation({
+    mutationFn: async (personData: any) => {
+      const { entityType, representativeId, commercialRepresentativeId, tempBankAccounts, tempBeneficiaries, pendingDocuments, inmobiliariaId, ...cleanPersonData } = personData;
+      const { data: personResult, error: personError } = await supabase
+        .from("personas")
+        .insert([{ ...cleanPersonData, tipo_persona: "pf" }])
+        .select()
+        .single();
+      if (personError) throw personError;
+      const { data: entidadResult, error: entidadError } = await supabase
+        .from("entidades_relacionadas")
+        .insert([{ id_persona: personResult.id, id_tipo_entidad: 1, id_proyecto: null, activo: true }])
+        .select()
+        .single();
+      if (entidadError) throw entidadError;
+      // Link to inmobiliaria persona
+      const { error: linkError } = await supabase
+        .from("personas")
+        .update({ id_entidad_relacionada_rep_leg: entidadResult.id })
+        .eq("id", personaId);
+      if (linkError) throw linkError;
+      return entidadResult.id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-persona"] });
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-rep-legal"] });
+      setIsNewRepLegalDialogOpen(false);
+      toast.success("Representante legal creado correctamente.");
+    },
+    onError: (error: any) => {
+      toast.error(`Error al crear representante legal: ${error.message}`);
+    },
+  });
+
+  // Create representante comercial mutation
+  const createRepComMutation = useMutation({
+    mutationFn: async (personData: any) => {
+      const { entityType, representativeId, commercialRepresentativeId, tempBankAccounts, tempBeneficiaries, pendingDocuments, inmobiliariaId, ...cleanPersonData } = personData;
+      const { data: personResult, error: personError } = await supabase
+        .from("personas")
+        .insert([{ ...cleanPersonData, tipo_persona: "pf" }])
+        .select()
+        .single();
+      if (personError) throw personError;
+      const { data: entidadResult, error: entidadError } = await supabase
+        .from("entidades_relacionadas")
+        .insert([{ id_persona: personResult.id, id_tipo_entidad: 21, id_proyecto: null, activo: true }])
+        .select()
+        .single();
+      if (entidadError) throw entidadError;
+      const { error: linkError } = await supabase
+        .from("personas")
+        .update({ id_entidad_relacionada_rep_com: entidadResult.id })
+        .eq("id", personaId);
+      if (linkError) throw linkError;
+      return entidadResult.id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-persona"] });
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-rep-com"] });
+      setIsNewRepComDialogOpen(false);
+      toast.success("Representante comercial creado correctamente.");
+    },
+    onError: (error: any) => {
+      toast.error(`Error al crear representante comercial: ${error.message}`);
+    },
+  });
+
+
   useEffect(() => {
     if (persona && !isEditingFiscal) {
       setFiscalForm({ ...persona });
@@ -373,6 +480,7 @@ export default function InmobConfiguracion() {
   const existingAccount = cuentas[0] || null;
 
   return (
+    <>
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-foreground">Configuración</h1>
 
@@ -440,6 +548,52 @@ export default function InmobConfiguracion() {
                     <p className="text-xs text-muted-foreground">
                       El email no puede ser modificado. En caso de requerirlo, contacte al administrador de la plataforma.
                     </p>
+                  </div>
+                </div>
+
+                {/* Representantes */}
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Representante Legal</Label>
+                    {persona.id_entidad_relacionada_rep_leg ? (
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-emerald-500" />
+                        <p className="font-medium text-foreground text-sm">{repLegalNombre || "Cargando..."}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsNewRepLegalDialogOpen(true)}
+                          className="gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Crear representante legal
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Representante Comercial</Label>
+                    {persona.id_entidad_relacionada_rep_com ? (
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-emerald-500" />
+                        <p className="font-medium text-foreground text-sm">{repComNombre || "Cargando..."}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsNewRepComDialogOpen(true)}
+                          className="gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Crear representante comercial
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </TabsContent>
@@ -652,6 +806,39 @@ export default function InmobConfiguracion() {
         </CardContent>
       </Card>
     </div>
+
+      {/* Dialog para nuevo representante legal */}
+      <Dialog open={isNewRepLegalDialogOpen} onOpenChange={setIsNewRepLegalDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nuevo Representante Legal</DialogTitle>
+          </DialogHeader>
+          <PersonForm
+            onSubmit={(data) => createRepLegalMutation.mutate(data)}
+            isLoading={createRepLegalMutation.isPending}
+            onCancel={() => setIsNewRepLegalDialogOpen(false)}
+            entityType="representante_legal"
+            restrictToBasicTab={true}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para nuevo representante comercial */}
+      <Dialog open={isNewRepComDialogOpen} onOpenChange={setIsNewRepComDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nuevo Representante Comercial</DialogTitle>
+          </DialogHeader>
+          <PersonForm
+            onSubmit={(data) => createRepComMutation.mutate(data)}
+            isLoading={createRepComMutation.isPending}
+            onCancel={() => setIsNewRepComDialogOpen(false)}
+            entityType="representante_legal"
+            restrictToBasicTab={true}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
