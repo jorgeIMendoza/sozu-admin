@@ -174,7 +174,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
       }} />
     </div>
   ) : (
-    <StepForm step={step} persona={persona} personaId={personaId} onSaved={handleSaved} basicDocTypes={effectiveBasicDocTypes} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: step } })} onTrackFieldChange={() => {
+    <StepForm step={step} persona={persona} personaId={personaId} onSaved={handleSaved} onClose={() => onOpenChange(false)} basicDocTypes={effectiveBasicDocTypes} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: step } })} onTrackFieldChange={() => {
       if (!hasTrackedFieldChange.current) {
         hasTrackedFieldChange.current = true;
         track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
