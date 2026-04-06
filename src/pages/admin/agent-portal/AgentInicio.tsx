@@ -37,6 +37,7 @@ const AgentInicio = () => {
   const [addProspectoOpen, setAddProspectoOpen] = useState(false);
   const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
   const [rescheduleData, setRescheduleData] = useState<{ prospectoId: string; proyectoId: number; prospectoName: string; proyectoName: string } | null>(null);
+  const [trainingDialogOpen, setTrainingDialogOpen] = useState(false);
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
   const queryClient = useQueryClient();
