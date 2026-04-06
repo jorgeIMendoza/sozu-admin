@@ -249,6 +249,7 @@ export default function InmobPipeline() {
   const [selectedProyectos, setSelectedProyectos] = useState<string[]>([]);
   const [selectedTipoOferta, setSelectedTipoOferta] = useState<string>("all");
   const [searchOfertaId, setSearchOfertaId] = useState<string>("");
+  const [searchProspecto, setSearchProspecto] = useState<string>("");
 
   // Month filter: array of "YYYY-M" keys (M is 0-indexed)
   const currentMonthKey = getCurrentMonthKey();
@@ -525,6 +526,10 @@ export default function InmobPipeline() {
         });
       }
     }
+    if (searchProspecto.trim()) {
+      const q = searchProspecto.trim().toLowerCase();
+      result = result.filter((o) => (o.lead_nombre || "").toLowerCase().includes(q));
+    }
     if (selectedAgentes.length > 0) {
       result = result.filter((o) => selectedAgentes.includes(o.email_creador));
     }
@@ -538,7 +543,7 @@ export default function InmobPipeline() {
       result = result.filter((o) => !!o.id_producto);
     }
     return result;
-  }, [ofertas, selectedAgentes, selectedProyectos, selectedTipoOferta, searchOfertaId]);
+  }, [ofertas, selectedAgentes, selectedProyectos, selectedTipoOferta, searchOfertaId, searchProspecto]);
 
   // Auto-open offer detail when offerId param is present (run once)
   const offerIdHandledRef = useRef<string | null>(null);
@@ -631,7 +636,7 @@ export default function InmobPipeline() {
   availableProyectos.forEach((p) => proyNameToId.set(p.nombre, String(p.id)));
   const selectedProyNames = selectedProyectos.map((id) => availableProyectos.find((p) => String(p.id) === id)?.nombre || id);
 
-  const hasActiveFilters = selectedAgentes.length > 0 || selectedProyectos.length > 0 || selectedTipoOferta !== "all" || selectedMonths.length > 0 || searchOfertaId.trim().length > 0;
+  const hasActiveFilters = selectedAgentes.length > 0 || selectedProyectos.length > 0 || selectedTipoOferta !== "all" || selectedMonths.length > 0 || searchOfertaId.trim().length > 0 || searchProspecto.trim().length > 0;
 
   const clearAllFilters = () => {
     setSelectedAgentes([]);
@@ -639,6 +644,7 @@ export default function InmobPipeline() {
     setSelectedTipoOferta("all");
     setSelectedMonths([]);
     setSearchOfertaId("");
+    setSearchProspecto("");
   };
 
   // Month filter label
