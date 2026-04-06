@@ -37,6 +37,9 @@ const AgentInicio = () => {
   const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
+  const queryClient = useQueryClient();
+  const [selectedCita, setSelectedCita] = useState<any>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 
   const nombre = isImpersonating ? (impersonatedAgentName?.split(" ")[0] || "Agente") : (profile?.nombre?.split(" ")[0] || "Agente");
 
