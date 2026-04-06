@@ -706,8 +706,28 @@ export default function Agentes() {
     setCurrentPage(1);
   };
 
-  const handleEdit = (agente: Agente) => {
-    setEditingAgente(agente);
+  const handleEdit = async (agente: Agente) => {
+    // Fetch full persona data including address and fiscal fields
+    const { data: fullPersona, error } = await supabase
+      .from('personas')
+      .select('*')
+      .eq('id', agente.id)
+      .single();
+    
+    if (error || !fullPersona) {
+      toast({ title: "Error", description: "No se pudo cargar la información completa del agente", variant: "destructive" });
+      return;
+    }
+
+    setEditingAgente({
+      ...agente,
+      ...fullPersona,
+      id_inmobiliaria: agente.id_inmobiliaria,
+      inmobiliaria_nombre: agente.inmobiliaria_nombre,
+      entidad_relacionada_id: (agente as any).entidad_relacionada_id,
+      id_tipo_entidad: (agente as any).id_tipo_entidad,
+      porcentaje_comision: (agente as any).porcentaje_comision,
+    });
     setIsEditDialogOpen(true);
   };
 
