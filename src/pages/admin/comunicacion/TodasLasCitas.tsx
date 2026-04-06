@@ -279,7 +279,7 @@ function StackedSlotCard({ items, onSelectSlot }: {
             <div className="flex items-center gap-1.5 truncate">
               <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
               <span className="font-semibold text-[11px] text-foreground truncate">
-                {totalCitas > 0 ? `${totalCitas} cita${totalCitas > 1 ? "s" : ""}` : items[0].slot.config?.nombre || "Slots"}
+                {items.length} elemento{items.length > 1 ? "s" : ""}
               </span>
             </div>
             <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">
@@ -288,16 +288,16 @@ function StackedSlotCard({ items, onSelectSlot }: {
           </div>
 
           <div className="mt-1 space-y-0.5">
-            {citaItems.slice(0, 2).map((item, i) => (
+            {items.slice(0, 2).map((item, i) => (
               <div key={i} className="flex items-center gap-1 text-[9px] text-muted-foreground truncate">
-                <div className="flex items-center justify-center w-3.5 h-3.5 rounded-full bg-primary/15 text-primary text-[7px] font-bold flex-shrink-0">
-                  {getInitials(item.slot.cita?.nombre_invitado || null)}
-                </div>
-                <span className="truncate">{item.slot.cita?.nombre_invitado || item.slot.cita?.email_invitado || "Invitado"}</span>
+                <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0",
+                  item.slot.type === "cita" ? "bg-blue-500" : "bg-muted-foreground/40"
+                )} />
+                <span className="truncate font-medium">{item.slot.config?.nombre || (item.slot.type === "cita" ? "Cita" : "Disponible")}</span>
               </div>
             ))}
-            {totalCitas > 2 && (
-              <div className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">+{totalCitas - 2} más</div>
+            {items.length > 2 && (
+              <div className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">+{items.length - 2} más</div>
             )}
           </div>
         </div>
