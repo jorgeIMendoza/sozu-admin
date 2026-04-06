@@ -562,9 +562,7 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
             : cita
               ? cita.id_estatus_cita === 3
                 ? "bg-green-50 dark:bg-green-950/20"
-                : cita.id_estatus_cita === 2
-                  ? "bg-yellow-50 dark:bg-yellow-950/20"
-                  : "bg-blue-50 dark:bg-blue-950/20"
+                : "bg-blue-50 dark:bg-blue-950/20"
               : "bg-muted/30"
         )}>
           <DialogHeader>
