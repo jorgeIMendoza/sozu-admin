@@ -180,6 +180,72 @@ function AgentTrainingCell({ personaId }: { personaId: number }) {
           })}
         </div>
       )}
+
+      {/* Detail dialog */}
+      <Dialog open={!!selectedCita} onOpenChange={(open) => { if (!open) setSelectedCita(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detalle de Capacitación</DialogTitle>
+          </DialogHeader>
+          {selectedCita && (() => {
+            const configName = getConfigName(selectedCita.id_configuracion_cita);
+            const hasValidTime = selectedCita.hora_inicio && selectedCita.hora_inicio.slice(0, 5) !== '00:00';
+            const timeStr = hasValidTime
+              ? `${selectedCita.hora_inicio?.slice(0, 5)}${selectedCita.hora_fin && selectedCita.hora_fin.slice(0, 5) !== '00:00' ? ` - ${selectedCita.hora_fin.slice(0, 5)}` : ''}`
+              : null;
+
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  {renderCitaBadge(selectedCita)}
+                </div>
+                <div className="space-y-3 bg-muted/50 rounded-lg p-3">
+                  <div className="flex items-start gap-2.5">
+                    <Calendar className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Fecha</p>
+                      <p className="text-sm font-medium">
+                        {new Date(selectedCita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                  {timeStr && (
+                    <div className="flex items-start gap-2.5">
+                      <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Horario</p>
+                        <p className="text-sm font-medium">{timeStr}</p>
+                      </div>
+                    </div>
+                  )}
+                  {selectedCita.ubicacion && (
+                    <div className="flex items-start gap-2.5">
+                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Ubicación</p>
+                        <p className="text-sm font-medium">{selectedCita.ubicacion}</p>
+                      </div>
+                    </div>
+                  )}
+                  {configName && (
+                    <div className="pt-2 border-t border-border">
+                      <p className="text-xs text-muted-foreground mb-1">Configuración</p>
+                      <p className="text-sm font-medium">{configName}</p>
+                    </div>
+                  )}
+                  {selectedCita.fecha_asistencia && (
+                    <div className="pt-2 border-t border-border">
+                      <p className="text-xs text-muted-foreground mb-1">Fecha de asistencia</p>
+                      <p className="text-sm font-medium">{new Date(selectedCita.fecha_asistencia).toLocaleString('es-MX')}</p>
+                    </div>
+                  )}
+                </div>
+                {renderCitaActions(selectedCita)}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
