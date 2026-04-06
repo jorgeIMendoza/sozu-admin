@@ -806,6 +806,39 @@ export default function InmobConfiguracion() {
         </CardContent>
       </Card>
     </div>
+
+      {/* Dialog para nuevo representante legal */}
+      <Dialog open={isNewRepLegalDialogOpen} onOpenChange={setIsNewRepLegalDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nuevo Representante Legal</DialogTitle>
+          </DialogHeader>
+          <PersonForm
+            onSubmit={(data) => createRepLegalMutation.mutate(data)}
+            isLoading={createRepLegalMutation.isPending}
+            onCancel={() => setIsNewRepLegalDialogOpen(false)}
+            entityType="representante_legal"
+            restrictToBasicTab={true}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para nuevo representante comercial */}
+      <Dialog open={isNewRepComDialogOpen} onOpenChange={setIsNewRepComDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nuevo Representante Comercial</DialogTitle>
+          </DialogHeader>
+          <PersonForm
+            onSubmit={(data) => createRepComMutation.mutate(data)}
+            isLoading={createRepComMutation.isPending}
+            onCancel={() => setIsNewRepComDialogOpen(false)}
+            entityType="representante_legal"
+            restrictToBasicTab={true}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
