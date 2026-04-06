@@ -29,9 +29,17 @@ const PROJECT_COLORS = [
   { bg: "bg-cyan-50", border: "border-cyan-200", text: "text-cyan-700", badge: "bg-cyan-100 text-cyan-800", dot: "bg-cyan-500" },
 ];
 
+interface RescheduleData {
+  prospectoId: string;
+  proyectoId: number;
+  prospectoName: string;
+  proyectoName: string;
+}
+
 interface AgendarCitaShowroomDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  rescheduleData?: RescheduleData | null;
 }
 
 interface ProspectoAgrupado {
@@ -41,7 +49,7 @@ interface ProspectoAgrupado {
   proyectos: { id: number; nombre: string }[];
 }
 
-export function AgendarCitaShowroomDialog({ open, onOpenChange }: AgendarCitaShowroomDialogProps) {
+export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }: AgendarCitaShowroomDialogProps) {
   const { profile, user } = useAuth();
   const { impersonatedAgentPersonaId, impersonatedAgentEmail } = useAgentImpersonation();
   const effectivePersonaId = impersonatedAgentPersonaId || profile?.id_persona;
