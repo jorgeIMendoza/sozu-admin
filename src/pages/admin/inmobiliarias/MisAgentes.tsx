@@ -605,7 +605,7 @@ export default function MisAgentes() {
                                       .select('*')
                                       .eq('id', agente.id)
                                       .single();
-                                    setEditingAgente(fullPersona ? { ...agente, ...fullPersona, id_inmobiliaria: agente.id_inmobiliaria } as any : agente);
+                                    setEditingAgente(fullPersona ? { ...agente, ...fullPersona } as any : agente);
                                     setIsEditDialogOpen(true);
                                   }}
                                 >
