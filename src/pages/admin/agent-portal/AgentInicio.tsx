@@ -524,6 +524,137 @@ const AgentInicio = () => {
           <AgendarCitaShowroomDialog open={agendarCitaOpen} onOpenChange={setAgendarCitaOpen} />
         </>
       )}
+
+      {/* Cita Detail Modal */}
+      <Dialog open={!!selectedCita} onOpenChange={(open) => { if (!open) { setSelectedCita(null); setCancelConfirmOpen(false); } }}>
+        <DialogContent className="sm:max-w-md bg-white text-gray-900">
+          <DialogHeader>
+            <DialogTitle className="text-lg">
+              {selectedCita?.tipos_cita?.nombre || 'Cita'}
+              {selectedCita?.proyectos?.nombre ? ` · ${selectedCita.proyectos.nombre}` : ''}
+            </DialogTitle>
+            <DialogDescription className="sr-only">Detalle de la cita</DialogDescription>
+          </DialogHeader>
+          {selectedCita && (() => {
+            const time = formatTime(selectedCita);
+            const badge = getCitaStatusBadge(selectedCita);
+            const isPast = selectedCita.fecha < today;
+            const isCancelled = selectedCita.estatus === 'cancelada' || selectedCita.estatus === 'no_asistio';
+            const canModify = !isPast && !isCancelled;
+
+            return (
+              <div className="space-y-4">
+                {/* Status */}
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                  {selectedCita.estatus_cita?.nombre && (
+                    <span className="text-xs text-gray-500">{selectedCita.estatus_cita.nombre}</span>
+                  )}
+                </div>
+
+                {/* Details */}
+                <div className="space-y-3 bg-gray-50 rounded-lg p-3">
+                  {selectedCita.personas?.nombre_legal && (
+                    <div className="flex items-start gap-2.5">
+                      <UserPlus className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500">Prospecto</p>
+                        <p className="text-sm font-medium">{selectedCita.personas.nombre_legal}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-start gap-2.5">
+                    <Calendar className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-500">Fecha</p>
+                      <p className="text-sm font-medium">
+                        {new Date(selectedCita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                  {time && (
+                    <div className="flex items-start gap-2.5">
+                      <Clock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500">Horario</p>
+                        <p className="text-sm font-medium">{time}</p>
+                      </div>
+                    </div>
+                  )}
+                  {selectedCita.ubicacion && (
+                    <div className="flex items-start gap-2.5">
+                      <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500">Ubicación</p>
+                        <p className="text-sm font-medium">{selectedCita.ubicacion}</p>
+                      </div>
+                    </div>
+                  )}
+                  {selectedCita.notas && (
+                    <div className="pt-2 border-t border-gray-200">
+                      <p className="text-xs text-gray-500 mb-1">Notas</p>
+                      <p className="text-sm text-gray-700">{selectedCita.notas}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions */}
+                {canModify && (
+                  cancelConfirmOpen ? (
+                    <div className="space-y-2 bg-red-50 rounded-lg p-3">
+                      <p className="text-sm font-medium text-red-800">¿Estás seguro de cancelar esta cita?</p>
+                      <p className="text-xs text-red-600">Esta acción no se puede deshacer.</p>
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => cancelCitaMutation.mutate(selectedCita.id)}
+                          disabled={cancelCitaMutation.isPending}
+                        >
+                          {cancelCitaMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Ban className="h-3 w-3 mr-1" />}
+                          Sí, cancelar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCancelConfirmOpen(false)}
+                        >
+                          No, volver
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                        onClick={() => setCancelConfirmOpen(true)}
+                      >
+                        <Ban className="h-4 w-4 mr-1.5" />
+                        Cancelar cita
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setSelectedCita(null);
+                          setAgendarCitaOpen(true);
+                        }}
+                      >
+                        <CalendarClock className="h-4 w-4 mr-1.5" />
+                        Reagendar
+                      </Button>
+                    </div>
+                  )
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
       </div>
     </div>
   );
