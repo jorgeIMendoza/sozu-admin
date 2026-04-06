@@ -194,7 +194,6 @@ function SlotCard({ slot, calendarStatus, onClick, onDragStart }: {
                   {slot.citas.map((c, i) => {
                     const statusColor = c.id_estatus_cita === 3 ? "bg-green-500"
                       : c.id_estatus_cita === 4 ? "bg-red-500"
-                      : c.id_estatus_cita === 2 ? "bg-yellow-500"
                       : "bg-blue-500";
                     return <div key={i} className={cn("h-full", statusColor)} style={{ width: `${100 / slot.citas!.length}%` }} />;
                   })}
@@ -331,9 +330,7 @@ function StackedSlotCard({ items, onSelectSlot }: {
                     "flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold flex-shrink-0",
                     cita.id_estatus_cita === 3
                       ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
-                      : cita.id_estatus_cita === 2
-                        ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400"
-                        : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+                      : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
                   )}>
                     {getInitials(cita.nombre_invitado)}
                   </div>
@@ -357,7 +354,6 @@ function StackedSlotCard({ items, onSelectSlot }: {
                     variant="outline"
                     className={cn("text-[9px] px-1.5 py-0 h-4 flex-shrink-0",
                       cita?.id_estatus_cita === 3 ? "border-green-300 text-green-700 dark:border-green-700 dark:text-green-400" :
-                      cita?.id_estatus_cita === 2 ? "border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-400" :
                       "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-400"
                     )}
                   >
