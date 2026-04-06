@@ -540,6 +540,14 @@ const AgentInicio = () => {
             onOpenChange={(v) => { setAgendarCitaOpen(v); if (!v) setRescheduleData(null); }}
             rescheduleData={rescheduleData}
           />
+          {personaId && (
+            <AgentOnboardingStepDialog
+              step="training"
+              personaId={personaId}
+              open={trainingDialogOpen}
+              onOpenChange={setTrainingDialogOpen}
+            />
+          )}
         </>
       )}
 
