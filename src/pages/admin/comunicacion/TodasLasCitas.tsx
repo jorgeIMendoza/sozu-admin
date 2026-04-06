@@ -430,7 +430,7 @@ function RsvpProgressBar({ citas, maxInvitados, rsvpMap, rsvpLoading }: {
   const colorMap: Record<string, string> = {
     accepted: "bg-green-500",
     declined: "bg-red-500",
-    tentative: "bg-yellow-500",
+    tentative: "bg-blue-500",
     needsAction: "bg-blue-500",
   };
 
