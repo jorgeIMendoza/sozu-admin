@@ -426,7 +426,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarDays className="h-5 w-5" />
-              Agendar Cita al Showroom
+              {rescheduleData ? "Reagendar Cita" : "Agendar Cita al Showroom"}
             </DialogTitle>
           </DialogHeader>
 
@@ -434,37 +434,45 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
             {/* Prospecto */}
             <div className="space-y-2">
               <Label>Prospecto <span className="text-destructive">*</span></Label>
-              {prospectoOptions.length > 10 ? (
-                <Combobox
-                  value={selectedProspecto}
-                  onValueChange={handleSelectProspecto}
-                  options={prospectoOptions}
-                  placeholder="Seleccionar prospecto..."
-                  searchPlaceholder="Buscar prospecto..."
-                  emptyText="No tienes prospectos asignados"
-                />
+              {rescheduleData ? (
+                <div className="px-3 py-2 rounded-md border border-border bg-muted/30 text-sm font-medium">
+                  {rescheduleData.prospectoName || 'Prospecto'}
+                </div>
               ) : (
-                <Select value={selectedProspecto} onValueChange={handleSelectProspecto}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar prospecto..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {prospectoOptions.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">No tienes prospectos asignados</div>
-                    ) : prospectoOptions.map((p) => (
-                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <>
+                  {prospectoOptions.length > 10 ? (
+                    <Combobox
+                      value={selectedProspecto}
+                      onValueChange={handleSelectProspecto}
+                      options={prospectoOptions}
+                      placeholder="Seleccionar prospecto..."
+                      searchPlaceholder="Buscar prospecto..."
+                      emptyText="No tienes prospectos asignados"
+                    />
+                  ) : (
+                    <Select value={selectedProspecto} onValueChange={handleSelectProspecto}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar prospecto..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {prospectoOptions.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No tienes prospectos asignados</div>
+                        ) : prospectoOptions.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAddProspectoOpen(true)}
+                    className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Crear prospecto
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                onClick={() => setAddProspectoOpen(true)}
-                className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Crear prospecto
-              </button>
             </div>
 
             {/* Existing appointments for all projects */}
