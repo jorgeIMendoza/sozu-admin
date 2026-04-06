@@ -549,6 +549,52 @@ export default function InmobConfiguracion() {
                     </p>
                   </div>
                 </div>
+
+                {/* Representantes */}
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Representante Legal</Label>
+                    {persona.id_entidad_relacionada_rep_leg ? (
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-emerald-500" />
+                        <p className="font-medium text-foreground text-sm">{repLegalNombre || "Cargando..."}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsNewRepLegalDialogOpen(true)}
+                          className="gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Crear representante legal
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Representante Comercial</Label>
+                    {persona.id_entidad_relacionada_rep_com ? (
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-emerald-500" />
+                        <p className="font-medium text-foreground text-sm">{repComNombre || "Cargando..."}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsNewRepComDialogOpen(true)}
+                          className="gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Crear representante comercial
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </TabsContent>
 
               {/* Tab 2: Dirección */}
