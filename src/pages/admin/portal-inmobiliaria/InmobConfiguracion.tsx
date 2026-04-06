@@ -136,7 +136,108 @@ export default function InmobConfiguracion() {
     },
   });
 
-  // Pre-fill fiscal form when persona loads
+  // Fetch representante legal name
+  const { data: repLegalNombre } = useQuery({
+    queryKey: ["inmob-config-rep-legal", persona?.id_entidad_relacionada_rep_leg],
+    queryFn: async () => {
+      const repLegId = persona?.id_entidad_relacionada_rep_leg;
+      if (!repLegId) return null;
+      const { data } = await supabase
+        .from("entidades_relacionadas")
+        .select("personas!entidades_relacionadas_id_persona_fkey(nombre_legal)")
+        .eq("id", repLegId)
+        .single() as any;
+      return data?.personas?.nombre_legal || null;
+    },
+    enabled: !!persona?.id_entidad_relacionada_rep_leg,
+  });
+
+  // Fetch representante comercial name
+  const { data: repComNombre } = useQuery({
+    queryKey: ["inmob-config-rep-com", persona?.id_entidad_relacionada_rep_com],
+    queryFn: async () => {
+      const repComId = persona?.id_entidad_relacionada_rep_com;
+      if (!repComId) return null;
+      const { data } = await supabase
+        .from("entidades_relacionadas")
+        .select("personas!entidades_relacionadas_id_persona_fkey(nombre_legal)")
+        .eq("id", repComId)
+        .single() as any;
+      return data?.personas?.nombre_legal || null;
+    },
+    enabled: !!persona?.id_entidad_relacionada_rep_com,
+  });
+
+  // Create representante legal mutation
+  const createRepLegalMutation = useMutation({
+    mutationFn: async (personData: any) => {
+      const { entityType, representativeId, commercialRepresentativeId, tempBankAccounts, tempBeneficiaries, pendingDocuments, inmobiliariaId, ...cleanPersonData } = personData;
+      const { data: personResult, error: personError } = await supabase
+        .from("personas")
+        .insert([{ ...cleanPersonData, tipo_persona: "pf" }])
+        .select()
+        .single();
+      if (personError) throw personError;
+      const { data: entidadResult, error: entidadError } = await supabase
+        .from("entidades_relacionadas")
+        .insert([{ id_persona: personResult.id, id_tipo_entidad: 1, id_proyecto: null, activo: true }])
+        .select()
+        .single();
+      if (entidadError) throw entidadError;
+      // Link to inmobiliaria persona
+      const { error: linkError } = await supabase
+        .from("personas")
+        .update({ id_entidad_relacionada_rep_leg: entidadResult.id })
+        .eq("id", personaId);
+      if (linkError) throw linkError;
+      return entidadResult.id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-persona"] });
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-rep-legal"] });
+      setIsNewRepLegalDialogOpen(false);
+      toast.success("Representante legal creado correctamente.");
+    },
+    onError: (error: any) => {
+      toast.error(`Error al crear representante legal: ${error.message}`);
+    },
+  });
+
+  // Create representante comercial mutation
+  const createRepComMutation = useMutation({
+    mutationFn: async (personData: any) => {
+      const { entityType, representativeId, commercialRepresentativeId, tempBankAccounts, tempBeneficiaries, pendingDocuments, inmobiliariaId, ...cleanPersonData } = personData;
+      const { data: personResult, error: personError } = await supabase
+        .from("personas")
+        .insert([{ ...cleanPersonData, tipo_persona: "pf" }])
+        .select()
+        .single();
+      if (personError) throw personError;
+      const { data: entidadResult, error: entidadError } = await supabase
+        .from("entidades_relacionadas")
+        .insert([{ id_persona: personResult.id, id_tipo_entidad: 21, id_proyecto: null, activo: true }])
+        .select()
+        .single();
+      if (entidadError) throw entidadError;
+      const { error: linkError } = await supabase
+        .from("personas")
+        .update({ id_entidad_relacionada_rep_com: entidadResult.id })
+        .eq("id", personaId);
+      if (linkError) throw linkError;
+      return entidadResult.id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-persona"] });
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-rep-com"] });
+      setIsNewRepComDialogOpen(false);
+      toast.success("Representante comercial creado correctamente.");
+    },
+    onError: (error: any) => {
+      toast.error(`Error al crear representante comercial: ${error.message}`);
+    },
+  });
+
+
   useEffect(() => {
     if (persona && !isEditingFiscal) {
       setFiscalForm({ ...persona });
