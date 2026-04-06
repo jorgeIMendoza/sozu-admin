@@ -720,14 +720,12 @@ export default function Agentes() {
     }
 
     setEditingAgente({
-      ...agente,
       ...fullPersona,
       id_inmobiliaria: agente.id_inmobiliaria,
       inmobiliaria_nombre: agente.inmobiliaria_nombre,
       entidad_relacionada_id: (agente as any).entidad_relacionada_id,
-      id_tipo_entidad: (agente as any).id_tipo_entidad,
       porcentaje_comision: (agente as any).porcentaje_comision,
-    });
+    } as any);
     setIsEditDialogOpen(true);
   };
 
