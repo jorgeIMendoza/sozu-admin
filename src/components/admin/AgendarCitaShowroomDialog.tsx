@@ -158,7 +158,10 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
   });
 
   // Fetch availability configs for ALL projects of the prospect
-  const projectIds = selectedProspectoData?.proyectos.map(p => p.id) || [];
+  const baseProjectIds = selectedProspectoData?.proyectos.map(p => p.id) || [];
+  const projectIds = rescheduleData && !baseProjectIds.includes(rescheduleData.proyectoId)
+    ? [...baseProjectIds, rescheduleData.proyectoId]
+    : baseProjectIds;
 
   const { data: availabilityData, isLoading: availLoading } = useQuery({
     queryKey: ["showroom-availability-multi", projectIds],
