@@ -722,6 +722,20 @@ export default function InmobPipeline() {
               </div>
             </div>
 
+            {/* Prospect search */}
+            <div className="min-w-[180px]">
+              <label className="text-sm font-medium mb-1 block">Prospecto</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar prospecto..."
+                  value={searchProspecto}
+                  onChange={(e) => setSearchProspecto(e.target.value)}
+                  className="pl-8 h-10"
+                />
+              </div>
+            </div>
+
 
             <div className="min-w-[180px]">
               <label className="text-sm font-medium mb-1 block">Periodo</label>
