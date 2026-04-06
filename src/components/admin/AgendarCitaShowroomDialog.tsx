@@ -371,8 +371,20 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
     setSelectedConfigId(null);
   };
 
-  // Auto-select project when prospect has only one
+  // Pre-fill when rescheduling
   useEffect(() => {
+    if (open && rescheduleData) {
+      setSelectedProspecto(rescheduleData.prospectoId);
+      setSelectedProyectoId(rescheduleData.proyectoId);
+      setSelectedDate("");
+      setSelectedHour("");
+      setSelectedConfigId(null);
+    }
+  }, [open, rescheduleData]);
+
+  // Auto-select project when prospect has only one (skip if rescheduling)
+  useEffect(() => {
+    if (rescheduleData) return;
     if (selectedProspecto && selectedProspectoData && selectedProspectoData.proyectos.length === 1 && !selectedProyectoId) {
       handleSelectProject(selectedProspectoData.proyectos[0].id);
     }
