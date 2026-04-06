@@ -22,8 +22,8 @@ import { toast } from "sonner";
 
 const STATUS_MAP: Record<number, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; color: string }> = {
   1: { label: "Agendada", variant: "outline", color: "text-primary" },
-  2: { label: "Quizá", variant: "secondary", color: "text-yellow-600" },
-  3: { label: "Asistirá", variant: "default", color: "text-green-600" },
+  2: { label: "Agendada", variant: "outline", color: "text-primary" },
+  3: { label: "Confirmada", variant: "default", color: "text-green-600" },
   4: { label: "NO asistirá", variant: "destructive", color: "text-red-600" },
 };
 
@@ -194,7 +194,6 @@ function SlotCard({ slot, calendarStatus, onClick, onDragStart }: {
                   {slot.citas.map((c, i) => {
                     const statusColor = c.id_estatus_cita === 3 ? "bg-green-500"
                       : c.id_estatus_cita === 4 ? "bg-red-500"
-                      : c.id_estatus_cita === 2 ? "bg-yellow-500"
                       : "bg-blue-500";
                     return <div key={i} className={cn("h-full", statusColor)} style={{ width: `${100 / slot.citas!.length}%` }} />;
                   })}
@@ -226,11 +225,9 @@ function SlotCard({ slot, calendarStatus, onClick, onDragStart }: {
     ? "bg-red-50 border-red-300 dark:bg-red-950/30 dark:border-red-700 hover:shadow-md"
     : cita.id_estatus_cita === 3
       ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-700 hover:shadow-md"
-      : cita.id_estatus_cita === 2
-        ? "bg-yellow-50 border-yellow-300 dark:bg-yellow-950/30 dark:border-yellow-700 hover:shadow-md"
-        : hasInvitados
-          ? "bg-blue-50 border-blue-300 dark:bg-blue-950/30 dark:border-blue-700 hover:shadow-md"
-          : "bg-secondary/50 border-secondary hover:bg-secondary/80";
+      : hasInvitados
+        ? "bg-blue-50 border-blue-300 dark:bg-blue-950/30 dark:border-blue-700 hover:shadow-md"
+        : "bg-secondary/50 border-secondary hover:bg-secondary/80";
 
   return (
     <div
@@ -243,15 +240,10 @@ function SlotCard({ slot, calendarStatus, onClick, onDragStart }: {
       <div className="flex items-center gap-1.5 font-semibold truncate text-foreground">
         {isCancelledCalendar ? (
           <AlertTriangle className="h-3 w-3 flex-shrink-0 text-destructive" />
-        ) : calendarStatus === "verified" ? (
-          <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-green-600" />
-        ) : calendarStatus === "pending" ? (
-          <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin text-muted-foreground" />
         ) : (
           <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0",
-            cita.id_estatus_cita === 1 ? "bg-blue-500" :
-            cita.id_estatus_cita === 2 ? "bg-yellow-500" :
-            cita.id_estatus_cita === 3 ? "bg-green-500" : "bg-muted-foreground"
+            cita.id_estatus_cita === 3 ? "bg-green-500" :
+            hasInvitados ? "bg-blue-500" : "bg-muted-foreground"
           )} />
         )}
         <span className="truncate">{slot.config?.nombre || "Cita"}</span>
@@ -338,9 +330,7 @@ function StackedSlotCard({ items, onSelectSlot }: {
                     "flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold flex-shrink-0",
                     cita.id_estatus_cita === 3
                       ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
-                      : cita.id_estatus_cita === 2
-                        ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400"
-                        : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+                      : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
                   )}>
                     {getInitials(cita.nombre_invitado)}
                   </div>
@@ -352,10 +342,10 @@ function StackedSlotCard({ items, onSelectSlot }: {
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">
-                    {isCita ? (cita?.nombre_invitado || cita?.email_invitado || "Invitado") : (slot.config?.nombre || "Disponible")}
+                    {slot.config?.nombre || (isCita ? "Cita" : "Disponible")}
                   </p>
                   <p className="text-[10px] text-muted-foreground truncate">
-                    {isCita && cita ? `${cita.hora_inicio} – ${cita.hora_fin}` : slot.config?.id_usuario_email || ""}
+                    {isCita && cita ? (cita.nombre_invitado || cita.email_invitado || slot.config?.id_usuario_email || "") : (slot.config?.id_usuario_email || "")}
                   </p>
                 </div>
 
@@ -364,7 +354,6 @@ function StackedSlotCard({ items, onSelectSlot }: {
                     variant="outline"
                     className={cn("text-[9px] px-1.5 py-0 h-4 flex-shrink-0",
                       cita?.id_estatus_cita === 3 ? "border-green-300 text-green-700 dark:border-green-700 dark:text-green-400" :
-                      cita?.id_estatus_cita === 2 ? "border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-400" :
                       "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-400"
                     )}
                   >
@@ -402,11 +391,11 @@ const RSVP_MAP: Record<string, { label: string; borderClass: string; textClass: 
     avatarClass: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
   },
   tentative: {
-    label: "Quizá",
-    borderClass: "border-yellow-300 dark:border-yellow-700",
-    textClass: "text-yellow-700 dark:text-yellow-400",
-    bgClass: "bg-yellow-50 dark:bg-yellow-950/20",
-    avatarClass: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400",
+    label: "Agendada",
+    borderClass: "border-blue-300 dark:border-blue-700",
+    textClass: "text-blue-700 dark:text-blue-400",
+    bgClass: "bg-blue-50 dark:bg-blue-950/20",
+    avatarClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
   },
   needsAction: {
     label: "Agendada",
@@ -441,7 +430,7 @@ function RsvpProgressBar({ citas, maxInvitados, rsvpMap, rsvpLoading }: {
   const colorMap: Record<string, string> = {
     accepted: "bg-green-500",
     declined: "bg-red-500",
-    tentative: "bg-yellow-500",
+    tentative: "bg-blue-500",
     needsAction: "bg-blue-500",
   };
 
@@ -573,9 +562,7 @@ function SlotDetailDialog({ slot, calendarStatus, open, onClose }: {
             : cita
               ? cita.id_estatus_cita === 3
                 ? "bg-green-50 dark:bg-green-950/20"
-                : cita.id_estatus_cita === 2
-                  ? "bg-yellow-50 dark:bg-yellow-950/20"
-                  : "bg-blue-50 dark:bg-blue-950/20"
+                : "bg-blue-50 dark:bg-blue-950/20"
               : "bg-muted/30"
         )}>
           <DialogHeader>
@@ -1143,8 +1130,13 @@ export default function TodasLasCitas() {
   }, [filteredCitas]);
 
   const filteredHorarios = useMemo(() => {
-    if (ownerFilter === "all") return horarios;
-    return horarios.filter(h => {
+    // Filter out horarios whose config no longer exists (obsolete/test configs)
+    const withActiveConfig = horarios.filter(h => {
+      if (!h.id_configuracion_cita) return false;
+      return configMap.has(h.id_configuracion_cita);
+    });
+    if (ownerFilter === "all") return withActiveConfig;
+    return withActiveConfig.filter(h => {
       const cfg = h.id_configuracion_cita ? configMap.get(h.id_configuracion_cita) : null;
       return cfg?.id_usuario_email === ownerFilter || h.id_usuario_email === ownerFilter;
     });
@@ -1419,16 +1411,8 @@ export default function TodasLasCitas() {
           Agendada
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
-          Pendiente
-        </span>
-        <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
           Confirmada
-        </span>
-        <span className="flex items-center gap-1.5">
-          <AlertTriangle className="h-3 w-3 text-destructive" />
-          No en Calendar
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded ring-2 ring-orange-400 bg-orange-50" />
