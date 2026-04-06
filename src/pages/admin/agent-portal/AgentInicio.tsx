@@ -207,6 +207,25 @@ const AgentInicio = () => {
     staleTime: 0,
   });
 
+  // Real-time subscription for citas updates
+  useEffect(() => {
+    if (!personaId) return;
+    const channel = supabase
+      .channel('agent-citas-realtime')
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'reservas_citas' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['agent-citas', personaId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [personaId, queryClient]);
+
   const today = new Date().toISOString().split('T')[0];
   const citasProximas = citas.filter((c: any) => c.fecha >= today);
   const citasHistorial = citas.filter((c: any) => c.fecha < today).slice(0, 5);
