@@ -227,6 +227,38 @@ const AgentInicio = () => {
     return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   };
 
+  const hasValidTime = (time: string | null | undefined) => {
+    if (!time) return false;
+    const t = time.slice(0, 5);
+    return t !== '00:00';
+  };
+
+  const formatTime = (cita: any) => {
+    if (!hasValidTime(cita.hora_inicio)) return null;
+    const start = cita.hora_inicio?.slice(0, 5);
+    const end = hasValidTime(cita.hora_fin) ? cita.hora_fin.slice(0, 5) : null;
+    return end ? `${start} - ${end}` : start;
+  };
+
+  const cancelCitaMutation = useMutation({
+    mutationFn: async (citaId: number) => {
+      const { error } = await (supabase as any)
+        .from('reservas_citas')
+        .update({ estatus: 'cancelada', id_estatus_cita: null, activo: false })
+        .eq('id', citaId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-citas'] });
+      setSelectedCita(null);
+      setCancelConfirmOpen(false);
+      toast.success('Cita cancelada exitosamente');
+    },
+    onError: () => {
+      toast.error('Error al cancelar la cita');
+    },
+  });
+
   const getStatusLabel = (statusId: number) => {
     switch (statusId) {
       case 3: return "Oferta aprobada";
