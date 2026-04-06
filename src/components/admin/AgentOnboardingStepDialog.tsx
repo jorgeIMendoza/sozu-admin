@@ -2775,7 +2775,14 @@ function StepForm({ step, persona, personaId, onSaved, onTrackSave, onTrackField
             Atrás
           </button>
         )}
-        {!isDocTab && (
+        {isDocTab && isLastTab ? (
+          <button
+            onClick={() => onOpenChange(false)}
+            className="flex-1 py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2"
+          >
+            Finalizar
+          </button>
+        ) : !isDocTab && (
           <button
             onClick={isLastTab ? handleSave : handleNextTab}
             disabled={saving}
