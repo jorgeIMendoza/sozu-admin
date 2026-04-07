@@ -608,6 +608,9 @@ export default function ConfiguracionCitas() {
           correos_enterado_fijos: correosEnteradoFijos,
           round_robin_enterados: roundRobinEnterados,
           descripcion_invitacion: descripcionInvitacion || null,
+          ubicacion_direccion: ubicacionDireccion || null,
+          ubicacion_latitud: ubicacionLatitud,
+          ubicacion_longitud: ubicacionLongitud,
           fecha_fin_recurrencia: fechaFinRecurrencia
             ? `${fechaFinRecurrencia.getFullYear()}-${String(fechaFinRecurrencia.getMonth() + 1).padStart(2, "0")}-${String(fechaFinRecurrencia.getDate()).padStart(2, "0")}`
             : null,
