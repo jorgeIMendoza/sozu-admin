@@ -183,16 +183,19 @@ Deno.serve(async (req) => {
     console.log(`Sending notification for ${tipo_evento} to ${filteredUsers.length} users`);
 
     console.log('Notification payload:', JSON.stringify(notificationPayload));
+    const incomingAuthHeader = req.headers.get('authorization') || req.headers.get('Authorization');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    if (!supabaseAnonKey) {
-      throw new Error('SUPABASE_ANON_KEY no configurada');
+    const downstreamAuthHeader = incomingAuthHeader || (supabaseAnonKey ? `Bearer ${supabaseAnonKey}` : null);
+
+    if (!downstreamAuthHeader || !supabaseAnonKey) {
+      throw new Error('Faltan credenciales para invocar enviar-notificacion');
     }
 
     const notifResponse = await fetch(`${supabaseUrl}/functions/v1/enviar-notificacion`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Authorization': downstreamAuthHeader,
         'apikey': supabaseAnonKey,
       },
       body: JSON.stringify(notificationPayload),
