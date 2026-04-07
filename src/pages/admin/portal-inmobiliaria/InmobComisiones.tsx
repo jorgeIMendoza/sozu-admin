@@ -109,7 +109,7 @@ function ClienteCell({ clientes }: { clientes: ClienteInfo[] }) {
 }
 
 /* ───── Factura upload button for external inmobiliarias ───── */
-function FacturaUploadButton({ cuentaId, inmobEmail, personaId, onUploaded }: { cuentaId: number; inmobEmail: string; personaId: number; onUploaded: () => void }) {
+function FacturaUploadButton({ cuentaId, inmobEmail, personaId, onUploaded, disabled: externalDisabled }: { cuentaId: number; inmobEmail: string; personaId: number; onUploaded: () => void; disabled?: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -159,7 +159,7 @@ function FacturaUploadButton({ cuentaId, inmobEmail, personaId, onUploaded }: { 
         variant="ghost"
         size="sm"
         className="h-7 gap-1 text-xs text-muted-foreground"
-        disabled={uploading}
+        disabled={uploading || externalDisabled}
         onClick={() => fileRef.current?.click()}
       >
         {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
