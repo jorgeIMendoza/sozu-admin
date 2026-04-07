@@ -518,10 +518,18 @@ export default function InmobComisiones() {
                 </div>
               </div>
 
-              {selectedComision.facturaUrl && (
+              {selectedComision.facturaUrl ? (
                 <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => { setPdfUrl(selectedComision.facturaUrl); setSelectedComision(null); }}>
                   <FileText className="h-4 w-4" /> Ver factura
                 </Button>
+              ) : !isSozu && (
+                <FacturaUploadButton
+                  cuentaId={selectedComision.cuentaId}
+                  inmobEmail={inmobEmail || ""}
+                  personaId={personaId!}
+                  onUploaded={() => { queryClient.invalidateQueries({ queryKey: ["inmob-comisiones-detail"] }); setSelectedComision(null); }}
+                  disabled={selectedComision.estatus !== "Pendiente factura"}
+                />
               )}
 
               {selectedComision.estatus === "Pagada" && selectedComision.comprobantePagoUrl && (
