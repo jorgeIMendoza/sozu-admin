@@ -198,8 +198,8 @@ Deno.serve(async (req) => {
     };
 
     if (evolutionWaToken) {
-      webhookHeaders['apikey-wa'] = evolutionWaToken;
-      console.log('EVOLUTION_WA_TOKEN included in headers as apikey-wa');
+      webhookHeaders['apikey'] = evolutionWaToken;
+      console.log('EVOLUTION_WA_TOKEN included in headers as apikey');
     } else {
       console.warn('EVOLUTION_WA_TOKEN not configured - WhatsApp may fail with 401');
     }
