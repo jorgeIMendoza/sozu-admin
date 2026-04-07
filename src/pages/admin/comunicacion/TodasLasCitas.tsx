@@ -165,7 +165,7 @@ function DetailRow({ icon: Icon, label, children, className }: {
 }
 
 // ─── Slot Card (Redesigned) ───
-function SlotCard({ slot, calendarStatus, onClick, onDragStart }: {
+function SlotCard({ slot, calendarStatus, onClick, onDragStart, rsvpStatuses }: {
   slot: CalendarSlot; calendarStatus: CalendarStatus; onClick: () => void;
   onDragStart?: (e: React.DragEvent) => void;
   rsvpStatuses?: Map<number, string>;
@@ -221,8 +221,9 @@ function SlotCard({ slot, calendarStatus, onClick, onDragStart }: {
               {slot.citas && slot.citas.length > 0 ? (
                 <div className="flex h-full" style={{ width: `${occupancyPercent}%` }}>
                   {slot.citas.map((c, i) => {
-                    const statusColor = c.id_estatus_cita === 3 ? "bg-green-500"
-                      : c.id_estatus_cita === 4 ? "bg-red-500"
+                    const effectiveEstatus = getEffectiveCitaEstatus(c, rsvpStatuses?.get(c.id));
+                    const statusColor = effectiveEstatus === 3 ? "bg-green-500"
+                      : effectiveEstatus === 4 ? "bg-red-500"
                       : "bg-blue-500";
                     return <div key={i} className={cn("h-full", statusColor)} style={{ width: `${100 / slot.citas!.length}%` }} />;
                   })}
@@ -338,7 +339,7 @@ function getDominantStatus(items: { slot: CalendarSlot; status: CalendarStatus }
   return "disponible";
 }
 
-function StackedSlotCard({ items, onSelectSlot }: {
+function StackedSlotCard({ items, onSelectSlot, rsvpStatuses }: {
   items: { slot: CalendarSlot; status: CalendarStatus }[];
   onSelectSlot: (slot: CalendarSlot) => void;
   rsvpStatuses?: Map<number, string>;
