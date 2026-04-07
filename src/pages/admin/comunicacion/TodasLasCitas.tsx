@@ -437,7 +437,10 @@ function StackedSlotCard({ items, onSelectSlot, rsvpStatuses, ownerNamesMap }: {
                     {slot.config?.nombre || (isCita ? "Cita" : "Disponible")}
                   </p>
                   <p className="text-[10px] text-muted-foreground truncate">
-                    {isCita && cita ? (cita.nombre_invitado || cita.email_invitado || slot.config?.id_usuario_email || "") : (slot.config?.id_usuario_email || "")}
+                    {isCita && cita
+                      ? (cita.nombre_invitado || cita.email_invitado || (ownerNamesMap?.get(slot.config?.id_usuario_email || "") ? `Responsable: ${ownerNamesMap.get(slot.config?.id_usuario_email || "")}` : slot.config?.id_usuario_email || ""))
+                      : (ownerNamesMap?.get(slot.config?.id_usuario_email || "") ? `Responsable: ${ownerNamesMap.get(slot.config?.id_usuario_email || "")}` : slot.config?.id_usuario_email || "")}
+                  </p>
                   </p>
                 </div>
 
