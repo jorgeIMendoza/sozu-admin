@@ -95,9 +95,8 @@ export default function ConfiguracionCitas() {
   const [deleteConfigTarget, setDeleteConfigTarget] = useState<{ id: number; nombre: string } | null>(null);
   const [calendarVerifying, setCalendarVerifying] = useState(false);
   const [calendarAccessStatus, setCalendarAccessStatus] = useState<"idle" | "ok" | "error">("idle");
-  const [ubicacionDireccion, setUbicacionDireccion] = useState<string>("");
-  const [ubicacionLatitud, setUbicacionLatitud] = useState<number | null>(null);
-  const [ubicacionLongitud, setUbicacionLongitud] = useState<number | null>(null);
+  // Per-project locations: Map<projectId, { direccion, latitud, longitud }>
+  const [projectLocations, setProjectLocations] = useState<Map<number, { direccion: string; latitud: number; longitud: number }>>(new Map());
 
   useEffect(() => {
     if (!isSuperAdmin && profile?.email) {
@@ -272,10 +271,15 @@ export default function ConfiguracionCitas() {
       if (!selectedConfigId) return [];
       const { data, error } = await supabase
         .from("configuracion_citas_proyectos")
-        .select("id_proyecto")
+        .select("id_proyecto, ubicacion_direccion, ubicacion_latitud, ubicacion_longitud")
         .eq("id_configuracion_cita", parseInt(selectedConfigId));
       if (error) throw error;
-      return (data || []).map((d: any) => d.id_proyecto);
+      return (data || []).map((d: any) => ({
+        id_proyecto: d.id_proyecto,
+        ubicacion_direccion: d.ubicacion_direccion,
+        ubicacion_latitud: d.ubicacion_latitud,
+        ubicacion_longitud: d.ubicacion_longitud,
+      }));
     },
     enabled: !!selectedConfigId,
   });
@@ -375,9 +379,6 @@ export default function ConfiguracionCitas() {
       setCorreosEnteradoFijos((selectedConfig as any).correos_enterado_fijos || []);
       setRoundRobinEnterados((selectedConfig as any).round_robin_enterados || false);
       setDescripcionInvitacion(selectedConfig.descripcion_invitacion || "");
-      setUbicacionDireccion((selectedConfig as any).ubicacion_direccion || "");
-      setUbicacionLatitud((selectedConfig as any).ubicacion_latitud ? Number((selectedConfig as any).ubicacion_latitud) : null);
-      setUbicacionLongitud((selectedConfig as any).ubicacion_longitud ? Number((selectedConfig as any).ubicacion_longitud) : null);
       setFechaFinRecurrencia(
         (selectedConfig as any).fecha_fin_recurrencia
           ? new Date((selectedConfig as any).fecha_fin_recurrencia + "T00:00:00")
@@ -406,17 +407,26 @@ export default function ConfiguracionCitas() {
       setCorreosEnteradoFijos([]);
       setRoundRobinEnterados(false);
       setDescripcionInvitacion("");
-      setUbicacionDireccion("");
-      setUbicacionLatitud(null);
-      setUbicacionLongitud(null);
+      setProjectLocations(new Map());
       setFechaFinRecurrencia(addMonths(new Date(), 3));
       setCalendarAccessStatus("idle");
     }
   }, [selectedConfig]);
 
-  // Initialize project selection
+  // Initialize project selection and locations from DB
   useEffect(() => {
-    setSelectedProyectoIds(configProyectos);
+    setSelectedProyectoIds(configProyectos.map((cp: any) => cp.id_proyecto));
+    const locMap = new Map<number, { direccion: string; latitud: number; longitud: number }>();
+    configProyectos.forEach((cp: any) => {
+      if (cp.ubicacion_direccion) {
+        locMap.set(cp.id_proyecto, {
+          direccion: cp.ubicacion_direccion,
+          latitud: Number(cp.ubicacion_latitud),
+          longitud: Number(cp.ubicacion_longitud),
+        });
+      }
+    });
+    setProjectLocations(locMap);
   }, [configProyectos]);
 
   // When duration changes, remove invalid slots
@@ -610,9 +620,6 @@ export default function ConfiguracionCitas() {
           correos_enterado_fijos: correosEnteradoFijos,
           round_robin_enterados: roundRobinEnterados,
           descripcion_invitacion: descripcionInvitacion || null,
-          ubicacion_direccion: ubicacionDireccion || null,
-          ubicacion_latitud: ubicacionLatitud,
-          ubicacion_longitud: ubicacionLongitud,
           fecha_fin_recurrencia: fechaFinRecurrencia
             ? `${fechaFinRecurrencia.getFullYear()}-${String(fechaFinRecurrencia.getMonth() + 1).padStart(2, "0")}-${String(fechaFinRecurrencia.getDate()).padStart(2, "0")}`
             : null,
@@ -621,11 +628,20 @@ export default function ConfiguracionCitas() {
         .eq("id", configId);
       if (updateError) throw updateError;
 
-      // 2. Sync projects
+      // 2. Sync projects with per-project locations
       await supabase.from("configuracion_citas_proyectos").delete().eq("id_configuracion_cita", configId);
       if (selectedProyectoIds.length > 0) {
         const { error: projError } = await supabase.from("configuracion_citas_proyectos").insert(
-          selectedProyectoIds.map((pid) => ({ id_configuracion_cita: configId, id_proyecto: pid }))
+          selectedProyectoIds.map((pid) => {
+            const loc = projectLocations.get(pid);
+            return {
+              id_configuracion_cita: configId,
+              id_proyecto: pid,
+              ubicacion_direccion: loc?.direccion || null,
+              ubicacion_latitud: loc?.latitud || null,
+              ubicacion_longitud: loc?.longitud || null,
+            };
+          })
         );
         if (projError) throw projError;
       }
@@ -981,81 +997,84 @@ export default function ConfiguracionCitas() {
                             )}
                           </div>
 
-                          {/* Ubicación */}
+                          {/* Per-project location selectors */}
                           {selectedProyectoIds.length > 0 && (
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               <Label className="flex items-center gap-1.5">
                                 <MapPin className="h-4 w-4" />
-                                Ubicación de la cita
+                                Ubicación por desarrollo
                               </Label>
                               <p className="text-xs text-muted-foreground">
-                                {locationOptions.length > 0
-                                  ? "Selecciona la ubicación donde se realizará la cita"
-                                  : "Los proyectos seleccionados no tienen showrooms ni ubicación configurada"}
+                                Selecciona la ubicación de cada desarrollo donde se realizarán las citas
                               </p>
-                              {locationOptions.length > 0 && (
-                                <Select
-                                  value={ubicacionDireccion || "__none__"}
-                                  onValueChange={(v) => {
-                                    if (v === "__none__") {
-                                      setUbicacionDireccion("");
-                                      setUbicacionLatitud(null);
-                                      setUbicacionLongitud(null);
-                                    } else {
-                                      const opt = locationOptions.find((o) => o.direccion === v);
-                                      if (opt) {
-                                        setUbicacionDireccion(opt.direccion);
-                                        setUbicacionLatitud(opt.latitud);
-                                        setUbicacionLongitud(opt.longitud);
-                                      }
-                                    }
-                                    setHasChanges(true);
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Seleccionar ubicación" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">Sin ubicación</SelectItem>
-                                    {/* Group options by proyecto */}
-                                    {(() => {
-                                      const grouped = new Map<string, typeof locationOptions>();
-                                      locationOptions.forEach((opt) => {
-                                        if (!grouped.has(opt.proyecto)) grouped.set(opt.proyecto, []);
-                                        grouped.get(opt.proyecto)!.push(opt);
-                                      });
-                                      return Array.from(grouped.entries()).map(([proyecto, opts]) => (
-                                        <div key={proyecto}>
-                                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">{proyecto}</div>
-                                          {opts.map((opt, i) => (
-                                            <SelectItem key={`${proyecto}-${i}`} value={opt.direccion}>
-                                              <div className="flex items-center gap-2">
-                                                {opt.type === "showroom" ? (
-                                                  <Store className="h-4 w-4 text-muted-foreground shrink-0" />
-                                                ) : (
-                                                  <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                                                )}
-                                                <div className="flex flex-col">
-                                                  <span className="font-medium">
-                                                    {opt.type === "showroom" ? opt.label : `Desarrollo ${opt.label}`}
-                                                  </span>
-                                                  <span className="text-xs text-muted-foreground truncate max-w-[300px]">{opt.direccion}</span>
-                                                </div>
-                                              </div>
-                                            </SelectItem>
-                                          ))}
-                                        </div>
-                                      ));
-                                    })()}
-                                  </SelectContent>
-                                </Select>
-                              )}
-                              {ubicacionDireccion && (
-                                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                                  <MapPin className="h-3 w-3" />
-                                  {ubicacionDireccion}
-                                </p>
-                              )}
+                              <div className="space-y-2">
+                                {selectedProyectoIds.map((pid) => {
+                                  const proj = proyectosPublicados.find((p: any) => p.id === pid);
+                                  if (!proj) return null;
+                                  // Get location options for this specific project
+                                  const projOptions = locationOptions.filter((o) => o.proyecto === proj.nombre);
+                                  const currentLoc = projectLocations.get(pid);
+                                  return (
+                                    <div key={pid} className="flex items-start gap-3 p-3 rounded-md border bg-muted/30">
+                                      <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                        <span className="text-sm font-medium">{proj.nombre}</span>
+                                        {projOptions.length > 0 ? (
+                                          <Select
+                                            value={currentLoc?.direccion || "__none__"}
+                                            onValueChange={(v) => {
+                                              setProjectLocations((prev) => {
+                                                const next = new Map(prev);
+                                                if (v === "__none__") {
+                                                  next.delete(pid);
+                                                } else {
+                                                  const opt = projOptions.find((o) => o.direccion === v);
+                                                  if (opt) {
+                                                    next.set(pid, { direccion: opt.direccion, latitud: opt.latitud, longitud: opt.longitud });
+                                                  }
+                                                }
+                                                return next;
+                                              });
+                                              setHasChanges(true);
+                                            }}
+                                          >
+                                            <SelectTrigger className="h-auto min-h-[2.25rem]">
+                                              <SelectValue placeholder="Seleccionar ubicación..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="__none__">Sin ubicación</SelectItem>
+                                              {projOptions.map((opt, i) => (
+                                                <SelectItem key={i} value={opt.direccion}>
+                                                  <div className="flex items-center gap-2">
+                                                    {opt.type === "showroom" ? (
+                                                      <Store className="h-4 w-4 text-muted-foreground shrink-0" />
+                                                    ) : (
+                                                      <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                                                    )}
+                                                    <div className="flex flex-col">
+                                                      <span className="font-medium">
+                                                        {opt.type === "showroom" ? opt.label : `Desarrollo`}
+                                                      </span>
+                                                      <span className="text-xs text-muted-foreground truncate max-w-[280px]">{opt.direccion}</span>
+                                                    </div>
+                                                  </div>
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        ) : (
+                                          <p className="text-xs text-muted-foreground">Sin showrooms ni ubicación configurada</p>
+                                        )}
+                                        {currentLoc && (
+                                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                            <MapPin className="h-3 w-3 shrink-0" />
+                                            <span className="truncate">{currentLoc.direccion}</span>
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
 
