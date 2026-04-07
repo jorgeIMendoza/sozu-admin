@@ -296,7 +296,60 @@ export default function ConfiguracionCitas() {
     enabled: !!selectedConfigId,
   });
 
-  // Initialize from existing config
+  // Fetch location options (showrooms + project locations) for selected projects
+  const { data: locationOptions = [] } = useQuery({
+    queryKey: ["config-citas-location-options", selectedProyectoIds],
+    queryFn: async () => {
+      if (selectedProyectoIds.length === 0) return [];
+      const options: { label: string; direccion: string; latitud: number; longitud: number; type: string }[] = [];
+
+      // Fetch showrooms for selected projects
+      const { data: showrooms } = await (supabase as any)
+        .from("showrooms_proyecto")
+        .select("id, nombre, descripcion_direccion, latitud, longitud, id_proyecto")
+        .in("id_proyecto", selectedProyectoIds)
+        .eq("activo", true);
+
+      // Fetch project locations
+      const { data: projects } = await supabase
+        .from("proyectos")
+        .select("id, nombre, direccion, latitud, longitud")
+        .in("id", selectedProyectoIds);
+
+      const projectMap = new Map((projects || []).map((p: any) => [p.id, p]));
+      const projectsWithShowrooms = new Set((showrooms || []).map((s: any) => s.id_proyecto));
+
+      // For each project: if has showrooms -> show showrooms, else -> show project location
+      for (const pid of selectedProyectoIds) {
+        const proj = projectMap.get(pid);
+        if (!proj) continue;
+
+        if (projectsWithShowrooms.has(pid)) {
+          const projShowrooms = (showrooms || []).filter((s: any) => s.id_proyecto === pid);
+          for (const s of projShowrooms) {
+            options.push({
+              label: `${s.nombre || "Showroom"} — ${proj.nombre}`,
+              direccion: s.descripcion_direccion,
+              latitud: Number(s.latitud),
+              longitud: Number(s.longitud),
+              type: "showroom",
+            });
+          }
+        } else if (proj.latitud && proj.longitud && proj.direccion) {
+          options.push({
+            label: `${proj.nombre} (Proyecto)`,
+            direccion: proj.direccion,
+            latitud: Number(proj.latitud),
+            longitud: Number(proj.longitud),
+            type: "proyecto",
+          });
+        }
+      }
+      return options;
+    },
+    enabled: selectedProyectoIds.length > 0,
+  });
+
   useEffect(() => {
     const days = new Set<number>();
     const slots = new Map<number, Set<string>>();
