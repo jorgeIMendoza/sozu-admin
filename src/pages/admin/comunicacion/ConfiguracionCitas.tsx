@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Save, CalendarClock, Check, ChevronsUpDown, Pencil, Plus, Settings2, Copy, AlertTriangle, CalendarIcon, Video, X, Trash2, MapPin } from "lucide-react";
+import { Loader2, Save, CalendarClock, Check, ChevronsUpDown, Pencil, Plus, Settings2, Copy, AlertTriangle, CalendarIcon, Video, X, Trash2, MapPin, Building2, Store } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -301,7 +301,7 @@ export default function ConfiguracionCitas() {
     queryKey: ["config-citas-location-options", selectedProyectoIds],
     queryFn: async () => {
       if (selectedProyectoIds.length === 0) return [];
-      const options: { label: string; direccion: string; latitud: number; longitud: number; type: string }[] = [];
+      const options: { label: string; proyecto: string; direccion: string; latitud: number; longitud: number; type: string }[] = [];
 
       // Fetch showrooms for selected projects
       const { data: showrooms } = await (supabase as any)
@@ -328,7 +328,8 @@ export default function ConfiguracionCitas() {
           const projShowrooms = (showrooms || []).filter((s: any) => s.id_proyecto === pid);
           for (const s of projShowrooms) {
             options.push({
-              label: `${s.nombre || "Showroom"} — ${proj.nombre}`,
+              label: s.nombre || "Showroom",
+              proyecto: proj.nombre,
               direccion: s.descripcion_direccion,
               latitud: Number(s.latitud),
               longitud: Number(s.longitud),
@@ -337,11 +338,12 @@ export default function ConfiguracionCitas() {
           }
         } else if (proj.latitud && proj.longitud && proj.direccion) {
           options.push({
-            label: `${proj.nombre} (Proyecto)`,
+            label: proj.nombre,
+            proyecto: proj.nombre,
             direccion: proj.direccion,
             latitud: Number(proj.latitud),
             longitud: Number(proj.longitud),
-            type: "proyecto",
+            type: "desarrollo",
           });
         }
       }
@@ -954,7 +956,7 @@ export default function ConfiguracionCitas() {
 
                           {/* Proyectos multi-selector */}
                           <div className="space-y-2">
-                            <Label>Proyectos vinculados</Label>
+                            <Label>Desarrollos vinculados</Label>
                             <div className="flex flex-wrap gap-1.5">
                               {proyectosPublicados.map((p: any) => {
                                 const isLinked = selectedProyectoIds.includes(p.id);
@@ -1015,14 +1017,36 @@ export default function ConfiguracionCitas() {
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="__none__">Sin ubicación</SelectItem>
-                                    {locationOptions.map((opt, i) => (
-                                      <SelectItem key={i} value={opt.direccion}>
-                                        <div className="flex flex-col">
-                                          <span className="font-medium">{opt.label}</span>
-                                          <span className="text-xs text-muted-foreground truncate max-w-[300px]">{opt.direccion}</span>
+                                    {/* Group options by proyecto */}
+                                    {(() => {
+                                      const grouped = new Map<string, typeof locationOptions>();
+                                      locationOptions.forEach((opt) => {
+                                        if (!grouped.has(opt.proyecto)) grouped.set(opt.proyecto, []);
+                                        grouped.get(opt.proyecto)!.push(opt);
+                                      });
+                                      return Array.from(grouped.entries()).map(([proyecto, opts]) => (
+                                        <div key={proyecto}>
+                                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">{proyecto}</div>
+                                          {opts.map((opt, i) => (
+                                            <SelectItem key={`${proyecto}-${i}`} value={opt.direccion}>
+                                              <div className="flex items-center gap-2">
+                                                {opt.type === "showroom" ? (
+                                                  <Store className="h-4 w-4 text-muted-foreground shrink-0" />
+                                                ) : (
+                                                  <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                                                )}
+                                                <div className="flex flex-col">
+                                                  <span className="font-medium">
+                                                    {opt.type === "showroom" ? opt.label : `Desarrollo ${opt.label}`}
+                                                  </span>
+                                                  <span className="text-xs text-muted-foreground truncate max-w-[300px]">{opt.direccion}</span>
+                                                </div>
+                                              </div>
+                                            </SelectItem>
+                                          ))}
                                         </div>
-                                      </SelectItem>
-                                    ))}
+                                      ));
+                                    })()}
                                   </SelectContent>
                                 </Select>
                               )}
