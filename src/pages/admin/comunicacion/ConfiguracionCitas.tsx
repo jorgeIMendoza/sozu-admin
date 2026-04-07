@@ -95,6 +95,9 @@ export default function ConfiguracionCitas() {
   const [deleteConfigTarget, setDeleteConfigTarget] = useState<{ id: number; nombre: string } | null>(null);
   const [calendarVerifying, setCalendarVerifying] = useState(false);
   const [calendarAccessStatus, setCalendarAccessStatus] = useState<"idle" | "ok" | "error">("idle");
+  const [ubicacionDireccion, setUbicacionDireccion] = useState<string>("");
+  const [ubicacionLatitud, setUbicacionLatitud] = useState<number | null>(null);
+  const [ubicacionLongitud, setUbicacionLongitud] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isSuperAdmin && profile?.email) {
