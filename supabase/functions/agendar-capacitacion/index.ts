@@ -1233,21 +1233,53 @@ Deno.serve(async (req) => {
     
     // Build description based on appointment type
     const notasSection = notas ? `\n\nNotas: ${notas}` : "";
+
+    // Resolve location: first from configuracion_citas_proyectos, fallback to request params
+    let resolvedLocation: string | undefined = direccion_showroom || undefined;
+    let resolvedLatitud: number | null = latitud_showroom || null;
+    let resolvedLongitud: number | null = longitud_showroom || null;
+
+    if (config_id && id_proyecto) {
+      const { data: projLoc } = await supabase
+        .from("configuracion_citas_proyectos")
+        .select("ubicacion_direccion, ubicacion_latitud, ubicacion_longitud")
+        .eq("id_configuracion_cita", config_id)
+        .eq("id_proyecto", id_proyecto)
+        .maybeSingle();
+      if (projLoc?.ubicacion_direccion) {
+        resolvedLocation = projLoc.ubicacion_direccion;
+        resolvedLatitud = projLoc.ubicacion_latitud ? Number(projLoc.ubicacion_latitud) : null;
+        resolvedLongitud = projLoc.ubicacion_longitud ? Number(projLoc.ubicacion_longitud) : null;
+        console.log(`[schedule] Location from config_citas_proyectos: ${resolvedLocation} (${resolvedLatitud}, ${resolvedLongitud})`);
+      }
+    }
+
+    // Build Google Maps link if coordinates are available
+    let locationSection = "";
+    if (resolvedLocation) {
+      if (resolvedLatitud && resolvedLongitud) {
+        const mapsLink = `https://www.google.com/maps?q=${resolvedLatitud},${resolvedLongitud}`;
+        locationSection = `\n\n📍 Ubicación: ${resolvedLocation}\n🗺️ Ver en mapa: ${mapsLink}`;
+      } else {
+        const mapsSearchLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(resolvedLocation)}`;
+        locationSection = `\n\n📍 Ubicación: ${resolvedLocation}\n🗺️ Ver en mapa: ${mapsSearchLink}`;
+      }
+    }
+
     let desc: string;
     if (isShowroomCita) {
       const prospLabel = prospectoName ? `${prospectoName} (${prospectoEmail})` : prospectoEmail;
       const agentLabel = agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal;
       desc = scheduleDescInv 
-        ? `${scheduleDescInv}${notasSection}\n\n--- Invitado ---\n• ${prospLabel}\n\n--- Atiende ---\n• ${agentLabel}`
-        : `Cita con prospecto: ${prospLabel}${notasSection}\n\n--- Atiende ---\n• ${agentLabel}`;
+        ? `${scheduleDescInv}${notasSection}${locationSection}\n\n--- Invitado ---\n• ${prospLabel}\n\n--- Atiende ---\n• ${agentLabel}`
+        : `Cita con prospecto: ${prospLabel}${notasSection}${locationSection}\n\n--- Atiende ---\n• ${agentLabel}`;
     } else {
       desc = scheduleDescInv 
-        ? `${scheduleDescInv}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`
-        : `Cita agendada para: ${agentEmailFinal}${notasSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`;
+        ? `${scheduleDescInv}${notasSection}${locationSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`
+        : `Cita agendada para: ${agentEmailFinal}${notasSection}${locationSection}\n\n--- Asistentes ---\n• ${agentName ? `${agentName} (${agentEmailFinal})` : agentEmailFinal}`;
     }
     
-    const eventLocation = direccion_showroom || undefined;
-    calendarEvent = await createCalendarEvent(token, scheduleCalendarId, fecha, hora_inicio, horaFin, summary, agentEmailFinal, bookingAttendees, desc, eventLocation);
+    calendarEvent = await createCalendarEvent(token, scheduleCalendarId, fecha, hora_inicio, horaFin, summary, agentEmailFinal, bookingAttendees, desc, resolvedLocation);
     
     // Check if attendees were actually added (Google might have silently dropped them)
     const createdAttendees = calendarEvent.attendees || [];
