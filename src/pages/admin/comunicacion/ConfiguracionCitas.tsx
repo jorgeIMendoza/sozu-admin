@@ -407,17 +407,26 @@ export default function ConfiguracionCitas() {
       setCorreosEnteradoFijos([]);
       setRoundRobinEnterados(false);
       setDescripcionInvitacion("");
-      setUbicacionDireccion("");
-      setUbicacionLatitud(null);
-      setUbicacionLongitud(null);
+      setProjectLocations(new Map());
       setFechaFinRecurrencia(addMonths(new Date(), 3));
       setCalendarAccessStatus("idle");
     }
   }, [selectedConfig]);
 
-  // Initialize project selection
+  // Initialize project selection and locations from DB
   useEffect(() => {
-    setSelectedProyectoIds(configProyectos);
+    setSelectedProyectoIds(configProyectos.map((cp: any) => cp.id_proyecto));
+    const locMap = new Map<number, { direccion: string; latitud: number; longitud: number }>();
+    configProyectos.forEach((cp: any) => {
+      if (cp.ubicacion_direccion) {
+        locMap.set(cp.id_proyecto, {
+          direccion: cp.ubicacion_direccion,
+          latitud: Number(cp.ubicacion_latitud),
+          longitud: Number(cp.ubicacion_longitud),
+        });
+      }
+    });
+    setProjectLocations(locMap);
   }, [configProyectos]);
 
   // When duration changes, remove invalid slots
