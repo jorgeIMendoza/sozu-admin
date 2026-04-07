@@ -1079,43 +1079,49 @@ export default function TodasLasCitas() {
       needsAction: 1 // Agendada
     };
 
-    byCalendar.forEach(async (citasGroup, calendarioEmail) => {
-      const eventIds = [...new Set(citasGroup.map(c => c.google_calendar_event_id!))];
-      try {
-        const { data, error } = await supabase.functions.invoke("consultar-estatus-calendar", {
-          body: { event_ids: eventIds, calendario_email: calendarioEmail },
-        });
-        if (error || !data?.events) {
-          console.warn("[RSVP Sync] Error:", error);
-          return;
-        }
-
-        const updates: Array<{ id: number; newEstatus: number }> = [];
-        for (const c of citasGroup) {
-          const eventData = data.events[c.google_calendar_event_id!];
-          if (!eventData?.attendees) continue;
-          const attendee = eventData.attendees.find(
-            (a: any) => a.email.toLowerCase() === c.email_invitado!.toLowerCase()
-          );
-          if (!attendee) continue;
-          const newEstatus = RSVP_TO_ESTATUS[attendee.responseStatus] ?? 1;
-          if (newEstatus !== c.id_estatus_cita) {
-            updates.push({ id: c.id, newEstatus });
+    const syncAll = async () => {
+      let anyUpdated = false;
+      for (const [calendarioEmail, citasGroup] of byCalendar) {
+        const eventIds = [...new Set(citasGroup.map(c => c.google_calendar_event_id!))];
+        try {
+          const { data, error } = await supabase.functions.invoke("consultar-estatus-calendar", {
+            body: { event_ids: eventIds, calendario_email: calendarioEmail },
+          });
+          if (error || !data?.events) {
+            console.warn("[RSVP Sync] Error:", error);
+            continue;
           }
-        }
 
-        if (updates.length > 0) {
-          console.log("[RSVP Sync] Updating estatus:", updates);
-          await Promise.all(updates.map(u =>
-            supabase.from("reservas_citas").update({ id_estatus_cita: u.newEstatus }).eq("id", u.id)
-          ));
-          // Refetch citas to reflect updated statuses
-          queryClient.invalidateQueries({ queryKey: ["all-citas-reservas-week"] });
+          const updates: Array<{ id: number; newEstatus: number }> = [];
+          for (const c of citasGroup) {
+            const eventData = data.events[c.google_calendar_event_id!];
+            if (!eventData?.attendees) continue;
+            const attendee = eventData.attendees.find(
+              (a: any) => a.email.toLowerCase() === c.email_invitado!.toLowerCase()
+            );
+            if (!attendee) continue;
+            const newEstatus = RSVP_TO_ESTATUS[attendee.responseStatus] ?? 1;
+            if (newEstatus !== c.id_estatus_cita) {
+              updates.push({ id: c.id, newEstatus });
+            }
+          }
+
+          if (updates.length > 0) {
+            console.log("[RSVP Sync] Updating estatus:", updates);
+            await Promise.all(updates.map(u =>
+              supabase.from("reservas_citas").update({ id_estatus_cita: u.newEstatus }).eq("id", u.id)
+            ));
+            anyUpdated = true;
+          }
+        } catch (err) {
+          console.error("[RSVP Sync] Error:", err);
         }
-      } catch (err) {
-        console.error("[RSVP Sync] Error:", err);
       }
-    });
+      if (anyUpdated) {
+        queryClient.invalidateQueries({ queryKey: ["all-citas-reservas-week"] });
+      }
+    };
+    syncAll();
   }, [citas, configs, queryClient]);
 
 
