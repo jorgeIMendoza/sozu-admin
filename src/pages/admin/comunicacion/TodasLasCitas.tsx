@@ -425,7 +425,7 @@ function StackedSlotCard({ items, onSelectSlot }: {
                   if (isGroup && agendados > 0) {
                     const itemStyle = SLOT_STATUS_STYLES[itemStatus];
                     return (
-                      <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-4 flex-shrink-0", itemStyle.borderClass || "", itemStyle.text || "")}>
+                      <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-4 flex-shrink-0", itemStyle.border, itemStyle.text)}>
                         {agendados}/{maxInv}
                       </Badge>
                     );
