@@ -409,6 +409,7 @@ export default function InmobComisiones() {
                               inmobEmail={inmobEmail || ""}
                               personaId={personaId!}
                               onUploaded={() => queryClient.invalidateQueries({ queryKey: ["inmob-comisiones-detail"] })}
+                              disabled={r.estatus !== "Pendiente factura"}
                             />
                           )}
                         </TableCell>
