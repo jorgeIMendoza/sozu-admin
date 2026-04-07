@@ -113,3 +113,9 @@ verify_jwt = false
 
 [functions.validate-architectural-plan]
 verify_jwt = false
+
+[functions.notificar-agentes]
+verify_jwt = false
+
+[functions.enviar-notificacion]
+verify_jwt = false
