@@ -979,7 +979,62 @@ export default function ConfiguracionCitas() {
                             )}
                           </div>
 
-                          {/* Correos de enterado */}
+                          {/* Ubicación */}
+                          {selectedProyectoIds.length > 0 && (
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-1.5">
+                                <MapPin className="h-4 w-4" />
+                                Ubicación de la cita
+                              </Label>
+                              <p className="text-xs text-muted-foreground">
+                                {locationOptions.length > 0
+                                  ? "Selecciona la ubicación donde se realizará la cita"
+                                  : "Los proyectos seleccionados no tienen showrooms ni ubicación configurada"}
+                              </p>
+                              {locationOptions.length > 0 && (
+                                <Select
+                                  value={ubicacionDireccion || "__none__"}
+                                  onValueChange={(v) => {
+                                    if (v === "__none__") {
+                                      setUbicacionDireccion("");
+                                      setUbicacionLatitud(null);
+                                      setUbicacionLongitud(null);
+                                    } else {
+                                      const opt = locationOptions.find((o) => o.direccion === v);
+                                      if (opt) {
+                                        setUbicacionDireccion(opt.direccion);
+                                        setUbicacionLatitud(opt.latitud);
+                                        setUbicacionLongitud(opt.longitud);
+                                      }
+                                    }
+                                    setHasChanges(true);
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Seleccionar ubicación" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">Sin ubicación</SelectItem>
+                                    {locationOptions.map((opt, i) => (
+                                      <SelectItem key={i} value={opt.direccion}>
+                                        <div className="flex flex-col">
+                                          <span className="font-medium">{opt.label}</span>
+                                          <span className="text-xs text-muted-foreground truncate max-w-[300px]">{opt.direccion}</span>
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              {ubicacionDireccion && (
+                                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {ubicacionDireccion}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
                           <div className="space-y-2">
                             <Label>Enterar a los siguientes correos</Label>
                             <p className="text-xs text-muted-foreground">Se agregarán como attendees adicionales (no cuentan para el máximo de invitados)</p>
