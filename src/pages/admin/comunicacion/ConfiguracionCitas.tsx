@@ -95,9 +95,8 @@ export default function ConfiguracionCitas() {
   const [deleteConfigTarget, setDeleteConfigTarget] = useState<{ id: number; nombre: string } | null>(null);
   const [calendarVerifying, setCalendarVerifying] = useState(false);
   const [calendarAccessStatus, setCalendarAccessStatus] = useState<"idle" | "ok" | "error">("idle");
-  const [ubicacionDireccion, setUbicacionDireccion] = useState<string>("");
-  const [ubicacionLatitud, setUbicacionLatitud] = useState<number | null>(null);
-  const [ubicacionLongitud, setUbicacionLongitud] = useState<number | null>(null);
+  // Per-project locations: Map<projectId, { direccion, latitud, longitud }>
+  const [projectLocations, setProjectLocations] = useState<Map<number, { direccion: string; latitud: number; longitud: number }>>(new Map());
 
   useEffect(() => {
     if (!isSuperAdmin && profile?.email) {
