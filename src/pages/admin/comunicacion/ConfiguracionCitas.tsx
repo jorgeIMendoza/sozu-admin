@@ -620,9 +620,6 @@ export default function ConfiguracionCitas() {
           correos_enterado_fijos: correosEnteradoFijos,
           round_robin_enterados: roundRobinEnterados,
           descripcion_invitacion: descripcionInvitacion || null,
-          ubicacion_direccion: ubicacionDireccion || null,
-          ubicacion_latitud: ubicacionLatitud,
-          ubicacion_longitud: ubicacionLongitud,
           fecha_fin_recurrencia: fechaFinRecurrencia
             ? `${fechaFinRecurrencia.getFullYear()}-${String(fechaFinRecurrencia.getMonth() + 1).padStart(2, "0")}-${String(fechaFinRecurrencia.getDate()).padStart(2, "0")}`
             : null,
@@ -631,11 +628,20 @@ export default function ConfiguracionCitas() {
         .eq("id", configId);
       if (updateError) throw updateError;
 
-      // 2. Sync projects
+      // 2. Sync projects with per-project locations
       await supabase.from("configuracion_citas_proyectos").delete().eq("id_configuracion_cita", configId);
       if (selectedProyectoIds.length > 0) {
         const { error: projError } = await supabase.from("configuracion_citas_proyectos").insert(
-          selectedProyectoIds.map((pid) => ({ id_configuracion_cita: configId, id_proyecto: pid }))
+          selectedProyectoIds.map((pid) => {
+            const loc = projectLocations.get(pid);
+            return {
+              id_configuracion_cita: configId,
+              id_proyecto: pid,
+              ubicacion_direccion: loc?.direccion || null,
+              ubicacion_latitud: loc?.latitud || null,
+              ubicacion_longitud: loc?.longitud || null,
+            };
+          })
         );
         if (projError) throw projError;
       }
