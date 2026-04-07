@@ -339,10 +339,11 @@ function getDominantStatus(items: { slot: CalendarSlot; status: CalendarStatus }
   return "disponible";
 }
 
-function StackedSlotCard({ items, onSelectSlot, rsvpStatuses }: {
+function StackedSlotCard({ items, onSelectSlot, rsvpStatuses, ownerNamesMap }: {
   items: { slot: CalendarSlot; status: CalendarStatus }[];
   onSelectSlot: (slot: CalendarSlot) => void;
   rsvpStatuses?: Map<number, string>;
+  ownerNamesMap?: Map<string, string>;
 }) {
   if (items.length <= 1) return null;
 
