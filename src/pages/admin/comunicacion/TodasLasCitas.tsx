@@ -1771,6 +1771,7 @@ export default function TodasLasCitas() {
                                 items={allItems.map(item => ({ slot: item.slot, status: item.status }))}
                                 onSelectSlot={(slot) => setSelectedSlot(slot)}
                                 rsvpStatuses={rsvpStatuses}
+                                ownerNamesMap={ownerNamesMap}
                               />
                             </div>
                           );
