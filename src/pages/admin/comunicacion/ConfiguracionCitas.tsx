@@ -271,10 +271,15 @@ export default function ConfiguracionCitas() {
       if (!selectedConfigId) return [];
       const { data, error } = await supabase
         .from("configuracion_citas_proyectos")
-        .select("id_proyecto")
+        .select("id_proyecto, ubicacion_direccion, ubicacion_latitud, ubicacion_longitud")
         .eq("id_configuracion_cita", parseInt(selectedConfigId));
       if (error) throw error;
-      return (data || []).map((d: any) => d.id_proyecto);
+      return (data || []).map((d: any) => ({
+        id_proyecto: d.id_proyecto,
+        ubicacion_direccion: d.ubicacion_direccion,
+        ubicacion_latitud: d.ubicacion_latitud,
+        ubicacion_longitud: d.ubicacion_longitud,
+      }));
     },
     enabled: !!selectedConfigId,
   });
