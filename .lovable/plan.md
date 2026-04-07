@@ -1,46 +1,71 @@
 
 
-## Diagnóstico
+## Situacion actual
 
-El error ocurre en la **llamada interna** de `notificar-agentes` hacia `enviar-notificacion` (linea 186-193). La función `enviar-notificacion` NO existe en este repositorio (no está en `supabase/functions/`), lo que significa que está desplegada externamente en tu proyecto Supabase.
+- Ya existe una pagina de configuracion de notificaciones en `/admin/notificaciones-config` con la tabla `notificaciones_configuracion`
+- Esa pagina **NO tiene submenú** en la BD (no aparece en la tabla `submenus`), por lo que no es accesible desde el sidebar
+- No existe tabla ni pagina de logs de notificaciones enviadas
+- El Edge Function `notificar-agentes` no registra logs de envio en ninguna tabla
 
-El problema es que la llamada usa solo `Authorization: Bearer ${supabaseServiceKey}`, pero falta el header `apikey` que Supabase requiere para rutear y autenticar llamadas a Edge Functions.
+## Plan
 
-Otras funciones en el proyecto que llaman a `enviar-notificacion` (como `registro-inmobiliaria-publica`, `generar-factura-comision-sozu`) usan el mismo patrón incorrecto, pero posiblemente no han fallado porque se invocan con menos frecuencia o en contextos diferentes.
+### 1. Crear tabla `notificaciones_log` (migración)
 
-## Plan de corrección
+```sql
+CREATE TABLE public.notificaciones_log (
+  id bigint generated always as identity primary key,
+  tipo_evento text not null,
+  canal text not null, -- 'email', 'whatsapp', 'ambos'
+  destinatarios_count int not null default 0,
+  id_proyecto int references proyectos(id),
+  nombre_desarrollo text,
+  payload jsonb,
+  resultado text not null default 'success', -- 'success', 'error'
+  error_detalle text,
+  created_at timestamptz not null default now()
+);
 
-### Archivo: `supabase/functions/notificar-agentes/index.ts`
+ALTER TABLE public.notificaciones_log ENABLE ROW LEVEL SECURITY;
 
-Agregar el header `apikey` con el anon key al hacer la llamada interna a `enviar-notificacion`:
+CREATE POLICY "Super Admin can read notification logs"
+ON public.notificaciones_log FOR SELECT
+TO authenticated
+USING (public.has_role(auth.uid(), 'admin'));
 
-```typescript
-// Líneas 186-193 - Cambiar de:
-const notifResponse = await fetch(`${supabaseUrl}/functions/v1/enviar-notificacion`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${supabaseServiceKey}`,
-  },
-  body: JSON.stringify(notificationPayload),
-});
-
-// A:
-const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const notifResponse = await fetch(`${supabaseUrl}/functions/v1/enviar-notificacion`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${supabaseServiceKey}`,
-    'apikey': supabaseAnonKey,
-  },
-  body: JSON.stringify(notificationPayload),
-});
+-- Permitir insert desde service_role (edge functions)
+CREATE POLICY "Service role can insert logs"
+ON public.notificaciones_log FOR INSERT
+TO service_role
+WITH CHECK (true);
 ```
 
-Adicionalmente, agregar `notificar-agentes` a `supabase/config.toml` con `verify_jwt = false` si no está ya (actualmente no aparece en el archivo).
+### 2. Registrar submenús en la BD (insert)
 
-### Verificación
+Crear dos submenús bajo el menú "Configuraciones/Logs" (ID 13):
 
-Después de desplegar, re-ejecutar la prueba desde n8n con el mismo payload para confirmar que el 401 se resuelve.
+- **ID 88** - "Config. Notificaciones" → `/admin/notificaciones-config` (orden 10)
+- **ID 89** - "Logs de Notificaciones" → `/admin/notificaciones-log` (orden 11)
+
+Asignar permisos `leer`, `crear`, `actualizar`, `eliminar` al rol Super Admin (ID 1) para ambos submenús.
+
+### 3. Crear pagina `NotificacionesLog.tsx`
+
+Nueva pagina en `src/pages/admin/NotificacionesLog.tsx` que muestre:
+- Filtros por rango de fecha, tipo de evento y resultado (success/error)
+- Tabla con columnas: Fecha, Evento, Canal, Destinatarios, Proyecto, Resultado, Error
+- Paginacion y ordenamiento por fecha descendente
+- Badges de color para resultado (verde=success, rojo=error)
+
+### 4. Registrar ruta en App.tsx
+
+Agregar lazy import y ruta `notificaciones-log` bajo `/admin`.
+
+### 5. Agregar rutas a validRoutes.ts y useDynamicMenus.ts
+
+- Agregar `/admin/notificaciones-log` a `VALID_ADMIN_ROUTES`
+- Agregar icono para `/admin/notificaciones-log` en `useDynamicMenus.ts`
+
+### 6. Actualizar Edge Function `notificar-agentes`
+
+Despues de enviar la notificacion (exitosa o con error), insertar un registro en `notificaciones_log` con el tipo de evento, canal, cantidad de destinatarios, proyecto y resultado.
 
