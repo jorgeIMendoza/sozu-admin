@@ -185,18 +185,28 @@ Deno.serve(async (req) => {
     console.log('Notification payload:', JSON.stringify(notificationPayload));
     const incomingAuthHeader = req.headers.get('Authorization') || req.headers.get('authorization');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const evolutionWaToken = Deno.env.get('EVOLUTION_WA_TOKEN');
 
     if (!supabaseAnonKey) {
       throw new Error('SUPABASE_ANON_KEY no configurada');
     }
 
+    const webhookHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': incomingAuthHeader || `Bearer ${supabaseAnonKey}`,
+      'apikey': supabaseAnonKey,
+    };
+
+    if (evolutionWaToken) {
+      webhookHeaders['apikey-wa'] = evolutionWaToken;
+      console.log('EVOLUTION_WA_TOKEN included in headers as apikey-wa');
+    } else {
+      console.warn('EVOLUTION_WA_TOKEN not configured - WhatsApp may fail with 401');
+    }
+
     const notifResponse = await fetch(`${supabaseUrl}/functions/v1/enviar-notificacion`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': incomingAuthHeader || `Bearer ${supabaseAnonKey}`,
-        'apikey': supabaseAnonKey,
-      },
+      headers: webhookHeaders,
       body: JSON.stringify(notificationPayload),
     });
 
