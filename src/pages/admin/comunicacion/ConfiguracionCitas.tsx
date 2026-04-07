@@ -997,81 +997,84 @@ export default function ConfiguracionCitas() {
                             )}
                           </div>
 
-                          {/* Ubicación */}
+                          {/* Per-project location selectors */}
                           {selectedProyectoIds.length > 0 && (
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               <Label className="flex items-center gap-1.5">
                                 <MapPin className="h-4 w-4" />
-                                Ubicación de la cita
+                                Ubicación por desarrollo
                               </Label>
                               <p className="text-xs text-muted-foreground">
-                                {locationOptions.length > 0
-                                  ? "Selecciona la ubicación donde se realizará la cita"
-                                  : "Los proyectos seleccionados no tienen showrooms ni ubicación configurada"}
+                                Selecciona la ubicación de cada desarrollo donde se realizarán las citas
                               </p>
-                              {locationOptions.length > 0 && (
-                                <Select
-                                  value={ubicacionDireccion || "__none__"}
-                                  onValueChange={(v) => {
-                                    if (v === "__none__") {
-                                      setUbicacionDireccion("");
-                                      setUbicacionLatitud(null);
-                                      setUbicacionLongitud(null);
-                                    } else {
-                                      const opt = locationOptions.find((o) => o.direccion === v);
-                                      if (opt) {
-                                        setUbicacionDireccion(opt.direccion);
-                                        setUbicacionLatitud(opt.latitud);
-                                        setUbicacionLongitud(opt.longitud);
-                                      }
-                                    }
-                                    setHasChanges(true);
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Seleccionar ubicación" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">Sin ubicación</SelectItem>
-                                    {/* Group options by proyecto */}
-                                    {(() => {
-                                      const grouped = new Map<string, typeof locationOptions>();
-                                      locationOptions.forEach((opt) => {
-                                        if (!grouped.has(opt.proyecto)) grouped.set(opt.proyecto, []);
-                                        grouped.get(opt.proyecto)!.push(opt);
-                                      });
-                                      return Array.from(grouped.entries()).map(([proyecto, opts]) => (
-                                        <div key={proyecto}>
-                                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">{proyecto}</div>
-                                          {opts.map((opt, i) => (
-                                            <SelectItem key={`${proyecto}-${i}`} value={opt.direccion}>
-                                              <div className="flex items-center gap-2">
-                                                {opt.type === "showroom" ? (
-                                                  <Store className="h-4 w-4 text-muted-foreground shrink-0" />
-                                                ) : (
-                                                  <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                                                )}
-                                                <div className="flex flex-col">
-                                                  <span className="font-medium">
-                                                    {opt.type === "showroom" ? opt.label : `Desarrollo ${opt.label}`}
-                                                  </span>
-                                                  <span className="text-xs text-muted-foreground truncate max-w-[300px]">{opt.direccion}</span>
-                                                </div>
-                                              </div>
-                                            </SelectItem>
-                                          ))}
-                                        </div>
-                                      ));
-                                    })()}
-                                  </SelectContent>
-                                </Select>
-                              )}
-                              {ubicacionDireccion && (
-                                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                                  <MapPin className="h-3 w-3" />
-                                  {ubicacionDireccion}
-                                </p>
-                              )}
+                              <div className="space-y-2">
+                                {selectedProyectoIds.map((pid) => {
+                                  const proj = proyectosPublicados.find((p: any) => p.id === pid);
+                                  if (!proj) return null;
+                                  // Get location options for this specific project
+                                  const projOptions = locationOptions.filter((o) => o.proyecto === proj.nombre);
+                                  const currentLoc = projectLocations.get(pid);
+                                  return (
+                                    <div key={pid} className="flex items-start gap-3 p-3 rounded-md border bg-muted/30">
+                                      <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                        <span className="text-sm font-medium">{proj.nombre}</span>
+                                        {projOptions.length > 0 ? (
+                                          <Select
+                                            value={currentLoc?.direccion || "__none__"}
+                                            onValueChange={(v) => {
+                                              setProjectLocations((prev) => {
+                                                const next = new Map(prev);
+                                                if (v === "__none__") {
+                                                  next.delete(pid);
+                                                } else {
+                                                  const opt = projOptions.find((o) => o.direccion === v);
+                                                  if (opt) {
+                                                    next.set(pid, { direccion: opt.direccion, latitud: opt.latitud, longitud: opt.longitud });
+                                                  }
+                                                }
+                                                return next;
+                                              });
+                                              setHasChanges(true);
+                                            }}
+                                          >
+                                            <SelectTrigger className="h-auto min-h-[2.25rem]">
+                                              <SelectValue placeholder="Seleccionar ubicación..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="__none__">Sin ubicación</SelectItem>
+                                              {projOptions.map((opt, i) => (
+                                                <SelectItem key={i} value={opt.direccion}>
+                                                  <div className="flex items-center gap-2">
+                                                    {opt.type === "showroom" ? (
+                                                      <Store className="h-4 w-4 text-muted-foreground shrink-0" />
+                                                    ) : (
+                                                      <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                                                    )}
+                                                    <div className="flex flex-col">
+                                                      <span className="font-medium">
+                                                        {opt.type === "showroom" ? opt.label : `Desarrollo`}
+                                                      </span>
+                                                      <span className="text-xs text-muted-foreground truncate max-w-[280px]">{opt.direccion}</span>
+                                                    </div>
+                                                  </div>
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        ) : (
+                                          <p className="text-xs text-muted-foreground">Sin showrooms ni ubicación configurada</p>
+                                        )}
+                                        {currentLoc && (
+                                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                            <MapPin className="h-3 w-3 shrink-0" />
+                                            <span className="truncate">{currentLoc.direccion}</span>
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
 
