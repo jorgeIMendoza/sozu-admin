@@ -288,8 +288,9 @@ async function handleJwtMode(req: Request, authHeader: string) {
   const requestingRolId = requestingUserData.rol_id;
   console.log('User role:', rolNombre, 'rol_id:', requestingRolId);
 
-  // Only Super Administrador (1), Administrador de Proyecto (2), and Inmobiliaria (4) can reset passwords
-  if (requestingRolId !== 1 && requestingRolId !== 2 && requestingRolId !== 4) {
+  // Roles allowed to reset passwords: Super Admin (1), Admin Proyecto (2), Inmobiliaria (4), Admin Cobranza (12)
+  const ALLOWED_RESET_ROLES = [1, 2, 4, 12];
+  if (!ALLOWED_RESET_ROLES.includes(requestingRolId)) {
     return jsonResponse({ error: 'No tienes permisos para resetear contraseñas' }, 403);
   }
 
@@ -316,6 +317,12 @@ async function handleJwtMode(req: Request, authHeader: string) {
   if ((requestingRolId === 2 || requestingRolId === 4) && ![3, 4, 9].includes(targetUser.rol_id)) {
     console.error(`Role ${requestingRolId} cannot reset rol_id ${targetUser.rol_id}`);
     return jsonResponse({ error: 'Solo puedes resetear contraseñas de usuarios con rol Inmobiliaria, Agente Inmobiliario o Agente Interno' }, 403);
+  }
+
+  // Administrador de cobranza can only reset Cliente (23)
+  if (requestingRolId === 12 && targetUser.rol_id !== 23) {
+    console.error(`Role 12 (Admin Cobranza) cannot reset rol_id ${targetUser.rol_id}`);
+    return jsonResponse({ error: 'Solo puedes resetear contraseñas de usuarios con rol Cliente' }, 403);
   }
 
   const result = await resetPassword(supabaseAdmin, email, targetUser.auth_user_id, targetUser.nombre, targetUser.rol_id);
