@@ -261,13 +261,25 @@ const App = () => (
                   <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
                   <Route path="/auth/forgot-password" element={<ForgotPassword />} />
                   <Route path="/" element={<Navigate to="/login" replace />} />
-                  <Route path="/admin/*" element={
+                  <Route path="/admin" element={
                     <ProtectedRoute>
                       <PermissionRoute>
                         <AdminLayout />
                       </PermissionRoute>
                     </ProtectedRoute>
-                  } />
+                  }>
+                    <Route index element={<Navigate to="/admin/portal-cliente/inicio" replace />} />
+                    <Route path="portal-cliente/inicio" element={<ClienteInicio />} />
+                    <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
+                    <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
+                    <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                    <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
+                    <Route path="portal-cliente/propiedad/:cuentaId/detalles-tecnicos" element={<ClienteDetallesTecnicos />} />
+                    <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
+                    <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
+                    <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                    <Route path="*" element={<Navigate to="/admin/portal-cliente/inicio" replace />} />
+                  </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
               ) : (
