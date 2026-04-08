@@ -319,6 +319,12 @@ async function handleJwtMode(req: Request, authHeader: string) {
     return jsonResponse({ error: 'Solo puedes resetear contraseñas de usuarios con rol Inmobiliaria, Agente Inmobiliario o Agente Interno' }, 403);
   }
 
+  // Administrador de cobranza can only reset Cliente (23)
+  if (requestingRolId === 12 && targetUser.rol_id !== 23) {
+    console.error(`Role 12 (Admin Cobranza) cannot reset rol_id ${targetUser.rol_id}`);
+    return jsonResponse({ error: 'Solo puedes resetear contraseñas de usuarios con rol Cliente' }, 403);
+  }
+
   const result = await resetPassword(supabaseAdmin, email, targetUser.auth_user_id, targetUser.nombre, targetUser.rol_id);
   if (result.error) {
     return jsonResponse({ error: result.error }, 500);
