@@ -288,8 +288,9 @@ async function handleJwtMode(req: Request, authHeader: string) {
   const requestingRolId = requestingUserData.rol_id;
   console.log('User role:', rolNombre, 'rol_id:', requestingRolId);
 
-  // Only Super Administrador (1), Administrador de Proyecto (2), and Inmobiliaria (4) can reset passwords
-  if (requestingRolId !== 1 && requestingRolId !== 2 && requestingRolId !== 4) {
+  // Roles allowed to reset passwords: Super Admin (1), Admin Proyecto (2), Inmobiliaria (4), Admin Cobranza (12)
+  const ALLOWED_RESET_ROLES = [1, 2, 4, 12];
+  if (!ALLOWED_RESET_ROLES.includes(requestingRolId)) {
     return jsonResponse({ error: 'No tienes permisos para resetear contraseñas' }, 403);
   }
 
