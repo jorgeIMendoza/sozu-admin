@@ -195,7 +195,48 @@ const App = () => (
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               {isAgentesSubdomain ? (
                 <Routes>
+                  <Route path="/login" element={<Login portalContext="agentes" />} />
+                  <Route path="/auth/login" element={<Login portalContext="agentes" />} />
+                  <Route path="/registro" element={<Registro />} />
+                  <Route path="/auth/change-password" element={<ChangePassword />} />
+                  <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
+                  <Route path="/auth/forgot-password" element={<ForgotPassword />} />
                   <Route path="*" element={<AgentesLanding />} />
+                </Routes>
+              ) : isInmobiliariasSubdomain ? (
+                <Routes>
+                  <Route path="/registro" element={<RegistroInmobiliaria />} />
+                  <Route path="/login" element={<Login portalContext="inmobiliarias" />} />
+                  <Route path="/auth/login" element={<Login portalContext="inmobiliarias" />} />
+                  <Route path="/auth/change-password" element={<ChangePassword />} />
+                  <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
+                  <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/" element={<Navigate to="/login" replace />} />
+                  <Route path="/admin/*" element={
+                    <ProtectedRoute>
+                      <PermissionRoute>
+                        <AdminLayout />
+                      </PermissionRoute>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="*" element={<Navigate to="/login" replace />} />
+                </Routes>
+              ) : isClientesSubdomain ? (
+                <Routes>
+                  <Route path="/login" element={<Login portalContext="clientes" />} />
+                  <Route path="/auth/login" element={<Login portalContext="clientes" />} />
+                  <Route path="/auth/change-password" element={<ChangePassword />} />
+                  <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
+                  <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/" element={<Navigate to="/login" replace />} />
+                  <Route path="/admin/*" element={
+                    <ProtectedRoute>
+                      <PermissionRoute>
+                        <AdminLayout />
+                      </PermissionRoute>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
               ) : (
               <Routes>
@@ -203,13 +244,14 @@ const App = () => (
                 <Route path="/welcome" element={<Index />} />
                 
                 {/* Auth Routes */}
-                <Route path="/auth/login" element={<Login />} />
+                <Route path="/auth/login" element={<Login portalContext={portalContext} />} />
                 <Route path="/auth/change-password" element={<ChangePassword />} />
                 <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
                 <Route path="/auth/forgot-password" element={<ForgotPassword />} />
                 
                 {/* Public Routes */}
                 <Route path="/registro" element={<Registro />} />
+                <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
                 <Route path="/agentes" element={<AgentesLanding />} />
                 
                 {/* Admin Routes - Protected by Auth and Permissions */}
