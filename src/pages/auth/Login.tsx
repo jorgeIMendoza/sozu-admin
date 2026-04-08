@@ -38,7 +38,13 @@ const ENTITY_TYPE_TO_PORTAL: Record<number, PortalOption> = {
   },
 };
 
-export default function Login() {
+const PORTAL_LABELS: Record<string, { label: string; color: string }> = {
+  agentes: { label: 'Portal Agentes', color: 'hsl(158 64% 38%)' },
+  inmobiliarias: { label: 'Portal Inmobiliarias', color: 'hsl(158 64% 38%)' },
+  clientes: { label: 'Portal Clientes', color: 'hsl(210 80% 45%)' },
+};
+
+export default function Login({ portalContext }: { portalContext?: 'agentes' | 'inmobiliarias' | 'clientes' | null }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
