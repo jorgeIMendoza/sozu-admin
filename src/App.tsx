@@ -201,6 +201,26 @@ const App = () => (
                   <Route path="/auth/change-password" element={<ChangePassword />} />
                   <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
                   <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/admin/*" element={
+                    <ProtectedRoute>
+                      <PermissionRoute>
+                        <AdminLayout />
+                      </PermissionRoute>
+                    </ProtectedRoute>
+                  }>
+                    <Route index element={<Navigate to="/admin/agent/inicio" replace />} />
+                    <Route path="agent/inicio" element={<AgentInicio />} />
+                    <Route path="agent/inventario" element={<AgentInventario />} />
+                    <Route path="agent/pipeline" element={<AgentPipeline />} />
+                    <Route path="agent/comisiones" element={<AgentComisiones />} />
+                    <Route path="agent/prospectos" element={<AgentProspectos />} />
+                    <Route path="agent/perfil" element={<AgentPerfil />} />
+                    <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
+                    <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />
+                    <Route path="agent/inventario/proyecto/:id" element={<AgentProyectoDetalle />} />
+                    <Route path="*" element={<Navigate to="/admin/agent/inicio" replace />} />
+                  </Route>
+                  <Route path="/" element={<AgentesLanding />} />
                   <Route path="*" element={<AgentesLanding />} />
                 </Routes>
               ) : isInmobiliariasSubdomain ? (
