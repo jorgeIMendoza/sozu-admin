@@ -161,7 +161,7 @@ export default function AgentesLanding() {
               <p className="text-[hsl(0,0%,34%)] mb-8">
                 Regístrate en menos de 2 minutos y comienza a comercializar proyectos inmobiliarios.
               </p>
-              <a href="https://registro.sozu.com">
+              <a href="https://agentes.sozu.com/registro">
                 <Button
                   size="lg"
                   className="rounded-full px-10 bg-[hsl(158,64%,38%)] hover:bg-[hsl(158,64%,32%)] text-white font-semibold"
