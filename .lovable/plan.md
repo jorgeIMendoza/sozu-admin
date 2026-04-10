@@ -1,71 +1,104 @@
 
 
-## Situacion actual
+## Plan: Edge Function para migrar archivos de api.sozu.com a Supabase Storage
 
-- Ya existe una pagina de configuracion de notificaciones en `/admin/notificaciones-config` con la tabla `notificaciones_configuracion`
-- Esa pagina **NO tiene submenú** en la BD (no aparece en la tabla `submenus`), por lo que no es accesible desde el sidebar
-- No existe tabla ni pagina de logs de notificaciones enviadas
-- El Edge Function `notificar-agentes` no registra logs de envio en ninguna tabla
+### Resumen
 
-## Plan
+Crear una Edge Function genérica llamada `migrar-archivos-storage` que reciba como parámetros la tabla, columna y bucket destino. La función:
+1. Consulta los registros con URLs de `api.sozu.com/storage/uploads/`
+2. Descarga cada archivo
+3. Lo sube al bucket de Supabase Storage
+4. Actualiza la URL en la BD
 
-### 1. Crear tabla `notificaciones_log` (migración)
+Tú controlarás qué tabla/columna migrar en cada ejecución.
+
+### Paso 1 — Crear bucket de Storage
+
+Crear una migración SQL para un bucket público llamado `legacy-uploads` donde se almacenarán todos los archivos migrados, organizados en carpetas por tabla (ej: `proyectos/`, `pagos/`, `documentos/`).
 
 ```sql
-CREATE TABLE public.notificaciones_log (
-  id bigint generated always as identity primary key,
-  tipo_evento text not null,
-  canal text not null, -- 'email', 'whatsapp', 'ambos'
-  destinatarios_count int not null default 0,
-  id_proyecto int references proyectos(id),
-  nombre_desarrollo text,
-  payload jsonb,
-  resultado text not null default 'success', -- 'success', 'error'
-  error_detalle text,
-  created_at timestamptz not null default now()
-);
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('legacy-uploads', 'legacy-uploads', true)
+ON CONFLICT (id) DO NOTHING;
 
-ALTER TABLE public.notificaciones_log ENABLE ROW LEVEL SECURITY;
+-- Política de lectura pública
+CREATE POLICY "Public read legacy-uploads"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'legacy-uploads');
 
-CREATE POLICY "Super Admin can read notification logs"
-ON public.notificaciones_log FOR SELECT
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'));
-
--- Permitir insert desde service_role (edge functions)
-CREATE POLICY "Service role can insert logs"
-ON public.notificaciones_log FOR INSERT
-TO service_role
-WITH CHECK (true);
+-- Política de inserción para service_role (la edge function usa service role)
+CREATE POLICY "Service insert legacy-uploads"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'legacy-uploads');
 ```
 
-### 2. Registrar submenús en la BD (insert)
+### Paso 2 — Crear Edge Function `migrar-archivos-storage`
 
-Crear dos submenús bajo el menú "Configuraciones/Logs" (ID 13):
+La función aceptará un POST con:
+```json
+{
+  "tabla": "proyectos",
+  "columna": "url_firma_recibos",
+  "carpeta": "proyectos",
+  "limit": 50,
+  "dry_run": true
+}
+```
 
-- **ID 88** - "Config. Notificaciones" → `/admin/notificaciones-config` (orden 10)
-- **ID 89** - "Logs de Notificaciones" → `/admin/notificaciones-log` (orden 11)
+- **dry_run: true** → solo lista los registros que se migrarían, sin tocar nada
+- **dry_run: false** → ejecuta la migración real
+- **limit** → controla cuántos registros procesar por lote
 
-Asignar permisos `leer`, `crear`, `actualizar`, `eliminar` al rol Super Admin (ID 1) para ambos submenús.
+La función usará `SUPABASE_SERVICE_ROLE_KEY` para tener permisos completos de Storage y BD.
 
-### 3. Crear pagina `NotificacionesLog.tsx`
+Flujo interno:
+1. SELECT registros donde la columna contiene `api.sozu.com/storage/uploads/`
+2. Para cada registro:
+   - Extraer el nombre del archivo de la URL
+   - Descargar el archivo con `fetch()`
+   - Subir a Supabase Storage en `legacy-uploads/{carpeta}/{nombre_archivo}`
+   - UPDATE la fila con la nueva URL pública de Supabase
+3. Retornar resumen: total encontrados, migrados exitosamente, errores
 
-Nueva pagina en `src/pages/admin/NotificacionesLog.tsx` que muestre:
-- Filtros por rango de fecha, tipo de evento y resultado (success/error)
-- Tabla con columnas: Fecha, Evento, Canal, Destinatarios, Proyecto, Resultado, Error
-- Paginacion y ordenamiento por fecha descendente
-- Badges de color para resultado (verde=success, rojo=error)
+### Paso 3 — Registrar en config.toml
 
-### 4. Registrar ruta en App.tsx
+Agregar la función con `verify_jwt = false` para que puedas invocarla fácilmente.
 
-Agregar lazy import y ruta `notificaciones-log` bajo `/admin`.
+### Uso
 
-### 5. Agregar rutas a validRoutes.ts y useDynamicMenus.ts
+Una vez desplegada, tú la invocarás tabla por tabla. Ejemplo para empezar con `proyectos.url_firma_recibos`:
 
-- Agregar `/admin/notificaciones-log` a `VALID_ADMIN_ROUTES`
-- Agregar icono para `/admin/notificaciones-log` en `useDynamicMenus.ts`
+```bash
+# Primero dry_run para ver qué se migraría
+POST /migrar-archivos-storage
+{ "tabla": "proyectos", "columna": "url_firma_recibos", "carpeta": "proyectos", "dry_run": true }
 
-### 6. Actualizar Edge Function `notificar-agentes`
+# Luego ejecutar
+POST /migrar-archivos-storage  
+{ "tabla": "proyectos", "columna": "url_firma_recibos", "carpeta": "proyectos", "dry_run": false, "limit": 50 }
+```
 
-Despues de enviar la notificacion (exitosa o con error), insertar un registro en `notificaciones_log` con el tipo de evento, canal, cantidad de destinatarios, proyecto y resultado.
+### Tablas a migrar (en el orden que tú elijas)
+
+| # | Tabla | Columna | Registros |
+|---|-------|---------|-----------|
+| 1 | proyectos | url_firma_recibos | 3 |
+| 2 | proyectos | url_logo | 15 |
+| 3 | proyectos | url_imagen_portada | 16 |
+| 4 | personas | url_imagen | 46 |
+| 5 | amenidades | url_icono | 94 |
+| 6 | vistas | url_imagen | 115 |
+| 7 | multimedias_proyecto | url | 3,739 |
+| 8 | documentos | url | 4,049 |
+| 9 | pagos | url_recibo | 6,150 |
+| 10 | pagos | url_cep | 14,112 |
+| 11 | multimedias_modelo | url | 14,797 |
+| 12 | propiedades | url_imagen_portada | 29,626 |
+| 13 | multimedias_propiedad | url | 250,668 |
+
+### Archivos a crear/modificar
+
+- `supabase/migrations/xxx.sql` — bucket y políticas
+- `supabase/functions/migrar-archivos-storage/index.ts` — la Edge Function
+- `supabase/config.toml` — registrar la función
 
