@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
     console.log('Notification payload:', JSON.stringify(notificationPayload));
     const incomingAuthHeader = req.headers.get('Authorization') || req.headers.get('authorization');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const evolutionWaToken = Deno.env.get('EVOLUTION_WA_TOKEN');
+    const evolutionWaToken = Deno.env.get('EVOLUTION_WA_COBRANZA_TOKEN');
 
     if (!supabaseAnonKey) {
       throw new Error('SUPABASE_ANON_KEY no configurada');
@@ -199,9 +199,9 @@ Deno.serve(async (req) => {
 
     if (evolutionWaToken) {
       webhookHeaders['apikey'] = evolutionWaToken;
-      console.log('EVOLUTION_WA_TOKEN included in headers as apikey');
+      console.log('EVOLUTION_WA_COBRANZA_TOKEN included in headers as apikey');
     } else {
-      console.warn('EVOLUTION_WA_TOKEN not configured - WhatsApp may fail with 401');
+      console.warn('EVOLUTION_WA_COBRANZA_TOKEN not configured - WhatsApp may fail with 401');
     }
 
     const notifResponse = await fetch(`${supabaseUrl}/functions/v1/enviar-notificacion`, {

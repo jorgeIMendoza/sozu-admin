@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Forward the apikey header from the incoming request (EVOLUTION_WA_TOKEN)
+    // Forward the apikey header from the incoming request (EVOLUTION_WA_COBRANZA_TOKEN)
     const incomingApiKey = req.headers.get('apikey');
 
     const outgoingHeaders: Record<string, string> = {
