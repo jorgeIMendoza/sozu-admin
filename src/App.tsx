@@ -459,10 +459,10 @@ const App = () => (
               </Routes>
               )}
             </Suspense>
+            </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>
             </ClienteImpersonationProvider>
             </AgentImpersonationProvider>
-            </CobranzaImpersonationProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
