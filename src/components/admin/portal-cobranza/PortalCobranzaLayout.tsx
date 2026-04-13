@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCobranzaImpersonation } from "@/contexts/CobranzaImpersonationContext";
 import { CobranzaImpersonationSelector } from "./CobranzaImpersonationSelector";
 import { APP_VERSION } from "@/lib/config";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
@@ -67,6 +68,7 @@ export const PortalCobranzaLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
+  const { impersonatedName, impersonatedEmail, isImpersonating } = useCobranzaImpersonation();
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
 
@@ -74,7 +76,16 @@ export const PortalCobranzaLayout = () => {
 
   const currentSection = Object.entries(SECTION_LABELS).find(([path]) => isActive(path))?.[1] || "Cobranza 360";
 
-  const userInitials = profile?.email ? profile.email.substring(0, 2).toUpperCase() : "U";
+  const activeUserName = isImpersonating
+    ? impersonatedName || impersonatedEmail || profile?.nombre || profile?.email || "Usuario"
+    : profile?.nombre || profile?.email || "Usuario";
+
+  const userInitials = activeUserName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("") || "U";
 
   return (
     <div className="min-h-screen flex">
@@ -207,11 +218,17 @@ export const PortalCobranzaLayout = () => {
           </div>
           <div className="flex items-center gap-3">
             {isSuperAdmin && <CobranzaImpersonationSelector />}
-            <Avatar className="h-9 w-9">
-              <AvatarFallback className="bg-primary text-primary-foreground text-[13px] font-bold">
-                {userInitials}
-              </AvatarFallback>
-            </Avatar>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="min-w-0 text-right">
+                <p className="text-sm font-medium text-foreground truncate">{activeUserName}</p>
+                <p className="text-xs text-muted-foreground truncate">Cobranza</p>
+              </div>
+              <Avatar className="h-9 w-9 shrink-0">
+                <AvatarFallback className="bg-primary text-primary-foreground text-[13px] font-bold">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+            </div>
           </div>
         </header>
 
