@@ -10,6 +10,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AgentImpersonationProvider } from "@/contexts/AgentImpersonationContext";
 import { ClienteImpersonationProvider } from "@/contexts/ClienteImpersonationContext";
 import { InmobiliariaImpersonationProvider } from "@/contexts/InmobiliariaImpersonationContext";
+import { CobranzaImpersonationProvider } from "@/contexts/CobranzaImpersonationContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PermissionRoute } from "@/components/auth/PermissionRoute";
 import { AdminLayout } from "./components/admin/AdminLayout";
@@ -145,6 +146,22 @@ const ClienteMantenimientoPago = lazyRetry(() => import("./pages/admin/portal-cl
 const ClientePropiedadPago = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedadPago"));
 const ClienteDetallesTecnicos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteDetallesTecnicos"));
 
+// Portal Cobranza pages
+const CobranzaDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaDashboard"));
+const CobranzaBandeja = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaBandeja"));
+const CobranzaAtencion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaAtencion"));
+const CobranzaPagos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPagos"));
+const CobranzaCeps = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaCeps"));
+const CobranzaConciliaciones = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConciliaciones"));
+const CobranzaPromesas = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPromesas"));
+const CobranzaAdminAvisos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaAdminAvisos"));
+const CobranzaEnviarAvisos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaEnviarAvisos"));
+const CobranzaEjecuciones = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaEjecuciones"));
+const CobranzaPlantillas = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPlantillas"));
+const CobranzaInputsObra = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaInputsObra"));
+const CobranzaReportes = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaReportes"));
+const CobranzaConfiguracion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConfiguracion"));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -192,6 +209,7 @@ const App = () => (
             <AgentImpersonationProvider>
             <ClienteImpersonationProvider>
             <InmobiliariaImpersonationProvider>
+            <CobranzaImpersonationProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               {isAgentesSubdomain ? (
                 <Routes>
@@ -419,6 +437,21 @@ const App = () => (
                   <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                   <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
                   <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                  {/* Portal Cobranza Routes */}
+                  <Route path="portal-cobranza/dashboard" element={<CobranzaDashboard />} />
+                  <Route path="portal-cobranza/bandeja" element={<CobranzaBandeja />} />
+                  <Route path="portal-cobranza/atencion" element={<CobranzaAtencion />} />
+                  <Route path="portal-cobranza/pagos" element={<CobranzaPagos />} />
+                  <Route path="portal-cobranza/ceps" element={<CobranzaCeps />} />
+                  <Route path="portal-cobranza/conciliaciones" element={<CobranzaConciliaciones />} />
+                  <Route path="portal-cobranza/promesas" element={<CobranzaPromesas />} />
+                  <Route path="portal-cobranza/comunicacion/avisos" element={<CobranzaAdminAvisos />} />
+                  <Route path="portal-cobranza/comunicacion/enviar" element={<CobranzaEnviarAvisos />} />
+                  <Route path="portal-cobranza/comunicacion/ejecuciones" element={<CobranzaEjecuciones />} />
+                  <Route path="portal-cobranza/comunicacion/plantillas" element={<CobranzaPlantillas />} />
+                  <Route path="portal-cobranza/inputs-obra" element={<CobranzaInputsObra />} />
+                  <Route path="portal-cobranza/reportes" element={<CobranzaReportes />} />
+                  <Route path="portal-cobranza/configuracion" element={<CobranzaConfiguracion />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
@@ -426,6 +459,7 @@ const App = () => (
               </Routes>
               )}
             </Suspense>
+            </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>
             </ClienteImpersonationProvider>
             </AgentImpersonationProvider>

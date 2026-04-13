@@ -98,6 +98,21 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-cliente/perfil',
   '/admin/notificaciones-config',
   '/admin/notificaciones-log',
+  // Portal Cobranza
+  '/admin/portal-cobranza/dashboard',
+  '/admin/portal-cobranza/bandeja',
+  '/admin/portal-cobranza/atencion',
+  '/admin/portal-cobranza/pagos',
+  '/admin/portal-cobranza/ceps',
+  '/admin/portal-cobranza/conciliaciones',
+  '/admin/portal-cobranza/promesas',
+  '/admin/portal-cobranza/comunicacion/avisos',
+  '/admin/portal-cobranza/comunicacion/enviar',
+  '/admin/portal-cobranza/comunicacion/ejecuciones',
+  '/admin/portal-cobranza/comunicacion/plantillas',
+  '/admin/portal-cobranza/inputs-obra',
+  '/admin/portal-cobranza/reportes',
+  '/admin/portal-cobranza/configuracion',
 ]);
 
 export function isValidRoute(route: string): boolean {
