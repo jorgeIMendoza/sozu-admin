@@ -21,16 +21,33 @@ export function CobranzaImpersonationSelector() {
   const [open, setOpen] = useState(false);
 
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
-  if (!isSuperAdmin) return null;
 
-  // Fetch all active users for impersonation
-  const { data: usuarios = [] } = useQuery({
-    queryKey: ["cobranza-impersonation-users"],
+  // First get roles that have permissions on Portal Cobranza submenus
+  const { data: allowedRoles = [] } = useQuery({
+    queryKey: ["cobranza-allowed-roles"],
     queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("submenus_permisos")
+        .select("rol_id, submenus!inner(menu_id, menus!inner(nombre))")
+        .eq("activo", true)
+        .eq("submenus.menus.nombre", "Portal Cobranza");
+
+      if (error) throw error;
+      const roleIds = [...new Set((data || []).map((r: any) => r.rol_id))];
+      return roleIds as number[];
+    },
+    enabled: isSuperAdmin,
+  });
+
+  const { data: usuarios = [] } = useQuery({
+    queryKey: ["cobranza-impersonation-users", allowedRoles],
+    queryFn: async () => {
+      if (allowedRoles.length === 0) return [];
       const { data, error } = await (supabase as any)
         .from("usuarios")
         .select("email, rol_id, personas!inner(id, nombre_legal, nombre_comercial), roles!inner(nombre)")
         .eq("activo", true)
+        .in("rol_id", allowedRoles)
         .order("email");
 
       if (error) throw error;
@@ -43,8 +60,10 @@ export function CobranzaImpersonationSelector() {
         }))
         .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
     },
-    enabled: isSuperAdmin,
+    enabled: isSuperAdmin && allowedRoles.length > 0,
   });
+
+  if (!isSuperAdmin) return null;
 
   return (
     <div className="flex items-center gap-2">
