@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Building2 } from "lucide-react";
+import { Building2, UserCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
@@ -12,6 +12,11 @@ export default function RegistroInmobiliaria() {
     email: "",
     telefono: "",
     clave_pais_telefono: "MX",
+    // Representante Legal
+    nombre_representante: "",
+    email_representante: "",
+    telefono_representante: "",
+    clave_pais_telefono_representante: "MX",
   });
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -26,10 +31,10 @@ export default function RegistroInmobiliaria() {
             clave_pais_telefono: formData.clave_pais_telefono,
           },
           representante_legal: {
-            nombre_legal: formData.nombre_comercial.trim(),
-            email: formData.email.trim().toLowerCase(),
-            telefono: formData.telefono.trim(),
-            clave_pais_telefono: formData.clave_pais_telefono,
+            nombre_legal: formData.nombre_representante.trim(),
+            email: formData.email_representante.trim().toLowerCase(),
+            telefono: formData.telefono_representante.trim(),
+            clave_pais_telefono: formData.clave_pais_telefono_representante,
           },
         },
       });
@@ -64,11 +69,46 @@ export default function RegistroInmobiliaria() {
     },
   });
 
+  const isRepEmailSameAsInmob =
+    formData.email_representante.trim().toLowerCase() === formData.email.trim().toLowerCase() &&
+    formData.email_representante.trim() !== "";
+
+  const isFormValid =
+    formData.nombre_comercial.trim() !== "" &&
+    formData.email.trim() !== "" &&
+    formData.email.includes("@") &&
+    formData.telefono.length === 10 &&
+    formData.nombre_representante.trim() !== "" &&
+    formData.email_representante.trim() !== "" &&
+    formData.email_representante.includes("@") &&
+    formData.telefono_representante.length === 10 &&
+    !isRepEmailSameAsInmob;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.nombre_comercial.trim()) {
       toast({ title: "Campo requerido", description: "El nombre comercial es obligatorio", variant: "destructive" });
+      return;
+    }
+
+    if (!formData.nombre_representante.trim()) {
+      toast({ title: "Campo requerido", description: "El nombre del representante legal es obligatorio", variant: "destructive" });
+      return;
+    }
+
+    if (!formData.email_representante.trim() || !formData.email_representante.includes('@')) {
+      toast({ title: "Campo requerido", description: "Ingresa un email válido para el representante legal", variant: "destructive" });
+      return;
+    }
+
+    if (isRepEmailSameAsInmob) {
+      toast({ title: "Email duplicado", description: "El email del representante legal no puede ser el mismo que el de la inmobiliaria", variant: "destructive" });
+      return;
+    }
+
+    if (!formData.telefono_representante.trim() || formData.telefono_representante.length !== 10) {
+      toast({ title: "Campo requerido", description: "El teléfono del representante legal debe tener 10 dígitos", variant: "destructive" });
       return;
     }
 
@@ -154,7 +194,72 @@ export default function RegistroInmobiliaria() {
             />
           </div>
 
-          {/* Email */}
+          {/* Representante Legal Section */}
+          <div className="border rounded-lg p-4 space-y-4" style={{ borderColor: 'hsl(0 0% 88%)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <UserCheck className="w-4 h-4" style={{ color: 'hsl(145 35% 51%)' }} />
+              <span className="text-sm font-semibold text-[hsl(0_0%_5%)]">Representante Legal</span>
+            </div>
+
+            {/* Nombre Representante */}
+            <div>
+              <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Nombre completo</label>
+              <input
+                type="text"
+                value={formData.nombre_representante}
+                onChange={(e) => setFormData(prev => ({ ...prev, nombre_representante: e.target.value }))}
+                placeholder="Nombre del representante legal"
+                required
+                className="login-input w-full"
+              />
+            </div>
+
+            {/* Email Representante */}
+            <div>
+              <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Email</label>
+              <input
+                type="email"
+                value={formData.email_representante}
+                onChange={(e) => setFormData(prev => ({ ...prev, email_representante: e.target.value }))}
+                placeholder="email@representante.com"
+                required
+                className={`login-input w-full ${isRepEmailSameAsInmob ? 'border-red-500 focus:border-red-500' : ''}`}
+              />
+              {isRepEmailSameAsInmob && (
+                <p className="text-xs mt-1 text-red-500">
+                  El email del representante no puede ser el mismo que el de la inmobiliaria
+                </p>
+              )}
+            </div>
+
+            {/* Teléfono Representante */}
+            <div>
+              <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Teléfono</label>
+              <div className="flex gap-3">
+                <select
+                  value={formData.clave_pais_telefono_representante}
+                  onChange={(e) => setFormData(prev => ({ ...prev, clave_pais_telefono_representante: e.target.value }))}
+                  className="login-input w-24 px-3"
+                >
+                  <option value="MX">🇲🇽 +52</option>
+                  <option value="US">🇺🇸 +1</option>
+                </select>
+                <input
+                  type="tel"
+                  value={formData.telefono_representante}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData(prev => ({ ...prev, telefono_representante: value }));
+                  }}
+                  placeholder="10 dígitos"
+                  required
+                  className="login-input flex-1"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Email Inmobiliaria */}
           <div>
             <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Email de la inmobiliaria</label>
             <input
@@ -167,7 +272,7 @@ export default function RegistroInmobiliaria() {
             />
           </div>
 
-          {/* Teléfono */}
+          {/* Teléfono Inmobiliaria */}
           <div>
             <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Teléfono de la inmobiliaria</label>
             <div className="flex gap-3">
@@ -196,7 +301,7 @@ export default function RegistroInmobiliaria() {
           {/* Submit */}
           <button
             type="submit"
-            disabled={registerMutation.isPending || !formData.nombre_comercial.trim() || !formData.email.trim() || !formData.email.includes('@') || formData.telefono.length !== 10}
+            disabled={registerMutation.isPending || !isFormValid}
             className="login-btn-primary"
           >
             {registerMutation.isPending ? "Registrando..." : "Registrarme como Inmobiliaria"}
