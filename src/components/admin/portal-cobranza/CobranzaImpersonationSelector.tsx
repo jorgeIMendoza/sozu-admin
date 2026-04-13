@@ -26,14 +26,32 @@ export function CobranzaImpersonationSelector() {
   const { data: allowedRoles = [] } = useQuery({
     queryKey: ["cobranza-allowed-roles"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("submenus_permisos")
-        .select("rol_id, submenus!inner(menu_id, menus!inner(nombre))")
-        .eq("activo", true)
-        .eq("submenus.menus.nombre", "Portal Cobranza");
+      // Step 1: get menu id
+      const { data: menuData } = await (supabase as any)
+        .from("menus")
+        .select("id")
+        .eq("nombre", "Portal Cobranza")
+        .single();
+      if (!menuData) return [];
 
-      if (error) throw error;
-      const roleIds = [...new Set((data || []).map((r: any) => r.rol_id))];
+      // Step 2: get submenu ids for that menu
+      const { data: subData } = await (supabase as any)
+        .from("submenus")
+        .select("id")
+        .eq("menu_id", menuData.id)
+        .eq("activo", true);
+      if (!subData || subData.length === 0) return [];
+
+      const subIds = subData.map((s: any) => s.id);
+
+      // Step 3: get distinct roles with permissions on those submenus
+      const { data: permData } = await (supabase as any)
+        .from("submenus_permisos")
+        .select("rol_id")
+        .in("submenu_id", subIds)
+        .eq("activo", true);
+
+      const roleIds = [...new Set((permData || []).map((r: any) => r.rol_id))];
       return roleIds as number[];
     },
     enabled: isSuperAdmin,
