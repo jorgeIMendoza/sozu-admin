@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { mockPaymentRecords, reconciliationStatusLabels, type ReconciliationStatus } from '@/data/mockDataExtended';
-import { mockAccounts, mockLegalEntities } from '@/data/mockData';
+import { mockPaymentRecords, reconciliationStatusLabels, type ReconciliationStatus } from '@/data/cobranza/mockDataExtended';
+import { mockAccounts, mockLegalEntities } from '@/data/cobranza/mockData';
 import { formatCurrency, formatDate } from '@/components/cobranza/StatusBadges';
 import { ActiveFilterBanner } from '@/components/cobranza/ActiveFilterBanner';
 import { Search, X, CheckCircle2, Clock, AlertTriangle, FileText, Link2, Eye, MessageSquare, DollarSign, Shield } from 'lucide-react';

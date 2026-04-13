@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { mockAccounts, mockLegalEntities, executives } from '@/data/mockData';
-import { getBitacoraEntries, type BitacoraEntry } from '@/data/bitacoraData';
+import { mockAccounts, mockLegalEntities, executives } from '@/data/cobranza/mockData';
+import { getBitacoraEntries, type BitacoraEntry } from '@/data/cobranza/bitacoraData';
 import { BitacoraEntryModal } from '@/components/cobranza/BitacoraEntryModal';
 import { PriorityBadge, formatCurrency, formatDate } from '@/components/cobranza/StatusBadges';
 import { ActiveFilterBanner } from '@/components/cobranza/ActiveFilterBanner';

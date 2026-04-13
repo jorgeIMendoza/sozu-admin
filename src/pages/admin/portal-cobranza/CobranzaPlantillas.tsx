@@ -3,7 +3,7 @@ import { Search, Plus, Pencil, FileText, Mail, MessageSquare } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { avisoCategoryLabels, type AvisoCategory, type AvisoChannel } from '@/data/avisosData';
+import { avisoCategoryLabels, type AvisoCategory, type AvisoChannel } from '@/data/cobranza/avisosData';
 
 interface Template {
   id: string;

@@ -1,5 +1,5 @@
 import { formatCurrency, formatDate, PromiseStatusBadge } from '@/components/cobranza/StatusBadges';
-import { mockAccounts } from '@/data/mockData';
+import { mockAccounts } from '@/data/cobranza/mockData';
 import { ActiveFilterBanner } from '@/components/cobranza/ActiveFilterBanner';
 import type { PaymentPromise, PromiseStatus } from '@/types/cobranza';
 import { useState, useMemo, useCallback } from 'react';

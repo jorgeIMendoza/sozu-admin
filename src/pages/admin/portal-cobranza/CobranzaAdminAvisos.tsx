@@ -3,7 +3,7 @@ import { Search, Plus, MoreHorizontal, Copy, Power, Trash2, Pencil, Mail, Messag
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
-import { avisoCategoryLabels, type AvisoCategory, type AvisoChannel } from '@/data/avisosData';
+import { avisoCategoryLabels, type AvisoCategory, type AvisoChannel } from '@/data/cobranza/avisosData';
 
 // ── Extended Aviso Definition ───────────────────────────────────
 interface AvisoDefinition {

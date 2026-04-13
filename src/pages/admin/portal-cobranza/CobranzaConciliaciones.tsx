@@ -11,7 +11,7 @@ import {
   priorityLabels, priorityColors, originLabels,
   type ConciliacionCase, type ConciliacionStatus, type ConciliacionPriority,
   type ArchiveReason, type ConciliacionCaseType,
-} from '@/data/conciliacionData';
+} from '@/data/cobranza/conciliacionData';
 import {
   AlertTriangle, Clock, Plus, Search, X, Eye, FileText, CheckCircle2,
   RotateCcw, Archive, ArrowUpRight, User, Briefcase, MessageSquare,

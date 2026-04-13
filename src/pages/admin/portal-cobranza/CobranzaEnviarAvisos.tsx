@@ -2,9 +2,9 @@ import { useState, useMemo } from 'react';
 import { Send, Users, User, Filter, Eye, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { mockAccounts, projects, mockLegalEntities, executives } from '@/data/mockData';
-import { avisoCategoryLabels, cobranzaTemplates, addAviso, type AvisoRecord, type AvisoChannel, type AvisoCategory } from '@/data/avisosData';
-import { addBitacoraEntry, type BitacoraEntry } from '@/data/bitacoraData';
+import { mockAccounts, projects, mockLegalEntities, executives } from '@/data/cobranza/mockData';
+import { avisoCategoryLabels, cobranzaTemplates, addAviso, type AvisoRecord, type AvisoChannel, type AvisoCategory } from '@/data/cobranza/avisosData';
+import { addBitacoraEntry, type BitacoraEntry } from '@/data/cobranza/bitacoraData';
 import { useToast } from '@/hooks/use-toast';
 
 type AudienceMode = 'individual' | 'filtrado' | 'masivo';

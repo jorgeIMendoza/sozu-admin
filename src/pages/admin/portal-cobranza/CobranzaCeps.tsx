@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { mockCEPRecords, cepStatusLabels, type CEPStatus } from '@/data/mockDataExtended';
+import { mockCEPRecords, cepStatusLabels, type CEPStatus } from '@/data/cobranza/mockDataExtended';
 import { formatCurrency, formatDate } from '@/components/cobranza/StatusBadges';
 import { ActiveFilterBanner } from '@/components/cobranza/ActiveFilterBanner';
 import { Search, X, FileCheck, Upload, Eye, UserCheck, Clock, AlertTriangle, CheckCircle2, FileX } from 'lucide-react';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { mockObraProjects, type ObraProject } from '@/data/obraData';
+import { mockObraProjects, type ObraProject } from '@/data/cobranza/obraData';
 import { formatCurrency } from '@/components/cobranza/StatusBadges';
 import { cn } from '@/lib/utils';
 import {

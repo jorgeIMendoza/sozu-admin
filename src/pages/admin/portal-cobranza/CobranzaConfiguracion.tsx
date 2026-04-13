@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Settings, Mail, MessageSquare, FileText, Shield, Clock, List, Users, ChevronRight, CreditCard, AlertTriangle, Milestone, Send, Zap, CheckCircle2 } from 'lucide-react';
-import { mockAutomationRules } from '@/data/mockData';
+import { mockAutomationRules } from '@/data/cobranza/mockData';
 import { cn } from '@/lib/utils';
 
 const configSections = [

@@ -4,15 +4,15 @@ import {
   mockCases, caseTypeLabels, caseStatusLabels, mockFollowUps, mockReminders,
   followUpTypeLabels, followUpResultLabels,
   type CustomerCase, type CaseStatus, type CaseFollowUp,
-} from '@/data/mockDataExtended';
+} from '@/data/cobranza/mockDataExtended';
 import {
   mockClients, getAccountsForClient, getCRMHistoryForClient, getClientIdFromAccountId, addCRMHistoryEntry,
   personTypeLabels, clientStatusLabels, clientAccountRoleLabels,
   crmInteractionLabels,
   type ClientEntity, type CRMInteractionType,
-} from '@/data/clientData';
-import { getBitacoraEntries, addBitacoraEntry, categoryLabels, type BitacoraEntry, type BitacoraCategory } from '@/data/bitacoraData';
-import { getAvisosForCase, getAvisosForAccount, getAvisosWithErrors, sendStatusConfig, sendStatusLabels, avisoCategoryLabels, errorTypeLabels, suggestedActionLabels, type AvisoRecord } from '@/data/avisosData';
+} from '@/data/cobranza/clientData';
+import { getBitacoraEntries, addBitacoraEntry, categoryLabels, type BitacoraEntry, type BitacoraCategory } from '@/data/cobranza/bitacoraData';
+import { getAvisosForCase, getAvisosForAccount, getAvisosWithErrors, sendStatusConfig, sendStatusLabels, avisoCategoryLabels, errorTypeLabels, suggestedActionLabels, type AvisoRecord } from '@/data/cobranza/avisosData';
 import { BitacoraEntryModal } from '@/components/cobranza/BitacoraEntryModal';
 import { SendAvisoModal } from '@/components/cobranza/SendAvisoModal';
 import { formatDate } from '@/components/cobranza/StatusBadges';
