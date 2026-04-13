@@ -34,6 +34,14 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <>{children}</>;
   }
 
+  // Allow portal-cobranza routes only for Super Admin
+  if (location.pathname.startsWith('/admin/portal-cobranza')) {
+    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
+      return <>{children}</>;
+    }
+    return <Navigate to="/admin/access-denied" replace />;
+  }
+
   // Cliente role should only see portal-cliente, redirect them there
   if (profile?.rol_nombre === 'Cliente') {
     return <Navigate to="/admin/portal-cliente/inicio" replace />;
