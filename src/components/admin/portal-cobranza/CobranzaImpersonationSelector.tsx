@@ -21,9 +21,7 @@ export function CobranzaImpersonationSelector() {
   const [open, setOpen] = useState(false);
 
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
-  if (!isSuperAdmin) return null;
 
-  // Fetch all active users for impersonation
   // First get roles that have permissions on Portal Cobranza submenus
   const { data: allowedRoles = [] } = useQuery({
     queryKey: ["cobranza-allowed-roles"],
@@ -64,6 +62,8 @@ export function CobranzaImpersonationSelector() {
     },
     enabled: isSuperAdmin && allowedRoles.length > 0,
   });
+
+  if (!isSuperAdmin) return null;
 
   return (
     <div className="flex items-center gap-2">
