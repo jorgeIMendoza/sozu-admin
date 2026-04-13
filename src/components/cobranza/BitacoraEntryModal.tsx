@@ -9,7 +9,7 @@ import {
   categoryEventTypes,
   resultOptions,
   addBitacoraEntry,
-} from '@/data/bitacoraData';
+} from '@/data/cobranza/bitacoraData';
 
 interface BitacoraEntryModalProps {
   open: boolean;

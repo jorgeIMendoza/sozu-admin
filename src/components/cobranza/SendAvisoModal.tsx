@@ -5,8 +5,8 @@ import { Send } from 'lucide-react';
 import {
   type AvisoCategory, type AvisoChannel, type AvisoRecord,
   avisoCategoryLabels, cobranzaTemplates, addAviso,
-} from '@/data/avisosData';
-import { addBitacoraEntry, type BitacoraEntry } from '@/data/bitacoraData';
+} from '@/data/cobranza/avisosData';
+import { addBitacoraEntry, type BitacoraEntry } from '@/data/cobranza/bitacoraData';
 
 interface SendAvisoModalProps {
   open: boolean;

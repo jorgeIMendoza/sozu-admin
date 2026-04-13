@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Building2, User, Landmark, FileText, CreditCard, Receipt, ScrollText, Upload, Plus, Trash2 } from 'lucide-react';
-import { projects, mockLegalEntities, executives, paymentOrigins } from '@/data/mockData';
+import { projects, mockLegalEntities, executives, paymentOrigins } from '@/data/cobranza/mockData';
 import { chargeTypeFullLabels } from '@/types/cobranza';
 import type { ChargeType } from '@/types/cobranza';
 import { cn } from '@/lib/utils';

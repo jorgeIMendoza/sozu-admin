@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { AccountFormTabs, getDefaultFormData, type AccountFormData } from './AccountFormTabs';
 import { toast } from 'sonner';
 import { Plus, Search, ArrowLeft, ArrowRight, Building2, CheckCircle2 } from 'lucide-react';
-import { projects, executives, mockLegalEntities } from '@/data/mockData';
+import { projects, executives, mockLegalEntities } from '@/data/cobranza/mockData';
 import { chargeTypeLabels } from '@/types/cobranza';
 import { cn } from '@/lib/utils';
 

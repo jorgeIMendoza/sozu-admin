@@ -1,12 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { mockAccounts } from '@/data/mockData';
+import { mockAccounts } from '@/data/cobranza/mockData';
 import {
   ConciliacionCaseType, ConciliacionPriority, ConciliacionStatus, ConciliacionOrigin,
   conciliacionCaseTypeLabels, priorityLabels, conciliacionStatusLabels, originLabels,
   type ConciliacionCase,
-} from '@/data/conciliacionData';
+} from '@/data/cobranza/conciliacionData';
 import { Search } from 'lucide-react';
 
 const executives = ['Luz Ochoa', 'Tomás Peterson'];

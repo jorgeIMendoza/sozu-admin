@@ -6,7 +6,7 @@ import { ModificationReasonModal, type ModificationReason } from './Modification
 import { toast } from 'sonner';
 import type { Account } from '@/types/cobranza';
 import { chargeTypeLabels } from '@/types/cobranza';
-import { projects, mockLegalEntities } from '@/data/mockData';
+import { projects, mockLegalEntities } from '@/data/cobranza/mockData';
 
 interface EditAccountModalProps {
   open: boolean;

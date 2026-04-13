@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { addBitacoraEntry } from '@/data/bitacoraData';
+import { addBitacoraEntry } from '@/data/cobranza/bitacoraData';
 import { BitacoraEntryModal } from '@/components/cobranza/BitacoraEntryModal';
 import { PriorityBadge, formatCurrency, formatDate } from '@/components/cobranza/StatusBadges';
 import { Button } from '@/components/ui/button';
