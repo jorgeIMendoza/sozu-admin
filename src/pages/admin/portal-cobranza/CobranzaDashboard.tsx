@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
-import { mockKPIs, mockFinancialMetrics, mockAccounts, mockWeeklyFlow, mockLegalEntities } from '@/data/cobranza/mockData';
+import { mockKPIs, mockFinancialMetrics, mockAccounts, mockWeeklyFlow, mockLegalEntities, executives } from '@/data/cobranza/mockData';
 import { mockObraProjects, mockObraWeekly, mockCashFlowProjection, getObraStatus, obraStatusConfig } from '@/data/cobranza/obraData';
 import { navigateWithFilters } from '@/lib/navigationFilters';
 import {
