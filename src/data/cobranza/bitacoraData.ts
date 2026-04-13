@@ -1,4 +1,4 @@
-import { mockAccounts } from '@/data/mockData';
+import { mockAccounts } from './mockData';
 
 export type BitacoraCategory = 'comunicacion' | 'nota_interna' | 'cobranza' | 'atencion' | 'documentacion' | 'venta' | 'legal' | 'sistema';
 

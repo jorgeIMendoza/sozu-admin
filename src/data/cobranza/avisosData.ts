@@ -1,5 +1,5 @@
-import { mockAccounts } from '@/data/mockData';
-import { mockCases } from '@/data/mockDataExtended';
+import { mockAccounts } from './mockData';
+import { mockCases } from './mockDataExtended';
 
 // ── Aviso Types ─────────────────────────────────────────────────
 export type AvisoCategory = 'cobranza_preventiva' | 'cobranza_vencida' | 'estado_cuenta' | 'comprobante' | 'documentacion' | 'penalizacion' | 'legal' | 'entrega_escrituracion' | 'general';

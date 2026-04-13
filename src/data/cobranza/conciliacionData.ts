@@ -1,5 +1,5 @@
-import { mockAccounts } from '@/data/mockData';
-import { addBitacoraEntry } from '@/data/bitacoraData';
+import { mockAccounts } from './mockData';
+import { addBitacoraEntry } from './bitacoraData';
 import type { IncidentType } from '@/types/cobranza';
 
 // ── Conciliation Case Types ─────────────────────────────────────

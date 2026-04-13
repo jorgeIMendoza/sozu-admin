@@ -106,7 +106,7 @@ export interface CustomerCase {
   escalationTarget?: string;
 }
 
-export { mockTemplates, templateSuggestionByCase } from '@/data/mockData';
+export { mockTemplates, templateSuggestionByCase } from './mockData';
 
 const a = mockAccounts;
 
