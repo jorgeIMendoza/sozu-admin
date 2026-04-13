@@ -76,8 +76,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check if inmobiliaria email already exists
+    // Validate that rep legal email is different from inmobiliaria email
     const inmobiliariaEmailLower = inmobiliaria.email.toLowerCase();
+    const repLegalEmailLower = representante_legal.email.toLowerCase();
+
+    if (inmobiliariaEmailLower === repLegalEmailLower) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'El email del representante legal no puede ser el mismo que el de la inmobiliaria' 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    // Check if inmobiliaria email already exists in personas
     const { data: existingInmobEmail } = await supabase
       .from('personas')
       .select('id, nombre_legal')
@@ -90,6 +103,24 @@ Deno.serve(async (req) => {
         JSON.stringify({ 
           success: false, 
           message: `El email ${inmobiliaria.email} ya está registrado` 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    // Check if rep legal email already exists in personas
+    const { data: existingRepLegalEmail } = await supabase
+      .from('personas')
+      .select('id, nombre_legal')
+      .ilike('email', repLegalEmailLower)
+      .eq('activo', true)
+      .maybeSingle();
+
+    if (existingRepLegalEmail) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: `El email del representante legal ${representante_legal.email} ya está registrado` 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
