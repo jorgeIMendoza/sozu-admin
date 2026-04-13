@@ -154,13 +154,14 @@ import {
       18: User,                // Portal Cliente
    };
  
- export interface DynamicMenuItem {
-   title: string;
-   href?: string;
-   icon: LucideIcon;
-   menuId: number;
-   children?: DynamicMenuChild[];
- }
+export interface DynamicMenuItem {
+    title: string;
+    href?: string;
+    icon: LucideIcon;
+    menuId: number;
+    children?: DynamicMenuChild[];
+    isPortal?: boolean;
+  }
  
 export interface DynamicMenuChild {
   title: string;
@@ -187,6 +188,7 @@ const USUARIO_A_EMAIL = 'jorge.mendoza@sozu.com';
 const LOGS_MENU_ID = 13; // Menu de Configuraciones/Logs
 const INMOBILIARIAS_PORTAL_MENU_ID = 12; // Menu de Inmobiliarias (portal)
 const DASHBOARD_MENU_ID = 1;
+const PORTAL_MENU_IDS = new Set([16, 17, 18]); // Portal Agente, Inmobiliaria, Cliente
  
  export function useDynamicMenus() {
    const { profile, isLoading: isAuthLoading, user, permissionVersion } = useAuth();
@@ -334,22 +336,31 @@ const DASHBOARD_MENU_ID = 1;
          const menuData = menuMap.get(menuId)!;
          const menuIcon = iconMapByMenuId[menuId] || Settings;
  
-         // Dashboard es especial - es un menu sin hijos que lleva directo a /admin
-         if (menuId === DASHBOARD_MENU_ID && menuData.children.length === 1) {
-           items.push({
-             title: menuData.children[0].title,
-             href: menuData.children[0].href,
-             icon: menuData.children[0].icon,
-             menuId,
-           });
-         } else {
-           items.push({
-             title: menuData.menuNombre,
-             icon: menuIcon,
-             menuId,
-             children: menuData.children,
-           });
-         }
+          // Dashboard es especial - es un menu sin hijos que lleva directo a /admin
+          if (menuId === DASHBOARD_MENU_ID && menuData.children.length === 1) {
+            items.push({
+              title: menuData.children[0].title,
+              href: menuData.children[0].href,
+              icon: menuData.children[0].icon,
+              menuId,
+            });
+          } else if (PORTAL_MENU_IDS.has(menuId) && menuData.children.length > 0) {
+            // Portales: enlace directo al primer submenú, sin desplegable
+            items.push({
+              title: menuData.menuNombre,
+              href: menuData.children[0].href,
+              icon: menuIcon,
+              menuId,
+              isPortal: true,
+            });
+          } else {
+            items.push({
+              title: menuData.menuNombre,
+              icon: menuIcon,
+              menuId,
+              children: menuData.children,
+            });
+          }
        });
  
        setMenuItems(items);
