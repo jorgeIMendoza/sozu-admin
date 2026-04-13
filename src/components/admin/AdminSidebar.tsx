@@ -9,7 +9,7 @@ import { useDynamicMenus, DynamicMenuItem } from "@/hooks/useDynamicMenus";
 import { useInmobiliariaDataStatus } from "@/hooks/useInmobiliariaDataStatus";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, ChevronDown, ChevronRight, LogOut, X, Lock } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight, LogOut, X, Lock, ExternalLink } from "lucide-react";
  
  interface AdminSidebarProps {
    isOpen: boolean;
@@ -211,20 +211,37 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
              <nav className="py-4 space-y-2">
                {menuItems.map((item, index) => (
                  <div key={index}>
-                   {item.href ? (
-                     <Link
-                       to={item.href}
-                       className={cn(
-                         "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
-                         currentPath === item.href
-                           ? "bg-primary text-primary-foreground"
-                           : "hover:bg-accent"
-                       )}
-                       onClick={onClose}
-                     >
-                       <item.icon className="h-5 w-5" />
-                       <span>{item.title}</span>
-                     </Link>
+                    {item.href && item.isPortal ? (
+                      <Link
+                        to={item.href}
+                        className={cn(
+                          "flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors font-medium border",
+                          currentPath.startsWith(item.href.split('/').slice(0, -1).join('/'))
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-accent/60 border-border hover:bg-accent hover:border-primary/40 text-foreground"
+                        )}
+                        onClick={onClose}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <item.icon className="h-5 w-5" />
+                          <span>{item.title}</span>
+                        </div>
+                        <ExternalLink className="h-3.5 w-3.5 opacity-50" />
+                      </Link>
+                    ) : item.href ? (
+                      <Link
+                        to={item.href}
+                        className={cn(
+                          "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                          currentPath === item.href
+                            ? "bg-primary text-primary-foreground"
+                            : "hover:bg-accent"
+                        )}
+                        onClick={onClose}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        <span>{item.title}</span>
+                      </Link>
                    ) : (
                      <div className="space-y-1">
                        <button
