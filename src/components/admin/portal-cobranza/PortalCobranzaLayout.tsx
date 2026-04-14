@@ -45,13 +45,7 @@ const navItems: NavItem[] = [
   },
   { separator: true, label: "", path: "", icon: LayoutDashboard },
   { label: "Inputs de Obra", path: "/admin/portal-cobranza/inputs-obra", icon: HardHat },
-  {
-    label: "Reportes", path: "/admin/portal-cobranza/reportes", icon: BarChart3,
-    children: [
-      { label: "Inventarios", path: "/admin/portal-cobranza/reportes/inventarios", icon: ClipboardList },
-      { label: "Finanzas", path: "/admin/portal-cobranza/reportes/finanzas", icon: DollarSign },
-    ],
-  },
+  { label: "Reportes", path: "/admin/portal-cobranza/reportes", icon: BarChart3 },
   { label: "Configuración", path: "/admin/portal-cobranza/configuracion", icon: Settings },
 ];
 
@@ -68,8 +62,7 @@ const SECTION_LABELS: Record<string, string> = {
   "/admin/portal-cobranza/comunicacion/ejecuciones": "Ejecuciones",
   "/admin/portal-cobranza/comunicacion/plantillas": "Plantillas",
   "/admin/portal-cobranza/inputs-obra": "Inputs de Obra",
-  "/admin/portal-cobranza/reportes/inventarios": "Inventarios",
-  "/admin/portal-cobranza/reportes/finanzas": "Finanzas",
+  "/admin/portal-cobranza/reportes": "Reportes",
   "/admin/portal-cobranza/configuracion": "Configuración",
 };
 
