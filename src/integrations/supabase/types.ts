@@ -7571,6 +7571,14 @@ export type Database = {
           reporte_id: number
         }[]
       }
+      get_bandeja_operativa: {
+        Args: {
+          p_proyecto_id?: number
+          p_search?: string
+          p_solo_vencidas?: boolean
+        }
+        Returns: Json
+      }
       get_cuentas_cobranza_export:
         | {
             Args: {
