@@ -8057,6 +8057,17 @@ export type Database = {
           vista: string
         }[]
       }
+      get_relacion_pagos: {
+        Args: {
+          p_has_cep?: boolean
+          p_limit?: number
+          p_metodo_pago?: string
+          p_offset?: number
+          p_proyecto_id?: number
+          p_search?: string
+        }
+        Returns: Json
+      }
       get_totales_comisiones_sozu: {
         Args: never
         Returns: {
