@@ -3,7 +3,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Inbox, FileText, CreditCard, FileCheck,
   AlertTriangle, Handshake, Megaphone, FileStack, Send, Activity,
-  HardHat, BarChart3, Settings, ArrowLeft, LogOut, LucideIcon, ClipboardList, DollarSign,
+  HardHat, BarChart3, Settings, ArrowLeft, LogOut, LucideIcon,
   ChevronDown, ChevronRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
