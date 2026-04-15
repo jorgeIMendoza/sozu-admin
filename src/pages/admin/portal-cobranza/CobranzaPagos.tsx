@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
+import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { formatCurrency, formatDate } from '@/components/cobranza/StatusBadges';
 import { ActiveFilterBanner } from '@/components/cobranza/ActiveFilterBanner';
 import {
@@ -10,12 +11,6 @@ import {
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 100;
-
-const PROYECTOS = [
-  { id: 2, nombre: 'Bottura' },
-  { id: 1453, nombre: 'Daiku' },
-  { id: 1743, nombre: 'Margot' },
-];
 
 const METODOS_PAGO = [
   'STP', 'Transferencia bancaria', 'Cheque', 'Efectivo',
