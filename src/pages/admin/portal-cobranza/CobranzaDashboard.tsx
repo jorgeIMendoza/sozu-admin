@@ -300,9 +300,16 @@ export default function CobranzaDashboard() {
           {filteredPorProyecto.length > 0 ? (
             <div className="sozu-kpi-card !p-0 overflow-hidden">
               <div className="px-5 py-3 border-b border-border"><h2 className="sozu-section-title">Cobranza por Proyecto</h2></div>
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-fixed">
+                <colgroup>
+                  <col className="w-[22%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[12%]" />
+                </colgroup>
                 <thead className="sozu-thead">
-                  <tr><th>Proyecto</th><th className="text-right">Cobrado</th><th className="text-right">Pendiente</th><th className="text-right">Vencido</th><th className="text-center">%</th></tr>
+                  <tr><th className="px-4 text-left">Proyecto</th><th className="px-4 text-right">Cobrado</th><th className="px-4 text-right">Pendiente</th><th className="px-4 text-right">Vencido</th><th className="px-4 text-center">%</th></tr>
                 </thead>
                 <tbody>
                   {filteredPorProyecto.map(p => {
