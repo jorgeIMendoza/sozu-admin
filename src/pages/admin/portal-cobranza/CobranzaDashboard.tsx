@@ -157,7 +157,7 @@ export default function CobranzaDashboard() {
           <p className="text-[13px] text-muted-foreground mt-0.5">Centro de inteligencia de cobranza · {mesActual}</p>
         </div>
         <div className="flex items-center gap-2">
-          <select value={period} onChange={e => setPeriod(e.target.value)} className="sozu-filter-select">
+          <select value={period} onChange={e => setPeriod(e.target.value as Period)} className="sozu-filter-select">
             {periods.map(p => <option key={p}>{p}</option>)}
           </select>
           <CobranzaProjectFilter
