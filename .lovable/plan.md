@@ -1,44 +1,44 @@
 
 
-## Problem
+## Diagnóstico
 
-The period filter ("Este mes", "Mes pasado", "Últimos 3 meses", "Año actual") is decorative — selecting a different period does nothing because:
+### Problema 1: Diferencia de ~$10M en Saldo Vencido
+La migración anterior añadió correctamente la resta de **pagos parciales** (`aplicaciones_pago`) al cálculo de Vencido, pero **no aplicó la misma lógica a Programado**. Verificación en base de datos:
+- Vencido bruto: $127.6M, parciales aplicados: $27M → neto correcto
+- Programado bruto mes: $17.1M, parciales en programado: $2.7M → **no se restan**
 
-1. **The RPC `get_dashboard_cobranza_kpis` has no date parameters** — it hardcodes `v_mes_inicio` and `v_mes_fin` to the current month (`date_trunc('month', current_date)`).
-2. **The frontend never passes the period** — `period` is stored in React state but not sent to the hook or the RPC.
+La solución: aplicar la misma resta de pagos parciales a **Programado** y **Vencido** para consistencia. Programado debe mostrar el saldo pendiente real de los acuerdos del periodo, no el monto bruto original.
 
-## Plan
+### Problema 2: "Por Cobrar" disminuye con periodos más largos
+Actualmente "Por Cobrar" se calcula en el **frontend** como `Programado - Cobrado`. Esto es incorrecto porque:
+- `Cobrado` proviene de la tabla `pagos` (pagos reales en el periodo)
+- `Programado` proviene de `acuerdos_pago` (montos programados en el periodo)
+- Son fuentes diferentes: un pago puede aplicarse a un acuerdo de otro periodo
 
-### Step 1: Update the RPC to accept date range parameters
+Cuando el periodo es mayor, `Cobrado` puede superar a `Programado`, dando $0. Verificación:
+- Por Cobrar neto real (mes actual): **$14.4M** ✓ (mayor que $0)
+- Por Cobrar neto real (3 meses): **$17.6M** ✓ (crece correctamente)
 
-Add two new optional parameters `p_fecha_inicio` and `p_fecha_fin` to the function. When provided, they replace the hardcoded current-month range for:
-- `v_cobrado_mes` (cobrado in the period)
-- `v_programado_mes` (programado in the period)
-- `recovery_rate` calculation
-- `cobrado_mensual` and `programado_mensual` series (adjust the 12-month window accordingly)
+La solución: calcular "Por Cobrar" directamente en el **RPC** como la suma del saldo remanente de acuerdos no pagados en el periodo.
 
-The "total" fields (`cobrado_total`, `vencido_total`, `pendiente_total`), aging, and morosidad remain unaffected by the period (they are point-in-time snapshots).
+---
 
-Migration SQL: `ALTER` or `CREATE OR REPLACE` the function with the new signature.
+## Plan de cambios
 
-### Step 2: Map UI period to date range in the frontend
+### Paso 1: Actualizar RPC `get_dashboard_cobranza_kpis`
+Migración SQL para:
+1. **Programado del periodo**: restar pagos parciales aplicados a cada acuerdo (igual que Vencido)
+2. **Nuevo campo `por_cobrar_mes`**: suma de `(monto - parciales)` para acuerdos en el periodo donde `pago_completado = false` (con contraentrega)
+3. **Nuevo campo `por_cobrar_mes_sin_ce`**: igual pero excluyendo `id_concepto = 3`
+4. Mantener `programado_mes` y `programado_mes_sin_ce` como monto bruto (meta/objetivo) y agregar versiones netas si es necesario
 
-In `CobranzaDashboard.tsx`, compute `fechaInicio` and `fechaFin` from the selected period:
-- "Este mes" → 1st of current month to end of current month
-- "Mes pasado" → 1st of previous month to end of previous month
-- "Últimos 3 meses" → 1st of 3 months ago to today
-- "Año actual" → Jan 1 of current year to today
+### Paso 2: Actualizar frontend
+En `CobranzaDashboard.tsx`:
+- Usar `kpis.por_cobrar_mes` y `kpis.por_cobrar_mes_sin_ce` del RPC en lugar del cálculo `Programado - Cobrado`
+- Actualizar el tipo `DashboardKPIs` en `useCobranzaDashboard.ts`
 
-### Step 3: Pass dates through the hook
-
-Update `useCobranzaDashboard` to accept optional `fechaInicio` and `fechaFin` parameters and pass them as `p_fecha_inicio` / `p_fecha_fin` to the RPC call. Include them in the `queryKey` so React Query refetches on period change.
-
-### Step 4: Update KPI labels
-
-Change the sub-labels like "Meta del periodo" and card titles to reflect the selected period (e.g., "Cobrado — Mes pasado" instead of always "Cobrado del Mes").
-
-### Files affected
-- **Database migration**: `CREATE OR REPLACE FUNCTION get_dashboard_cobranza_kpis` with new params
-- `src/hooks/useCobranzaDashboard.ts` — add date params to hook and RPC call
-- `src/pages/admin/portal-cobranza/CobranzaDashboard.tsx` — compute dates from period, pass to hook, update labels
+### Archivos afectados
+- **Migración SQL**: `CREATE OR REPLACE FUNCTION get_dashboard_cobranza_kpis`
+- `src/hooks/useCobranzaDashboard.ts` — nuevos campos en la interfaz
+- `src/pages/admin/portal-cobranza/CobranzaDashboard.tsx` — usar campos del RPC
 
