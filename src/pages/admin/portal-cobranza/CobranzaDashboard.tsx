@@ -183,12 +183,12 @@ export default function CobranzaDashboard() {
       {activeTab === 'resumen' && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <FinKPICard label="Programado Mes" value={formatCurrency(kpis.programado_mes)} icon={Calendar} sub="Meta del periodo" />
-            <FinKPICard label="Cobrado del Mes" value={formatCurrency(kpis.cobrado_mes)} icon={DollarSign} />
+            <FinKPICard label={`Programado — ${period}`} value={formatCurrency(kpis.programado_mes)} icon={Calendar} sub={periodLabel} />
+            <FinKPICard label={`Cobrado — ${period}`} value={formatCurrency(kpis.cobrado_mes)} icon={DollarSign} sub={periodLabel} />
             <FinKPICard label="% Cumplimiento" value={`${cumplimiento}%`} icon={Target} trend={cumplimiento >= 90 ? 'En meta' : 'Bajo meta'} trendUp={cumplimiento >= 90} />
-            <FinKPICard label="Por Cobrar Mes" value={formatCurrency(Math.max(porCobrarMes, 0))} icon={BarChart3} sub="Pendiente periodo" />
+            <FinKPICard label={`Por Cobrar — ${period}`} value={formatCurrency(Math.max(porCobrarMes, 0))} icon={BarChart3} sub={periodLabel} />
             <FinKPICard label="Saldo Vencido" value={formatCurrency(kpis.vencido_total)} icon={AlertTriangle} variant="danger" onClick={() => drill(navigate, '/bandeja', { preset: 'critical' })} />
-            <FinKPICard label="Recovery Rate" value={`${recoveryRate}%`} icon={TrendingUp} sub="Periodo actual" />
+            <FinKPICard label="Recovery Rate" value={`${recoveryRate}%`} icon={TrendingUp} sub={periodLabel} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
