@@ -39,6 +39,19 @@ export default function CobranzaDashboard() {
 
   const mesActual = format(new Date(), "MMMM yyyy", { locale: es });
 
+  // Set of accessible project IDs (null = unrestricted)
+  const accessibleIds = useMemo(() => {
+    if (!proyectos) return null;
+    return new Set(proyectos.map((p: any) => p.id as number));
+  }, [proyectos]);
+
+  // Filter por_proyecto to only show accessible projects
+  const filteredPorProyecto = useMemo(() => {
+    if (!kpis?.por_proyecto) return [];
+    if (!accessibleIds) return kpis.por_proyecto;
+    return kpis.por_proyecto.filter(p => accessibleIds.has(p.proyecto_id));
+  }, [kpis?.por_proyecto, accessibleIds]);
+
   // Merge cobrado + programado mensual for chart
   const chartData = useMemo(() => {
     if (!kpis?.cobrado_mensual) return [];
