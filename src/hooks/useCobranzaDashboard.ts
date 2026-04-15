@@ -14,7 +14,7 @@ export interface DashboardKPIs {
   por_cobrar_mes: number;
   por_cobrar_mes_sin_ce: number;
   recovery_rate: number;
-  aging: { rango: string; monto: number; cantidad: number }[] | null;
+  aging: { rango: string; monto: number; monto_sin_ce: number; cantidad: number }[] | null;
   morosidad: { grupo: string; cuentas: number }[] | null;
   por_proyecto: { proyecto: string; proyecto_id: number; cobrado: number; vencido: number; pendiente: number }[] | null;
   cobrado_mensual: { mes: string; cobrado: number }[] | null;
