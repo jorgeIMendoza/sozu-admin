@@ -451,6 +451,7 @@ const App = () => (
                   <Route path="portal-cobranza/comunicacion/plantillas" element={<CobranzaPlantillas />} />
                   <Route path="portal-cobranza/inputs-obra" element={<CobranzaInputsObra />} />
                   <Route path="portal-cobranza/reportes" element={<CobranzaReportes />} />
+                  <Route path="portal-cobranza/reportes/ver/:id" element={<ReporteViewer />} />
                   <Route path="portal-cobranza/configuracion" element={<CobranzaConfiguracion />} />
                 </Route>
                 

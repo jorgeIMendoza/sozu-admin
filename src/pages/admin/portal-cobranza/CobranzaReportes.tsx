@@ -114,7 +114,7 @@ export default function CobranzaReportes() {
 
   const handleOpenReport = (reporte: Reporte) => {
     if (!reporte.prendido) return;
-    navigate(`/admin/reportes/ver/${reporte.id}?return=/admin/portal-cobranza/reportes`);
+    navigate(`/admin/portal-cobranza/reportes/ver/${reporte.id}?return=/admin/portal-cobranza/reportes`);
   };
 
   const isLoading = subLoading || repLoading;
