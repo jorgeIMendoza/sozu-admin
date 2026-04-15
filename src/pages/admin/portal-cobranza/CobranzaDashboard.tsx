@@ -14,7 +14,39 @@ import {
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { cn } from '@/lib/utils';
 
-const periods = ['Este mes', 'Mes pasado', 'Últimos 3 meses', 'Año actual'];
+const periods = ['Este mes', 'Mes pasado', 'Últimos 3 meses', 'Año actual'] as const;
+type Period = typeof periods[number];
+
+function getPeriodDates(period: Period): { fechaInicio: string; fechaFin: string; label: string } {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-indexed
+
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const lastDay = (year: number, month: number) => new Date(year, month + 1, 0);
+
+  switch (period) {
+    case 'Mes pasado': {
+      const start = new Date(y, m - 1, 1);
+      const end = lastDay(y, m - 1);
+      return { fechaInicio: fmt(start), fechaFin: fmt(end), label: format(start, 'MMMM yyyy', { locale: es }) };
+    }
+    case 'Últimos 3 meses': {
+      const start = new Date(y, m - 2, 1);
+      return { fechaInicio: fmt(start), fechaFin: fmt(now), label: 'Últimos 3 meses' };
+    }
+    case 'Año actual': {
+      const start = new Date(y, 0, 1);
+      return { fechaInicio: fmt(start), fechaFin: fmt(now), label: `Año ${y}` };
+    }
+    case 'Este mes':
+    default: {
+      const start = new Date(y, m, 1);
+      const end = lastDay(y, m);
+      return { fechaInicio: fmt(start), fechaFin: fmt(end), label: format(start, 'MMMM yyyy', { locale: es }) };
+    }
+  }
+}
 
 type DashTab = 'resumen' | 'flujo' | 'riesgo' | 'cobranza' | 'operacion';
 const tabs: { id: DashTab; label: string; icon: React.ElementType }[] = [
@@ -31,14 +63,16 @@ function drill(navigate: ReturnType<typeof useNavigate>, path: string, filters: 
 
 export default function CobranzaDashboard() {
   const navigate = useNavigate();
-  const [period, setPeriod] = useState('Este mes');
+  const [period, setPeriod] = useState<Period>('Este mes');
   const [activeTab, setActiveTab] = useState<DashTab>('resumen');
   const [selectedProyecto, setSelectedProyecto] = useState<number | null>(null);
 
-  const { data: kpis, isLoading, error } = useCobranzaDashboard(selectedProyecto);
+  const { fechaInicio, fechaFin, label: periodLabel } = useMemo(() => getPeriodDates(period), [period]);
+
+  const { data: kpis, isLoading, error } = useCobranzaDashboard(selectedProyecto, fechaInicio, fechaFin);
   const { data: proyectos } = useProyectosCobranza();
 
-  const mesActual = format(new Date(), "MMMM yyyy", { locale: es });
+  const mesActual = periodLabel;
 
   // Set of accessible project IDs (null = unrestricted)
   const accessibleIds = useMemo(() => {
@@ -123,7 +157,7 @@ export default function CobranzaDashboard() {
           <p className="text-[13px] text-muted-foreground mt-0.5">Centro de inteligencia de cobranza · {mesActual}</p>
         </div>
         <div className="flex items-center gap-2">
-          <select value={period} onChange={e => setPeriod(e.target.value)} className="sozu-filter-select">
+          <select value={period} onChange={e => setPeriod(e.target.value as Period)} className="sozu-filter-select">
             {periods.map(p => <option key={p}>{p}</option>)}
           </select>
           <CobranzaProjectFilter
@@ -149,12 +183,12 @@ export default function CobranzaDashboard() {
       {activeTab === 'resumen' && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <FinKPICard label="Programado Mes" value={formatCurrency(kpis.programado_mes)} icon={Calendar} sub="Meta del periodo" />
-            <FinKPICard label="Cobrado del Mes" value={formatCurrency(kpis.cobrado_mes)} icon={DollarSign} />
+            <FinKPICard label={`Programado — ${period}`} value={formatCurrency(kpis.programado_mes)} icon={Calendar} sub={periodLabel} />
+            <FinKPICard label={`Cobrado — ${period}`} value={formatCurrency(kpis.cobrado_mes)} icon={DollarSign} sub={periodLabel} />
             <FinKPICard label="% Cumplimiento" value={`${cumplimiento}%`} icon={Target} trend={cumplimiento >= 90 ? 'En meta' : 'Bajo meta'} trendUp={cumplimiento >= 90} />
-            <FinKPICard label="Por Cobrar Mes" value={formatCurrency(Math.max(porCobrarMes, 0))} icon={BarChart3} sub="Pendiente periodo" />
+            <FinKPICard label={`Por Cobrar — ${period}`} value={formatCurrency(Math.max(porCobrarMes, 0))} icon={BarChart3} sub={periodLabel} />
             <FinKPICard label="Saldo Vencido" value={formatCurrency(kpis.vencido_total)} icon={AlertTriangle} variant="danger" onClick={() => drill(navigate, '/bandeja', { preset: 'critical' })} />
-            <FinKPICard label="Recovery Rate" value={`${recoveryRate}%`} icon={TrendingUp} sub="Periodo actual" />
+            <FinKPICard label="Recovery Rate" value={`${recoveryRate}%`} icon={TrendingUp} sub={periodLabel} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
