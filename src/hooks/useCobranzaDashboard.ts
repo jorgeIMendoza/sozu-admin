@@ -17,13 +17,19 @@ export interface DashboardKPIs {
   programado_mensual: { mes: string; programado: number }[] | null;
 }
 
-export function useCobranzaDashboard(proyectoId?: number | null) {
+export function useCobranzaDashboard(
+  proyectoId?: number | null,
+  fechaInicio?: string | null,
+  fechaFin?: string | null,
+) {
   return useQuery({
-    queryKey: ['cobranza-dashboard-kpis', proyectoId],
+    queryKey: ['cobranza-dashboard-kpis', proyectoId, fechaInicio, fechaFin],
     queryFn: async (): Promise<DashboardKPIs> => {
       const { data, error } = await supabase.rpc('get_dashboard_cobranza_kpis', {
         p_proyecto_id: proyectoId ?? null,
-      });
+        p_fecha_inicio: fechaInicio ?? null,
+        p_fecha_fin: fechaFin ?? null,
+      } as any);
       if (error) throw error;
       return data as unknown as DashboardKPIs;
     },

@@ -14,7 +14,39 @@ import {
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { cn } from '@/lib/utils';
 
-const periods = ['Este mes', 'Mes pasado', 'Últimos 3 meses', 'Año actual'];
+const periods = ['Este mes', 'Mes pasado', 'Últimos 3 meses', 'Año actual'] as const;
+type Period = typeof periods[number];
+
+function getPeriodDates(period: Period): { fechaInicio: string; fechaFin: string; label: string } {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-indexed
+
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const lastDay = (year: number, month: number) => new Date(year, month + 1, 0);
+
+  switch (period) {
+    case 'Mes pasado': {
+      const start = new Date(y, m - 1, 1);
+      const end = lastDay(y, m - 1);
+      return { fechaInicio: fmt(start), fechaFin: fmt(end), label: format(start, 'MMMM yyyy', { locale: es }) };
+    }
+    case 'Últimos 3 meses': {
+      const start = new Date(y, m - 2, 1);
+      return { fechaInicio: fmt(start), fechaFin: fmt(now), label: 'Últimos 3 meses' };
+    }
+    case 'Año actual': {
+      const start = new Date(y, 0, 1);
+      return { fechaInicio: fmt(start), fechaFin: fmt(now), label: `Año ${y}` };
+    }
+    case 'Este mes':
+    default: {
+      const start = new Date(y, m, 1);
+      const end = lastDay(y, m);
+      return { fechaInicio: fmt(start), fechaFin: fmt(end), label: format(start, 'MMMM yyyy', { locale: es }) };
+    }
+  }
+}
 
 type DashTab = 'resumen' | 'flujo' | 'riesgo' | 'cobranza' | 'operacion';
 const tabs: { id: DashTab; label: string; icon: React.ElementType }[] = [
