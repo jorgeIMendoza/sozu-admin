@@ -1,66 +1,44 @@
 
 
-## Plan: Migrar Dashboard de Cobranza a datos reales
+## Problem
 
-### Resumen
-Reemplazar los datos mock del Dashboard por queries reales a Supabase. Los datos existen y son abundantes: ~1,400 cuentas activas, ~$127M en cartera vencida, ~$1,142M cobrados históricamente, 3 proyectos activos.
+The period filter ("Este mes", "Mes pasado", "Últimos 3 meses", "Año actual") is decorative — selecting a different period does nothing because:
 
-### Datos disponibles confirmados en BD
-| KPI | Valor real |
-|---|---|
-| Cobrado total | $1,142M |
-| Vencido total | $127.7M |
-| Pendiente futuro | $336.5M |
-| Cobrado mes actual | $2.2M |
-| Programado mes | $17.1M |
-| Parcialidades vencidas | 1,711 |
-| Cuentas con 1 vencida | 364 |
-| Cuentas con 2 vencidas | 83 |
-| Cuentas con 3+ vencidas | 184 |
-| Aging +90 días | $102.7M (985 parcialidades) |
-| Proyectos | Margot, Bottura, Daiku |
-| Pagos últimos 12 meses | Datos mensuales disponibles |
+1. **The RPC `get_dashboard_cobranza_kpis` has no date parameters** — it hardcodes `v_mes_inicio` and `v_mes_fin` to the current month (`date_trunc('month', current_date)`).
+2. **The frontend never passes the period** — `period` is stored in React state but not sent to the hook or the RPC.
 
-### Datos NO disponibles (se omiten o muestran "—")
-- Ejecutivos asignados (no hay campo) → Tab "Operación" mostrará estado vacío
-- Documentación/PLD/Legal → Se ocultan del dashboard
-- Provisión de obra → Tab "Flujo y Obra" permanece con datos ilustrativos o vacío
-- Promesas de pago → No hay tabla específica
+## Plan
 
-### Pasos de implementación
+### Step 1: Update the RPC to accept date range parameters
 
-**1. Crear hook `useCobranzaDashboard`** (`src/hooks/useCobranzaDashboard.ts`)
-- Query 1: KPIs globales (programado mes, cobrado mes, vencido total, pendiente)
-- Query 2: Cobrado vs meta por mes (últimos 12 meses desde `pagos`)
-- Query 3: Cobranza por proyecto (cobrado, por cobrar, vencido por proyecto)
-- Query 4: Aging de cartera (1-30, 31-60, 61-90, +90 días)
-- Query 5: Cuentas por parcialidades vencidas (1, 2, 3+)
-- Query 6: Lista de proyectos y entidades para filtros
-- Todas las queries usan `supabase.rpc()` o queries directas con JOINs
-- Soporta filtros por proyecto y periodo
+Add two new optional parameters `p_fecha_inicio` and `p_fecha_fin` to the function. When provided, they replace the hardcoded current-month range for:
+- `v_cobrado_mes` (cobrado in the period)
+- `v_programado_mes` (programado in the period)
+- `recovery_rate` calculation
+- `cobrado_mensual` and `programado_mensual` series (adjust the 12-month window accordingly)
 
-**2. Crear RPC `get_dashboard_cobranza_kpis`** (migración SQL)
-- Una sola función que retorna todos los KPIs en un JSON para reducir roundtrips
-- Parámetros: `p_proyecto_id`, `p_fecha_inicio`, `p_fecha_fin`
-- Retorna: programado, cobrado, por cobrar, vencido, aging, cuentas por morosidad, cobranza por proyecto, cobrado mensual
+The "total" fields (`cobrado_total`, `vencido_total`, `pendiente_total`), aging, and morosidad remain unaffected by the period (they are point-in-time snapshots).
 
-**3. Modificar `CobranzaDashboard.tsx`**
-- Reemplazar imports de `mockKPIs`, `mockFinancialMetrics`, `mockAccounts`, etc.
-- Usar el hook con estados de loading/error
-- Tab **Resumen**: KPIs reales, alertas reales, gráfica de cobrado vs mes
-- Tab **Riesgo y Cartera**: Aging real, cuentas por morosidad real
-- Tab **Cobranza por Proyecto**: Tabla con datos reales de Margot/Bottura/Daiku
-- Tab **Flujo y Obra**: Mostrar mensaje "Datos de obra no disponibles" o mantener estructura vacía
-- Tab **Operación**: Mostrar "Sin ejecutivos asignados" en lugar de mock
-- Filtros de proyecto y entidad cargan dinámicamente
+Migration SQL: `ALTER` or `CREATE OR REPLACE` the function with the new signature.
 
-**4. Ajustes menores**
-- Actualizar el subtítulo de fecha dinámica ("Abril 2026" → mes actual)
-- Recovery rate calculado como (cobrado_mes / programado_mes * 100)
-- Acciones prioritarias usan conteos reales
+### Step 2: Map UI period to date range in the frontend
 
-### Archivos a crear/modificar
-- **Crear**: `src/hooks/useCobranzaDashboard.ts`
-- **Crear**: Migración SQL para RPC `get_dashboard_cobranza_kpis`
-- **Modificar**: `src/pages/admin/portal-cobranza/CobranzaDashboard.tsx`
+In `CobranzaDashboard.tsx`, compute `fechaInicio` and `fechaFin` from the selected period:
+- "Este mes" → 1st of current month to end of current month
+- "Mes pasado" → 1st of previous month to end of previous month
+- "Últimos 3 meses" → 1st of 3 months ago to today
+- "Año actual" → Jan 1 of current year to today
+
+### Step 3: Pass dates through the hook
+
+Update `useCobranzaDashboard` to accept optional `fechaInicio` and `fechaFin` parameters and pass them as `p_fecha_inicio` / `p_fecha_fin` to the RPC call. Include them in the `queryKey` so React Query refetches on period change.
+
+### Step 4: Update KPI labels
+
+Change the sub-labels like "Meta del periodo" and card titles to reflect the selected period (e.g., "Cobrado — Mes pasado" instead of always "Cobrado del Mes").
+
+### Files affected
+- **Database migration**: `CREATE OR REPLACE FUNCTION get_dashboard_cobranza_kpis` with new params
+- `src/hooks/useCobranzaDashboard.ts` — add date params to hook and RPC call
+- `src/pages/admin/portal-cobranza/CobranzaDashboard.tsx` — compute dates from period, pass to hook, update labels
 
