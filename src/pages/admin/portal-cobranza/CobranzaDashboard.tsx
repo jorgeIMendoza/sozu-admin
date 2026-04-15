@@ -63,14 +63,16 @@ function drill(navigate: ReturnType<typeof useNavigate>, path: string, filters: 
 
 export default function CobranzaDashboard() {
   const navigate = useNavigate();
-  const [period, setPeriod] = useState('Este mes');
+  const [period, setPeriod] = useState<Period>('Este mes');
   const [activeTab, setActiveTab] = useState<DashTab>('resumen');
   const [selectedProyecto, setSelectedProyecto] = useState<number | null>(null);
 
-  const { data: kpis, isLoading, error } = useCobranzaDashboard(selectedProyecto);
+  const { fechaInicio, fechaFin, label: periodLabel } = useMemo(() => getPeriodDates(period), [period]);
+
+  const { data: kpis, isLoading, error } = useCobranzaDashboard(selectedProyecto, fechaInicio, fechaFin);
   const { data: proyectos } = useProyectosCobranza();
 
-  const mesActual = format(new Date(), "MMMM yyyy", { locale: es });
+  const mesActual = periodLabel;
 
   // Set of accessible project IDs (null = unrestricted)
   const accessibleIds = useMemo(() => {
