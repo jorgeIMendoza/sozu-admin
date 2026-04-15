@@ -15,7 +15,7 @@ import { getBitacoraEntries, addBitacoraEntry, categoryLabels, type BitacoraEntr
 import { getAvisosForCase, getAvisosForAccount, getAvisosWithErrors, sendStatusConfig, sendStatusLabels, avisoCategoryLabels, errorTypeLabels, suggestedActionLabels, type AvisoRecord } from '@/data/cobranza/avisosData';
 import { BitacoraEntryModal } from '@/components/cobranza/BitacoraEntryModal';
 import { SendAvisoModal } from '@/components/cobranza/SendAvisoModal';
-import { formatDate } from '@/components/cobranza/StatusBadges';
+import { formatDate, formatCurrency } from '@/components/cobranza/StatusBadges';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
