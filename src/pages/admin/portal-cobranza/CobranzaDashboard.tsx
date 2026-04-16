@@ -495,11 +495,34 @@ export default function CobranzaDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="h-[64px]">
-                    <td colSpan={6} className="text-center text-[13px] text-muted-foreground">
-                      Los datos detallados de clientes críticos se activarán próximamente.
-                    </td>
-                  </tr>
+                  {clientesCriticos.length === 0 ? (
+                    <tr className="h-[64px]">
+                      <td colSpan={6} className="text-center text-[13px] text-muted-foreground">
+                        Sin clientes críticos para los filtros seleccionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    clientesCriticos.map((c) => (
+                      <tr
+                        key={c.cuenta_id}
+                        className="sozu-table-row h-[52px] cursor-pointer"
+                        onClick={() => navigate(`/admin/cuentas-cobranza/${c.cuenta_id}`)}
+                      >
+                        <td className="px-5 text-[13px] font-mono text-primary">CC-{String(c.cuenta_id).padStart(6, '0')}</td>
+                        <td className="px-3 text-[13px] text-foreground truncate max-w-[220px]">{c.cliente_nombre || 'Sin cliente'}</td>
+                        <td className="px-3 text-[13px] text-foreground">{c.proyecto || '—'}</td>
+                        <td className="px-3 text-center">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-danger-bg text-danger text-xs font-semibold">
+                            {c.parcialidades_vencidas}
+                          </span>
+                        </td>
+                        <td className="px-3 text-right text-[13px] font-semibold text-danger tabular-nums">
+                          {formatCurrency(c.monto_vencido)}
+                        </td>
+                        <td className="px-3 text-[13px] text-muted-foreground">NA</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
