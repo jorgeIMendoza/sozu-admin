@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { avisoCategoryLabels, type AvisoCategory, type AvisoChannel } from '@/data/cobranza/avisosData';
+import { usePagination } from '@/hooks/usePagination';
+import { SimplePagination } from '@/components/ui/simple-pagination';
 
 interface Template {
   id: string;
@@ -59,6 +61,8 @@ export default function PlantillasCobranzaPage() {
     return true;
   });
 
+  const { paginated: paginatedTpl, page, setPage, totalPages, total, from, to } = usePagination(filtered, 50);
+
   const openEdit = (t: Template) => {
     setEditTpl(t); setFName(t.name); setFCat(t.category); setFCh(t.channel); setFSubj(t.subject); setFBody(t.body); setShowEdit(true);
   };
@@ -112,7 +116,7 @@ export default function PlantillasCobranzaPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map(t => (
+            {paginatedTpl.map(t => (
               <TableRow key={t.id}>
                 <TableCell><span className="text-[13px] font-medium text-foreground">{t.name}</span></TableCell>
                 <TableCell><span className="text-[12px] text-muted-foreground">{avisoCategoryLabels[t.category] || t.category}</span></TableCell>
@@ -132,6 +136,14 @@ export default function PlantillasCobranzaPage() {
             ))}
           </TableBody>
         </Table>
+        <SimplePagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          total={total}
+          from={from}
+          to={to}
+        />
       </div>
 
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
