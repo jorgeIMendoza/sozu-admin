@@ -1001,14 +1001,22 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                             <div className="space-y-2">
                               <GoogleMapComponent
                                 onLocationSelect={(loc) => {
-                                  const updated = [...showrooms];
-                                  updated[idx] = { ...updated[idx], latitud: loc.lat, longitud: loc.lng };
-                                  setShowrooms(updated);
+                                  setShowrooms(prev => {
+                                    const updated = [...prev];
+                                    if (updated[idx]) {
+                                      updated[idx] = { ...updated[idx], latitud: loc.lat, longitud: loc.lng };
+                                    }
+                                    return updated;
+                                  });
                                 }}
                                 onAddressSelect={(address) => {
-                                  const updated = [...showrooms];
-                                  updated[idx] = { ...updated[idx], descripcion_direccion: address };
-                                  setShowrooms(updated);
+                                  setShowrooms(prev => {
+                                    const updated = [...prev];
+                                    if (updated[idx]) {
+                                      updated[idx] = { ...updated[idx], descripcion_direccion: address };
+                                    }
+                                    return updated;
+                                  });
                                 }}
                                 initialLocation={showroom.latitud && showroom.longitud ? { lat: showroom.latitud, lng: showroom.longitud } : undefined}
                               />

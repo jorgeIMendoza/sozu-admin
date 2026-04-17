@@ -48,26 +48,25 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
     libraries: libraries
   });
 
-  const onMapClick = useCallback((event: google.maps.MapMouseEvent) => {
-    if (event.latLng) {
-      const lat = event.latLng.lat();
-      const lng = event.latLng.lng();
-      const newPosition = { lat, lng };
-      
-      setMarkerPosition(newPosition);
-      onLocationSelect(newPosition);
-      
-      // Reverse geocoding to get address
-      if (onAddressSelect && window.google) {
-        const geocoder = new window.google.maps.Geocoder();
-        geocoder.geocode({ location: newPosition }, (results, status) => {
-          if (status === 'OK' && results && results[0]) {
-            onAddressSelect(results[0].formatted_address);
-          }
-        });
-      }
+  const updateLocation = useCallback((newPosition: { lat: number; lng: number }) => {
+    setMarkerPosition(newPosition);
+    onLocationSelect(newPosition);
+
+    if (onAddressSelect && window.google) {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ location: newPosition }, (results, status) => {
+        if (status === 'OK' && results && results[0]) {
+          onAddressSelect(results[0].formatted_address);
+        }
+      });
     }
   }, [onLocationSelect, onAddressSelect]);
+
+  const onMapClick = useCallback((event: google.maps.MapMouseEvent) => {
+    if (event.latLng) {
+      updateLocation({ lat: event.latLng.lat(), lng: event.latLng.lng() });
+    }
+  }, [updateLocation]);
 
   const handleSearch = useCallback(() => {
     if (!searchText.trim() || !window.google) return;
@@ -142,6 +141,12 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
             <Marker
               position={markerPosition}
               animation={google.maps.Animation.DROP}
+              draggable={!readOnly}
+              onDragEnd={(event) => {
+                if (event.latLng) {
+                  updateLocation({ lat: event.latLng.lat(), lng: event.latLng.lng() });
+                }
+              }}
             />
           )}
         </GoogleMap>
