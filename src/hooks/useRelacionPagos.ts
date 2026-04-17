@@ -38,6 +38,11 @@ export interface RelacionPagosFilters {
 export interface RelacionPagosResult {
   pagos: PagoRecord[];
   total: number;
+  totalMonto: number;
+  totalConCep: number;
+  totalSinCep: number;
+  totalAplicados: number;
+  totalSinAplicar: number;
   isLoading: boolean;
   error: string | null;
 }
