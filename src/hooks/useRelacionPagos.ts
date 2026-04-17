@@ -28,6 +28,7 @@ export interface PagoRecord {
 export interface RelacionPagosFilters {
   proyectoId?: number | null;
   metodoPago?: string | null;
+  metodosPermitidos?: string[] | null;
   search?: string;
   hasCep?: boolean | null;
   tipoCuenta?: 'propiedad' | 'producto' | null;
