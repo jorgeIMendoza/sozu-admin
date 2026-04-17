@@ -98,10 +98,10 @@ export default function CobranzaExpediente() {
       </div>
 
       {/* Risk banner */}
-      {finanzas.parcialidades_vencidas > 0 && (
+      {(finanzas.parcialidades_vencidas > 0 || finanzas.multas_pendientes_count > 0) && (
         <div className="sozu-kpi-card !p-4 border-l-4 border-l-danger flex items-center gap-4">
           <AlertTriangle className="w-5 h-5 text-danger shrink-0" strokeWidth={1.75} />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 flex-1">
             <div>
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Parc. vencidas</p>
               <p className="text-[20px] font-semibold text-danger">{finanzas.parcialidades_vencidas}</p>
@@ -113,6 +113,20 @@ export default function CobranzaExpediente() {
             <div>
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Saldo pendiente</p>
               <p className="text-[20px] font-semibold text-warning tabular-nums">{formatCurrency(finanzas.saldo_pendiente)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Multas pendientes</p>
+              <p className={cn(
+                'text-[20px] font-semibold tabular-nums',
+                finanzas.multas_pendientes_monto > 0 ? 'text-danger' : 'text-muted-foreground'
+              )}>
+                {formatCurrency(finanzas.multas_pendientes_monto)}
+                {finanzas.multas_pendientes_count > 0 && (
+                  <span className="text-[11px] font-medium text-muted-foreground ml-1">
+                    ({finanzas.multas_pendientes_count})
+                  </span>
+                )}
+              </p>
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Próximo venc.</p>
