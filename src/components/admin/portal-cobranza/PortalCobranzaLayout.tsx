@@ -74,6 +74,12 @@ export const PortalCobranzaLayout = () => {
   const { impersonatedName, impersonatedEmail, isImpersonating } = useCobranzaImpersonation();
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleNavigate = (path: string) => {
+    navigate(path);
+    setMobileOpen(false);
+  };
 
   const { data: personaName } = useQuery({
     queryKey: ["cobranza-persona-name", profile?.id_persona],
