@@ -165,7 +165,7 @@ export default function CobranzaExpediente() {
             progressPct={progressPct}
           />
         )}
-        {activeTab === 'estado' && <EstadoCuentaTab parcialidades={parcialidades} pagos={pagos} />}
+        {activeTab === 'estado' && <EstadoCuentaTab parcialidades={parcialidades} pagos={pagos} multas={multas} />}
         {activeTab === 'calendario' && <CalendarioTab parcialidades={parcialidades} />}
         {activeTab === 'pagos' && <PagosTab pagos={pagos} />}
       </div>
