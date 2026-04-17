@@ -46,12 +46,18 @@ export default function RelacionPagosPage() {
     setProjectFilter(null);
     setMetodoPagoFilter(null);
     setCepFilter(null);
+    setTipoCuentaFilter(null);
     setSearchQuery('');
     setPage(1);
     setSearchParams({}, { replace: true });
   }, [setSearchParams]);
 
-  const hasFilters = projectFilter !== null || metodoPagoFilter !== null || cepFilter !== null || searchQuery;
+  const hasFilters = projectFilter !== null || metodoPagoFilter !== null || cepFilter !== null || tipoCuentaFilter !== null || searchQuery;
+
+  const formatCuenta = (id: number, tipo: 'propiedad' | 'producto' | null) => {
+    const padded = String(id).padStart(6, '0');
+    return tipo === 'producto' ? `CCP-${padded}` : `CC-${padded}`;
+  };
 
   // Stats from current result set
   const totalAmount = useMemo(() => pagos.reduce((s, r) => s + Number(r.monto), 0), [pagos]);
