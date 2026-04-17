@@ -157,20 +157,20 @@ export default function RelacionPagosPage() {
           <p className="text-lg font-semibold text-foreground tabular-nums">{total.toLocaleString()}</p>
         </div>
         <div className="sozu-kpi-card !p-4">
-          <div className="flex items-center gap-1.5 mb-1"><DollarSign className="w-3.5 h-3.5 text-primary" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Monto página</span></div>
-          <p className="text-lg font-semibold text-foreground tabular-nums">{formatCurrency(totalAmount)}</p>
+          <div className="flex items-center gap-1.5 mb-1"><DollarSign className="w-3.5 h-3.5 text-primary" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Monto total</span></div>
+          <p className="text-lg font-semibold text-foreground tabular-nums">{formatCurrency(totalMonto)}</p>
         </div>
         <div className="sozu-kpi-card !p-4">
           <div className="flex items-center gap-1.5 mb-1"><CheckCircle2 className="w-3.5 h-3.5 text-success" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Con CEP</span></div>
-          <p className="text-lg font-semibold text-success tabular-nums">{conCep}</p>
+          <p className="text-lg font-semibold text-success tabular-nums">{totalConCep.toLocaleString()}</p>
         </div>
         <div className="sozu-kpi-card !p-4">
           <div className="flex items-center gap-1.5 mb-1"><Clock className="w-3.5 h-3.5 text-warning" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Sin CEP</span></div>
-          <p className="text-lg font-semibold text-warning tabular-nums">{sinCep}</p>
+          <p className="text-lg font-semibold text-warning tabular-nums">{totalSinCep.toLocaleString()}</p>
         </div>
         <div className="sozu-kpi-card !p-4">
           <div className="flex items-center gap-1.5 mb-1"><Shield className="w-3.5 h-3.5 text-primary" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Aplicados</span></div>
-          <p className="text-lg font-semibold text-primary tabular-nums">{aplicados}</p>
+          <p className="text-lg font-semibold text-primary tabular-nums">{totalAplicados.toLocaleString()}</p>
         </div>
       </div>
 
