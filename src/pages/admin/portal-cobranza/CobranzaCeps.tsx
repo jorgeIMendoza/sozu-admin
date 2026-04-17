@@ -183,7 +183,7 @@ export default function CEPsPage() {
                   <AlertTriangle className="w-6 h-6 text-danger mx-auto mb-2" />
                   <p className="text-sm text-danger">{error}</p>
                 </div>
-              ) : pagos.length === 0 ? (
+              ) : filteredPagos.length === 0 ? (
                 <div className="text-center py-16">
                   <FileCheck className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" strokeWidth={1.5} />
                   <p className="text-sm text-muted-foreground mb-1">No se encontraron CEPs pendientes</p>
@@ -205,8 +205,12 @@ export default function CEPsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagos.map(r => (
-                        <tr key={r.pago_id} className={cn('sozu-table-row h-[52px] cursor-pointer', selectedCEP?.pago_id === r.pago_id && 'bg-primary-muted')}
+                      {filteredPagos.map(r => {
+                        const sinAplicar = r.num_aplicaciones === 0;
+                        return (
+                        <tr key={r.pago_id} className={cn('sozu-table-row h-[52px] cursor-pointer',
+                          selectedCEP?.pago_id === r.pago_id && 'bg-primary-muted',
+                          sinAplicar && 'border-l-2 border-l-danger bg-danger/[0.03] hover:bg-danger/[0.06]')}
                           onClick={() => setSelectedCEP(r)}>
                           <td className="px-4 text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(r.fecha_pago)}</td>
                           <td className="px-4">
@@ -227,10 +231,11 @@ export default function CEPsPage() {
                           <td className="px-4 text-center">
                             {r.num_aplicaciones > 0
                               ? <span className="sozu-chip bg-success-bg text-success text-[10px]" title={`${r.num_aplicaciones} aplicación(es) — Total aplicado: ${formatCurrency(Number(r.monto_aplicado))}`}>{r.num_aplicaciones}</span>
-                              : <span className="text-[11px] text-muted-foreground">—</span>}
+                              : <span className="sozu-chip bg-danger/10 text-danger text-[10px]" title="Pago sin aplicar a ningún acuerdo">Sin aplicar</span>}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
 
