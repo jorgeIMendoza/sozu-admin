@@ -1095,16 +1095,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       }
 
       try {
-        // Reutilizar el módulo ya precargado antes de generar PDFs para evitar fallos de carga tardía en iPhone/WebKit.
-        const { sendMultipleOffersEmail, sendMultipleOffersEmailDirect } = await emailServicePromise;
-        const emailSent = await sendMultipleOffersEmail({
-          offerIds: allOfferIdsForEmail,
-          propertyNumber,
-          recipientEmail: result.leadEmail,
-          recipientName: result.leadName,
-        });
-        // Si no se envió automáticamente y el usuario eligió enviar antes de generar
-        if (!emailSent && sendEmailOnGenerate) {
+        // Solo enviar por correo si el usuario marcó explícitamente el checkbox.
+        // Nunca enviar de forma automática.
+        if (sendEmailOnGenerate) {
+          const { sendMultipleOffersEmailDirect } = await emailServicePromise;
           await sendMultipleOffersEmailDirect({
             offerIds: allOfferIdsForEmail,
             propertyNumber,
@@ -2631,18 +2625,16 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </div>
             )}
 
-            {confirmBankingReasons.length > 0 && (
-              <div className="flex items-center gap-2 mt-2">
-                <Checkbox
-                  id="sendEmailOnGenerate"
-                  checked={sendEmailOnGenerate}
-                  onCheckedChange={(checked) => setSendEmailOnGenerate(checked === true)}
-                />
-                <label htmlFor="sendEmailOnGenerate" className="text-sm text-foreground cursor-pointer">
-                  También enviar oferta(s) por correo al prospecto
-                </label>
-              </div>
-            )}
+            <div className="flex items-center gap-2 mt-2">
+              <Checkbox
+                id="sendEmailOnGenerate"
+                checked={sendEmailOnGenerate}
+                onCheckedChange={(checked) => setSendEmailOnGenerate(checked === true)}
+              />
+              <label htmlFor="sendEmailOnGenerate" className="text-sm text-foreground cursor-pointer">
+                Enviar oferta por correo al prospecto
+              </label>
+            </div>
 
             {productsWithPriceInfo.total > 0 ? (
               <p className="text-sm text-muted-foreground">

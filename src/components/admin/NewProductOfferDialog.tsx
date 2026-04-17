@@ -116,6 +116,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmReasons, setConfirmReasons] = useState<string[]>([]);
   const [pendingFormValues, setPendingFormValues] = useState<FormData | null>(null);
+  const [sendEmailOnGenerate, setSendEmailOnGenerate] = useState(false);
   const selectedProductRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
@@ -789,38 +790,16 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
           isProductOffer: true,
           productId: selectedProduct
         });
-        // Enviar por correo al prospecto (fire-and-forget)
-        const { sendOfferEmailAfterDownload, sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
-        const emailSent = await sendOfferEmailAfterDownload({
-          offerId: ofertaData.id,
-          propertyNumber: propertyNumber || '',
-          recipientEmail: formValues.email,
-          recipientName: formValues.razon_social,
-          tipo: 'producto',
-        });
-        if (!emailSent) {
-          const offerParams = {
+        // Solo enviar por correo si el usuario marcó explícitamente el checkbox.
+        // Nunca enviar de forma automática.
+        if (sendEmailOnGenerate) {
+          const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+          await sendOfferEmailDirect({
             offerId: ofertaData.id,
             propertyNumber: propertyNumber || '',
             recipientEmail: formValues.email,
             recipientName: formValues.razon_social,
-            tipo: 'producto' as const,
-          };
-          toast({
-            title: "Oferta descargada",
-            description: "La oferta no incluye datos bancarios. ¿Deseas enviarla por correo al prospecto?",
-            duration: 15000,
-            action: (
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0"
-                onClick={() => sendOfferEmailDirect(offerParams)}
-              >
-                <Mail className="h-4 w-4 mr-1" />
-                Enviar
-              </Button>
-            ),
+            tipo: 'producto',
           });
         }
       } catch (pdfError) {
@@ -842,6 +821,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
       setSelectedProduct(null);
       setSelectedProductData(null);
       setSelectedPerson(null);
+      setSendEmailOnGenerate(false);
       
       // Call onSuccess callback to refresh the offers list
       onSuccess?.();
@@ -1517,18 +1497,33 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
                 </>
               )}
 
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setOpen(false)}>
-                  Cancelar
-                </Button>
-                {selectedProductData && (
-                  <Button 
-                    onClick={() => void handleGenerateOffer()} 
-                    disabled={isGenerating || (selectedMode === "precargada" && productPaymentSchemes.length === 0)}
+              <div className="flex items-center justify-between gap-4 pt-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="sendEmailOnGenerateProduct"
+                    checked={sendEmailOnGenerate}
+                    onCheckedChange={(checked) => setSendEmailOnGenerate(checked === true)}
+                  />
+                  <label
+                    htmlFor="sendEmailOnGenerateProduct"
+                    className="text-sm text-foreground cursor-pointer"
                   >
-                    {isGenerating ? "Generando..." : "Generar Oferta"}
+                    Enviar oferta por correo al prospecto
+                  </label>
+                </div>
+                <div className="flex space-x-2">
+                  <Button variant="outline" onClick={() => setOpen(false)}>
+                    Cancelar
                   </Button>
-                )}
+                  {selectedProductData && (
+                    <Button
+                      onClick={() => void handleGenerateOffer()}
+                      disabled={isGenerating || (selectedMode === "precargada" && productPaymentSchemes.length === 0)}
+                    >
+                      {isGenerating ? "Generando..." : "Generar Oferta"}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </Form>
