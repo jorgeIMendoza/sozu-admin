@@ -1,57 +1,38 @@
 
-## Plan: Fix apartado_pagado + auto-status Apartado
 
-### 1) Migración SQL (un solo archivo)
+## Plan: Envío de oferta por correo siempre manual vía checkbox
 
-**a) Reemplazar `get_cuentas_cobranza_paginadas`** copiando la versión actual íntegra y cambiando SOLO la línea `false AS apartado_pagado` por:
-```sql
-COALESCE((
-  SELECT bool_and(ap2.pago_completado)
-  FROM acuerdos_pago ap2
-  WHERE ap2.id_cuenta_cobranza = cc.id
-    AND ap2.activo = true
-    AND ap2.id_concepto IN (1, 2)  -- 1=Apartado, 2=Enganche
-), false) AS apartado_pagado
-```
-Nota: si la cuenta no tiene acuerdos de Apartado/Enganche, devolver `false` (mantiene comportamiento actual seguro). Mantener firma, parámetros, RETURNS TABLE y resto del cuerpo idénticos.
+### Objetivo
+Eliminar el envío automático de oferta(s) por correo en TODOS los flujos de generación. Mostrar SIEMPRE un checkbox "Enviar oferta por correo al prospecto" desmarcado por default. Solo enviar si el usuario lo activa.
 
-**b) Crear función + trigger `actualizar_estatus_propiedad_apartada`** sobre `acuerdos_pago` AFTER UPDATE OF `pago_completado`:
-- Cuando `NEW.id_concepto = 1` y `NEW.pago_completado = true` y `OLD.pago_completado = false`
-- Resolver `id_propiedad` vía `cuentas_cobranza → ofertas`
-- Si estatus actual ∈ (1, 2): UPDATE a 4 + `clabe_stp_tmp_apartado = NULL` + `monto_apartado_pagando = 0`
-- No tocar si estatus ≥ 4 (no retroceder)
-- `SECURITY DEFINER`, `search_path = public`
+### Cambios
 
-**c) Backfill one-shot** dentro de la misma migración:
-```sql
-UPDATE propiedades p
-SET id_estatus_disponibilidad = 4,
-    clabe_stp_tmp_apartado = NULL,
-    monto_apartado_pagando = 0
-WHERE p.id_estatus_disponibilidad IN (1, 2)
-  AND EXISTS (
-    SELECT 1 FROM acuerdos_pago ap
-    JOIN cuentas_cobranza cc ON cc.id = ap.id_cuenta_cobranza
-    JOIN ofertas o ON o.id = cc.id_oferta
-    WHERE o.id_propiedad = p.id
-      AND cc.activo = true AND ap.activo = true
-      AND ap.id_concepto = 1
-      AND ap.pago_completado = true
-  );
-```
+**1) `src/components/admin/NewOfferDialog.tsx` (oferta de propiedad + productos juntos)**
+- Mover el checkbox `sendEmailOnGenerate` fuera del bloque condicional `confirmBankingReasons.length > 0` para que aparezca SIEMPRE en el formulario (idealmente justo antes del footer del diálogo, no solo en el AlertDialog de confirmación).
+- En el flujo `onSubmit`/`createOfferMutation`, reemplazar la llamada actual `sendMultipleOffersEmail(...)` (envío automático condicionado a datos bancarios) por una sola rama:
+  - Si `sendEmailOnGenerate === true` → llamar `sendMultipleOffersEmailDirect(...)` (envío forzado manual).
+  - Si `false` → NO llamar nada relacionado con email.
+- Eliminar el fallback `if (!emailSent && sendEmailOnGenerate)` ya que solo habrá un camino.
 
-### 2) Validación post-migración (en orden)
+**2) `src/components/admin/NewProductOfferDialog.tsx` (oferta de producto suelta)**
+- Agregar estado `const [sendEmailOnGenerate, setSendEmailOnGenerate] = useState(false)`.
+- Agregar un `<Checkbox>` siempre visible en el formulario (cerca del botón "Generar"), con label "Enviar oferta por correo al prospecto", desmarcado por default.
+- Eliminar la llamada automática a `sendOfferEmailAfterDownload(...)` y el toast con botón "Enviar" que aparecía cuando no se enviaba.
+- Reemplazar por: si `sendEmailOnGenerate === true` después de generar el PDF → llamar `sendOfferEmailDirect(...)`. Si no, no hacer nada.
+- Resetear `sendEmailOnGenerate` al cerrar/limpiar el diálogo.
 
-1. `SELECT id_estatus_disponibilidad FROM propiedades WHERE id = 5202` → debe ser 4.
-2. RPC con filtro de cuenta 1747: `apartado_pagado` → debe ser `true`.
-3. RPC con filtro de cuenta 1750: `apartado_pagado` → debe ser `true` y `estatus_propiedad` = "Apartado".
-4. Conteo de propiedades movidas por backfill (reportar al usuario).
-5. Spot-check: una cuenta con apartado/enganche pendiente debe seguir con `apartado_pagado = false`.
-6. Si cualquier validación falla → ajustar la función/trigger e iterar.
+**3) Servicio `src/services/ofertaEmailService.ts`**
+- No requiere cambios funcionales: ya existen `sendOfferEmailDirect` y `sendMultipleOffersEmailDirect` (envío forzado sin condición de datos bancarios). Las funciones `sendOfferEmailAfterDownload` y `sendMultipleOffersEmail` (las que filtraban por datos bancarios) dejarán de usarse desde los diálogos pero se mantienen por si las usa otra vista (ej. botones de "Reenviar" en `Propiedades.tsx` ya usan `sendOfferEmailDirect`, no se afectan).
 
-### 3) Sin cambios en frontend
-Los componentes ya leen `apartado_pagado` correctamente. El trigger es independiente del flujo n8n (este sigue funcionando como respaldo).
+### Comportamiento resultante
+- En cualquier diálogo de generación de oferta (propiedad, productos, o ambos): aparece un checkbox "Enviar oferta por correo al prospecto" desmarcado.
+- Si el usuario lo marca antes de "Generar" → se descarga el PDF Y se envía por correo.
+- Si no lo marca → solo se descarga el PDF, nunca se envía.
+- Los botones independientes de "Reenviar oferta por correo" en listados de propiedades siguen funcionando igual (manuales).
 
-### Archivos afectados
-- Nueva migración SQL (vía herramienta de migración)
-- Cero cambios en código TS
+### Archivos a editar
+- `src/components/admin/NewOfferDialog.tsx`
+- `src/components/admin/NewProductOfferDialog.tsx`
+
+Sin cambios en backend ni en `ofertaEmailService.ts`.
+
