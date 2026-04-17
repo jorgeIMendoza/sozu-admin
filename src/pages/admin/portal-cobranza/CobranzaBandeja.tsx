@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { usePagination } from '@/hooks/usePagination';
+import { SimplePagination } from '@/components/ui/simple-pagination';
 
 type PriorityLevel = 'purple' | 'red' | 'yellow' | 'green';
 
@@ -72,6 +74,8 @@ export default function BandejaOperativaPage() {
     if (priorityFilter !== 'all') result = result.filter(c => c.prioridad === priorityFilter);
     return result;
   }, [cuentas, priorityFilter]);
+
+  const { paginated, page, setPage, totalPages, total, from, to } = usePagination(filtered, 50);
 
   const counts = useMemo(() => ({
     total: filtered.length,
@@ -176,7 +180,7 @@ export default function BandejaOperativaPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((cuenta) => (
+              {paginated.map((cuenta) => (
                 <tr key={cuenta.cuenta_id} className="sozu-table-row h-[52px]">
                   <td className="px-3"><PriorityBadge priority={cuenta.prioridad} /></td>
                   <td className="px-3">
@@ -218,6 +222,14 @@ export default function BandejaOperativaPage() {
             </tbody>
           </table>
         )}
+        <SimplePagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          total={total}
+          from={from}
+          to={to}
+        />
       </div>
     </div>
   );

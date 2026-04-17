@@ -28,6 +28,8 @@ import {
   User, Building2, Link2, Briefcase,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePagination } from '@/hooks/usePagination';
+import { SimplePagination } from '@/components/ui/simple-pagination';
 
 // ── Status config ───────────────────────────────────────────────
 const statusConfig: Record<CaseStatus, { bg: string; text: string }> = {
@@ -138,6 +140,8 @@ export default function InboxPage() {
     }
     return cases.sort((a, b) => caseSortScore(a) - caseSortScore(b));
   }, [statusFilter, typeFilter, agendaFilter, searchQuery]);
+
+  const { paginated: paginatedCases, page, setPage, totalPages, total, from, to } = usePagination(filtered, 50);
 
   // Stats
   const activeCases = mockCases.filter(c => c.status !== 'resuelto' && c.status !== 'archivado');
@@ -256,13 +260,22 @@ export default function InboxPage() {
 
         {/* Case list */}
         <div className="flex-1 overflow-auto p-5 space-y-2">
-          {filtered.map(c => <CaseCard key={c.id} c={c} selected={selectedCase?.id === c.id} onSelect={() => { setSelectedCase(c); setDetailTab('resumen'); }} />)}
+          {paginatedCases.map(c => <CaseCard key={c.id} c={c} selected={selectedCase?.id === c.id} onSelect={() => { setSelectedCase(c); setDetailTab('resumen'); }} />)}
           {filtered.length === 0 && (
             <div className="text-center py-12">
               <ClipboardList className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" strokeWidth={1.5} />
               <p className="text-sm text-muted-foreground">No se encontraron casos</p>
             </div>
           )}
+          <SimplePagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            total={total}
+            from={from}
+            to={to}
+            className="border-t-0 mt-2"
+          />
         </div>
       </div>
 

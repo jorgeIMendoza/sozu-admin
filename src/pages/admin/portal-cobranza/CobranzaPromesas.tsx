@@ -6,6 +6,8 @@ import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Handshake, Search, X, CheckCircle2, RotateCcw, Eye, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { usePagination } from '@/hooks/usePagination';
+import { SimplePagination } from '@/components/ui/simple-pagination';
 
 export default function PromesasPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -52,6 +54,8 @@ export default function PromesasPage() {
     cumplidas: allPromises.filter(p => p.status === 'cumplida').length,
     vencidas: allPromises.filter(p => p.status === 'vencida').length,
   };
+
+  const { paginated: promisesPage, page, setPage, totalPages, total, from, to } = usePagination(promises, 50);
 
   return (
     <div className="flex h-full -m-5">
@@ -104,7 +108,7 @@ export default function PromesasPage() {
               </tr>
             </thead>
             <tbody>
-              {promises.map(p => (
+              {promisesPage.map(p => (
                 <tr
                   key={p.id}
                   className={`sozu-table-row h-[52px] ${selectedPromise?.id === p.id ? 'bg-primary-muted' : ''}`}
@@ -122,6 +126,14 @@ export default function PromesasPage() {
             </tbody>
           </table>
           )}
+          <SimplePagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            total={total}
+            from={from}
+            to={to}
+          />
         </div>
       </div>
 
