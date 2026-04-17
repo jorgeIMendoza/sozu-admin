@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -216,8 +216,15 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
     enabled: open,
   });
 
-  // Populate showrooms when data is loaded
+  // Populate showrooms only once per dialog open, to avoid overwriting in-progress local edits
+  // (e.g. when the user clicks the map to move the marker).
+  const showroomsHydratedRef = useRef(false);
   useEffect(() => {
+    if (!open) {
+      showroomsHydratedRef.current = false;
+      return;
+    }
+    if (showroomsHydratedRef.current) return;
     if (projectShowrooms.length > 0) {
       setShowrooms(projectShowrooms.map(s => ({
         id: s.id,
@@ -226,10 +233,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         latitud: s.latitud != null ? Number(s.latitud) : null,
         longitud: s.longitud != null ? Number(s.longitud) : null,
       })));
-    } else if (project && projectShowrooms.length === 0) {
+      showroomsHydratedRef.current = true;
+    } else if (project) {
       setShowrooms([]);
+      showroomsHydratedRef.current = true;
     }
-  }, [projectShowrooms, project]);
+  }, [open, projectShowrooms, project]);
 
   // Geocode an address using Google Maps Geocoder
   const geocodeAddress = (address: string, idx: number) => {
