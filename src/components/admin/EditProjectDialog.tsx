@@ -223,13 +223,36 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         id: s.id,
         nombre: s.nombre || '',
         descripcion_direccion: s.descripcion_direccion,
-        latitud: s.latitud,
-        longitud: s.longitud,
+        latitud: s.latitud != null ? Number(s.latitud) : null,
+        longitud: s.longitud != null ? Number(s.longitud) : null,
       })));
     } else if (project && projectShowrooms.length === 0) {
       setShowrooms([]);
     }
   }, [projectShowrooms, project]);
+
+  // Geocode an address using Google Maps Geocoder
+  const geocodeAddress = (address: string, idx: number) => {
+    if (!address.trim() || !(window as any).google?.maps) return;
+    const geocoder = new (window as any).google.maps.Geocoder();
+    geocoder.geocode({ address, componentRestrictions: { country: "mx" } }, (results: any, status: string) => {
+      if (status === 'OK' && results && results[0]) {
+        const loc = results[0].geometry.location;
+        setShowrooms(prev => {
+          const updated = [...prev];
+          if (updated[idx]) {
+            updated[idx] = {
+              ...updated[idx],
+              latitud: loc.lat(),
+              longitud: loc.lng(),
+              descripcion_direccion: results[0].formatted_address || updated[idx].descripcion_direccion,
+            };
+          }
+          return updated;
+        });
+      }
+    });
+  };
 
   const { data: vistas } = useQuery({
     queryKey: ["vistas-proyecto", projectId],
@@ -956,6 +979,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                                   const updated = [...showrooms];
                                   updated[idx] = { ...updated[idx], descripcion_direccion: e.target.value };
                                   setShowrooms(updated);
+                                }}
+                                onBlur={(e) => {
+                                  // Auto-geocode when user finishes typing the address manually
+                                  if (e.target.value.trim() && (!showroom.latitud || !showroom.longitud)) {
+                                    geocodeAddress(e.target.value, idx);
+                                  }
                                 }}
                                 className="mt-1"
                               />
