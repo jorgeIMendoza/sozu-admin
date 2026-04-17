@@ -30,7 +30,18 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
   const [markerPosition, setMarkerPosition] = useState(initialLocation || null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [searchText, setSearchText] = useState("");
-  
+
+  // Sync markerPosition when initialLocation changes (e.g. async data load on edit)
+  useEffect(() => {
+    if (initialLocation && (initialLocation.lat !== markerPosition?.lat || initialLocation.lng !== markerPosition?.lng)) {
+      setMarkerPosition(initialLocation);
+      if (mapInstance) {
+        mapInstance.panTo(initialLocation);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLocation?.lat, initialLocation?.lng]);
+
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
