@@ -31,6 +31,7 @@ export interface RelacionPagosFilters {
   metodosPermitidos?: string[] | null;
   search?: string;
   hasCep?: boolean | null;
+  hasAplicaciones?: boolean | null;
   tipoCuenta?: 'propiedad' | 'producto' | null;
   page: number;
   pageSize: number;
