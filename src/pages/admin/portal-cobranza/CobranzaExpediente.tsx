@@ -62,7 +62,7 @@ export default function CobranzaExpediente() {
     );
   }
 
-  const { cuenta, compradores, finanzas, parcialidades, pagos } = data;
+  const { cuenta, compradores, finanzas, parcialidades, pagos, multas } = data;
   const priority = priorityFromVencidas(finanzas.parcialidades_vencidas);
   const progressPct = cuenta.precio_final > 0
     ? Math.min(100, Math.round((finanzas.total_pagado / cuenta.precio_final) * 100))
