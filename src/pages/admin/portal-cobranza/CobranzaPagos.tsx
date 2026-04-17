@@ -32,7 +32,17 @@ export default function RelacionPagosPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
 
-  const { pagos, total, isLoading, error } = useRelacionPagos({
+  const {
+    pagos,
+    total,
+    totalMonto,
+    totalConCep,
+    totalSinCep,
+    totalAplicados,
+    totalSinAplicar,
+    isLoading,
+    error,
+  } = useRelacionPagos({
     proyectoId: projectFilter,
     metodoPago: metodoPagoFilter,
     search: searchQuery,
@@ -59,12 +69,8 @@ export default function RelacionPagosPage() {
     return tipo === 'producto' ? `CCP-${padded}` : `CC-${padded}`;
   };
 
-  // Stats from current result set
-  const totalAmount = useMemo(() => pagos.reduce((s, r) => s + Number(r.monto), 0), [pagos]);
-  const conCep = useMemo(() => pagos.filter(r => r.tiene_cep).length, [pagos]);
-  const sinCep = useMemo(() => pagos.filter(r => !r.tiene_cep).length, [pagos]);
-  const aplicados = useMemo(() => pagos.filter(r => r.num_aplicaciones > 0).length, [pagos]);
-  const sinAplicar = useMemo(() => pagos.filter(r => r.num_aplicaciones === 0).length, [pagos]);
+  // Page-only stats (for the small inline header next to the title)
+  const pageAmount = useMemo(() => pagos.reduce((s, r) => s + Number(r.monto), 0), [pagos]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
