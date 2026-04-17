@@ -152,14 +152,22 @@ export default function CEPsPage() {
           <div className="flex items-center gap-1.5 mb-1"><DollarSign className="w-3.5 h-3.5 text-primary" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Monto total</span></div>
           <p className="text-lg font-semibold text-foreground tabular-nums" title={formatCurrency(totalMonto)}>{formatCompactCurrency(totalMonto)}</p>
         </div>
-        <div className="sozu-kpi-card !p-4">
+        <button
+          type="button"
+          onClick={() => { setAplicacionFilter(prev => prev === 'aplicados' ? null : 'aplicados'); setPage(1); }}
+          className={cn('sozu-kpi-card !p-4 text-left transition-all hover:shadow-md cursor-pointer',
+            aplicacionFilter === 'aplicados' && 'ring-2 ring-primary border-primary')}>
           <div className="flex items-center gap-1.5 mb-1"><Shield className="w-3.5 h-3.5 text-primary" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Aplicados</span></div>
           <p className="text-lg font-semibold text-primary tabular-nums" title={totalAplicados.toLocaleString()}>{formatCompactNumber(totalAplicados)}</p>
-        </div>
-        <div className="sozu-kpi-card !p-4">
-          <div className="flex items-center gap-1.5 mb-1"><AlertTriangle className="w-3.5 h-3.5 text-muted-foreground" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Sin aplicar</span></div>
-          <p className="text-lg font-semibold text-muted-foreground tabular-nums" title={totalSinAplicar.toLocaleString()}>{formatCompactNumber(totalSinAplicar)}</p>
-        </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setAplicacionFilter(prev => prev === 'sin_aplicar' ? null : 'sin_aplicar'); setPage(1); }}
+          className={cn('sozu-kpi-card !p-4 text-left transition-all hover:shadow-md cursor-pointer',
+            aplicacionFilter === 'sin_aplicar' && 'ring-2 ring-danger border-danger')}>
+          <div className="flex items-center gap-1.5 mb-1"><AlertTriangle className="w-3.5 h-3.5 text-danger" strokeWidth={1.75} /><span className="text-[11px] text-danger">Sin aplicar</span></div>
+          <p className="text-lg font-semibold text-danger tabular-nums" title={totalSinAplicar.toLocaleString()}>{formatCompactNumber(totalSinAplicar)}</p>
+        </button>
       </div>
 
       <div className="flex h-full px-5 gap-5">
