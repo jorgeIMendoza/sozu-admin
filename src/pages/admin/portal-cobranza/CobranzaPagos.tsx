@@ -13,6 +13,13 @@ import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 50;
 
+function formatCompactNumber(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(abs >= 10_000_000 ? 1 : 2).replace(/\.?0+$/, '')}M`;
+  if (abs >= 1_000) return `${(n / 1_000).toFixed(abs >= 10_000 ? 1 : 2).replace(/\.?0+$/, '')}K`;
+  return n.toLocaleString();
+}
+
 const METODOS_PAGO = [
   'STP', 'Transferencia bancaria', 'Cheque', 'Efectivo',
   'Tarjeta de crédito', 'Tarjeta de débito', 'STP-manual', 'Cesión de derechos',
@@ -154,7 +161,7 @@ export default function RelacionPagosPage() {
       <div className="px-5 grid grid-cols-5 gap-3">
         <div className="sozu-kpi-card !p-4">
           <div className="flex items-center gap-1.5 mb-1"><DollarSign className="w-3.5 h-3.5 text-primary" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Total Pagos</span></div>
-          <p className="text-lg font-semibold text-foreground tabular-nums">{total.toLocaleString()}</p>
+          <p className="text-lg font-semibold text-foreground tabular-nums" title={total.toLocaleString()}>{formatCompactNumber(total)}</p>
         </div>
         <div className="sozu-kpi-card !p-4">
           <div className="flex items-center gap-1.5 mb-1"><DollarSign className="w-3.5 h-3.5 text-primary" strokeWidth={1.75} /><span className="text-[11px] text-muted-foreground">Monto total</span></div>
