@@ -66,15 +66,12 @@ export default function CEPsPage() {
     metodosPermitidos: METODOS_PAGO,
     search: searchQuery,
     hasCep: false,
+    hasAplicaciones: aplicacionFilter === 'aplicados' ? true : aplicacionFilter === 'sin_aplicar' ? false : null,
     page,
     pageSize: PAGE_SIZE,
   });
 
-  const filteredPagos = useMemo(() => {
-    if (!aplicacionFilter) return pagos;
-    if (aplicacionFilter === 'aplicados') return pagos.filter(p => p.num_aplicaciones > 0);
-    return pagos.filter(p => p.num_aplicaciones === 0);
-  }, [pagos, aplicacionFilter]);
+  const filteredPagos = pagos;
 
   const clearAllFilters = useCallback(() => {
     setProjectFilter(null);
