@@ -4,8 +4,9 @@ import {
   LayoutDashboard, Inbox, FileText, CreditCard, FileCheck,
   AlertTriangle, Handshake, Megaphone, FileStack, Send, Activity,
   HardHat, BarChart3, Settings, ArrowLeft, LogOut, LucideIcon,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Menu,
 } from "lucide-react";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -73,6 +74,12 @@ export const PortalCobranzaLayout = () => {
   const { impersonatedName, impersonatedEmail, isImpersonating } = useCobranzaImpersonation();
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleNavigate = (path: string) => {
+    navigate(path);
+    setMobileOpen(false);
+  };
 
   const { data: personaName } = useQuery({
     queryKey: ["cobranza-persona-name", profile?.id_persona],
@@ -103,121 +110,134 @@ export const PortalCobranzaLayout = () => {
     .map((part) => part.charAt(0).toUpperCase())
     .join("") || "U";
 
+  const sidebarContent = (
+    <>
+      {/* Logo */}
+      <div className="px-4 pt-4 pb-4 border-b border-border">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold shrink-0">
+            S
+          </div>
+          <div className="min-w-0">
+            <p className="text-[15px] font-bold text-foreground leading-tight">SOZU</p>
+            <p className="text-[11px] text-muted-foreground leading-tight">Cobranza 360</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+        {navItems.map((item, idx) => {
+          if (item.separator) {
+            return <div key={`sep-${idx}`} className="my-2 mx-2 border-t border-border" />;
+          }
+
+          if (item.children) {
+            const isExpanded = expandedMenu === item.path || item.children.some(c => isActive(c.path));
+            return (
+              <div key={item.path}>
+                <button
+                  onClick={() => setExpandedMenu(isExpanded ? null : item.path)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
+                    item.children.some(c => isActive(c.path))
+                      ? "text-primary font-semibold"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+                    {item.label}
+                  </div>
+                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {isExpanded && (
+                  <div className="ml-4 mt-0.5 space-y-0.5">
+                    {item.children.map((child) => {
+                      const active = isActive(child.path);
+                      return (
+                        <button
+                          key={child.path}
+                          onClick={() => handleNavigate(child.path)}
+                          className={cn(
+                            "w-full flex items-center gap-2 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150",
+                            active
+                              ? "bg-primary/10 text-primary font-semibold"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}
+                        >
+                          <child.icon className="h-4 w-4 shrink-0" strokeWidth={active ? 2 : 1.75} />
+                          {child.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          const active = isActive(item.path);
+          return (
+            <button
+              key={item.path}
+              onClick={() => handleNavigate(item.path)}
+              className={cn(
+                "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
+                active
+                  ? "bg-primary/10 text-primary font-semibold"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2 : 1.75} />
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Footer */}
+      <div className="px-3 py-3 border-t border-border space-y-2">
+        <div className="min-w-0 px-1">
+          <p className="text-xs text-muted-foreground truncate">{profile?.email || "—"}</p>
+          <p className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleNavigate("/admin")}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Menú principal
+          </button>
+          <button
+            onClick={signOut}
+            className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Salir
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen flex">
-      {/* Sidebar */}
+      {/* Desktop Sidebar */}
       <aside
         className="hidden lg:flex lg:flex-col border-r border-border bg-card fixed inset-y-0 left-0 z-30"
         style={{ width: 232 }}
       >
-        {/* Logo */}
-        <div className="px-4 pt-4 pb-4 border-b border-border">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold shrink-0">
-              S
-            </div>
-            <div className="min-w-0">
-              <p className="text-[15px] font-bold text-foreground leading-tight">SOZU</p>
-              <p className="text-[11px] text-muted-foreground leading-tight">Cobranza 360</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {navItems.map((item, idx) => {
-            if (item.separator) {
-              return <div key={`sep-${idx}`} className="my-2 mx-2 border-t border-border" />;
-            }
-
-            if (item.children) {
-              const isExpanded = expandedMenu === item.path || item.children.some(c => isActive(c.path));
-              return (
-                <div key={item.path}>
-                  <button
-                    onClick={() => setExpandedMenu(isExpanded ? null : item.path)}
-                    className={cn(
-                      "w-full flex items-center justify-between px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
-                      item.children.some(c => isActive(c.path))
-                        ? "text-primary font-semibold"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-                      {item.label}
-                    </div>
-                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                  </button>
-                  {isExpanded && (
-                    <div className="ml-4 mt-0.5 space-y-0.5">
-                      {item.children.map((child) => {
-                        const active = isActive(child.path);
-                        return (
-                          <button
-                            key={child.path}
-                            onClick={() => navigate(child.path)}
-                            className={cn(
-                              "w-full flex items-center gap-2 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150",
-                              active
-                                ? "bg-primary/10 text-primary font-semibold"
-                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                          >
-                            <child.icon className="h-4 w-4 shrink-0" strokeWidth={active ? 2 : 1.75} />
-                            {child.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            const active = isActive(item.path);
-            return (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={cn(
-                  "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
-                  active
-                    ? "bg-primary/10 text-primary font-semibold"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-              >
-                <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2 : 1.75} />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Footer */}
-        <div className="px-3 py-3 border-t border-border space-y-2">
-          <div className="min-w-0 px-1">
-            <p className="text-xs text-muted-foreground truncate">{profile?.email || "—"}</p>
-            <p className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate("/admin")}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Menú principal
-            </button>
-            <button
-              onClick={signOut}
-              className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Salir
-            </button>
-          </div>
-        </div>
+        {sidebarContent}
       </aside>
+
+      {/* Mobile Sheet Sidebar */}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="p-0 w-[260px] flex flex-col bg-card">
+          {sidebarContent}
+        </SheetContent>
+      </Sheet>
 
       {/* Main content */}
       <div className="flex-1 lg:ml-[232px]">
@@ -248,7 +268,29 @@ export const PortalCobranzaLayout = () => {
           </div>
         </header>
 
-        <main className="p-8 lg:px-10 lg:py-8 bg-background min-h-[calc(100vh-56px)]">
+        {/* Mobile Topbar */}
+        <header className="flex lg:hidden items-center justify-between sticky top-0 z-20 bg-card border-b border-border px-3 h-14">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="p-2 -ml-1 rounded-md text-foreground hover:bg-muted transition-colors"
+              aria-label="Abrir menú"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-foreground leading-tight truncate">Cobranza 360</p>
+              <p className="text-[11px] text-muted-foreground leading-tight truncate">{currentSection}</p>
+            </div>
+          </div>
+          <Avatar className="h-8 w-8 shrink-0">
+            <AvatarFallback className="bg-primary text-primary-foreground text-[12px] font-bold">
+              {userInitials}
+            </AvatarFallback>
+          </Avatar>
+        </header>
+
+        <main className="p-4 lg:px-10 lg:py-8 bg-background min-h-[calc(100vh-56px)]">
           <Outlet />
         </main>
       </div>
