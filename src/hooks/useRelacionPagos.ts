@@ -56,9 +56,10 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
     filters.metodoPago,
     debouncedSearch,
     filters.hasCep,
+    filters.tipoCuenta,
     filters.page,
     filters.pageSize,
-  ], [filters.proyectoId, filters.metodoPago, debouncedSearch, filters.hasCep, filters.page, filters.pageSize]);
+  ], [filters.proyectoId, filters.metodoPago, debouncedSearch, filters.hasCep, filters.tipoCuenta, filters.page, filters.pageSize]);
 
   const { data, isLoading, error } = useQuery({
     queryKey,
@@ -68,6 +69,7 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
         p_metodo_pago: filters.metodoPago ?? null,
         p_search: debouncedSearch || null,
         p_has_cep: filters.hasCep ?? null,
+        p_tipo_cuenta: filters.tipoCuenta ?? null,
         p_limit: filters.pageSize,
         p_offset: (filters.page - 1) * filters.pageSize,
       });
