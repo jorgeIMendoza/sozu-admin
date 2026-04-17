@@ -32,6 +32,21 @@ export interface ExpedienteFinanzas {
   proximo_vencimiento: string | null;
   total_parcialidades: number;
   parcialidades_pagadas: number;
+  total_multas: number;
+  multas_pendientes_monto: number;
+  multas_pendientes_count: number;
+  multas_total_count: number;
+}
+
+export interface ExpedienteMulta {
+  id: number;
+  monto: number;
+  descripcion: string | null;
+  fecha_creacion: string;
+  es_pagada: boolean;
+  id_acuerdo_pago: number | null;
+  acuerdo_orden: number | null;
+  fecha_acuerdo: string | null;
 }
 
 export interface ExpedienteParcialidad {
@@ -69,6 +84,7 @@ export interface Expediente {
   finanzas: ExpedienteFinanzas;
   parcialidades: ExpedienteParcialidad[];
   pagos: ExpedientePago[];
+  multas: ExpedienteMulta[];
 }
 
 export function useExpedienteCobranza(cuentaId: number | null) {
