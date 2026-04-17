@@ -62,6 +62,7 @@ export default function CEPsPage() {
   } = useRelacionPagos({
     proyectoId: projectFilter,
     metodoPago: metodoPagoFilter,
+    metodosPermitidos: METODOS_PAGO,
     search: searchQuery,
     hasCep: false,
     page,
