@@ -266,13 +266,31 @@ export default function CEPsPage() {
 
         {/* Detail panel */}
         {selectedCEP && (
-          <div className="w-[380px] shrink-0 bg-card border border-border rounded-xl flex flex-col animate-slide-in-right self-start sticky top-[180px]">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+          <div className={cn('w-[380px] shrink-0 bg-card border rounded-xl flex flex-col animate-slide-in-right self-start sticky top-[180px]',
+            selectedCEP.num_aplicaciones === 0 ? 'border-danger/40' : 'border-border')}>
+            <div className={cn('flex items-center justify-between px-5 py-3 border-b',
+              selectedCEP.num_aplicaciones === 0 ? 'border-danger/30 bg-danger/[0.04]' : 'border-border')}>
               <h3 className="text-[14px] font-semibold text-foreground">Detalle CEP Pendiente</h3>
               <button onClick={() => setSelectedCEP(null)} className="p-1.5 rounded-md hover:bg-muted transition-colors"><X className="w-4 h-4" strokeWidth={1.75} /></button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-              <span className="sozu-chip bg-warning-bg text-warning">Sin CEP</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="sozu-chip bg-warning-bg text-warning">Sin CEP</span>
+                {selectedCEP.num_aplicaciones === 0 && (
+                  <span className="sozu-chip bg-danger/10 text-danger">Sin aplicar</span>
+                )}
+              </div>
+              {selectedCEP.num_aplicaciones === 0 && (
+                <div className="rounded-md border border-danger/30 bg-danger/[0.06] px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-danger" strokeWidth={1.75} />
+                    <p className="text-[11px] font-semibold text-danger uppercase tracking-wider">Pago no aplicado — motivo</p>
+                  </div>
+                  <p className="text-[12px] text-foreground leading-relaxed">
+                    {selectedCEP.descripcion?.trim() || 'Este pago aún no se ha asociado a ningún acuerdo de pago. No hay descripción registrada que indique el motivo.'}
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
                 <InfoItem label="Cliente" value={selectedCEP.cliente || 'Sin identificar'} />
                 <InfoItem label="Proyecto" value={selectedCEP.proyecto || '—'} />
@@ -285,7 +303,7 @@ export default function CEPsPage() {
                 <InfoItem label="Propiedad" value={selectedCEP.num_propiedad || '—'} />
                 <InfoItem label="Aplicaciones" value={selectedCEP.num_aplicaciones > 0 ? `${selectedCEP.num_aplicaciones} (${formatCurrency(Number(selectedCEP.monto_aplicado))})` : 'Sin aplicar'} />
               </div>
-              {selectedCEP.descripcion && (
+              {selectedCEP.descripcion && selectedCEP.num_aplicaciones > 0 && (
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Descripción</p>
                   <p className="text-[13px] text-muted-foreground">{selectedCEP.descripcion}</p>
