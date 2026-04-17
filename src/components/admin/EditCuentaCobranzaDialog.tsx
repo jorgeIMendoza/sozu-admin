@@ -1825,6 +1825,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
     return totalPagadoEnganche >= totalEnganche && totalEnganche > 0;
   })() : false;
 
+  // El bloqueo por enganche pagado solo aplica a cuentas de Propiedad.
+  // Las cuentas de Producto / Servicio NO se bloquean por enganche pagado.
+  const aplicaBloqueoComisionPorEnganche = isEnganchePagado && tipoCuenta === 'Propiedad';
+  const isComisionLockedByEnganche = aplicaBloqueoComisionPorEnganche && !canSuperAdminEditComision;
+
   // Handle adding comisionista
   const handleAddComisionista = () => {
     if (!selectedUsuario) {
