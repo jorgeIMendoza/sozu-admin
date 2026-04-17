@@ -72,6 +72,24 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     enabled: !!personaId,
   });
 
+  // Carta de cumplimiento firmada vía Mifiel (fallback si el webhook no creó el doc tipo 48)
+  const { data: cartaFirmada = false, isLoading: loadingCarta } = useQuery({
+    queryKey: ['agent-onboarding-carta-firmada', personaId],
+    queryFn: async () => {
+      if (!personaId) return false;
+      const { data, error } = await supabase
+        .from('firmas_digitales')
+        .select('id')
+        .eq('tipo_documento', 'carta_acuerdos')
+        .eq('referencia_id', personaId)
+        .eq('estado', 'completado')
+        .limit(1);
+      if (error) throw error;
+      return !!(data && data.length > 0);
+    },
+    enabled: !!personaId,
+  });
+
   const { data: cuentas = [], isLoading: loadingCuentas } = useQuery({
     queryKey: ['agent-onboarding-bank', personaId],
     queryFn: async () => {
