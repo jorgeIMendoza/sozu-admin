@@ -18,6 +18,8 @@ import {
   ChevronRight, Filter, ArrowUpDown, Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePagination } from '@/hooks/usePagination';
+import { SimplePagination } from '@/components/ui/simple-pagination';
 
 const executives = ['Luz Ochoa', 'Tomás Peterson'];
 
@@ -91,6 +93,8 @@ export default function ConciliacionesPage() {
   }, [cases, statusFilter, priorityFilter, assigneeFilter, typeFilter, searchQuery, sortBy]);
 
   const hasFilters = statusFilter !== 'all' || priorityFilter !== 'all' || assigneeFilter !== 'all' || typeFilter !== 'all' || searchQuery.trim();
+
+  const { paginated: paginatedCases, page, setPage, totalPages, total, from, to } = usePagination(filtered, 50);
 
   // Actions
   const handleNewCase = useCallback((c: ConciliacionCase) => {
@@ -230,12 +234,21 @@ export default function ConciliacionesPage() {
               <button onClick={clearAllFilters} className="text-[13px] text-primary hover:underline">Limpiar filtros</button>
             </div>
           ) : (
-            filtered.map(c => (
+            paginatedCases.map(c => (
               <CaseCard key={c.id} caso={c} selected={selectedCase?.id === c.id}
                 onClick={() => { setSelectedCase(c); setDetailTab('resumen'); }}
                 isFuera={isFueraSLA(c)} />
             ))
           )}
+          <SimplePagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            total={total}
+            from={from}
+            to={to}
+            className="border-t-0 mt-2"
+          />
         </div>
       </div>
 
