@@ -209,10 +209,20 @@ export default function RelacionPagosPage() {
                   <tr key={r.pago_id} className="sozu-table-row h-[52px]">
                     <td className="px-4 text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(r.fecha_pago)}</td>
                     <td className="px-4">
-                      <p className="text-[13px] font-medium text-foreground truncate max-w-[180px]">{r.cliente || 'Sin identificar'}</p>
-                      {r.num_propiedad && <p className="text-[11px] text-muted-foreground">Prop. {r.num_propiedad}</p>}
+                      <p className="text-[13px] font-medium text-foreground truncate max-w-[200px]">{r.cliente || 'Sin identificar'}</p>
+                      <p className="text-[11px] font-mono text-muted-foreground">{formatCuenta(r.id_cuenta_cobranza, r.tipo_cuenta)}</p>
                     </td>
-                    <td className="px-4 text-[13px] text-foreground">{r.proyecto || '—'}</td>
+                    <td className="px-4">
+                      <p className="text-[13px] text-foreground">{r.proyecto || '—'}</p>
+                      {(r.num_propiedad || r.producto) && (
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">
+                          {r.proyecto && (r.num_propiedad || r.producto) ? `${r.proyecto} · ` : ''}{r.num_propiedad || r.producto}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 text-[13px] text-foreground truncate max-w-[180px]" title={r.producto || ''}>
+                      {r.tipo_cuenta === 'producto' ? (r.producto || '—') : '—'}
+                    </td>
                     <td className="px-4">
                       <span className={cn('sozu-chip text-[10px]',
                         r.metodo_pago === 'STP' ? 'bg-info/10 text-info' :
