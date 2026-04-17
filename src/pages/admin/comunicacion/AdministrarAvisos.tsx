@@ -467,6 +467,14 @@ export default function AdministrarAvisos() {
             ))}
           </TableBody>
         </Table>
+        <SimplePagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          total={total}
+          from={from}
+          to={to}
+        />
       </div>
 
       {/* Create/Edit Dialog */}
