@@ -15,11 +15,14 @@ export interface PagoRecord {
   clabe_stp: string | null;
   cliente: string | null;
   num_propiedad: string | null;
+  producto: string | null;
+  tipo_cuenta: 'propiedad' | 'producto' | null;
   proyecto: string | null;
   proyecto_id: number | null;
   tiene_cep: boolean;
   monto_aplicado: number;
   num_aplicaciones: number;
+  aplicaciones_detalle: Array<{ concepto: string | null; orden: number | null; monto: number }>;
 }
 
 export interface RelacionPagosFilters {
@@ -27,6 +30,7 @@ export interface RelacionPagosFilters {
   metodoPago?: string | null;
   search?: string;
   hasCep?: boolean | null;
+  tipoCuenta?: 'propiedad' | 'producto' | null;
   page: number;
   pageSize: number;
 }
