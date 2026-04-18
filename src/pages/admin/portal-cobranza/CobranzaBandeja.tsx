@@ -181,6 +181,7 @@ export default function BandejaOperativaPage() {
             <thead className="sozu-thead">
               <tr>
                 <th className="w-[160px]">Prioridad</th>
+                <th className="w-[90px]">Cuenta</th>
                 <th>Cliente</th>
                 <th>Proyecto / Unidad</th>
                 <th className="text-center">Precio</th>
@@ -196,6 +197,11 @@ export default function BandejaOperativaPage() {
               {paginated.map((cuenta) => (
                 <tr key={cuenta.cuenta_id} className="sozu-table-row h-[52px]">
                   <td className="px-3"><PriorityBadge priority={cuenta.prioridad} /></td>
+                  <td className="px-3">
+                    <span className="text-[12px] font-mono font-semibold text-foreground tabular-nums">
+                      CC-{cuenta.cuenta_id}
+                    </span>
+                  </td>
                   <td className="px-3">
                     <p className="text-[13px] font-semibold text-foreground leading-snug truncate max-w-[200px]">
                       {cuenta.cliente_nombre || 'Sin cliente'}
