@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
+import { PriorityLegend } from '@/components/admin/portal-cobranza/PriorityLegend';
 import { useBandejaOperativa, type BandejaCuenta } from '@/hooks/useBandejaOperativa';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
@@ -12,18 +13,21 @@ import { cn } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
 import { SimplePagination } from '@/components/ui/simple-pagination';
 
-type PriorityLevel = 'purple' | 'red' | 'yellow' | 'green';
+type PriorityLevel = 'purple' | 'red_dark' | 'red' | 'yellow' | 'green' | 'blue' | 'gray';
 
 const priorityConfig: Record<PriorityLevel, { bg: string; text: string; label: string; order: number }> = {
-  purple: { bg: 'bg-priority-purple/15', text: 'text-priority-purple', label: '3+ Prelegal', order: 0 },
-  red: { bg: 'bg-danger-bg', text: 'text-danger', label: '2 Vencidas', order: 1 },
-  yellow: { bg: 'bg-warning-bg', text: 'text-warning', label: '1 Vencida', order: 2 },
-  green: { bg: 'bg-success-bg', text: 'text-success', label: 'Al corriente', order: 3 },
+  gray: { bg: 'bg-muted', text: 'text-muted-foreground', label: 'Doc. incompleta', order: 0 },
+  blue: { bg: 'bg-info-bg', text: 'text-info', label: 'Conciliación', order: 1 },
+  purple: { bg: 'bg-priority-purple/15', text: 'text-priority-purple', label: 'Prelegal (90+)', order: 2 },
+  red_dark: { bg: 'bg-danger-bg', text: 'text-danger', label: 'Vencida 3+ (60-89)', order: 3 },
+  red: { bg: 'bg-danger-bg', text: 'text-danger', label: 'Vencida 2 (30-59)', order: 4 },
+  yellow: { bg: 'bg-warning-bg', text: 'text-warning', label: 'Vencida 1 (1-29)', order: 5 },
+  green: { bg: 'bg-success-bg', text: 'text-success', label: 'Al corriente', order: 6 },
 };
 
 function PriorityBadge({ priority }: { priority: PriorityLevel }) {
   const c = priorityConfig[priority];
-  return <span className={cn('sozu-chip text-[10px] font-semibold', c.bg, c.text)}>{c.label}</span>;
+  return <span className={cn('sozu-chip text-[10px] font-semibold whitespace-nowrap', c.bg, c.text)}>{c.label}</span>;
 }
 
 function formatDate(dateStr: string | null) {
@@ -79,7 +83,7 @@ export default function BandejaOperativaPage() {
 
   const counts = useMemo(() => ({
     total: filtered.length,
-    critical: filtered.filter(c => c.prioridad === 'purple' || c.prioridad === 'red').length,
+    critical: filtered.filter(c => c.prioridad === 'purple' || c.prioridad === 'red_dark' || c.prioridad === 'red').length,
     pending: filtered.filter(c => c.prioridad === 'yellow').length,
     ok: filtered.filter(c => c.prioridad === 'green').length,
   }), [filtered]);
@@ -133,9 +137,12 @@ export default function BandejaOperativaPage() {
           />
           <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as PriorityLevel | 'all')} className="sozu-filter-select">
             <option value="all">Prioridad</option>
-            <option value="purple">3+ / Prelegal</option>
-            <option value="red">2 vencidas</option>
-            <option value="yellow">1 vencida</option>
+            <option value="purple">Prelegal (90+)</option>
+            <option value="red_dark">Vencida 3+ (60-89)</option>
+            <option value="red">Vencida 2 (30-59)</option>
+            <option value="yellow">Vencida 1 (1-29)</option>
+            <option value="blue">Conciliación</option>
+            <option value="gray">Doc. incompleta</option>
             <option value="green">Al corriente</option>
           </select>
           <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground cursor-pointer select-none">
@@ -151,8 +158,13 @@ export default function BandejaOperativaPage() {
         </div>
       </div>
 
+      {/* Legend */}
+      <div className="px-5 pt-3">
+        <PriorityLegend />
+      </div>
+
       {/* Table */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto px-5 pt-3">
         {isLoading ? (
           <div className="flex items-center justify-center h-40">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
@@ -168,13 +180,14 @@ export default function BandejaOperativaPage() {
           <table className="w-full text-sm">
             <thead className="sozu-thead">
               <tr>
-                <th className="w-[110px]">Prioridad</th>
+                <th className="w-[160px]">Prioridad</th>
                 <th>Cliente</th>
                 <th>Proyecto / Unidad</th>
                 <th className="text-center">Precio</th>
                 <th className="text-center">Vencido</th>
                 <th className="text-center">Saldo Pendiente</th>
                 <th className="text-center w-[60px]">Parc.</th>
+                <th className="text-center w-[80px]">Días s/pago</th>
                 <th>Próx. Venc.</th>
                 <th>CLABE</th>
               </tr>
@@ -212,6 +225,11 @@ export default function BandejaOperativaPage() {
                     {cuenta.parcialidades_vencidas > 0
                       ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-danger-bg text-danger text-xs font-semibold">{cuenta.parcialidades_vencidas}</span>
                       : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-3 text-center text-[12px] tabular-nums">
+                    {cuenta.parcialidades_vencidas > 0
+                      ? <span className="font-semibold text-danger">{cuenta.dias_sin_pagar}d</span>
+                      : <span className="text-muted-foreground">{cuenta.dias_sin_pagar}d</span>}
                   </td>
                   <td className="px-3 text-[13px] text-muted-foreground tabular-nums">{formatDate(cuenta.proximo_vencimiento)}</td>
                   <td className="px-3 text-[11px] text-muted-foreground font-mono tracking-wide truncate max-w-[160px]">
