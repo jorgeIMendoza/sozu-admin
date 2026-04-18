@@ -137,9 +137,12 @@ export default function BandejaOperativaPage() {
           />
           <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as PriorityLevel | 'all')} className="sozu-filter-select">
             <option value="all">Prioridad</option>
-            <option value="purple">3+ / Prelegal</option>
-            <option value="red">2 vencidas</option>
-            <option value="yellow">1 vencida</option>
+            <option value="purple">Prelegal (90+)</option>
+            <option value="red_dark">Vencida 3+ (60-89)</option>
+            <option value="red">Vencida 2 (30-59)</option>
+            <option value="yellow">Vencida 1 (1-29)</option>
+            <option value="blue">Conciliación</option>
+            <option value="gray">Doc. incompleta</option>
             <option value="green">Al corriente</option>
           </select>
           <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground cursor-pointer select-none">
