@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
+import { PriorityLegend } from '@/components/admin/portal-cobranza/PriorityLegend';
 import { useBandejaOperativa, type BandejaCuenta } from '@/hooks/useBandejaOperativa';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
