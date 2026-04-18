@@ -158,8 +158,13 @@ export default function BandejaOperativaPage() {
         </div>
       </div>
 
+      {/* Legend */}
+      <div className="px-5 pt-3">
+        <PriorityLegend />
+      </div>
+
       {/* Table */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto px-5 pt-3">
         {isLoading ? (
           <div className="flex items-center justify-center h-40">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
