@@ -12,18 +12,21 @@ import { cn } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
 import { SimplePagination } from '@/components/ui/simple-pagination';
 
-type PriorityLevel = 'purple' | 'red' | 'yellow' | 'green';
+type PriorityLevel = 'purple' | 'red_dark' | 'red' | 'yellow' | 'green' | 'blue' | 'gray';
 
 const priorityConfig: Record<PriorityLevel, { bg: string; text: string; label: string; order: number }> = {
-  purple: { bg: 'bg-priority-purple/15', text: 'text-priority-purple', label: '3+ Prelegal', order: 0 },
-  red: { bg: 'bg-danger-bg', text: 'text-danger', label: '2 Vencidas', order: 1 },
-  yellow: { bg: 'bg-warning-bg', text: 'text-warning', label: '1 Vencida', order: 2 },
-  green: { bg: 'bg-success-bg', text: 'text-success', label: 'Al corriente', order: 3 },
+  gray: { bg: 'bg-muted', text: 'text-muted-foreground', label: 'Doc. incompleta', order: 0 },
+  blue: { bg: 'bg-info-bg', text: 'text-info', label: 'Conciliación', order: 1 },
+  purple: { bg: 'bg-priority-purple/15', text: 'text-priority-purple', label: 'Prelegal (90+)', order: 2 },
+  red_dark: { bg: 'bg-danger-bg', text: 'text-danger', label: 'Vencida 3+ (60-89)', order: 3 },
+  red: { bg: 'bg-danger-bg', text: 'text-danger', label: 'Vencida 2 (30-59)', order: 4 },
+  yellow: { bg: 'bg-warning-bg', text: 'text-warning', label: 'Vencida 1 (1-29)', order: 5 },
+  green: { bg: 'bg-success-bg', text: 'text-success', label: 'Al corriente', order: 6 },
 };
 
 function PriorityBadge({ priority }: { priority: PriorityLevel }) {
   const c = priorityConfig[priority];
-  return <span className={cn('sozu-chip text-[10px] font-semibold', c.bg, c.text)}>{c.label}</span>;
+  return <span className={cn('sozu-chip text-[10px] font-semibold whitespace-nowrap', c.bg, c.text)}>{c.label}</span>;
 }
 
 function formatDate(dateStr: string | null) {
