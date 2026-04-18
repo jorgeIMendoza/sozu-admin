@@ -180,13 +180,14 @@ export default function BandejaOperativaPage() {
           <table className="w-full text-sm">
             <thead className="sozu-thead">
               <tr>
-                <th className="w-[110px]">Prioridad</th>
+                <th className="w-[160px]">Prioridad</th>
                 <th>Cliente</th>
                 <th>Proyecto / Unidad</th>
                 <th className="text-center">Precio</th>
                 <th className="text-center">Vencido</th>
                 <th className="text-center">Saldo Pendiente</th>
                 <th className="text-center w-[60px]">Parc.</th>
+                <th className="text-center w-[80px]">Días s/pago</th>
                 <th>Próx. Venc.</th>
                 <th>CLABE</th>
               </tr>
