@@ -275,7 +275,12 @@ export default function AdministrarAvisos() {
       .select('*')
       .eq('activo', true)
       .order('nombre');
-    setFuentesTrigger((data as any) || []);
+    const list = (data as any[]) || [];
+    setFuentesTrigger(list);
+    // Auto-select the first available source (single conceptual source: acuerdos_pago.fecha_pago)
+    if (list.length > 0) {
+      setEventoFuenteId(prev => prev || String(list[0].id));
+    }
   };
 
   useEffect(() => { fetchAvisos(); fetchRoles(); fetchPostmarkTemplates(); fetchFuentes(); }, []);
@@ -285,7 +290,9 @@ export default function AdministrarAvisos() {
     setNombre(""); setAsunto(""); setMensajeHtml(""); setTipoEnvio("manual");
     setCronExpression(""); setCronError(""); setActivo(true); setSelectedRoles([]); setDestinatarios([]);
     setPostmarkTemplateId("36978552"); setSelectedProyectos([]);
-    setModoTrigger('cron'); setEventoFuenteId(''); setEventoOffsets('-5,-3,-1');
+    setModoTrigger('cron');
+    setEventoFuenteId(fuentesTrigger[0] ? String(fuentesTrigger[0].id) : '');
+    setEventoOffsets('-5,-3,-1');
     setEventoHora('10:00'); setEventoCanal('email'); setEventoActivo(true);
     setDialogOpen(true);
   };
@@ -329,7 +336,8 @@ export default function AdministrarAvisos() {
       setEventoCanal(((trigData as any).canal as any) || 'email');
       setEventoActivo(!!(trigData as any).activo);
     } else {
-      setEventoFuenteId(''); setEventoOffsets('-5,-3,-1'); setEventoHora('10:00');
+      setEventoFuenteId(fuentesTrigger[0] ? String(fuentesTrigger[0].id) : '');
+      setEventoOffsets('-5,-3,-1'); setEventoHora('10:00');
       setEventoCanal('email'); setEventoActivo(true);
     }
     setDialogOpen(true);
@@ -677,20 +685,13 @@ export default function AdministrarAvisos() {
                   {modoTrigger === 'evento' && (
                     <div className="space-y-3 border rounded-md p-3 bg-muted/30">
                       <div>
-                        <Label>Fuente de la fecha</Label>
-                        <Select value={eventoFuenteId} onValueChange={setEventoFuenteId}>
-                          <SelectTrigger><SelectValue placeholder="Selecciona una fuente" /></SelectTrigger>
-                          <SelectContent>
-                            {fuentesTrigger.map(f => (
-                              <SelectItem key={f.id} value={String(f.id)}>{f.nombre}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {eventoFuenteId && (
-                          <p className="text-[11px] text-muted-foreground mt-1">
-                            {fuentesTrigger.find(f => String(f.id) === eventoFuenteId)?.descripcion}
-                          </p>
-                        )}
+                        <Label>Fecha base</Label>
+                        <div className="rounded-md border bg-background px-3 py-2 text-sm">
+                          <code className="text-primary">acuerdos_pago.fecha_pago</code>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Se evalúa sobre acuerdos activos no pagados. Usa offsets <strong>negativos</strong> para enviar antes del vencimiento (recordatorios) y <strong>positivos</strong> para enviar después (cobranza vencida).
+                        </p>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -723,7 +724,7 @@ export default function AdministrarAvisos() {
                       </div>
                       {eventoFuenteId && eventoOffsets && (
                         <p className="text-xs font-medium text-primary">
-                          Se enviará por {eventoCanal} a las {eventoHora} ({eventoOffsets.split(',').map(s => s.trim()).filter(Boolean).join(', ')}) días respecto a {fuentesTrigger.find(f => String(f.id) === eventoFuenteId)?.nombre.toLowerCase()}.
+                          Se enviará por {eventoCanal} a las {eventoHora}, en los offsets ({eventoOffsets.split(',').map(s => s.trim()).filter(Boolean).join(', ')}) días respecto a <code>acuerdos_pago.fecha_pago</code>.
                         </p>
                       )}
                       <p className="text-[11px] text-muted-foreground">
