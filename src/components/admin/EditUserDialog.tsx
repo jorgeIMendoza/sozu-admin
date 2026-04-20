@@ -525,6 +525,7 @@ export function EditUserDialog({
       queryClient.invalidateQueries({ queryKey: ['agent_inmobiliaria'] });
       queryClient.invalidateQueries({ queryKey: ['inmob_user_inmobiliaria'] });
       queryClient.invalidateQueries({ queryKey: ['email_confirmado'] });
+      queryClient.invalidateQueries({ queryKey: ['user_phone'] });
 
       registrarActualizacion('usuario', 
         { email: data.oldEmail, nombre: userName },
