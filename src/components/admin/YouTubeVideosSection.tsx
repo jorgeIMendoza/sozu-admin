@@ -9,6 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Power, PowerOff, Plus, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface YouTubeVideosSectionProps {
   projectId: number;
@@ -18,6 +28,7 @@ export function YouTubeVideosSection({ projectId }: YouTubeVideosSectionProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [newVideo, setNewVideo] = useState({
     nombre: "",
     link: ""
@@ -53,6 +64,14 @@ export function YouTubeVideosSection({ projectId }: YouTubeVideosSectionProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['youtubeVideos', projectId] });
+      // Trigger notification "nuevo_avance_de_obra"
+      supabase.functions.invoke('notificar-agentes', {
+        body: {
+          tipo_evento: 'nuevo_avance_de_obra',
+          id_proyecto: projectId,
+          datos: { nombre_video: newVideo.nombre, link_video: newVideo.link },
+        },
+      }).catch(err => console.error('Error sending notification:', err));
       setNewVideo({ nombre: "", link: "" });
       setIsAdding(false);
       toast({ title: "Video de YouTube agregado exitosamente" });
@@ -95,8 +114,8 @@ export function YouTubeVideosSection({ projectId }: YouTubeVideosSectionProps) {
       toast({ title: "Por favor ingresa una URL válida de YouTube", variant: "destructive" });
       return;
     }
-    
-    addMutation.mutate(newVideo);
+
+    setConfirmOpen(true);
   };
 
   const getYouTubeEmbedUrl = (url: string) => {
@@ -162,6 +181,30 @@ export function YouTubeVideosSection({ projectId }: YouTubeVideosSectionProps) {
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar nuevo avance de obra?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Al agregar este video se enviará una notificación (email y/o WhatsApp) a los usuarios configurados en el evento <strong>nuevo_avance_de_obra</strong> (Super Administrador, Agente Inmobiliario, Agente Interno, Vendedor, Cliente, Embajador, Desarrollador e Inmobiliaria con acceso al proyecto).
+              <br /><br />
+              ¿Deseas continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOpen(false);
+                addMutation.mutate(newVideo);
+              }}
+            >
+              Sí, agregar y notificar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="grid gap-4">
         {videos.map((video) => {
