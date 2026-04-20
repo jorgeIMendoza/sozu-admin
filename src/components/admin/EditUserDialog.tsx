@@ -574,11 +574,14 @@ export function EditUserDialog({
       newNombre: nombre.trim(),
       newInmobiliariaId: needsInmobiliaria && selectedInmobiliariaId ? parseInt(selectedInmobiliariaId) : undefined,
       personaId: userPersonaId,
+      newTelefono: telefono.trim() || undefined,
+      newClavePais: telefono.trim() ? clavePaisTelefono : undefined,
     });
   };
 
   const inmobiliariaChanged = needsInmobiliaria && selectedInmobiliariaId !== originalInmobiliariaId;
-  const hasChanges = nombre !== userName || email !== userEmail || inmobiliariaChanged;
+  const phoneChanged = telefono !== originalTelefono || clavePaisTelefono !== originalClavePais;
+  const hasChanges = nombre !== userName || email !== userEmail || inmobiliariaChanged || phoneChanged;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -655,6 +658,35 @@ export function EditUserDialog({
                 ⚠ Al cambiar el email, se requerirá nueva confirmación por correo.
               </p>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-telefono">Teléfono</Label>
+            <div className="flex gap-2">
+              <Select value={clavePaisTelefono} onValueChange={setClavePaisTelefono}>
+                <SelectTrigger className="w-24">
+                  <SelectValue placeholder="País" />
+                </SelectTrigger>
+                <SelectContent>
+                  {paises.map((pais: any) => (
+                    <SelectItem key={pais.id} value={pais.id}>
+                      {pais.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                id="edit-telefono"
+                type="tel"
+                value={telefono}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setTelefono(v);
+                }}
+                placeholder="10 dígitos"
+                className="flex-1"
+              />
+            </div>
           </div>
 
           {/* Inmobiliaria selector - for agent and Inmobiliaria roles */}
