@@ -286,7 +286,12 @@ const NotificacionesConfig = () => {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Plantilla Postmark: </span>
-                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{item.postmark_template_id}</code>
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {(() => {
+                      const tmpl = postmarkTemplates.find(t => t.id === item.postmark_template_id);
+                      return tmpl ? tmpl.name : item.postmark_template_id;
+                    })()}
+                  </Badge>
                 </div>
               </div>
             </CardContent>
