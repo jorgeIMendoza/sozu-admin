@@ -646,6 +646,30 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
           </div>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={confirmYoutubeOpen} onOpenChange={setConfirmYoutubeOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar nuevo avance de obra?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Al agregar este video se enviará una notificación (email y/o WhatsApp) a los usuarios configurados en el evento <strong>nuevo_avance_de_obra</strong> (Super Administrador, Agente Inmobiliario, Agente Interno, Vendedor, Cliente, Embajador, Desarrollador e Inmobiliaria con acceso al desarrollo).
+              <br /><br />
+              ¿Deseas continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmYoutubeOpen(false);
+                addYoutubeMutation.mutate(youtubeForm);
+              }}
+            >
+              Sí, agregar y notificar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
