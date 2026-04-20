@@ -340,15 +340,32 @@ export default function AdministrarAvisos() {
       toast({ title: "Error", description: "Nombre, asunto y mensaje son requeridos", variant: "destructive" });
       return;
     }
+    let parsedOffsets: number[] = [];
     if (tipoEnvio === 'automatico') {
-      if (!cronExpression) {
-        toast({ title: "Error", description: "La expresión cron es requerida para envío automático", variant: "destructive" });
-        return;
-      }
-      const cronValidation = validateCron(cronExpression);
-      if (!cronValidation.valid) {
-        toast({ title: "Expresión cron inválida", description: cronValidation.error, variant: "destructive" });
-        return;
+      if (modoTrigger === 'cron') {
+        if (!cronExpression) {
+          toast({ title: "Error", description: "La expresión cron es requerida para envío automático", variant: "destructive" });
+          return;
+        }
+        const cronValidation = validateCron(cronExpression);
+        if (!cronValidation.valid) {
+          toast({ title: "Expresión cron inválida", description: cronValidation.error, variant: "destructive" });
+          return;
+        }
+      } else {
+        if (!eventoFuenteId) {
+          toast({ title: "Error", description: "Selecciona la fuente del evento", variant: "destructive" });
+          return;
+        }
+        parsedOffsets = eventoOffsets.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+        if (parsedOffsets.length === 0) {
+          toast({ title: "Error", description: "Ingresa al menos un offset de días (ej. -5,-3,-1)", variant: "destructive" });
+          return;
+        }
+        if (!/^\d{2}:\d{2}$/.test(eventoHora)) {
+          toast({ title: "Error", description: "Hora de envío inválida (formato HH:MM)", variant: "destructive" });
+          return;
+        }
       }
     }
 
@@ -365,9 +382,10 @@ export default function AdministrarAvisos() {
 
     const payload = {
       nombre, asunto, mensaje_html: mensajeHtml, tipo_envio: tipoEnvio,
-      cron_expression: tipoEnvio === 'automatico' ? cronExpression : null,
+      cron_expression: (tipoEnvio === 'automatico' && modoTrigger === 'cron') ? cronExpression : null,
       activo, fecha_actualizacion: new Date().toISOString(),
       postmark_template_id: templateId,
+      modo_trigger: tipoEnvio === 'automatico' ? modoTrigger : 'cron',
     };
 
     let avisoId: number;
