@@ -39,6 +39,7 @@ interface NotificacionConfig {
   asunto_email: string;
   plantilla_wa: string;
   plantilla_email_detalles: string;
+  postmark_template_id: number;
 }
 
 interface Rol {
@@ -56,6 +57,7 @@ const EMPTY_CONFIG: Omit<NotificacionConfig, 'id'> = {
   asunto_email: '',
   plantilla_wa: '',
   plantilla_email_detalles: '',
+  postmark_template_id: 41353048,
 };
 
 const NotificacionesConfig = () => {
@@ -128,6 +130,7 @@ const NotificacionesConfig = () => {
           asunto_email: editItem.asunto_email,
           plantilla_wa: editItem.plantilla_wa,
           plantilla_email_detalles: editItem.plantilla_email_detalles,
+          postmark_template_id: editItem.postmark_template_id,
         })
         .select()
         .single();
@@ -152,6 +155,7 @@ const NotificacionesConfig = () => {
           asunto_email: editItem.asunto_email,
           plantilla_wa: editItem.plantilla_wa,
           plantilla_email_detalles: editItem.plantilla_email_detalles,
+          postmark_template_id: editItem.postmark_template_id,
         })
         .eq('id', editItem.id);
 
@@ -259,6 +263,10 @@ const NotificacionesConfig = () => {
                   <span className="text-muted-foreground">Identificador: </span>
                   <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{item.tipo_evento}</code>
                 </div>
+                <div>
+                  <span className="text-muted-foreground">Plantilla Postmark: </span>
+                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{item.postmark_template_id}</code>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -361,6 +369,19 @@ const NotificacionesConfig = () => {
                   placeholder="Asunto..."
                 />
                 <p className="text-xs text-muted-foreground mt-1">Placeholders: {'{nombre_desarrollo}'}, {'{nombre_esquema}'}</p>
+              </div>
+
+              <div>
+                <Label>Plantilla de Postmark (Template ID)</Label>
+                <Input
+                  type="number"
+                  value={editItem.postmark_template_id ?? 41353048}
+                  onChange={e => setEditItem({ ...editItem, postmark_template_id: parseInt(e.target.value || '0', 10) })}
+                  placeholder="41353048"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  ID numérico de la plantilla de Postmark a usar para este evento. Default: 41353048 (Notificaciones internas).
+                </p>
               </div>
 
               <div>

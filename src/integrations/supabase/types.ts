@@ -4980,6 +4980,7 @@ export type Database = {
           id: number
           plantilla_email_detalles: string
           plantilla_wa: string
+          postmark_template_id: number
           requiere_acceso_proyecto: boolean
           roles_destino: number[]
           tipo_evento: string
@@ -4994,6 +4995,7 @@ export type Database = {
           id?: number
           plantilla_email_detalles?: string
           plantilla_wa?: string
+          postmark_template_id?: number
           requiere_acceso_proyecto?: boolean
           roles_destino?: number[]
           tipo_evento: string
@@ -5008,6 +5010,7 @@ export type Database = {
           id?: number
           plantilla_email_detalles?: string
           plantilla_wa?: string
+          postmark_template_id?: number
           requiere_acceso_proyecto?: boolean
           roles_destino?: number[]
           tipo_evento?: string
