@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Plus, Pencil, Trash2, Search, Users, Mail, Loader2 } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { AvisoDestinatariosSection } from "@/components/admin/AvisoDestinatariosSection";
+import { AvisoPayloadSection } from "@/components/admin/AvisoPayloadSection";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
 import { usePagination } from "@/hooks/usePagination";
 import { SimplePagination } from "@/components/ui/simple-pagination";
@@ -35,6 +36,7 @@ interface Aviso {
   fecha_creacion: string;
   postmark_template_id: number;
   modo_trigger?: string | null;
+  payload_postmark?: any;
 }
 
 interface Rol {
@@ -244,6 +246,10 @@ export default function AdministrarAvisos() {
   const [eventoCanal, setEventoCanal] = useState<'email' | 'whatsapp' | 'ambos'>('email');
   const [eventoActivo, setEventoActivo] = useState<boolean>(true);
 
+  // Payload Postmark personalizado
+  const [payloadEnabled, setPayloadEnabled] = useState<boolean>(false);
+  const [payloadJson, setPayloadJson] = useState<string>("");
+
   const fetchAvisos = async () => {
     setIsLoading(true);
     const { data } = await supabase.from('avisos').select('*').order('fecha_creacion', { ascending: false });
@@ -294,6 +300,8 @@ export default function AdministrarAvisos() {
     setEventoFuenteId(fuentesTrigger[0] ? String(fuentesTrigger[0].id) : '');
     setEventoOffsets('-5,-3,-1');
     setEventoHora('10:00'); setEventoCanal('email'); setEventoActivo(true);
+    setPayloadEnabled(false);
+    setPayloadJson("");
     setDialogOpen(true);
   };
 
@@ -305,6 +313,16 @@ export default function AdministrarAvisos() {
     setPostmarkTemplateId(String(aviso.postmark_template_id || 36978552));
     setSelectedProyectos([]);
     setModoTrigger((aviso.modo_trigger as any) || 'cron');
+
+    // Load payload personalizado
+    if (aviso.payload_postmark) {
+      setPayloadEnabled(true);
+      try { setPayloadJson(JSON.stringify(aviso.payload_postmark, null, 2)); }
+      catch { setPayloadJson(""); }
+    } else {
+      setPayloadEnabled(false);
+      setPayloadJson("");
+    }
 
     // Load existing roles and their correos
     const { data } = await supabase.from('avisos_roles_destinatarios').select('id_rol, correos').eq('id_aviso', aviso.id);
@@ -388,12 +406,28 @@ export default function AdministrarAvisos() {
       return;
     }
 
+    // Validate custom payload JSON
+    let payloadPostmark: any = null;
+    if (payloadEnabled) {
+      if (!payloadJson.trim()) {
+        toast({ title: "Error", description: "El payload personalizado está vacío", variant: "destructive" });
+        return;
+      }
+      try {
+        payloadPostmark = JSON.parse(payloadJson);
+      } catch (e: any) {
+        toast({ title: "JSON inválido en payload", description: e.message, variant: "destructive" });
+        return;
+      }
+    }
+
     const payload = {
       nombre, asunto, mensaje_html: mensajeHtml, tipo_envio: tipoEnvio,
       cron_expression: (tipoEnvio === 'automatico' && modoTrigger === 'cron') ? cronExpression : null,
       activo, fecha_actualizacion: new Date().toISOString(),
       postmark_template_id: templateId,
       modo_trigger: tipoEnvio === 'automatico' ? modoTrigger : 'cron',
+      payload_postmark: payloadPostmark,
     };
 
     let avisoId: number;
@@ -738,6 +772,14 @@ export default function AdministrarAvisos() {
                 <Switch checked={activo} onCheckedChange={setActivo} />
                 <Label>Activo</Label>
               </div>
+
+              <AvisoPayloadSection
+                enabled={payloadEnabled}
+                onEnabledChange={setPayloadEnabled}
+                payloadJson={payloadJson}
+                onPayloadJsonChange={setPayloadJson}
+                modo={tipoEnvio === 'automatico' ? (modoTrigger === 'evento' ? 'evento' : 'cron') : 'manual'}
+              />
 
               <AvisoDestinatariosSection
                 roles={roles}
