@@ -285,6 +285,8 @@ export default function AdministrarAvisos() {
     setNombre(""); setAsunto(""); setMensajeHtml(""); setTipoEnvio("manual");
     setCronExpression(""); setCronError(""); setActivo(true); setSelectedRoles([]); setDestinatarios([]);
     setPostmarkTemplateId("36978552"); setSelectedProyectos([]);
+    setModoTrigger('cron'); setEventoFuenteId(''); setEventoOffsets('-5,-3,-1');
+    setEventoHora('10:00'); setEventoCanal('email'); setEventoActivo(true);
     setDialogOpen(true);
   };
 
@@ -295,6 +297,7 @@ export default function AdministrarAvisos() {
     setActivo(aviso.activo);
     setPostmarkTemplateId(String(aviso.postmark_template_id || 36978552));
     setSelectedProyectos([]);
+    setModoTrigger((aviso.modo_trigger as any) || 'cron');
 
     // Load existing roles and their correos
     const { data } = await supabase.from('avisos_roles_destinatarios').select('id_rol, correos').eq('id_aviso', aviso.id);
@@ -312,6 +315,23 @@ export default function AdministrarAvisos() {
     });
     setSelectedRoles(rolIds);
     setDestinatarios(allDests);
+
+    // Load existing event trigger config (single row per aviso in V1)
+    const { data: trigData } = await supabase
+      .from('avisos_triggers_evento')
+      .select('*')
+      .eq('id_aviso', aviso.id)
+      .maybeSingle();
+    if (trigData) {
+      setEventoFuenteId(String((trigData as any).id_fuente));
+      setEventoOffsets(((trigData as any).offsets_dias || []).join(','));
+      setEventoHora(((trigData as any).hora_envio || '10:00:00').substring(0, 5));
+      setEventoCanal(((trigData as any).canal as any) || 'email');
+      setEventoActivo(!!(trigData as any).activo);
+    } else {
+      setEventoFuenteId(''); setEventoOffsets('-5,-3,-1'); setEventoHora('10:00');
+      setEventoCanal('email'); setEventoActivo(true);
+    }
     setDialogOpen(true);
   };
 
