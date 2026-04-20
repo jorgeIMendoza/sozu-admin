@@ -191,9 +191,11 @@ export default function BandejaOperativaPage() {
             <thead className="sozu-thead">
               <tr>
                 <th className="w-[160px]">Prioridad</th>
-                <th className="w-[90px]">Cuenta</th>
+                <th className="w-[110px]">Cuenta</th>
+                <th className="w-[90px]">Tipo</th>
                 <th>Cliente</th>
                 <th>Proyecto / Unidad</th>
+                <th>Producto</th>
                 <th className="text-center">Precio</th>
                 <th className="text-center">Vencido</th>
                 <th className="text-center">Saldo Pendiente</th>
@@ -209,7 +211,17 @@ export default function BandejaOperativaPage() {
                   <td className="px-3"><PriorityBadge priority={cuenta.prioridad} /></td>
                   <td className="px-3">
                     <span className="text-[12px] font-mono font-semibold text-foreground tabular-nums">
-                      CC-{cuenta.cuenta_id}
+                      {formatCuentaCobranzaId(cuenta.cuenta_id, cuenta.tipo_cuenta)}
+                    </span>
+                  </td>
+                  <td className="px-3">
+                    <span className={cn(
+                      'sozu-chip text-[10px] font-semibold',
+                      cuenta.tipo_cuenta === 'Propiedad' && 'bg-info-bg text-info',
+                      cuenta.tipo_cuenta === 'Producto' && 'bg-success-bg text-success',
+                      cuenta.tipo_cuenta === 'Servicio' && 'bg-warning-bg text-warning',
+                    )}>
+                      {cuenta.tipo_cuenta}
                     </span>
                   </td>
                   <td className="px-3">
@@ -224,6 +236,11 @@ export default function BandejaOperativaPage() {
                     <p className="text-[13px] text-foreground">{cuenta.proyecto || '—'}</p>
                     <p className="text-[11px] text-muted-foreground">
                       {[cuenta.edificio, cuenta.numero_propiedad].filter(Boolean).join(' · ') || '—'}
+                    </p>
+                  </td>
+                  <td className="px-3">
+                    <p className="text-[12px] text-foreground truncate max-w-[180px]">
+                      {cuenta.producto_nombre || '—'}
                     </p>
                   </td>
                   <td className="px-3 text-center text-[13px] text-foreground tabular-nums">
