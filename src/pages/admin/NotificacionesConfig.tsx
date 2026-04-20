@@ -69,6 +69,8 @@ const EMPTY_CONFIG: Omit<NotificacionConfig, 'id'> = {
 const NotificacionesConfig = () => {
   const [configs, setConfigs] = useState<NotificacionConfig[]>([]);
   const [roles, setRoles] = useState<Rol[]>([]);
+  const [postmarkTemplates, setPostmarkTemplates] = useState<PostmarkTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [editItem, setEditItem] = useState<NotificacionConfig | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -88,7 +90,20 @@ const NotificacionesConfig = () => {
     setIsLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  const fetchPostmarkTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('listar-postmark-templates');
+      if (!error && data?.templates) {
+        setPostmarkTemplates(data.templates);
+      }
+    } catch (e) {
+      console.error('Error fetching Postmark templates:', e);
+    }
+    setLoadingTemplates(false);
+  };
+
+  useEffect(() => { fetchData(); fetchPostmarkTemplates(); }, []);
 
   const handleToggleActivo = async (item: NotificacionConfig) => {
     const { error } = await (supabase as any)
