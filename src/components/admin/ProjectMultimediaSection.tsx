@@ -71,6 +71,29 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
     }
   });
 
+  // Load notification config for "nuevo_avance_de_obra" so the confirmation
+  // dialog reflects the actual configuration (channel + recipient roles).
+  const { data: avanceObraConfig } = useQuery({
+    queryKey: ['notif-config', 'nuevo_avance_de_obra'],
+    queryFn: async () => {
+      const { data: config } = await (supabase as any)
+        .from('notificaciones_configuracion')
+        .select('tipo_evento, descripcion, canal, roles_destino, activo')
+        .eq('tipo_evento', 'nuevo_avance_de_obra')
+        .maybeSingle();
+      if (!config) return null;
+      let roleNames: string[] = [];
+      if (Array.isArray(config.roles_destino) && config.roles_destino.length > 0) {
+        const { data: roles } = await supabase
+          .from('roles')
+          .select('id, nombre')
+          .in('id', config.roles_destino);
+        roleNames = (roles || []).map((r: any) => r.nombre);
+      }
+      return { ...config, roleNames };
+    },
+  });
+
   const addMutation = useMutation({
     mutationFn: async (multimediaData: typeof newMultimedia) => {
       const { data, error } = await supabase
@@ -652,9 +675,40 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
           <AlertDialogHeader>
             <AlertDialogTitle>¿Confirmar nuevo avance de obra?</AlertDialogTitle>
             <AlertDialogDescription>
-              Al agregar este video se enviará una notificación (email y/o WhatsApp) a los usuarios configurados en el evento <strong>nuevo_avance_de_obra</strong> (Super Administrador, Agente Inmobiliario, Agente Interno, Vendedor, Cliente, Embajador, Desarrollador e Inmobiliaria con acceso al desarrollo).
-              <br /><br />
-              ¿Deseas continuar?
+              {avanceObraConfig ? (
+                <>
+                  Al agregar este video se enviará una notificación por{' '}
+                  <strong>
+                    {avanceObraConfig.canal === 'ambos'
+                      ? 'Email y WhatsApp'
+                      : avanceObraConfig.canal === 'email'
+                      ? 'Email'
+                      : avanceObraConfig.canal === 'whatsapp'
+                      ? 'WhatsApp'
+                      : avanceObraConfig.canal}
+                  </strong>{' '}
+                  a los usuarios con rol{' '}
+                  <strong>
+                    {avanceObraConfig.roleNames.length > 0
+                      ? avanceObraConfig.roleNames.join(', ')
+                      : 'sin roles configurados'}
+                  </strong>{' '}
+                  con acceso al desarrollo, según la configuración del evento{' '}
+                  <strong>{avanceObraConfig.tipo_evento}</strong>.
+                  {!avanceObraConfig.activo && (
+                    <>
+                      <br /><br />
+                      <span className="text-destructive">
+                        ⚠️ El evento está desactivado, no se enviarán notificaciones.
+                      </span>
+                    </>
+                  )}
+                  <br /><br />
+                  ¿Deseas continuar?
+                </>
+              ) : (
+                <>Cargando configuración de la notificación...</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
