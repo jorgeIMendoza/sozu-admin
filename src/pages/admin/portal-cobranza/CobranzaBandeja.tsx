@@ -47,6 +47,7 @@ export default function BandejaOperativaPage() {
   const [priorityFilter, setPriorityFilter] = useState<PriorityLevel | 'all'>(() =>
     (searchParams.get('prioridad') as PriorityLevel) || 'all'
   );
+  const [tipoFilter, setTipoFilter] = useState<'all' | 'Propiedad' | 'Producto' | 'Servicio'>('all');
   const [soloVencidas, setSoloVencidas] = useState(() => searchParams.get('preset') === 'critical');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
