@@ -5,6 +5,7 @@ import { PriorityLegend } from '@/components/admin/portal-cobranza/PriorityLegen
 import { useBandejaOperativa, type BandejaCuenta } from '@/hooks/useBandejaOperativa';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
+import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
 import {
   Search, X, AlertTriangle, Loader2, ChevronRight,
 } from 'lucide-react';
