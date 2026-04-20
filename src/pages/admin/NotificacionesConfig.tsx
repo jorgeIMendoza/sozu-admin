@@ -263,6 +263,10 @@ const NotificacionesConfig = () => {
                   <span className="text-muted-foreground">Identificador: </span>
                   <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{item.tipo_evento}</code>
                 </div>
+                <div>
+                  <span className="text-muted-foreground">Plantilla Postmark: </span>
+                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{item.postmark_template_id}</code>
+                </div>
               </div>
             </CardContent>
           </Card>
