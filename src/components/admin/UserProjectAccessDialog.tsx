@@ -878,7 +878,7 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
             {userRole && (
               <Badge variant="outline" className="w-fit">{userRole}</Badge>
             )}
-            {isAgente && !isLoading && (
+            {isAgente && !isEmbajador && !isLoading && (
               <AgentInmobiliariaBadge userPersonaId={userPersonaId} />
             )}
           </div>
@@ -912,6 +912,7 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
             userPersonaId={userPersonaId}
             isAgenteInterno={isAgenteInterno}
             isSecondaryInmobiliaria={isSecondaryInmobiliaria}
+            isEmbajador={isEmbajador}
             proyectos={proyectos}
             selectedProjects={selectedProjects}
             setSelectedProjects={setSelectedProjects}
