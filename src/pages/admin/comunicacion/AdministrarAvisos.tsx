@@ -677,20 +677,13 @@ export default function AdministrarAvisos() {
                   {modoTrigger === 'evento' && (
                     <div className="space-y-3 border rounded-md p-3 bg-muted/30">
                       <div>
-                        <Label>Fuente de la fecha</Label>
-                        <Select value={eventoFuenteId} onValueChange={setEventoFuenteId}>
-                          <SelectTrigger><SelectValue placeholder="Selecciona una fuente" /></SelectTrigger>
-                          <SelectContent>
-                            {fuentesTrigger.map(f => (
-                              <SelectItem key={f.id} value={String(f.id)}>{f.nombre}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {eventoFuenteId && (
-                          <p className="text-[11px] text-muted-foreground mt-1">
-                            {fuentesTrigger.find(f => String(f.id) === eventoFuenteId)?.descripcion}
-                          </p>
-                        )}
+                        <Label>Fecha base</Label>
+                        <div className="rounded-md border bg-background px-3 py-2 text-sm">
+                          <code className="text-primary">acuerdos_pago.fecha_pago</code>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Se evalúa sobre acuerdos activos no pagados. Usa offsets <strong>negativos</strong> para enviar antes del vencimiento (recordatorios) y <strong>positivos</strong> para enviar después (cobranza vencida).
+                        </p>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
