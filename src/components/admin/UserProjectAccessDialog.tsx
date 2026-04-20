@@ -467,7 +467,10 @@ export function UserProjectAccessDialog({ userId, userName, userEmail, userRole,
   // Check if user is Agente Inmobiliario (role 3) or Agente Interno (role 9) - they inherit access from parent Inmobiliaria
   const isAgenteInmobiliario = userRoleId === 3;
   const isAgenteInterno = userRoleId === 9;
-  const isAgente = isAgenteInmobiliario || isAgenteInterno;
+  // Embajador (role 25) follows the same flow as agents: if no inmobiliaria,
+  // gets the "Agente independiente" disclaimer + access to public Sozu projects with toggles.
+  const isEmbajador = userRoleId === 25;
+  const isAgente = isAgenteInmobiliario || isAgenteInterno || isEmbajador;
   
   // Check if user is Inmobiliaria (role 4) - their changes propagate to agents
   const isInmobiliaria = userRoleId === 4;

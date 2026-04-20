@@ -38,8 +38,12 @@ export const AgentPortalLayout = () => {
   const previousThemeRef = useRef(theme ?? "system");
 
   const { profile } = useAuth();
-  const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  // Roles cuyo "hogar" es el Portal de Agente: no deben ver el botón "Menú principal".
+  // 3 = Agente Inmobiliario, 9 = Agente Interno, 4 = Inmobiliaria, 25 = Embajador
+  const AGENT_PORTAL_HOME_ROLES = [3, 4, 9, 25];
+  const livesInAgentPortal = !!profile?.rol_id && AGENT_PORTAL_HOME_ROLES.includes(profile.rol_id);
+  const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
 
   useLayoutEffect(() => {
     setTheme("light");
@@ -105,7 +109,10 @@ export const AgentPortalLayout = () => {
 
   const isActive = (path: string) => location.pathname.startsWith(path);
 
-  const showBackButton = !isAgentRole && hasOtherMenus;
+  // Solo mostramos "Menú principal" para usuarios que tienen otros menús
+  // (típicamente Super Admin / Admin de Proyecto). Roles cuyo hogar es este portal
+  // no deben ver este botón.
+  const showBackButton = !livesInAgentPortal && hasOtherMenus;
 
   return (
     <div className="agent-portal light min-h-screen flex flex-col" style={{ background: "hsl(var(--agent-bg))", colorScheme: "light" }}>
