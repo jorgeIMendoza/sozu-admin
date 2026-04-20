@@ -269,7 +269,16 @@ export default function AdministrarAvisos() {
     setLoadingTemplates(false);
   };
 
-  useEffect(() => { fetchAvisos(); fetchRoles(); fetchPostmarkTemplates(); }, []);
+  const fetchFuentes = async () => {
+    const { data } = await supabase
+      .from('aviso_triggers_fuentes')
+      .select('*')
+      .eq('activo', true)
+      .order('nombre');
+    setFuentesTrigger((data as any) || []);
+  };
+
+  useEffect(() => { fetchAvisos(); fetchRoles(); fetchPostmarkTemplates(); fetchFuentes(); }, []);
 
   const openCreate = () => {
     setEditingAviso(null);
