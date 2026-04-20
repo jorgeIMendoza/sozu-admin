@@ -716,7 +716,7 @@ export default function AdministrarAvisos() {
                       </div>
                       {eventoFuenteId && eventoOffsets && (
                         <p className="text-xs font-medium text-primary">
-                          Se enviará por {eventoCanal} a las {eventoHora} ({eventoOffsets.split(',').map(s => s.trim()).filter(Boolean).join(', ')}) días respecto a {fuentesTrigger.find(f => String(f.id) === eventoFuenteId)?.nombre.toLowerCase()}.
+                          Se enviará por {eventoCanal} a las {eventoHora}, en los offsets ({eventoOffsets.split(',').map(s => s.trim()).filter(Boolean).join(', ')}) días respecto a <code>acuerdos_pago.fecha_pago</code>.
                         </p>
                       )}
                       <p className="text-[11px] text-muted-foreground">
