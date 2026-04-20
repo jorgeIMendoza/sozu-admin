@@ -47,6 +47,12 @@ interface Rol {
   nombre: string;
 }
 
+interface PostmarkTemplate {
+  id: number;
+  name: string;
+  active: boolean;
+}
+
 const EMPTY_CONFIG: Omit<NotificacionConfig, 'id'> = {
   tipo_evento: '',
   descripcion: '',
@@ -63,6 +69,8 @@ const EMPTY_CONFIG: Omit<NotificacionConfig, 'id'> = {
 const NotificacionesConfig = () => {
   const [configs, setConfigs] = useState<NotificacionConfig[]>([]);
   const [roles, setRoles] = useState<Rol[]>([]);
+  const [postmarkTemplates, setPostmarkTemplates] = useState<PostmarkTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [editItem, setEditItem] = useState<NotificacionConfig | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -82,7 +90,20 @@ const NotificacionesConfig = () => {
     setIsLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  const fetchPostmarkTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('listar-postmark-templates');
+      if (!error && data?.templates) {
+        setPostmarkTemplates(data.templates);
+      }
+    } catch (e) {
+      console.error('Error fetching Postmark templates:', e);
+    }
+    setLoadingTemplates(false);
+  };
+
+  useEffect(() => { fetchData(); fetchPostmarkTemplates(); }, []);
 
   const handleToggleActivo = async (item: NotificacionConfig) => {
     const { error } = await (supabase as any)
@@ -265,7 +286,12 @@ const NotificacionesConfig = () => {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Plantilla Postmark: </span>
-                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{item.postmark_template_id}</code>
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {(() => {
+                      const tmpl = postmarkTemplates.find(t => t.id === item.postmark_template_id);
+                      return tmpl ? tmpl.name : item.postmark_template_id;
+                    })()}
+                  </Badge>
                 </div>
               </div>
             </CardContent>
@@ -373,14 +399,29 @@ const NotificacionesConfig = () => {
 
               <div>
                 <Label>Plantilla de Postmark (Template ID)</Label>
-                <Input
-                  type="number"
-                  value={editItem.postmark_template_id ?? 41353048}
-                  onChange={e => setEditItem({ ...editItem, postmark_template_id: parseInt(e.target.value || '0', 10) })}
-                  placeholder="41353048"
-                />
+                <Select
+                  value={String(editItem.postmark_template_id ?? 41353048)}
+                  onValueChange={v => setEditItem({ ...editItem, postmark_template_id: parseInt(v, 10) })}
+                  disabled={loadingTemplates}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingTemplates ? 'Cargando plantillas...' : 'Selecciona una plantilla'} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {postmarkTemplates.length === 0 && !loadingTemplates && (
+                      <SelectItem value={String(editItem.postmark_template_id ?? 41353048)}>
+                        {editItem.postmark_template_id ?? 41353048} (sin lista)
+                      </SelectItem>
+                    )}
+                    {postmarkTemplates.map(t => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.name} <span className="text-xs text-muted-foreground ml-2">#{t.id}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground mt-1">
-                  ID numérico de la plantilla de Postmark a usar para este evento. Default: 41353048 (Notificaciones internas).
+                  Plantilla de Postmark a usar para este evento. Default: Notificaciones internas (41353048).
                 </p>
               </div>
 
