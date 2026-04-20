@@ -5,6 +5,7 @@ import { PriorityLegend } from '@/components/admin/portal-cobranza/PriorityLegen
 import { useBandejaOperativa, type BandejaCuenta } from '@/hooks/useBandejaOperativa';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
+import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
 import {
   Search, X, AlertTriangle, Loader2, ChevronRight,
 } from 'lucide-react';
@@ -46,6 +47,7 @@ export default function BandejaOperativaPage() {
   const [priorityFilter, setPriorityFilter] = useState<PriorityLevel | 'all'>(() =>
     (searchParams.get('prioridad') as PriorityLevel) || 'all'
   );
+  const [tipoFilter, setTipoFilter] = useState<'all' | 'Propiedad' | 'Producto' | 'Servicio'>('all');
   const [soloVencidas, setSoloVencidas] = useState(() => searchParams.get('preset') === 'critical');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -76,8 +78,9 @@ export default function BandejaOperativaPage() {
     if (!cuentas) return [];
     let result = [...cuentas];
     if (priorityFilter !== 'all') result = result.filter(c => c.prioridad === priorityFilter);
+    if (tipoFilter !== 'all') result = result.filter(c => c.tipo_cuenta === tipoFilter);
     return result;
-  }, [cuentas, priorityFilter]);
+  }, [cuentas, priorityFilter, tipoFilter]);
 
   const { paginated, page, setPage, totalPages, total, from, to } = usePagination(filtered, 50);
 
@@ -91,13 +94,14 @@ export default function BandejaOperativaPage() {
   const clearAllFilters = useCallback(() => {
     setProjectFilter(null);
     setPriorityFilter('all');
+    setTipoFilter('all');
     setSoloVencidas(false);
     setSearchQuery('');
     setDebouncedSearch('');
     setSearchParams({}, { replace: true });
   }, [setSearchParams]);
 
-  const hasFilters = projectFilter !== null || priorityFilter !== 'all' || soloVencidas || searchQuery;
+  const hasFilters = projectFilter !== null || priorityFilter !== 'all' || tipoFilter !== 'all' || soloVencidas || searchQuery;
 
   if (error) {
     return (
@@ -145,6 +149,12 @@ export default function BandejaOperativaPage() {
             <option value="gray">Doc. incompleta</option>
             <option value="green">Al corriente</option>
           </select>
+          <select value={tipoFilter} onChange={e => setTipoFilter(e.target.value as typeof tipoFilter)} className="sozu-filter-select">
+            <option value="all">Tipo</option>
+            <option value="Propiedad">Propiedad</option>
+            <option value="Producto">Producto</option>
+            <option value="Servicio">Servicio</option>
+          </select>
           <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground cursor-pointer select-none">
             <input type="checkbox" checked={soloVencidas} onChange={e => setSoloVencidas(e.target.checked)} className="rounded border-border" />
             Solo vencidas
@@ -181,9 +191,11 @@ export default function BandejaOperativaPage() {
             <thead className="sozu-thead">
               <tr>
                 <th className="w-[160px]">Prioridad</th>
-                <th className="w-[90px]">Cuenta</th>
+                <th className="w-[110px]">Cuenta</th>
+                <th className="w-[90px]">Tipo</th>
                 <th>Cliente</th>
                 <th>Proyecto / Unidad</th>
+                <th>Producto</th>
                 <th className="text-center">Precio</th>
                 <th className="text-center">Vencido</th>
                 <th className="text-center">Saldo Pendiente</th>
@@ -199,7 +211,17 @@ export default function BandejaOperativaPage() {
                   <td className="px-3"><PriorityBadge priority={cuenta.prioridad} /></td>
                   <td className="px-3">
                     <span className="text-[12px] font-mono font-semibold text-foreground tabular-nums">
-                      CC-{cuenta.cuenta_id}
+                      {formatCuentaCobranzaId(cuenta.cuenta_id, cuenta.tipo_cuenta)}
+                    </span>
+                  </td>
+                  <td className="px-3">
+                    <span className={cn(
+                      'sozu-chip text-[10px] font-semibold',
+                      cuenta.tipo_cuenta === 'Propiedad' && 'bg-info-bg text-info',
+                      cuenta.tipo_cuenta === 'Producto' && 'bg-success-bg text-success',
+                      cuenta.tipo_cuenta === 'Servicio' && 'bg-warning-bg text-warning',
+                    )}>
+                      {cuenta.tipo_cuenta}
                     </span>
                   </td>
                   <td className="px-3">
@@ -214,6 +236,11 @@ export default function BandejaOperativaPage() {
                     <p className="text-[13px] text-foreground">{cuenta.proyecto || '—'}</p>
                     <p className="text-[11px] text-muted-foreground">
                       {[cuenta.edificio, cuenta.numero_propiedad].filter(Boolean).join(' · ') || '—'}
+                    </p>
+                  </td>
+                  <td className="px-3">
+                    <p className="text-[12px] text-foreground truncate max-w-[180px]">
+                      {cuenta.producto_nombre || '—'}
                     </p>
                   </td>
                   <td className="px-3 text-center text-[13px] text-foreground tabular-nums">

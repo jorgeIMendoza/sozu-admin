@@ -14,6 +14,8 @@ export interface BandejaCuenta {
   edificio: string | null;
   numero_propiedad: string | null;
   modelo: string | null;
+  producto_nombre: string | null;
+  tipo_cuenta: 'Propiedad' | 'Producto' | 'Servicio';
   parcialidades_vencidas: number;
   monto_vencido: number;
   saldo_pendiente: number;
