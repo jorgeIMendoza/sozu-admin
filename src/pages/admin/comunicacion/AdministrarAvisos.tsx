@@ -632,31 +632,104 @@ export default function AdministrarAvisos() {
                 </div>
               </div>
               {tipoEnvio === 'automatico' && (
-                <div className="space-y-2">
-                  <Label>Expresión Cron (horario México UTC-6)</Label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {CRON_PRESETS.map(p => (
-                      <Button key={p.value} variant={cronExpression === p.value ? 'default' : 'outline'} size="sm"
-                        onClick={() => setCronExpression(p.value)}>{p.label}</Button>
-                    ))}
+                <>
+                  <div>
+                    <Label>Modo de disparo</Label>
+                    <Select value={modoTrigger} onValueChange={(v) => setModoTrigger(v as 'cron' | 'evento')}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cron">Por fecha y hora (cron)</SelectItem>
+                        <SelectItem value="evento">Por evento (relativo a una fecha)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Input value={cronExpression} onChange={e => {
-                    const val = e.target.value;
-                    setCronExpression(val);
-                    if (val.trim()) {
-                      const result = validateCron(val);
-                      setCronError(result.valid ? "" : result.error || "Expresión inválida");
-                    } else {
-                      setCronError("");
-                    }
-                  }}
-                    placeholder="* * * * *" className="font-mono" />
-                  <p className="text-xs text-muted-foreground">Formato: minuto hora día-mes mes día-semana</p>
-                  {cronError && <p className="text-sm text-destructive">{cronError}</p>}
-                  {!cronError && cronExpression && (
-                    <p className="text-sm font-medium text-primary">{describeCron(cronExpression)}</p>
+
+                  {modoTrigger === 'cron' && (
+                    <div className="space-y-2">
+                      <Label>Expresión Cron (horario México UTC-6)</Label>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {CRON_PRESETS.map(p => (
+                          <Button key={p.value} variant={cronExpression === p.value ? 'default' : 'outline'} size="sm"
+                            onClick={() => setCronExpression(p.value)}>{p.label}</Button>
+                        ))}
+                      </div>
+                      <Input value={cronExpression} onChange={e => {
+                        const val = e.target.value;
+                        setCronExpression(val);
+                        if (val.trim()) {
+                          const result = validateCron(val);
+                          setCronError(result.valid ? "" : result.error || "Expresión inválida");
+                        } else {
+                          setCronError("");
+                        }
+                      }}
+                        placeholder="* * * * *" className="font-mono" />
+                      <p className="text-xs text-muted-foreground">Formato: minuto hora día-mes mes día-semana</p>
+                      {cronError && <p className="text-sm text-destructive">{cronError}</p>}
+                      {!cronError && cronExpression && (
+                        <p className="text-sm font-medium text-primary">{describeCron(cronExpression)}</p>
+                      )}
+                    </div>
                   )}
-                </div>
+
+                  {modoTrigger === 'evento' && (
+                    <div className="space-y-3 border rounded-md p-3 bg-muted/30">
+                      <div>
+                        <Label>Fuente de la fecha</Label>
+                        <Select value={eventoFuenteId} onValueChange={setEventoFuenteId}>
+                          <SelectTrigger><SelectValue placeholder="Selecciona una fuente" /></SelectTrigger>
+                          <SelectContent>
+                            {fuentesTrigger.map(f => (
+                              <SelectItem key={f.id} value={String(f.id)}>{f.nombre}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {eventoFuenteId && (
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            {fuentesTrigger.find(f => String(f.id) === eventoFuenteId)?.descripcion}
+                          </p>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label>Offsets en días</Label>
+                          <Input value={eventoOffsets} onChange={e => setEventoOffsets(e.target.value)}
+                            placeholder="-5,-3,-1" className="font-mono" />
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            Negativos = antes de la fecha, positivos = después. Ej. <code>-5,-3,-1</code> o <code>1,3,7</code>.
+                          </p>
+                        </div>
+                        <div>
+                          <Label>Hora de envío (México UTC-6)</Label>
+                          <Input type="time" value={eventoHora} onChange={e => setEventoHora(e.target.value)} />
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Canal</Label>
+                        <Select value={eventoCanal} onValueChange={(v) => setEventoCanal(v as any)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="email">Email</SelectItem>
+                            <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                            <SelectItem value="ambos">Ambos</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={eventoActivo} onCheckedChange={setEventoActivo} />
+                        <Label>Trigger evento activo</Label>
+                      </div>
+                      {eventoFuenteId && eventoOffsets && (
+                        <p className="text-xs font-medium text-primary">
+                          Se enviará por {eventoCanal} a las {eventoHora} ({eventoOffsets.split(',').map(s => s.trim()).filter(Boolean).join(', ')}) días respecto a {fuentesTrigger.find(f => String(f.id) === eventoFuenteId)?.nombre.toLowerCase()}.
+                        </p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground">
+                        Variables disponibles en asunto y mensaje: <code>{'{{nombre}}'}</code>, <code>{'{{monto}}'}</code>, <code>{'{{fecha_pago}}'}</code>, <code>{'{{orden}}'}</code>, <code>{'{{cuenta_id}}'}</code>, <code>{'{{offset}}'}</code>.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
               <div className="flex items-center gap-2">
                 <Switch checked={activo} onCheckedChange={setActivo} />
