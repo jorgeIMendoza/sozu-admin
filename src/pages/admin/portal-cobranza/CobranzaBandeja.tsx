@@ -149,6 +149,12 @@ export default function BandejaOperativaPage() {
             <option value="gray">Doc. incompleta</option>
             <option value="green">Al corriente</option>
           </select>
+          <select value={tipoFilter} onChange={e => setTipoFilter(e.target.value as typeof tipoFilter)} className="sozu-filter-select">
+            <option value="all">Tipo</option>
+            <option value="Propiedad">Propiedad</option>
+            <option value="Producto">Producto</option>
+            <option value="Servicio">Servicio</option>
+          </select>
           <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground cursor-pointer select-none">
             <input type="checkbox" checked={soloVencidas} onChange={e => setSoloVencidas(e.target.checked)} className="rounded border-border" />
             Solo vencidas
