@@ -34,6 +34,7 @@ interface Aviso {
   activo: boolean;
   fecha_creacion: string;
   postmark_template_id: number;
+  modo_trigger?: string | null;
 }
 
 interface Rol {
@@ -44,6 +45,25 @@ interface Rol {
 interface Destinatario {
   nombre: string;
   email: string;
+}
+
+interface FuenteTrigger {
+  id: number;
+  clave: string;
+  nombre: string;
+  descripcion: string | null;
+  activo: boolean;
+}
+
+interface TriggerEvento {
+  id?: number;
+  id_aviso?: number;
+  id_fuente: number;
+  offsets_dias: number[];
+  hora_envio: string; // HH:MM
+  canal: 'email' | 'whatsapp' | 'ambos';
+  filtros?: any;
+  activo: boolean;
 }
 
 const DIAS_SEMANA: Record<string, string> = { '0': 'domingo', '1': 'lunes', '2': 'martes', '3': 'miércoles', '4': 'jueves', '5': 'viernes', '6': 'sábado', '7': 'domingo' };
@@ -215,6 +235,15 @@ export default function AdministrarAvisos() {
   const [postmarkTemplates, setPostmarkTemplates] = useState<PostmarkTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
+  // Modo trigger por evento
+  const [modoTrigger, setModoTrigger] = useState<'cron' | 'evento'>('cron');
+  const [fuentesTrigger, setFuentesTrigger] = useState<FuenteTrigger[]>([]);
+  const [eventoFuenteId, setEventoFuenteId] = useState<string>('');
+  const [eventoOffsets, setEventoOffsets] = useState<string>('-5,-3,-1');
+  const [eventoHora, setEventoHora] = useState<string>('10:00');
+  const [eventoCanal, setEventoCanal] = useState<'email' | 'whatsapp' | 'ambos'>('email');
+  const [eventoActivo, setEventoActivo] = useState<boolean>(true);
+
   const fetchAvisos = async () => {
     setIsLoading(true);
     const { data } = await supabase.from('avisos').select('*').order('fecha_creacion', { ascending: false });
@@ -240,13 +269,24 @@ export default function AdministrarAvisos() {
     setLoadingTemplates(false);
   };
 
-  useEffect(() => { fetchAvisos(); fetchRoles(); fetchPostmarkTemplates(); }, []);
+  const fetchFuentes = async () => {
+    const { data } = await supabase
+      .from('aviso_triggers_fuentes')
+      .select('*')
+      .eq('activo', true)
+      .order('nombre');
+    setFuentesTrigger((data as any) || []);
+  };
+
+  useEffect(() => { fetchAvisos(); fetchRoles(); fetchPostmarkTemplates(); fetchFuentes(); }, []);
 
   const openCreate = () => {
     setEditingAviso(null);
     setNombre(""); setAsunto(""); setMensajeHtml(""); setTipoEnvio("manual");
     setCronExpression(""); setCronError(""); setActivo(true); setSelectedRoles([]); setDestinatarios([]);
     setPostmarkTemplateId("36978552"); setSelectedProyectos([]);
+    setModoTrigger('cron'); setEventoFuenteId(''); setEventoOffsets('-5,-3,-1');
+    setEventoHora('10:00'); setEventoCanal('email'); setEventoActivo(true);
     setDialogOpen(true);
   };
 
@@ -257,6 +297,7 @@ export default function AdministrarAvisos() {
     setActivo(aviso.activo);
     setPostmarkTemplateId(String(aviso.postmark_template_id || 36978552));
     setSelectedProyectos([]);
+    setModoTrigger((aviso.modo_trigger as any) || 'cron');
 
     // Load existing roles and their correos
     const { data } = await supabase.from('avisos_roles_destinatarios').select('id_rol, correos').eq('id_aviso', aviso.id);
@@ -274,6 +315,23 @@ export default function AdministrarAvisos() {
     });
     setSelectedRoles(rolIds);
     setDestinatarios(allDests);
+
+    // Load existing event trigger config (single row per aviso in V1)
+    const { data: trigData } = await supabase
+      .from('avisos_triggers_evento')
+      .select('*')
+      .eq('id_aviso', aviso.id)
+      .maybeSingle();
+    if (trigData) {
+      setEventoFuenteId(String((trigData as any).id_fuente));
+      setEventoOffsets(((trigData as any).offsets_dias || []).join(','));
+      setEventoHora(((trigData as any).hora_envio || '10:00:00').substring(0, 5));
+      setEventoCanal(((trigData as any).canal as any) || 'email');
+      setEventoActivo(!!(trigData as any).activo);
+    } else {
+      setEventoFuenteId(''); setEventoOffsets('-5,-3,-1'); setEventoHora('10:00');
+      setEventoCanal('email'); setEventoActivo(true);
+    }
     setDialogOpen(true);
   };
 
@@ -282,15 +340,32 @@ export default function AdministrarAvisos() {
       toast({ title: "Error", description: "Nombre, asunto y mensaje son requeridos", variant: "destructive" });
       return;
     }
+    let parsedOffsets: number[] = [];
     if (tipoEnvio === 'automatico') {
-      if (!cronExpression) {
-        toast({ title: "Error", description: "La expresión cron es requerida para envío automático", variant: "destructive" });
-        return;
-      }
-      const cronValidation = validateCron(cronExpression);
-      if (!cronValidation.valid) {
-        toast({ title: "Expresión cron inválida", description: cronValidation.error, variant: "destructive" });
-        return;
+      if (modoTrigger === 'cron') {
+        if (!cronExpression) {
+          toast({ title: "Error", description: "La expresión cron es requerida para envío automático", variant: "destructive" });
+          return;
+        }
+        const cronValidation = validateCron(cronExpression);
+        if (!cronValidation.valid) {
+          toast({ title: "Expresión cron inválida", description: cronValidation.error, variant: "destructive" });
+          return;
+        }
+      } else {
+        if (!eventoFuenteId) {
+          toast({ title: "Error", description: "Selecciona la fuente del evento", variant: "destructive" });
+          return;
+        }
+        parsedOffsets = eventoOffsets.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+        if (parsedOffsets.length === 0) {
+          toast({ title: "Error", description: "Ingresa al menos un offset de días (ej. -5,-3,-1)", variant: "destructive" });
+          return;
+        }
+        if (!/^\d{2}:\d{2}$/.test(eventoHora)) {
+          toast({ title: "Error", description: "Hora de envío inválida (formato HH:MM)", variant: "destructive" });
+          return;
+        }
       }
     }
 
@@ -307,9 +382,10 @@ export default function AdministrarAvisos() {
 
     const payload = {
       nombre, asunto, mensaje_html: mensajeHtml, tipo_envio: tipoEnvio,
-      cron_expression: tipoEnvio === 'automatico' ? cronExpression : null,
+      cron_expression: (tipoEnvio === 'automatico' && modoTrigger === 'cron') ? cronExpression : null,
       activo, fecha_actualizacion: new Date().toISOString(),
       postmark_template_id: templateId,
+      modo_trigger: tipoEnvio === 'automatico' ? modoTrigger : 'cron',
     };
 
     let avisoId: number;
@@ -342,6 +418,22 @@ export default function AdministrarAvisos() {
           id_rol: firstRole.id,
           correos: correosJson,
         });
+      }
+    }
+
+    // Persist event-trigger config: one row per aviso (delete + insert for simplicity)
+    await supabase.from('avisos_triggers_evento').delete().eq('id_aviso', avisoId);
+    if (tipoEnvio === 'automatico' && modoTrigger === 'evento' && eventoFuenteId) {
+      const { error: trigErr } = await supabase.from('avisos_triggers_evento').insert({
+        id_aviso: avisoId,
+        id_fuente: parseInt(eventoFuenteId, 10),
+        offsets_dias: parsedOffsets,
+        hora_envio: `${eventoHora}:00`,
+        canal: eventoCanal,
+        activo: eventoActivo,
+      });
+      if (trigErr) {
+        toast({ title: "Aviso guardado, pero error en trigger evento", description: trigErr.message, variant: "destructive" });
       }
     }
 
@@ -427,7 +519,9 @@ export default function AdministrarAvisos() {
               <TableRow key={aviso.id}>
                 <TableCell className="font-medium">{aviso.nombre}</TableCell>
                 <TableCell>
-                  {aviso.tipo_envio === 'automatico' && aviso.cron_expression ? (
+                  {aviso.tipo_envio === 'automatico' && aviso.modo_trigger === 'evento' ? (
+                    <Badge variant="default" className="bg-accent text-accent-foreground">automático · evento</Badge>
+                  ) : aviso.tipo_envio === 'automatico' && aviso.cron_expression ? (
                     <Popover>
                       <PopoverTrigger asChild>
                         <button type="button" className="inline-flex">
@@ -540,31 +634,104 @@ export default function AdministrarAvisos() {
                 </div>
               </div>
               {tipoEnvio === 'automatico' && (
-                <div className="space-y-2">
-                  <Label>Expresión Cron (horario México UTC-6)</Label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {CRON_PRESETS.map(p => (
-                      <Button key={p.value} variant={cronExpression === p.value ? 'default' : 'outline'} size="sm"
-                        onClick={() => setCronExpression(p.value)}>{p.label}</Button>
-                    ))}
+                <>
+                  <div>
+                    <Label>Modo de disparo</Label>
+                    <Select value={modoTrigger} onValueChange={(v) => setModoTrigger(v as 'cron' | 'evento')}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cron">Por fecha y hora (cron)</SelectItem>
+                        <SelectItem value="evento">Por evento (relativo a una fecha)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Input value={cronExpression} onChange={e => {
-                    const val = e.target.value;
-                    setCronExpression(val);
-                    if (val.trim()) {
-                      const result = validateCron(val);
-                      setCronError(result.valid ? "" : result.error || "Expresión inválida");
-                    } else {
-                      setCronError("");
-                    }
-                  }}
-                    placeholder="* * * * *" className="font-mono" />
-                  <p className="text-xs text-muted-foreground">Formato: minuto hora día-mes mes día-semana</p>
-                  {cronError && <p className="text-sm text-destructive">{cronError}</p>}
-                  {!cronError && cronExpression && (
-                    <p className="text-sm font-medium text-primary">{describeCron(cronExpression)}</p>
+
+                  {modoTrigger === 'cron' && (
+                    <div className="space-y-2">
+                      <Label>Expresión Cron (horario México UTC-6)</Label>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {CRON_PRESETS.map(p => (
+                          <Button key={p.value} variant={cronExpression === p.value ? 'default' : 'outline'} size="sm"
+                            onClick={() => setCronExpression(p.value)}>{p.label}</Button>
+                        ))}
+                      </div>
+                      <Input value={cronExpression} onChange={e => {
+                        const val = e.target.value;
+                        setCronExpression(val);
+                        if (val.trim()) {
+                          const result = validateCron(val);
+                          setCronError(result.valid ? "" : result.error || "Expresión inválida");
+                        } else {
+                          setCronError("");
+                        }
+                      }}
+                        placeholder="* * * * *" className="font-mono" />
+                      <p className="text-xs text-muted-foreground">Formato: minuto hora día-mes mes día-semana</p>
+                      {cronError && <p className="text-sm text-destructive">{cronError}</p>}
+                      {!cronError && cronExpression && (
+                        <p className="text-sm font-medium text-primary">{describeCron(cronExpression)}</p>
+                      )}
+                    </div>
                   )}
-                </div>
+
+                  {modoTrigger === 'evento' && (
+                    <div className="space-y-3 border rounded-md p-3 bg-muted/30">
+                      <div>
+                        <Label>Fuente de la fecha</Label>
+                        <Select value={eventoFuenteId} onValueChange={setEventoFuenteId}>
+                          <SelectTrigger><SelectValue placeholder="Selecciona una fuente" /></SelectTrigger>
+                          <SelectContent>
+                            {fuentesTrigger.map(f => (
+                              <SelectItem key={f.id} value={String(f.id)}>{f.nombre}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {eventoFuenteId && (
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            {fuentesTrigger.find(f => String(f.id) === eventoFuenteId)?.descripcion}
+                          </p>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label>Offsets en días</Label>
+                          <Input value={eventoOffsets} onChange={e => setEventoOffsets(e.target.value)}
+                            placeholder="-5,-3,-1" className="font-mono" />
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            Negativos = antes de la fecha, positivos = después. Ej. <code>-5,-3,-1</code> o <code>1,3,7</code>.
+                          </p>
+                        </div>
+                        <div>
+                          <Label>Hora de envío (México UTC-6)</Label>
+                          <Input type="time" value={eventoHora} onChange={e => setEventoHora(e.target.value)} />
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Canal</Label>
+                        <Select value={eventoCanal} onValueChange={(v) => setEventoCanal(v as any)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="email">Email</SelectItem>
+                            <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                            <SelectItem value="ambos">Ambos</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={eventoActivo} onCheckedChange={setEventoActivo} />
+                        <Label>Trigger evento activo</Label>
+                      </div>
+                      {eventoFuenteId && eventoOffsets && (
+                        <p className="text-xs font-medium text-primary">
+                          Se enviará por {eventoCanal} a las {eventoHora} ({eventoOffsets.split(',').map(s => s.trim()).filter(Boolean).join(', ')}) días respecto a {fuentesTrigger.find(f => String(f.id) === eventoFuenteId)?.nombre.toLowerCase()}.
+                        </p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground">
+                        Variables disponibles en asunto y mensaje: <code>{'{{nombre}}'}</code>, <code>{'{{monto}}'}</code>, <code>{'{{fecha_pago}}'}</code>, <code>{'{{orden}}'}</code>, <code>{'{{cuenta_id}}'}</code>, <code>{'{{offset}}'}</code>.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
               <div className="flex items-center gap-2">
                 <Switch checked={activo} onCheckedChange={setActivo} />
