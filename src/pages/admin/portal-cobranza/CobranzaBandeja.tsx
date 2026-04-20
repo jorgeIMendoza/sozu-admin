@@ -78,8 +78,9 @@ export default function BandejaOperativaPage() {
     if (!cuentas) return [];
     let result = [...cuentas];
     if (priorityFilter !== 'all') result = result.filter(c => c.prioridad === priorityFilter);
+    if (tipoFilter !== 'all') result = result.filter(c => c.tipo_cuenta === tipoFilter);
     return result;
-  }, [cuentas, priorityFilter]);
+  }, [cuentas, priorityFilter, tipoFilter]);
 
   const { paginated, page, setPage, totalPages, total, from, to } = usePagination(filtered, 50);
 
@@ -93,13 +94,14 @@ export default function BandejaOperativaPage() {
   const clearAllFilters = useCallback(() => {
     setProjectFilter(null);
     setPriorityFilter('all');
+    setTipoFilter('all');
     setSoloVencidas(false);
     setSearchQuery('');
     setDebouncedSearch('');
     setSearchParams({}, { replace: true });
   }, [setSearchParams]);
 
-  const hasFilters = projectFilter !== null || priorityFilter !== 'all' || soloVencidas || searchQuery;
+  const hasFilters = projectFilter !== null || priorityFilter !== 'all' || tipoFilter !== 'all' || soloVencidas || searchQuery;
 
   if (error) {
     return (
