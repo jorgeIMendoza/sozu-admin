@@ -10,6 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Power, PowerOff, Plus, Upload, Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ProjectMultimediaSectionProps {
   projectId: number;
@@ -20,6 +30,7 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingYoutube, setIsAddingYoutube] = useState(false);
+  const [confirmYoutubeOpen, setConfirmYoutubeOpen] = useState(false);
   const [newMultimedia, setNewMultimedia] = useState({
     es_imagen: true,
     url: ""
@@ -104,6 +115,14 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectYoutubeVideos', projectId] });
+      // Trigger notification for "nuevo_avance_de_obra"
+      supabase.functions.invoke('notificar-agentes', {
+        body: {
+          tipo_evento: 'nuevo_avance_de_obra',
+          id_proyecto: projectId,
+          datos: { nombre_video: youtubeForm.nombre, link_video: youtubeForm.link },
+        },
+      }).catch(err => console.error('Error sending notification:', err));
       setYoutubeForm({ nombre: '', link: '' });
       setIsAddingYoutube(false);
       toast({ title: "Video de YouTube agregado exitosamente" });
@@ -241,7 +260,7 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
       toast({ title: "Debes completar todos los campos", variant: "destructive" });
       return;
     }
-    addYoutubeMutation.mutate(youtubeForm);
+    setConfirmYoutubeOpen(true);
   };
 
   const getYouTubeEmbedUrl = (url: string) => {
@@ -627,6 +646,30 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
           </div>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={confirmYoutubeOpen} onOpenChange={setConfirmYoutubeOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar nuevo avance de obra?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Al agregar este video se enviará una notificación (email y/o WhatsApp) a los usuarios configurados en el evento <strong>nuevo_avance_de_obra</strong> (Super Administrador, Agente Inmobiliario, Agente Interno, Vendedor, Cliente, Embajador, Desarrollador e Inmobiliaria con acceso al desarrollo).
+              <br /><br />
+              ¿Deseas continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmYoutubeOpen(false);
+                addYoutubeMutation.mutate(youtubeForm);
+              }}
+            >
+              Sí, agregar y notificar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
