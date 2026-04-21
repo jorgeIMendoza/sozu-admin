@@ -115,30 +115,6 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Cargar correos manuales configurados en avisos_roles_destinatarios para este aviso.
-      // Estos correos siempre reciben copia cuando hay un envío disparado por evento.
-      const { data: rolesDest } = await supabaseAdmin
-        .from('avisos_roles_destinatarios')
-        .select('correos')
-        .eq('id_aviso', aviso.id);
-      const manualEmails: { email: string; nombre: string }[] = [];
-      for (const r of rolesDest || []) {
-        const c: any = (r as any).correos;
-        const lista = Array.isArray(c) ? c : (Array.isArray(c?.destinatarios) ? c.destinatarios : []);
-        for (const d of lista) {
-          const email = typeof d === 'string' ? d : d?.email;
-          const nombre = typeof d === 'string' ? '' : (d?.nombre || '');
-          if (email && typeof email === 'string' && email.includes('@')) {
-            if (!manualEmails.some((m) => m.email.toLowerCase() === email.toLowerCase())) {
-              manualEmails.push({ email: email.trim(), nombre });
-            }
-          }
-        }
-      }
-      if (manualEmails.length > 0) {
-        console.log(`${tag} trigger ${trig.id}: ${manualEmails.length} correo(s) manual(es) recibirán copia`);
-      }
-
       const offsets: number[] = (trig.offsets_dias as number[]) || [];
       const effectiveOffsets = overrideOffset !== null && !Number.isNaN(overrideOffset) ? [overrideOffset] : offsets;
       if (effectiveOffsets.length === 0) { summary.skipped++; continue; }
@@ -242,9 +218,8 @@ Deno.serve(async (req) => {
             ? renderJsonTemplate(aviso.payload_postmark, vars)
             : { mensaje: { nombre: persona.nombre_legal || '', texto: renderedHtml, asunto: renderedAsunto } };
 
-          // Construir lista de destinatarios: cliente real + correos manuales (siempre reciben copia)
-          // Cada destinatario tiene su propio clave_entidad para idempotencia independiente.
-          type Dest = { email: string | null; nombre: string; tipo: 'cliente' | 'manual'; claveEntidad: string };
+          // Destinatario único por acuerdo: el cliente real (o el override de prueba si está configurado)
+          type Dest = { email: string | null; nombre: string; tipo: 'cliente'; claveEntidad: string };
           const destinatarios: Dest[] = [];
           if (emailReal) {
             destinatarios.push({
@@ -252,16 +227,6 @@ Deno.serve(async (req) => {
               nombre: persona.nombre_legal || '',
               tipo: 'cliente',
               claveEntidad: `acuerdo:${ac.id}:offset:${offset}`,
-            });
-          }
-          for (const m of manualEmails) {
-            // Evitar duplicado si el manual coincide con el cliente real
-            if (emailReal && m.email.toLowerCase() === emailReal.toLowerCase()) continue;
-            destinatarios.push({
-              email: m.email,
-              nombre: m.nombre || '',
-              tipo: 'manual',
-              claveEntidad: `acuerdo:${ac.id}:offset:${offset}:manual:${m.email.toLowerCase()}`,
             });
           }
 
