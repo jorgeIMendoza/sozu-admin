@@ -201,11 +201,12 @@ Deno.serve(async (req) => {
       telefono: telefonos || undefined,
       mensajeWA,
       asunto: asuntoEmail,
-      mensaje: {
-        nombre: 'Equipo',
-        actividad: asuntoEmail,
-        detalles: detallesEmail,
-      },
+      // IMPORTANT: `mensaje` MUST mirror `templateModel` exactly.
+      // The downstream n8n flow uses the `mensaje` field as the Postmark
+      // TemplateModel. If we send a different shape here (e.g. legacy
+      // {nombre, actividad, detalles}), nested variables like
+      // {{mensaje.proyecto}} in the Postmark template render empty.
+      mensaje: templateModel,
       templateId: config.postmark_template_id || 41353048,
       templateModel,
     };
