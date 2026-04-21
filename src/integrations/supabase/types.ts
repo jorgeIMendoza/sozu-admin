@@ -4978,6 +4978,7 @@ export type Database = {
           created_at: string
           descripcion: string | null
           id: number
+          mapeo_variables_postmark: Json
           plantilla_email_detalles: string
           plantilla_wa: string
           postmark_template_id: number
@@ -4993,6 +4994,7 @@ export type Database = {
           created_at?: string
           descripcion?: string | null
           id?: number
+          mapeo_variables_postmark?: Json
           plantilla_email_detalles?: string
           plantilla_wa?: string
           postmark_template_id?: number
@@ -5008,6 +5010,7 @@ export type Database = {
           created_at?: string
           descripcion?: string | null
           id?: number
+          mapeo_variables_postmark?: Json
           plantilla_email_detalles?: string
           plantilla_wa?: string
           postmark_template_id?: number
