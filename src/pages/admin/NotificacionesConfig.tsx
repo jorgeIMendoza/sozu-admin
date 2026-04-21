@@ -576,7 +576,13 @@ const NotificacionesConfig = () => {
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {SYSTEM_PLACEHOLDERS.map(p => (
-                      <Badge key={p} variant="outline" className="font-mono text-xs">{p}</Badge>
+                      <Badge
+                        key={p}
+                        variant="outline"
+                        className="font-mono text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                        onClick={() => copyToClipboard(p)}
+                        title="Click para copiar"
+                      >{p}</Badge>
                     ))}
                   </div>
                 </div>
