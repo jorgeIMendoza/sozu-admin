@@ -12,39 +12,48 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Leer el parámetro numero_dias_atras del body (default 1 = ayer)
+    // Leer el parámetro numero_dias_atras (default 1 = ayer)
+    // Acepta: body JSON (cualquier método incluido GET con body), o query string ?numero_dias_atras=N
     let numeroDiasAtras = 1;
+    let parsed: number | null = null;
+
+    // 1) Intentar leer del body (independiente del método HTTP)
     try {
-      if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH") {
-        const body = await req.json().catch(() => ({}));
-        if (body && typeof body.numero_dias_atras !== "undefined") {
-          const n = Number(body.numero_dias_atras);
-          if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
-            return new Response(
-              JSON.stringify({ error: "numero_dias_atras debe ser un entero >= 0" }),
-              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+      const ct = req.headers.get("content-type") || "";
+      const cl = req.headers.get("content-length");
+      const tieneBody = (cl !== null && cl !== "0") || ct.includes("application/json");
+      if (tieneBody) {
+        const raw = await req.text();
+        if (raw && raw.trim().length > 0) {
+          const body = JSON.parse(raw);
+          if (body && typeof body.numero_dias_atras !== "undefined") {
+            parsed = Number(body.numero_dias_atras);
           }
-          numeroDiasAtras = n;
-        }
-      } else {
-        // Soportar también ?numero_dias_atras=N por GET
-        const url = new URL(req.url);
-        const q = url.searchParams.get("numero_dias_atras");
-        if (q !== null) {
-          const n = Number(q);
-          if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
-            return new Response(
-              JSON.stringify({ error: "numero_dias_atras debe ser un entero >= 0" }),
-              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          numeroDiasAtras = n;
         }
       }
     } catch (_) {
-      // body inválido → usar default
+      // body inválido → seguir con query string / default
     }
+
+    // 2) Si no vino en body, intentar query string
+    if (parsed === null) {
+      const url = new URL(req.url);
+      const q = url.searchParams.get("numero_dias_atras");
+      if (q !== null) parsed = Number(q);
+    }
+
+    // 3) Validar
+    if (parsed !== null) {
+      if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+        return new Response(
+          JSON.stringify({ error: "numero_dias_atras debe ser un entero >= 0" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      numeroDiasAtras = parsed;
+    }
+
+    console.log(`[get-cadenas-cep] method=${req.method} numero_dias_atras=${numeroDiasAtras}`);
 
     // Calcular fecha objetivo en formato YYYY-MM-DD
     const fecha = new Date();
