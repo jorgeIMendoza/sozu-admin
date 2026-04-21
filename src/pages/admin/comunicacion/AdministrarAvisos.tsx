@@ -865,6 +865,112 @@ export default function AdministrarAvisos() {
         title="Eliminar Aviso"
         description="¿Estás seguro de que deseas eliminar este aviso? Esta acción no se puede deshacer."
       />
+
+      {/* Detalle de envío del aviso */}
+      <Dialog open={!!detailAviso} onOpenChange={(o) => !o && setDetailAviso(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-primary" />
+              {detailAviso?.nombre}
+            </DialogTitle>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="py-8 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : detailAviso && (
+            <div className="space-y-4 text-sm">
+              {/* Estado */}
+              <div className="flex items-center gap-2">
+                <Badge variant={detailAviso.activo ? 'default' : 'secondary'}>
+                  {detailAviso.activo ? 'Activo' : 'Inactivo'}
+                </Badge>
+                <Badge variant="outline">{detailAviso.tipo_envio}</Badge>
+                {detailAviso.modo_trigger === 'evento' && (
+                  <Badge variant="outline">por evento</Badge>
+                )}
+              </div>
+
+              {/* Cuándo se envía */}
+              <div className="rounded-lg border bg-muted/40 p-4 space-y-2">
+                <div className="flex items-center gap-2 font-medium">
+                  {detailAviso.modo_trigger === 'evento' ? <CalendarClock className="h-4 w-4 text-primary" /> : <Clock className="h-4 w-4 text-primary" />}
+                  ¿Cuándo se envía?
+                </div>
+                {detailAviso.tipo_envio === 'manual' && (
+                  <p className="text-muted-foreground">
+                    Este aviso es <strong>manual</strong>. Solo se envía cuando alguien lo dispara desde la pantalla "Enviar Avisos".
+                  </p>
+                )}
+                {detailAviso.tipo_envio === 'automatico' && detailAviso.modo_trigger !== 'evento' && detailAviso.cron_expression && (
+                  <>
+                    <p className="text-foreground">{describeCron(detailAviso.cron_expression)}</p>
+                    <p className="text-xs font-mono text-muted-foreground">{detailAviso.cron_expression} (hora México UTC-6)</p>
+                  </>
+                )}
+                {detailAviso.tipo_envio === 'automatico' && detailAviso.modo_trigger === 'evento' && (
+                  detailTriggers.length === 0 ? (
+                    <p className="text-muted-foreground italic">No hay triggers de evento configurados.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {detailTriggers.map((trig, idx) => {
+                        const fuente = fuentesTrigger.find(f => f.id === trig.id_fuente);
+                        return (
+                          <div key={idx} className="rounded-md bg-background border p-3 space-y-1">
+                            <p className="text-foreground">{describeEventTrigger(trig, fuente)}</p>
+                            {fuente?.descripcion && (
+                              <p className="text-xs text-muted-foreground">{fuente.descripcion}</p>
+                            )}
+                            {!trig.activo && (
+                              <Badge variant="secondary" className="text-[10px]">Trigger desactivado</Badge>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {detailAviso.tipo_envio === 'automatico' && detailAviso.modo_trigger !== 'evento' && !detailAviso.cron_expression && (
+                  <p className="text-muted-foreground italic">Este aviso es automático pero no tiene programación cron configurada.</p>
+                )}
+              </div>
+
+              {/* Destinatarios */}
+              <div className="rounded-lg border bg-muted/40 p-4 space-y-2">
+                <div className="flex items-center gap-2 font-medium">
+                  <Users className="h-4 w-4 text-primary" />
+                  ¿A quién se envía?
+                </div>
+                {detailRoles.length === 0 ? (
+                  <p className="text-muted-foreground italic">Sin roles configurados (los destinatarios se calculan dinámicamente según la fuente del evento).</p>
+                ) : (
+                  <ul className="space-y-1 text-sm">
+                    {detailRoles.map((r) => {
+                      const rolNombre = roles.find(x => x.id === r.id_rol)?.nombre || `Rol ${r.id_rol}`;
+                      const correosArr = Array.isArray(r.correos) ? r.correos : [];
+                      return (
+                        <li key={r.id_rol} className="flex items-start gap-2">
+                          <Mail className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                          <span>
+                            <strong>{rolNombre}</strong>
+                            {correosArr.length > 0 && (
+                              <span className="text-muted-foreground"> — {correosArr.length} correo{correosArr.length === 1 ? '' : 's'} adicional{correosArr.length === 1 ? '' : 'es'}</span>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailAviso(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
