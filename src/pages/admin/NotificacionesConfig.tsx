@@ -40,6 +40,7 @@ interface NotificacionConfig {
   plantilla_wa: string;
   plantilla_email_detalles: string;
   postmark_template_id: number;
+  mapeo_variables_postmark: Record<string, string>;
 }
 
 interface Rol {
@@ -64,7 +65,10 @@ const EMPTY_CONFIG: Omit<NotificacionConfig, 'id'> = {
   plantilla_wa: '',
   plantilla_email_detalles: '',
   postmark_template_id: 41353048,
+  mapeo_variables_postmark: {},
 };
+
+const SYSTEM_PLACEHOLDERS = ['{nombre_desarrollo}', '{nombre_esquema}', '{id_proyecto}'];
 
 const NotificacionesConfig = () => {
   const [configs, setConfigs] = useState<NotificacionConfig[]>([]);
@@ -76,6 +80,10 @@ const NotificacionesConfig = () => {
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteItem, setDeleteItem] = useState<NotificacionConfig | null>(null);
+  const [templateVars, setTemplateVars] = useState<string[]>([]);
+  const [loadingVars, setLoadingVars] = useState(false);
+  const [mapeoJsonText, setMapeoJsonText] = useState<string>('{}');
+  const [mapeoJsonError, setMapeoJsonError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -121,11 +129,56 @@ const NotificacionesConfig = () => {
   const handleOpenNew = () => {
     setEditItem({ ...EMPTY_CONFIG, id: 0 } as NotificacionConfig);
     setIsNew(true);
+    setMapeoJsonText('{}');
+    setMapeoJsonError(null);
+    setTemplateVars([]);
   };
 
   const handleOpenEdit = (item: NotificacionConfig) => {
-    setEditItem({ ...item });
+    const mapeo = item.mapeo_variables_postmark || {};
+    setEditItem({ ...item, mapeo_variables_postmark: mapeo });
     setIsNew(false);
+    setMapeoJsonText(JSON.stringify(mapeo, null, 2));
+    setMapeoJsonError(null);
+    setTemplateVars([]);
+    if (item.postmark_template_id) loadTemplateVariables(item.postmark_template_id);
+  };
+
+  const loadTemplateVariables = async (templateId: number) => {
+    if (!templateId) return;
+    setLoadingVars(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('obtener-postmark-template', {
+        body: { templateId },
+      });
+      if (!error && data?.variables) {
+        setTemplateVars(data.variables);
+        // Auto-prefill missing keys in mapeo (only if value not already set)
+        setEditItem(prev => {
+          if (!prev) return prev;
+          const current = { ...(prev.mapeo_variables_postmark || {}) };
+          let changed = false;
+          for (const v of data.variables as string[]) {
+            if (current[v] === undefined) {
+              // Auto-suggest mapping if name matches a known placeholder
+              if (v === 'nombre_desarrollo') current[v] = '{nombre_desarrollo}';
+              else if (v === 'nombre_esquema') current[v] = '{nombre_esquema}';
+              else if (v === 'id_proyecto') current[v] = '{id_proyecto}';
+              else current[v] = '';
+              changed = true;
+            }
+          }
+          if (changed) {
+            setMapeoJsonText(JSON.stringify(current, null, 2));
+            return { ...prev, mapeo_variables_postmark: current };
+          }
+          return prev;
+        });
+      }
+    } catch (e) {
+      console.error('Error fetching template variables:', e);
+    }
+    setLoadingVars(false);
   };
 
   const handleSave = async () => {
@@ -133,6 +186,21 @@ const NotificacionesConfig = () => {
 
     if (!editItem.tipo_evento.trim()) {
       toast({ title: "Error", description: "El identificador del evento es requerido.", variant: "destructive" });
+      return;
+    }
+
+    // Validate JSON of mapeo
+    let mapeoFinal: Record<string, string> = editItem.mapeo_variables_postmark || {};
+    try {
+      const parsed = JSON.parse(mapeoJsonText || '{}');
+      if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+        throw new Error('Debe ser un objeto JSON');
+      }
+      mapeoFinal = parsed as Record<string, string>;
+      setMapeoJsonError(null);
+    } catch (e: any) {
+      setMapeoJsonError(e.message);
+      toast({ title: "JSON inválido", description: `Mapeo de variables: ${e.message}`, variant: "destructive" });
       return;
     }
 
@@ -152,6 +220,7 @@ const NotificacionesConfig = () => {
           plantilla_wa: editItem.plantilla_wa,
           plantilla_email_detalles: editItem.plantilla_email_detalles,
           postmark_template_id: editItem.postmark_template_id,
+          mapeo_variables_postmark: mapeoFinal,
         })
         .select()
         .single();
@@ -177,6 +246,7 @@ const NotificacionesConfig = () => {
           plantilla_wa: editItem.plantilla_wa,
           plantilla_email_detalles: editItem.plantilla_email_detalles,
           postmark_template_id: editItem.postmark_template_id,
+          mapeo_variables_postmark: mapeoFinal,
         })
         .eq('id', editItem.id);
 
@@ -401,7 +471,11 @@ const NotificacionesConfig = () => {
                 <Label>Plantilla de Postmark (Template ID)</Label>
                 <Select
                   value={String(editItem.postmark_template_id ?? 41353048)}
-                  onValueChange={v => setEditItem({ ...editItem, postmark_template_id: parseInt(v, 10) })}
+                  onValueChange={v => {
+                    const id = parseInt(v, 10);
+                    setEditItem({ ...editItem, postmark_template_id: id });
+                    loadTemplateVariables(id);
+                  }}
                   disabled={loadingTemplates}
                 >
                   <SelectTrigger>
@@ -423,6 +497,73 @@ const NotificacionesConfig = () => {
                 <p className="text-xs text-muted-foreground mt-1">
                   Plantilla de Postmark a usar para este evento. Default: Notificaciones internas (41353048).
                 </p>
+              </div>
+
+              {/* Template variables + JSON mapping editor */}
+              <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Mapeo de variables de la plantilla</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingVars || !editItem.postmark_template_id}
+                    onClick={() => loadTemplateVariables(editItem.postmark_template_id)}
+                  >
+                    {loadingVars ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                    {loadingVars ? 'Detectando...' : 'Detectar variables'}
+                  </Button>
+                </div>
+
+                {templateVars.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Variables que la plantilla espera:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {templateVars.map(v => (
+                        <Badge key={v} variant="secondary" className="font-mono text-xs">{`{{${v}}}`}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Placeholders del sistema que puedes usar como valor:
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {SYSTEM_PLACEHOLDERS.map(p => (
+                      <Badge key={p} variant="outline" className="font-mono text-xs">{p}</Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-xs">Mapeo (JSON)</Label>
+                  <Textarea
+                    value={mapeoJsonText}
+                    onChange={e => {
+                      setMapeoJsonText(e.target.value);
+                      try {
+                        const parsed = JSON.parse(e.target.value || '{}');
+                        if (typeof parsed === 'object' && !Array.isArray(parsed) && parsed !== null) {
+                          setMapeoJsonError(null);
+                          setEditItem(prev => prev ? { ...prev, mapeo_variables_postmark: parsed } : prev);
+                        }
+                      } catch (err: any) {
+                        setMapeoJsonError(err.message);
+                      }
+                    }}
+                    rows={6}
+                    className="font-mono text-xs"
+                    placeholder={`{\n  "nombre_desarrollo": "{nombre_desarrollo}"\n}`}
+                  />
+                  {mapeoJsonError && (
+                    <p className="text-xs text-destructive mt-1">JSON inválido: {mapeoJsonError}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Llave = nombre exacto de la variable en Postmark. Valor = placeholder del sistema o texto fijo.
+                  </p>
+                </div>
               </div>
 
               <div>
