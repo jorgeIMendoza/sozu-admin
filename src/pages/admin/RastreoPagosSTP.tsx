@@ -44,6 +44,7 @@ const TIPOS_PAGO: Record<number, string> = {
 export default function RastreoPagosSTP() {
   const { toast } = useToast();
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [evidenciaUrl, setEvidenciaUrl] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     claveRastreo: "",
     clabeStp: "",
