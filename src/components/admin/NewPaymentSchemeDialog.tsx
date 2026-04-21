@@ -129,6 +129,18 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
         insertData.tramos_mensualidad = tramos;
       }
 
+      // Calcular el siguiente orden (max + 1) para este proyecto
+      const { data: maxOrdenData } = await supabase
+        .from("esquemas_pago")
+        .select("orden")
+        .eq("id_proyecto", projectId)
+        .eq("activo", true)
+        .eq("es_manual", false)
+        .order("orden", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      insertData.orden = ((maxOrdenData?.orden ?? 0) as number) + 1;
+
       const { error } = await supabase
         .from("esquemas_pago")
         .insert([insertData]);
