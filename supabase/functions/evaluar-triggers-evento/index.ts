@@ -66,9 +66,16 @@ Deno.serve(async (req) => {
   const summary: any = { evaluated: 0, triggers: 0, sent: 0, skipped: 0, errors: 0, details: [] as any[] };
 
   try {
+    // Optional debug flags via query string:
+    //   ?ignore_window=1   → bypass hora_envio window check
+    //   ?dry_run=1         → run query path but skip sending emails/whatsapp
+    const url = new URL(req.url);
+    const ignoreWindow = url.searchParams.get('ignore_window') === '1';
+    const dryRun = url.searchParams.get('dry_run') === '1';
+
     const mexNow = getMexicoTime();
     const tag = `[${fmtTime(mexNow)} MX]`;
-    console.log(`${tag} evaluar-triggers-evento iniciando`);
+    console.log(`${tag} evaluar-triggers-evento iniciando (ignoreWindow=${ignoreWindow}, dryRun=${dryRun})`);
 
     // Load all active event triggers + their aviso
     const { data: triggers, error: tErr } = await supabaseAdmin
