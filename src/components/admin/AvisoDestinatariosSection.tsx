@@ -347,7 +347,12 @@ export function AvisoDestinatariosSection({
       toast({ title: "Error", description: "Este email ya está en la lista", variant: "destructive" });
       return;
     }
-    const newItem: PoolItem = { nombre: manualNombre.trim() || manualEmail.trim(), email: manualEmail.trim(), rolIds: [] };
+    const newItem: PoolItem = {
+      nombre: manualNombre.trim() || manualEmail.trim(),
+      email: manualEmail.trim(),
+      telefono: manualTelefono.trim(),
+      rolIds: [],
+    };
     const updatedPool = [...pool, newItem];
     setPool(updatedPool);
     const newSelected = new Set(selectedEmails);
@@ -356,6 +361,7 @@ export function AvisoDestinatariosSection({
     notifyParent(newSelected, updatedPool);
     setManualNombre("");
     setManualEmail("");
+    setManualTelefono("");
   };
 
   const rolesInPool = roles.filter(r => pool.some(p => p.rolIds.includes(r.id)));
@@ -452,9 +458,15 @@ export function AvisoDestinatariosSection({
       {/* Manual add */}
       <div>
         <Label>Agregar destinatario manual</Label>
+        <p className="text-xs text-muted-foreground mb-1">
+          El teléfono es opcional y solo se usa si el aviso envía por WhatsApp. Acepta formato libre
+          (ej. <code>+5217221514185</code> o <code>7221514185</code>); se normaliza automáticamente.
+        </p>
         <div className="flex gap-2 mt-1">
           <Input placeholder="Nombre" value={manualNombre} onChange={(e) => setManualNombre(e.target.value)} className="flex-1" />
           <Input placeholder="Email *" type="email" value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} className="flex-1"
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addManual())} />
+          <Input placeholder="Teléfono (opc.)" value={manualTelefono} onChange={(e) => setManualTelefono(e.target.value)} className="flex-1"
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addManual())} />
           <Button type="button" size="icon" variant="outline" onClick={addManual}>
             <Plus className="h-4 w-4" />
