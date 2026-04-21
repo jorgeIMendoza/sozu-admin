@@ -478,6 +478,21 @@ export default function RastreoPagosSTP() {
                           {pago.tipo_real || TIPOS_PAGO[pago.id_tipo_pago] || `Tipo ${pago.id_tipo_pago}`}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        {pago.evidencia_url ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setEvidenciaUrl(pago.evidencia_url!)}
+                            title="Ver evidencia"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">Aún sin CEP</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -492,6 +507,13 @@ export default function RastreoPagosSTP() {
           Mostrando los últimos 50 registros. Usa los filtros para refinar tu búsqueda.
         </p>
       )}
+
+      <PdfViewerDialog
+        open={!!evidenciaUrl}
+        onOpenChange={(open) => !open && setEvidenciaUrl(null)}
+        url={evidenciaUrl || ""}
+        title="Evidencia de Pago"
+      />
     </div>
   );
 }
