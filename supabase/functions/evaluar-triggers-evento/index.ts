@@ -115,9 +115,9 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Cargar destinatarios manuales configurados en la UI (avisos_roles_destinatarios.correos)
-      // Si hay correos manuales, REEMPLAZAN al cliente real (modo prueba/segmentación dirigida).
-      // Solo se envía 1 correo por acuerdo que cumpla la condición, a cada correo manual.
+      // Cargar destinatarios manuales configurados en la UI (avisos_roles_destinatarios.correos).
+      // Los correos manuales son ADICIONALES al cliente real: por cada acuerdo que cumpla la
+      // condición, se envía al cliente real Y a cada correo manual (copia/auditoría).
       const { data: rolesDest } = await supabaseAdmin
         .from('avisos_roles_destinatarios')
         .select('correos')
@@ -132,9 +132,8 @@ Deno.serve(async (req) => {
           if (em.includes('@')) manualEmails.push({ email: em, nombre: it?.nombre || '' });
         }
       }
-      const tieneManuales = manualEmails.length > 0;
-      if (tieneManuales) {
-        console.log(`${tag} trigger ${trig.id}: ${manualEmails.length} correo(s) manual(es) → reemplazan al cliente real`);
+      if (manualEmails.length > 0) {
+        console.log(`${tag} trigger ${trig.id}: ${manualEmails.length} correo(s) manual(es) → se enviarán como copia adicional al cliente real`);
       }
 
       const offsets: number[] = (trig.offsets_dias as number[]) || [];
@@ -241,25 +240,27 @@ Deno.serve(async (req) => {
             : { mensaje: { nombre: persona.nombre_legal || '', texto: renderedHtml, asunto: renderedAsunto } };
 
           // Destinatarios por acuerdo:
-          //   - Si hay correos manuales en avisos_roles_destinatarios → reemplazan al cliente real
-          //   - Si no, se envía al cliente real (o al email_override si está en filtros)
+          //   1) Cliente real (o email_override si está en filtros) — siempre que tenga email
+          //   2) Cada correo manual configurado en la UI (adicionales / copia)
+          // Cada destinatario tiene su propia clave de idempotencia para no duplicar envíos.
           type Dest = { email: string | null; nombre: string; tipo: 'cliente' | 'manual'; claveEntidad: string };
           const destinatarios: Dest[] = [];
-          if (tieneManuales) {
-            for (const m of manualEmails) {
-              destinatarios.push({
-                email: m.email,
-                nombre: m.nombre || persona.nombre_legal || '',
-                tipo: 'manual',
-                claveEntidad: `acuerdo:${ac.id}:offset:${offset}:manual:${m.email}`,
-              });
-            }
-          } else if (emailReal) {
+          if (emailReal) {
             destinatarios.push({
               email: emailReal,
               nombre: persona.nombre_legal || '',
               tipo: 'cliente',
               claveEntidad: `acuerdo:${ac.id}:offset:${offset}`,
+            });
+          }
+          for (const m of manualEmails) {
+            // Evitar duplicar si el manual coincide con el cliente real
+            if (emailReal && m.email.toLowerCase() === emailReal.toLowerCase()) continue;
+            destinatarios.push({
+              email: m.email,
+              nombre: m.nombre || persona.nombre_legal || '',
+              tipo: 'manual',
+              claveEntidad: `acuerdo:${ac.id}:offset:${offset}:manual:${m.email}`,
             });
           }
 
