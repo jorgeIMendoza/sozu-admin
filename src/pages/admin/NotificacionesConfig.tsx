@@ -512,16 +512,6 @@ const NotificacionesConfig = () => {
               </div>
 
               <div>
-                <Label>Asunto del email</Label>
-                <Input
-                  value={editItem.asunto_email}
-                  onChange={e => setEditItem({ ...editItem, asunto_email: e.target.value })}
-                  placeholder="Asunto..."
-                />
-                <p className="text-xs text-muted-foreground mt-1">Placeholders: {'{nombre_desarrollo}'}, {'{nombre_esquema}'}</p>
-              </div>
-
-              <div>
                 <Label>Plantilla de Postmark (Template ID)</Label>
                 <Select
                   value={String(editItem.postmark_template_id ?? 41353048)}
